@@ -15,12 +15,12 @@ Used by: agvhito, agvhito_tools, bay, central, central_api, common_ros, cost_fun
 
 `common` sits at the bottom of the workspace, so everything it needs comes from outside the repository. Its declared dependencies (in `package.xml`) are few: Eigen, rclcpp and rmw, plus the build and test tooling. The less obvious dependencies are the implicit ones: the Linux socket API used by the Modbus client, a vendored and trimmed copy of the magic_enum library, and a set of ROS message packages that are referenced only by name, as strings inside the topic registry.
 
-No versions are pinned anywhere in the pack. The Version column therefore records what the code implies, and where that is only an inference it is marked as such. One useful clue is that `CMakeLists.txt` requires CMake ≥ 3.28, which is the version shipped with Ubuntu 24.04. That makes ROS 2 Jazzy and Eigen 3.4 the likely toolchain, but the team should confirm it.
+No versions are pinned anywhere in the pack. The Version column therefore records what the code implies, and where that is only an inference it is marked as such. One useful clue is that `CMakeLists.txt` requires CMake ≥ 3.28, which is the version shipped with Ubuntu 24.04. Eigen 3.4 is therefore likely. For ROS, the next package (`rclcppx`) configures introspection on action servers, an API first released in ROS 2 Kilted Kaiju (May 2025). The workspace therefore builds against Kilted or newer, not Jazzy as the CMake version alone would suggest. See `02-rclcppx.md`, section A.
 
 | Name | Description | Version | Link | Usage in this package |
 |---|---|---|---|---|
 | Eigen3 | Header-only C++ linear algebra library (fixed-size vectors and matrices). | Not pinned; 3.4 likely on Ubuntu 24.04 (the probe used 3.4.0). | https://eigen.tuxfamily.org | `Eigen::Vector2d` throughout `geometry_utils` (`Segment`, rotations, intersections); `Vector2d`, `Vector3d` and `Matrix3d` in `motion_sim`. Linked explicitly as `Eigen3::Eigen` on `common_lib`. |
-| rclcpp | ROS 2 C++ client library. | Not pinned; the ROS 2 distro is not stated. Comments in `topic.cpp` link to rmw "rolling" sources. | https://github.com/ros2/rclcpp | Used only in `topic.cpp`, to build `rclcpp::QoS` objects from the shared QoS profiles. The header forward-declares `rclcpp::QoS` so that most users do not need rclcpp headers. |
+| rclcpp | ROS 2 C++ client library. | Not pinned. Kilted or newer, inferred from `rclcppx` (see section A note). Comments in `topic.cpp` link to rmw "rolling" sources. | https://github.com/ros2/rclcpp | Used only in `topic.cpp`, to build `rclcpp::QoS` objects from the shared QoS profiles. The header forward-declares `rclcpp::QoS` so that most users do not need rclcpp headers. |
 | rmw | ROS 2 middleware interface (C types for QoS and so on). | Not pinned. | https://github.com/ros2/rmw | `rmw_qos_profile_t` and the `RMW_QOS_*` constants that define `kBestEffortQoS`, `kReliableQoS` and `kReliableQoS_50`. |
 | magic_enum (vendored, trimmed) | Compile-time enum reflection that reads names from `__PRETTY_FUNCTION__`. | Fork of unknown upstream revision; "lots of functionality removed". | https://github.com/Neargye/magic_enum | `include/common/enum.hpp` (namespace `common`). It is a copied header, not a link dependency. |
 | POSIX sockets / glibc | BSD socket API on Linux. | System. | https://man7.org/linux/man-pages/man7/socket.7.html | `modbus_tcp.cpp`: `socket`, `connect`, `send` with `MSG_NOSIGNAL` (Linux-specific), `recv`, `setsockopt` timeouts, `inet_addr`, `strerror_r`. |
@@ -831,12 +831,15 @@ Ordered roughly by impact on robot-side code.
 | R18 | Default tolerances are an absolute epsilon (≈2.2e-16). This makes `IsNear` effectively exact and makes the segment-intersection tests depend on coordinate scale. | **[read]** |
 | R19 | `MotionSim::step` snaps yaw to the raw `goalYaw_` when done, while yaw during motion is wrapped. A goal outside $(-\pi, \pi]$ therefore jumps on the final step. | **[read]** |
 | R20 | Hygiene: missing `<limits>` / `<utility>` / `<cstdint>` includes; `ModbusMock` declares defaulted copy and move operations that are implicitly deleted; `kRad2Rev = 2π` is really radians per revolution; a comment says `std::clamp` "not defined until C++20" (it is C++17). | **[read]** |
+| R21 | `Motion1D` discretization: speed chatters near the braking point, and the final step snaps speed to zero from up to 0.45 m/s (an implied 4.5 m/s² deceleration with `a_max = 0.5`; see Figure 7.8). This is harmless for visualization, but a controller or simulator that differentiates the output would see an acceleration spike. | **[probed]** C++ and Python agree |
 
 ---
 
 ## 7. Math
 
 All of the math lives in `math_utils`, `geometry_utils`, `motion_sim` and two derived constants. It hangs together around one convention: radians, counter-clockwise from +x, wrapped to $(-\pi, \pi]$, with SI lengths. The formulas below are what the code computes. Where the code departs from the textbook form, it is noted.
+
+The figures in this section were generated with Python (matplotlib) from the same formulas the code uses; the SVG sources live in `figures/01-common/`. The velocity profiles in the `Motion1D` figure come from a Python re-implementation of `Motion1D::step`. It was cross-checked against the compiled C++: both give 59, 25 and 44 steps for the three cases shown, with the same final speeds before the snap to zero **[probed]**.
 
 **Angle wrapping.** For an angle $\theta$ in radians and a lower bound $\ell$ (default $-\pi$):
 
@@ -871,6 +874,10 @@ The derived predicates are:
 - "angle or reciprocal": $\min(|\delta|,\ \pi-|\delta|)\le\varepsilon$;
 - "same hemisphere": $|\delta|\le\pi/2$.
 
+![Angle wrapping and signed angle distance on the unit circle](figures/01-common/angle_wrap.svg)
+
+*Figure 7.1 — `SignedAngleDist` takes the short way round (+50°), never the raw difference (−310°). At the seam, `Wrap` maps to +π while `wrapPi` maps to −π.*
+
 **Rate limiting.** `RateLimit` clamps the target into a window of half-width $r\,\Delta t$ around the current value, and reports $\pm1$ when it had to clip:
 
 $$
@@ -896,6 +903,10 @@ $$
 T=\begin{bmatrix}R(\psi)&\mathbf p\\ \mathbf 0^\top&1\end{bmatrix}=\operatorname{translate}(\mathbf p)\cdot\operatorname{rotate}(\psi)
 $$
 
+![Body and inertial frames related by yaw](figures/01-common/body_inertial_frames.svg)
+
+*Figure 7.2 — The same vector p seen in both frames. `BodyToInertial` and `InertialToBody` only rotate; any translation is the caller's job (`MotionSim` adds it through the homogeneous matrix).*
+
 **Direction predicates.** These measure the angle between two vectors:
 
 $$
@@ -910,6 +921,10 @@ The tests are:
 The clamp protects `acos` from rounding just outside $[-1,1]$.
 
 **Perp-dot and collinearity.** The perp-dot product is $\mathbf a\times\mathbf b=a_xb_y-a_yb_x$, the signed area of the parallelogram spanned by the two vectors. Two segments count as collinear when all four such areas (each segment's direction against the other segment's endpoints) are within tolerance. That is why the tolerance is an area rather than an angle.
+
+![Perp-dot as parallelogram area, and the collinearity test](figures/01-common/perp_dot_collinear.svg)
+
+*Figure 7.3 — Left: a×b is the signed area of the parallelogram. Right: `AreCollinear` requires the four triangle-pair areas formed with the other segment's endpoints to be below an area tolerance, so its default 0.01 is in m², not radians.*
 
 **Segment intersection.** Define the two segment directions $\mathbf u=\mathbf p^{(1)}_2-\mathbf p^{(1)}_1$ and $\mathbf v=\mathbf p^{(2)}_2-\mathbf p^{(2)}_1$, the start-to-start offset $\mathbf w=\mathbf p^{(1)}_1-\mathbf p^{(2)}_1$, and $D=\mathbf u\times\mathbf v$.
 
@@ -929,12 +944,20 @@ When $D=0$ and the segments are collinear, the code proceeds in four steps:
 
 All the zero tests use the default absolute ε (R18).
 
+![Four cases of segment intersection](figures/01-common/segment_intersection.svg)
+
+*Figure 7.4 — (a) Skew lines that cross inside both segments return one point. (b) Skew lines that cross outside a segment (here at s = 1.80) return nothing. (c) Parallel, offset segments return nothing. (d) Collinear segments return the endpoints of their overlap, after s₁ is projected onto s₂'s parameter t and clipped to [0, 1].*
+
 **Point–segment distance.** Project the point onto the segment's line and clamp to the segment:
 
 $$
 t^{\star}=\operatorname{clamp}\!\left(\frac{(\mathbf p-\mathbf a)\cdot(\mathbf b-\mathbf a)}{\|\mathbf b-\mathbf a\|^2},0,1\right),\qquad
 d=\big\|\mathbf p-\mathbf a-t^{\star}(\mathbf b-\mathbf a)\big\|
 $$
+
+![Point to segment distance in three cases](figures/01-common/point_segment_distance.svg)
+
+*Figure 7.5 — The foot of the perpendicular is used only when its parameter lies in [0, 1]. Otherwise the nearest endpoint is used, so the distance is measured to a or b rather than to the infinite line.*
 
 **Line versus box.** The test is a modified Cohen–Sutherland algorithm.
 1. Give each endpoint a 4-bit outcode: left 1, right 2, bottom 4, top 8.
@@ -943,6 +966,14 @@ $$
 4. Otherwise, clip the endpoint with the larger code to $y_{\max}$ or $y_{\min}$ using $x=x_0+\frac{\Delta x}{\Delta y}(y_m-y_0)$, and repeat from step 2.
 
 An oriented box with center $\mathbf c$ and yaw $\psi$ is handled by mapping the line through $\mathbf p\mapsto R(-\psi)(\mathbf p-\mathbf c)$ and testing against $[-L/2,L/2]\times[-W/2,W/2]$.
+
+![Cohen–Sutherland outcode regions with five example lines](figures/01-common/cohen_sutherland.svg)
+
+*Figure 7.6 — Outcodes (bits TOP, BOTTOM, RIGHT, LEFT) and the five ways a test ends. Lines D and E both clip their TOP endpoint to y = 3. D lands inside the box and is accepted; E lands in the LEFT region, which now shares a bit with its other endpoint, so it is rejected.*
+
+![Oriented box test by change of frame](figures/01-common/oriented_box.svg)
+
+*Figure 7.7 — `DoesLineIntersectWithBox` translates the line by −c and rotates it by −ψ, which reduces the oriented test to the axis-aligned one.*
 
 **Trapezoidal profile (`Motion1D`).** With remaining distance $r=S-s$, the profile brakes as soon as the remaining distance is within the braking distance:
 
@@ -964,6 +995,18 @@ The discrete integrator comes close: for 2 m at 1 m/s and 0.5 m/s² it took 39 s
 
 `brakeNow` sets $S\leftarrow s+v^2/(2a_{\max})$ on both axes. The pose is then $\mathbf p=\mathbf p_0+\hat{\mathbf d}\,s_{\text{lin}}$ and $\psi=\psi_0+\sigma\,s_{\text{rot}}$, where $\sigma=\operatorname{sign}\big(\operatorname{wrapPi}(\psi_g-\psi_0)\big)$.
 
+![Motion1D speed and distance profiles](figures/01-common/trapezoid_profile.svg)
+
+*Figure 7.8 — Speed and distance for a 4 m move (trapezoid), a 1 m move (triangle), and a 4 m move with `brakeNow()` at t = 3 s. Two artefacts of the discrete bang-bang rule are visible. First, chatter: speed alternates up and down near the braking point, because after one braking step the remaining distance again exceeds the new braking distance by $a\,\Delta t^2/2$. Second, a final-step snap: speed drops to zero in a single step, from as much as 0.45 m/s, an implied deceleration of 4.5 m/s² against $a_{\max}=0.5$ (R21).*
+
+In formulas, the chatter comes from one braking step. Starting from $r_k=v_k^2/(2a)$, that step leaves
+
+$$
+r_{k+1}-\frac{v_{k+1}^2}{2a}=\frac{a\,\Delta t^2}{2}>0 ,
+$$
+
+so the next step accelerates again. Speed therefore oscillates by $\pm a\,\Delta t$ around the ideal braking curve until the snap condition $s\ge S$ fires.
+
 **Heartbeat latency.** With period $T$ and the last heartbeat at $t_h$, the first reaction comes at some
 
 $$
@@ -971,6 +1014,10 @@ t\in(t_h+T,\ t_h+2T]
 $$
 
 plus scheduling jitter.
+
+![Heartbeat monitor check timeline](figures/01-common/heartbeat_latency.svg)
+
+*Figure 7.9 — The watchdog checks at T, 2T, … . After the last heartbeat at t_h = 2.2T, the check at 3T still finds the flag set, and the first reaction comes at 4T, inside (t_h + T, t_h + 2T]. The callback repeats every period until a heartbeat arrives (6.5T).*
 
 **Miscellaneous formulas.**
 - `CalculateSquareRadius` $=\tfrac12\sqrt{w^2+l^2}$, the circumscribed radius of a $w\times l$ rectangle.
@@ -1000,6 +1047,7 @@ There are 70 gtest cases in 11 executables. Coverage is strong exactly where the
 **Gaps.** The untested areas line up closely with the RISK list, which suggests where new tests would pay off first.
 - **No tests at all** for `Modbus`, `ModbusTCP` or `ModbusMock` (a round-trip test through the mock would have caught R3), for `MotionSim`, `Motion1D` and `brakeNow`, for `Topic::QoS` and `qos_ptr` (a test calling `.QoS()` on every registry entry would catch R11), for registry invariants in the AGV, sim, vecs and visualizer families (unique keys, non-null QoS), for `EnsureDirExists`, or for `DiscretizeToNearestCartesianAxis`.
 - **Missing edge cases:**
+  - `Motion1D` chatter and the final-step snap (R21);
   - a heartbeat monitor moved before `Start()` (R1);
   - enums with unsigned underlying types or values above 64 (R15);
   - `ReciprocalAngle<double>` (R8);
