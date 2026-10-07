@@ -114,6 +114,17 @@ For every step the script:
 
 Every package document has the same sections: summary, files table, public API, **Mermaid diagrams** (UML classDiagram with ownership on the edges, data-flow flowchart, stateDiagram-v2 for state machines), behavior, ownership and safety, math in LaTeX, tests, idioms, and open questions.
 
+**When packages change (regenerating docs):**
+```zsh
+cd ~/repos/volley_notes/guide
+uv run volley_guide.py stale                               # which packs are missing or older than their code
+uv run volley_guide.py export --changed                    # → /tmp/volley_repomix_commands.sh (refresh task embedded)
+bash /tmp/volley_repomix_commands.sh                       # rebuild just those packs
+uv run volley_guide.py export --out /tmp/all.sh            # or: every package's command (new-doc task embedded)
+uv run volley_guide.py export --only central,bay --refresh # specific packages, refresh task embedded
+```
+For each rebuilt pack: start a new chat, attach the pack **plus your current `packages/nn-<pkg>.md`**, and paste the Refresh prompt (`volley_guide.py copy Pnn 2`). Claude returns the complete updated document, with a "Changes since last version" list at the top. Save it with `[w]` and commit, so `git diff` shows what changed.
+
 After the packages: **SLICE** (vehicle retrieval end to end, with a sequence diagram) and **TICKET** (P-change before your first edit).
 
 ## 9.6 Prompts specific to the web workflow

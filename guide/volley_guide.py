@@ -15,7 +15,10 @@ Progress is stored in <notes>/.volley_guide_state.json.
 
 Run (no install needed; uv reads the dependency header above):
     uv run ~/repos/volley_notes/guide/volley_guide.py            # interactive
-    uv run volley_guide.py list | show S3 | done | jump S5 | copy S1 1
+    uv run volley_guide.py list | show P03 | done | jump P05 | copy P01 1
+    uv run volley_guide.py export [--out /tmp/volley_repomix_commands.sh] [--changed] [--refresh] [--only a,b] [--run]
+        write every package's repomix command to a shell script (+ file lists / task files)
+    uv run volley_guide.py stale        list packages whose pack is missing or older than the code
 
 Paths (override with env vars):
     VOLLEY_WS     repo                  default ~/volley
@@ -165,6 +168,17 @@ confirmation. Numbered sequence with path:line for each hop, the message/service
 action used, which component and executor/thread runs it, and where state is
 persisted. Include a Mermaid sequenceDiagram of the whole flow. Flag any hop you
 couldn't find. Max 600 words plus the diagram."""
+
+
+def refresh_prompt(pkg: str, pack_name: str, doc_name: str, part: int, nparts: int) -> str:
+    scope = f" (part {part} of {nparts}: update only what this part covers)" if nparts > 1 else ""
+    return f"""PACKAGE REFRESH: `{pkg}` changed since my document was written{scope}.
+Attached: the regenerated pack {pack_name} and my current document {doc_name}.
+Update the document to match the code: keep its structure and sections, correct
+everything that changed (including the Mermaid diagrams and the files table), and
+remove what no longer exists. Add at the very top a "Changes since last version"
+list (what changed, with paths). Return the COMPLETE updated {doc_name} as
+described in rule 7."""
 
 
 def merge_notes(doc_name: str) -> str:
@@ -555,6 +569,8 @@ class Step:
     session: bool = False                                   # show the standard session loop
     subsystem: str = ""                                     # subsystems/<name>
     upload_why: str = ""                                    # why these uploads (or none)
+    package: str = ""                                       # package name (package steps only)
+    files: list[Path] = field(default_factory=list)         # files packed (package steps only)
 
 
 SESSION_UPLOAD_WHY = (
@@ -715,7 +731,7 @@ def package_steps() -> list[Step]:
                              "you've already documented (common_ros depends on launcher only for launch/test resources).")
             if pi < n:
                 notes.append(f"After saving the doc, continue with part {pi + 1}; attach the doc you just saved.")
-            notes.append("Prompt 2 (merge notes) is "
+            notes.append("Prompt 3 (merge notes) is "
                          + ("RECOMMENDED now: last package at this depth." if last_in_depth and pi == n
                             else "optional here; do it at least once per depth level."))
             steps.append(Step(
@@ -731,10 +747,13 @@ def package_steps() -> list[Step]:
                 ],
                 uploads=uploads,
                 prompts=[("Package task (paste with the attachments)", prompt),
+                         ("Refresh an existing doc (package changed; attach new pack + current doc)",
+                          refresh_prompt(pkg.name, pack_name, doc, pi, n)),
                          ("Merge notes into volley-notes.md", merge_notes(doc))],
                 save=[("Package doc", PKG_DOCS / doc), ("volley-notes.md (overwrite)", NOTES / "volley-notes.md")],
                 checks=[PACKS / pack_name, PKG_DOCS / doc],
                 notes=notes, session=True, subsystem=doc, upload_why=SESSION_UPLOAD_WHY,
+                package=pkg.name, files=files,
             ))
     return steps
 
@@ -852,7 +871,8 @@ SESSION_LOOP = [
     ("chat", "Ask follow-ups if needed (2–3 max)."),
     ("chat", "Claude returns the package doc: download it to the 'Package doc' path, or copy the ````markdown "
              "block and press [w] → 1."),
-    ("chat", "Prompt 2 (merge notes) when the step's note says so; save it with [w] → 2."),
+    ("chat", "Prompt 3 (merge notes) when the step's note says so; save it with [w] → 2. "
+             "(Package changed later? Rebuild the pack, attach it + the current doc, use the Refresh prompt.)"),
     ("Project", "If volley-notes.md changed: replace it in Project knowledge."),
     ("terminal", "Commit (last command; [r] offers it)."),
     ("you", "Read the doc; spot-check 2–3 claims and one diagram against the code."),
@@ -988,87 +1008,111 @@ def run_cmd(c: Cmd) -> None:
 
 
 # --------------------------------------------------------------------------- rendering
+VIEW = {"full": False}          # toggled with [x]
+
+
+def short(p: Path) -> str:
+    """Path relative to the notes/packs/repo roots (or ~), to keep lines short."""
+    for root, tag in ((PACKS, "packs"), (PKG_DOCS, "packages"), (SUBS, "subsystems"), (NOTES, "notes"), (WS, "volley")):
+        try:
+            return f"{tag}/{p.relative_to(root)}"
+        except ValueError:
+            continue
+    try:
+        return "~/" + str(p.relative_to(HOME))
+    except ValueError:
+        return str(p)
+
+
+def fsize_short(p: Path) -> Text:
+    if not p.exists():
+        return Text("✗ missing", style="red")
+    if p.is_dir():
+        return Text("✓ dir", style="green")
+    return Text(f"✓ ~{p.stat().st_size // 4:,} tok", style="green")
+
+
+def one_line(cmd: str, width: int) -> str:
+    cmd = " ".join(cmd.split())
+    return cmd if len(cmd) <= width else cmd[: width - 1] + "…"
+
+
+def section(title: str, style: str) -> None:
+    console.print(Rule(Text(title, style=f"bold {style}"), style=style, align="left"))
+
+
 def render(idx: int, st_state: dict) -> None:
     step = STEPS[idx]
     done = step.id in st_state["done"]
+    full = VIEW["full"]
+    w = console.width
     console.clear()
-    title = Text.assemble((f"{step.id}", "bold cyan"), "  ·  ", (step.title, "bold"),
-                          ("   ✔ done" if done else "", "green"))
-    console.print(Panel(Text(step.goal), title=title, subtitle=f"step {idx + 1}/{len(STEPS)} · {len(st_state['done'])} done · progress: {STATE_FILE.name}",
-                        border_style="green" if done else "cyan", box=box.ROUNDED))
+
+    # header: 2 lines
+    head = Text.assemble((f" {step.id} ", "bold black on cyan" if not done else "bold black on green"), " ",
+                         (step.title, "bold"), ("  ✔ done" if done else "", "green"),
+                         (f"   step {idx + 1}/{len(STEPS)} · {len(st_state['done'])} done", "dim"))
+    console.print(head)
+    console.print(Text(step.goal, style="italic"), soft_wrap=False, overflow="fold")
 
     if step.commands:
-        t = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold", expand=True)
-        t.add_column("#", width=3)
-        t.add_column("where", width=11)
-        t.add_column("what")
+        section("1 commands  [r] run", "blue")
         for i, c in enumerate(step.commands, 1):
-            body: list = [Text(c.label, style="bold")]
-            if c.action:
-                body.append(Text("(python action: run with [r])", style="dim"))
-            elif c.cmd:
-                body.append(Syntax(c.cmd, "bash", word_wrap=True, background_color="default"))
-            if c.cwd:
-                body.append(Text(f"cwd: {c.cwd}", style="dim"))
+            tag = {"HOST": "H", "CONTAINER": "C", "CLAUDE": "web"}.get(c.where, c.where)
+            line = Text.assemble((f" {i} ", "bold"), (f"[{tag}] ", "cyan"), (c.label, "bold"))
             if not c.runnable and not c.action:
-                body.append(Text("(manual)", style="yellow"))
-            t.add_row(str(i), where_badge(c.where), Group(*body))
-        console.print(Panel(t, title="1 · Commands / actions", border_style="blue"))
+                line.append(" (manual)", style="yellow")
+            console.print(line)
+            if c.cmd and full:
+                console.print(Syntax(c.cmd, "bash", word_wrap=True, background_color="default", padding=(0, 0, 0, 5)))
+            elif c.cmd and c.where != "CLAUDE":
+                console.print(Text("     " + one_line(c.cmd, w - 6), style="dim"))
 
-    if step.knowledge:
-        t = Table(box=box.MINIMAL, expand=True)
-        t.add_column("Upload to Project knowledge")
-        t.add_column("size", justify="right")
-        for p in step.knowledge:
-            t.add_row(str(p), fsize(p))
-        console.print(Panel(t, title="2 · Claude Project knowledge (shared by every chat)", border_style="yellow"))
-
-    if step.uploads:
-        t = Table(box=box.MINIMAL, expand=True)
-        t.add_column("Attach to the chat (📎)")
-        t.add_column("size", justify="right")
-        for p in step.uploads:
-            t.add_row(str(p), fsize(p))
-        total = sum(p.stat().st_size for p in step.uploads if p.exists() and p.is_file()) // 4
-        t.add_row("[dim]total (approx.)[/]", f"~{total:,} tok")
-        console.print(Panel(t, title="2 · Attach to a NEW chat in the Volley Project", border_style="yellow"))
-
-    if step.upload_why:
-        console.print(Panel(Text(step.upload_why), title="Why these uploads?" if (step.uploads or step.knowledge)
-                            else "Uploads", border_style="dim yellow"))
+    files = [(p, "knowledge") for p in step.knowledge] + [(p, "attach") for p in step.uploads]
+    if files:
+        section("2 upload" + ("  (Project knowledge)" if step.knowledge else "  (new chat, same message as prompt 1)"),
+                "yellow")
+        t = Table(box=None, show_header=False, padding=(0, 1), expand=False)
+        t.add_column(no_wrap=True)
+        t.add_column(no_wrap=True, overflow="ellipsis", max_width=max(30, w - 30))
+        t.add_column(no_wrap=True)
+        for p, kind in files:
+            t.add_row(Text("📎" if kind == "attach" else "📚"), short(p), fsize_short(p))
+        console.print(t)
+        if full and step.upload_why:
+            console.print(Text(step.upload_why, style="dim"))
+    elif full and step.upload_why:
+        section("2 upload", "yellow")
+        console.print(Text(step.upload_why, style="dim"))
 
     if step.prompts:
-        t = Table(box=box.MINIMAL, expand=True)
-        t.add_column("#", width=3)
-        t.add_column("Prompt")
-        t.add_column("first line", style="dim")
-        for i, (name, text) in enumerate(step.prompts, 1):
-            t.add_row(str(i), name, text.splitlines()[0][:70] + "…")
-        console.print(Panel(t, title="3 · Prompts to paste (\\[c] copy, \\[v] view)", border_style="magenta"))
+        section("3 prompts  [c] copy  [v] view", "magenta")
+        for i, (name, _) in enumerate(step.prompts, 1):
+            console.print(Text.assemble((f" {i} ", "bold"), name))
 
     if step.save:
-        t = Table(box=box.MINIMAL, expand=True)
-        t.add_column("Save")
-        t.add_column("path")
-        t.add_column("status", justify="right")
-        for name, p in step.save:
-            t.add_row(name, str(p), fsize(p))
-        console.print(Panel(t, title="4 · Save results", border_style="green"))
+        section("4 save  [w] clipboard → file", "green")
+        t = Table(box=None, show_header=False, padding=(0, 1))
+        t.add_column(no_wrap=True)
+        t.add_column(no_wrap=True, overflow="ellipsis", max_width=max(30, w - 34))
+        t.add_column(no_wrap=True)
+        for i, (name, p) in enumerate(step.save, 1):
+            t.add_row(f"{i} {name}", short(p), fsize_short(p))
+        console.print(t)
 
-    if step.session:
-        t = Table(box=box.SIMPLE, show_header=False, expand=True)
-        t.add_column(width=3)
-        t.add_column(width=10, style="cyan")
-        t.add_column()
-        for i, (w, txt) in enumerate(SESSION_LOOP, 1):
-            t.add_row(str(i), w, txt)
-        console.print(Panel(t, title="5 · Session loop", border_style="white"))
+    if full and step.session:
+        section("loop", "white")
+        for i, (who, txt) in enumerate(SESSION_LOOP, 1):
+            console.print(Text.assemble((f" {i} ", "bold"), (f"{who:<9}", "cyan"), txt), overflow="fold")
 
     if step.notes:
-        console.print(Panel(Markdown("\n".join(f"- {n}" for n in step.notes)), title="Notes", border_style="dim"))
+        notes = step.notes if full else step.notes[:2]
+        for n in notes:
+            console.print(Text("• " + n, style="dim"), overflow="ellipsis" if not full else "fold",
+                          no_wrap=not full)
 
-    console.print(Text("[r] run  [c] copy prompt  [v] view prompt  [w] write clipboard → save file  [o] open folder  "
-                       "[s] status  [d] done → next  [n]/[p] next/prev  [l] list  [j] jump  [q] quit", style="bold dim"))
+    console.print(Text("r run · c copy · w save · d done · q quit · n/p · j jump · l list · v view · s status · "
+                       "o open · x " + ("less" if full else "more"), style="bold dim"), overflow="ellipsis", no_wrap=True)
 
 
 def render_list(st_state: dict) -> None:
@@ -1177,7 +1221,10 @@ def interactive() -> None:
         idx = st["current"]
         step = STEPS[idx]
         render(idx, st)
-        key = Prompt.ask("next action", default="d" if step.id not in st["done"] else "n").strip().lower()
+        key = Prompt.ask(">", default="d" if step.id not in st["done"] else "n").strip().lower()
+        if key == "x":
+            VIEW["full"] = not VIEW["full"]
+            continue
         if key == "q":
             save_state(st)
             return
@@ -1237,6 +1284,76 @@ def interactive() -> None:
         save_state(st)
 
 
+def pack_is_stale(step: Step) -> bool:
+    """True if the pack is missing or any packed file (or the file set) changed after the pack was built."""
+    pack = PACKS / Path(step.commands[1].cmd.split(" -o ")[1].split(" <")[0]).name
+    if not pack.exists():
+        return True
+    built = pack.stat().st_mtime
+    listfile = step.commands[0].produces[0]
+    if listfile.exists():
+        old = set(listfile.read_text().split())
+        new = {str(f.relative_to(WS)) for f in step.files}
+        if old != new:
+            return True
+    return any(f.exists() and f.stat().st_mtime > built for f in step.files)
+
+
+def export_commands(argv: list[str]) -> None:
+    """volley_guide.py export [--out PATH] [--changed] [--refresh] [--only pkg1,pkg2] [--run]
+
+    --changed  only packages whose pack is missing or older than their files (or whose file set changed)
+    --refresh  embed the REFRESH task (update existing doc) for packages that already have a doc
+               (implied by --changed)"""
+    out = Path("/tmp/volley_repomix_commands.sh")
+    only: set[str] = set()
+    changed = run = refresh = False
+    it = iter(argv)
+    for a in it:
+        if a == "--out":
+            out = Path(next(it)).expanduser()
+        elif a == "--only":
+            only = set(next(it).split(","))
+        elif a == "--changed":
+            changed = True
+        elif a == "--refresh":
+            refresh = True
+        elif a == "--run":
+            run = True
+    pkg_steps = [st for st in STEPS if st.package]
+    if not pkg_steps:
+        sys.exit(f"no packages found under {WS / 'src'} (set VOLLEY_WS)")
+    selected = [st for st in pkg_steps if (not only or st.package in only) and (not changed or pack_is_stale(st))]
+    lines = ["#!/usr/bin/env bash",
+             f"# Generated by volley_guide.py export on {__import__('datetime').datetime.now():%Y-%m-%d %H:%M}",
+             f"# {len(selected)} pack(s){' (changed only)' if changed else ''}. File lists and task instructions are in {WORK}.",
+             "set -euo pipefail", f"cd {WS}", ""]
+    t = Table(title=f"repomix commands → {out}", box=box.SIMPLE)
+    t.add_column("step")
+    t.add_column("package")
+    t.add_column("files", justify="right")
+    t.add_column("~tokens", justify="right")
+    t.add_column("embedded task")
+    for st in selected:
+        st.commands[0].action()                      # (re)write file list + instruction file
+        doc_exists = (PKG_DOCS / st.subsystem).exists()
+        mode = "new doc"
+        if (changed or refresh) and doc_exists:      # embed the REFRESH task instead of the new-doc task
+            st.commands[0].produces[1].write_text(st.prompts[1][1] + "\n")
+            mode = "refresh"
+        lines += [f"# {st.id}: {st.title}  ->  doc: {st.subsystem} ({mode})", st.commands[1].cmd, ""]
+        t.add_row(st.id, st.package, str(len(st.files)), f"{_est(st.files):,}", mode)
+    out.write_text("\n".join(lines) + "\n")
+    out.chmod(0o755)
+    console.print(t)
+    console.print(f"[green]wrote[/] {out}  ({len(selected)} commands). Run it with: bash {out}")
+    if changed and selected:
+        console.print("[yellow]For each rebuilt pack: new chat → attach the pack + the current package doc → "
+                      "paste the step's Refresh prompt (`volley_guide.py copy <step> 2`).[/]")
+    if run and selected:
+        subprocess.run(["bash", str(out)], check=False)
+
+
 def main(argv: list[str]) -> None:
     if not argv:
         try:
@@ -1249,6 +1366,9 @@ def main(argv: list[str]) -> None:
     if cmd == "list":
         render_list(st)
     elif cmd in ("show", "next"):
+        if "--full" in rest:
+            VIEW["full"] = True
+            rest = [x for x in rest if x != "--full"]
         i = find(rest[0]) if rest else st["current"]
         if i is None:
             sys.exit(f"unknown step {rest[0]}")
@@ -1273,6 +1393,15 @@ def main(argv: list[str]) -> None:
             sys.exit(f"unknown step {rest[0]}")
         k = int(rest[1]) - 1 if len(rest) > 1 else 0
         do_copy(STEPS[i], k)
+    elif cmd in ("export", "--export-commands"):
+        export_commands(rest)
+    elif cmd == "stale":
+        rows = [st for st in STEPS if st.package and pack_is_stale(st)]
+        t = Table(title="packs that are missing or older than their package files", box=box.SIMPLE)
+        t.add_column("step"); t.add_column("package"); t.add_column("doc")
+        for st in rows:
+            t.add_row(st.id, st.package, st.subsystem)
+        console.print(t)
     elif cmd == "codemap":
         if rest and rest[0] == "--stdout":
             print(generate_codemap())
