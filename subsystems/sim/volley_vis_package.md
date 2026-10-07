@@ -1,8 +1,8 @@
 # Volley `vis` Package: Package and Software Design
 
-[Overview and ROS concepts](volley_simulation_guide.md) · [Simulation package](volley_sim_package.md) · [Setup and runbook](volley_simulation_runbook.md)
+[Overview and ROS concepts](volley_simulation_guide.md) · [Simulation package](volley_sim_package.md) · [Setup and runbook](volley_simulation_runbook.md) · [Launcher package](volley_launcher_package.md)
 
-Source basis: all 30 files in `vis-repomix.md`; inventory below. This is static source analysis. `math_test.cpp` assertions were inspected, but no ROS build or executable/test run was performed. Custom interface definitions, launcher, mesh bytes, and the simulated AGV implementation are outside this pack.
+Source basis: all 30 files in `vis-repomix.md`; inventory below. This is static source analysis. `math_test.cpp` assertions were inspected, but no ROS build or executable/test run was performed. Custom interface definitions, mesh bytes, and the simulated AGV implementation are outside this pack.
 
 ## 1. Summary, package design, and dependencies
 
@@ -24,7 +24,7 @@ Source basis: all 30 files in `vis-repomix.md`; inventory below. This is static 
 | `geometry_msgs`, `std_msgs`, `visualization_msgs` | Point/pose/quaternion, color/header, and standard RViz marker interfaces. |
 | `bay_interfaces`, `vrc_interfaces` | Bay light values and VRC gate/report types used in rendering. |
 | `rclcpp`, `eigen` | ROS callbacks/timers/publishers and rigid-transform computation. |
-| `launcher` | Declared execution dependency; supplies system orchestration/configuration outside this pack. |
+| `launcher` | Declared execution dependency; supplies system orchestration/configuration confirmed by `launcher-repomix.md`; see its companion guide. |
 | Installed `sim/3d` assets | Resource dependency when local mesh mode is selected; path is `package://sim/3d/`. `vis/package.xml` does not explicitly declare `sim`, although the local mesh path requires its installed resources. |
 
 The command-display code classifies `AgvCommand` with `common_ros` helpers and draws overlays. A label such as LOCOMOTE or LIFT expresses a reported/planned operation, not a command executed by `vis`. Similarly, a rendered waiting car is an illustration of queued work, not another central payload registration.
@@ -123,7 +123,7 @@ QoS compatibility is separate from type/name compatibility: matching names and m
 | `/sim/report` | `interfaces/msg/SimReport` | Waiting patron insert queue. |
 | `/agv/a<ID>/command_list` | `interfaces/msg/AgvCommandReportList` | AGV command overlay; subscribed dynamically. |
 
-All outputs below carry `visualization_msgs/msg/MarkerArray`. The code uses **relative names**; `default.rviz.in` expects them under `/vis`. The launch must supply that namespace (or matching remappings/configuration). Naming a node `vis` alone does not make its relative topics `/vis/...`.
+All outputs below carry `visualization_msgs/msg/MarkerArray`. The code uses **relative names**; `default.rviz.in` expects them under `/vis`. The supplied simulation, production central, and bagplay launch files explicitly supply namespace `vis`. Naming a node `vis` alone does not make its relative topics `/vis/...`.
 
 | Expected topic in supplied RViz configuration | Contents |
 | --- | --- |
@@ -274,7 +274,7 @@ Bay visual markers require both a bay-like layout node and a cached matching Bay
 | Setting | Local `vis` behavior/default |
 | --- | --- |
 | `layout` | Read as a string with no explicit local fallback; resolved with `GetLayoutPathByName`. Resolution failure logs and exits. |
-| `use_remote_meshes` | **`true` in `BuildVisContext`**. The earlier launch guide reports `false`; the omitted launch configuration may override this application default. |
+| `use_remote_meshes` | **`true` in `BuildVisContext`**. Simulation launcher explicitly passes `false` unless overridden; bagplay also passes false. Production central passes shared params, so inspect YAML or application default. |
 | `remote_mesh_prefix` | `https://aws-mesh-proxy.tailfadbb4.ts.net/model/`. |
 | Local mesh prefix | `package://sim/3d/`. |
 | Render period | Fixed 50 ms of the node's ROS clock. |
@@ -484,7 +484,7 @@ Choose a stable marker namespace/ID scheme; define whether entities missing from
 
 ### Open questions for the team
 
-1. Which launcher namespace/remappings guarantee relative outputs match RViz's `/vis/...` configuration?
+1. With `/vis` namespace confirmed, should sim launch also explicitly load the installed RViz configuration and simulated-time settings?
 2. Should local mesh resources be an explicit `sim` runtime dependency, or should assets live in a separate resource package?
 3. Should fresh marker headers preserve the source snapshot stamp or expose age, so stale data is visible?
 4. Should all entity caches be reconciled on removal and AGV command subscriptions removed with them?
@@ -498,3 +498,7 @@ Choose a stable marker namespace/ID scheme; define whether entities missing from
 ## Source and rendering notes
 
 Primary source: `vis-repomix.md`, all 30 files listed above. The companion `sim` pack establishes its caller relationship to `math_lib` and local asset installation. Internal helper implementations in omitted packages are not assumed. Mermaid blocks describe ownership/data flow or presentation-state retention, not a physical dynamics engine. ROS concept references are linked in the overview and contract discussion.
+
+### Confirmed launcher integration
+
+`launcher/sim_nodes.py` creates `/vis/visualizer`, passes `use_remote_meshes=False` by default, and includes Foxglove when `vis` is enabled. RViz creation is nested under that same condition: `vis:=false` disables RViz regardless of `rviz`. The RViz action has no explicit `-d` config argument. Production central and bagplay also use namespace `vis`; bagplay does not pass layout or simulated time. See [launcher design](volley_launcher_package.md) for option precedence, replay limitations and startup timing.

@@ -1,8 +1,8 @@
 # Volley Simulation Setup and Runbook
 
-[Overview and ROS concepts](volley_simulation_guide.md) · [Simulation package](volley_sim_package.md) · [Visualizer package](volley_vis_package.md)
+[Overview and ROS concepts](volley_simulation_guide.md) · [Simulation package](volley_sim_package.md) · [Visualizer package](volley_vis_package.md) · [Launcher package](volley_launcher_package.md)
 
-This preserves the supplied setup/simulation guides and adds source-backed visualization checks. Launcher source remains omitted; no commands were executed against a live ROS system.
+This preserves the supplied setup/simulation guides and adds source-backed visualization checks. The supplied launcher pack now confirms option parsing, topology and namespace settings; no commands were executed against a live ROS system.
 
 ## 1. Setup and documented launch walkthrough
 
@@ -193,7 +193,7 @@ The getting-started guide recommends a unique domain per developer:
 poe domain-id <id>
 ```
 
-Replace `<id>` with your selected domain. The earlier architecture guide says the omitted simulation loader sets `ROS_DOMAIN_ID=75` **only when it is not already set**. Domain 75 separates the default simulation from other domains, but does not give every developer a unique simulation network.
+Replace `<id>` with your selected domain. The earlier architecture guide says the supplied simulation loader sets `ROS_DOMAIN_ID=75` **only when it is not already set**. Domain 75 separates the default simulation from other domains, but does not give every developer a unique simulation network.
 
 Ensure all terminals used for this simulation share the same effective domain and ROS discovery configuration. A domain set inside the launch process does not automatically update a separately attached shell. Check terminal configuration when an event script cannot discover the simulation.
 
@@ -234,23 +234,23 @@ Components can be loaded into containers without a separate executable for every
 
 | Argument | Documented default | Meaning |
 | --- | --- | --- |
-| `scenario` | Depends on entrypoint; named tests may supply one | Scenario file containing initial conditions. Supply it explicitly for this workflow. |
+| `scenario` | `None` in manual sim entry; named tests may supply one | Scenario file containing initial conditions. Supply it explicitly for this workflow. |
 | `real_time_factor` | `1.0` for manual runs; `10.0` for system tests | Ratio of simulated to wall time; `0` pauses simulated time. |
 | `enable_dispatch_charging_mode` | `true` | Enable automatic dispatch charging behavior. |
-| `garage_dirtiness_threshold_ratio` | `0.1` | Threshold for queuing an idle AUTO-mode garage-cleaning job. |
+| `garage_dirtiness_threshold_ratio` | YAML default retained; earlier guide says `0.1`, unverified | Threshold for queuing an idle AUTO-mode garage-cleaning job. |
 | `record_artifacts` | `false` | Enable ROS MCAP artifact recording. |
 | `artifacts_output_dir` | Timestamped directory under `ARTIFACTS_DIR` | Artifact output location. |
 | `artifact_basename` | `sim` | Artifact subdirectory and file base name. |
 | `vis` | `true` for manual runs | Enable the 3D visualizer. |
 | `rviz` | `true` | Enable RViz. |
-| `use_remote_meshes` | `false` in earlier launch guide | Use remote mesh assets. The supplied `vis` application defaults to `true` unless overridden; check launcher mapping. |
-| `remote_mesh_prefix` | `https://aws-mesh-proxy.tailfadbb4.ts.net/model/` in supplied `vis` code | Remote mesh base URL; launch overrides remain to be checked. |
+| `use_remote_meshes` | `false` in supplied launcher | Explicitly overrides `vis` application default `true`; local assets required. |
+| `remote_mesh_prefix` | `https://aws-mesh-proxy.tailfadbb4.ts.net/model/` in supplied `vis` code | Remote mesh base URL; launcher only passes a supplied nonempty override. |
 | `printdags` | `false` | Print scheduler DAGs to standard output. |
-| `auto_confirm_insert` | Normally enabled | Let simulated patron insert confirmations happen automatically. |
+| `auto_confirm_insert` | YAML default retained; value unverified | Let simulated patron insert confirmations happen automatically. |
 
-These are launch-layer options, which may map to node parameters differently; the launcher source is not packed. In particular, `auto_confirm_insert` maps to `simulator.auto_confirm_insert` in the bay component.
+These options are confirmed by `launcher/sim_nodes.py`. Unset auto-confirm and dirtiness threshold preserve YAML values; those files were excluded. Dispatch charging is only forced when its option is false. In particular, `auto_confirm_insert` maps to `simulator.auto_confirm_insert` in the bay component.
 
-To inspect launch arguments exposed by the installed version:
+The sim parser uses `sys.argv` regexes rather than declared launch arguments. Therefore the following command may not list these options; use the [launcher option table](volley_launcher_package.md#public-simulation-launch-options) for the source-backed catalog:
 
 ```bash
 ros2 launch launcher sim.launch.py --show-args
@@ -372,4 +372,13 @@ Inspect `header.frame_id`, marker pose, `mesh_resource`, namespace and ID in the
 
 ## Source and rendering notes
 
-Setup commands derive from the supplied repository getting-started/simulation guides. Package-source analysis is in the two companion guides; metrics/event-script source is still omitted. Markdown uses `$...$`, `$$...$$`, and Mermaid fenced blocks. Save these files together to preserve their relative navigation links.
+Setup commands derive from the supplied repository getting-started/simulation guides. Package-source analysis is in the three companion package guides; metrics/event-script source is still omitted. Markdown uses `$...$`, `$$...$$`, and Mermaid fenced blocks. Save these files together to preserve their relative navigation links.
+
+### Launcher-specific setup checks
+
+- Sim layout comes from scenario YAML; this launch path sets installation ID `9998` regardless of shell `LAYOUT`/`INSTALLATION_ID`. Preserve the documented command for other tooling, but do not infer its environment values control these sim parameters.
+- The source starts RViz without an explicit display config. Select the installed vis configuration and Fixed Frame `map` if needed.
+- `vis:=false` gates visualizer, bridge, and RViz. `rviz:=false` keeps visualizer/bridge available when vis is enabled.
+- The clock is configured first in the main container, with no startup-readiness barrier. Check `/clock` and component/service discovery if startup stalls.
+- Artifact output defaults to a UTC timestamp under `ARTIFACTS_DIR`, otherwise `${ROS_HOME:-~/.ros}/artifacts`. Recorder source subdirectories are flattened during installation, so its installed include is `launch/recorder.launch.xml`.
+- Bagplay loops playback but does not request `--clock` or pass layout/use_sim_time to vis; see the [launcher guide](volley_launcher_package.md) before treating it as a complete simulation replay.

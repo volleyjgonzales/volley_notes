@@ -2,13 +2,14 @@
 
 The supported simulation uses Volley's C++/ROS simulation components with production scheduling, tracking, and bay control. RViz displays state through the `vis` package's mesh-marker topics. The supplied source contains clock/sensor/collision logic and visual kinematics; the AGV motion implementation still requires the omitted `agvhito` source.
 
-The documentation is split into four linked files. Keep them together when downloading so relative links work in VS Code.
+The documentation is split into five linked files. Keep them together when downloading so relative links work in VS Code.
 
 | Document | Read it for |
 | --- | --- |
 | [This overview](volley_simulation_guide.md) | Basic concepts, what ROS contracts mean, engine/TF explanations, tray/bay population and C++ responsibility map. |
 | [Simulation package design](volley_sim_package.md) | Nine-part `sim` source analysis: 28 files, APIs, ROS endpoints, diagrams, lifecycle, safety, math, tests and idioms. |
 | [Visualizer package design](volley_vis_package.md) | Nine-part `vis` package/software analysis: 30 files, build/dependency design, APIs, topic contracts, ownership/state diagrams, callbacks, visual equations and tests. |
+| [Launcher package design](volley_launcher_package.md) | Nine-part analysis of 23 files: configuration precedence, deployment topology, namespaces, executors, recording/replay, and safety. |
 | [Setup and runbook](volley_simulation_runbook.md) | Container/environment setup, build, exact launch/exercise commands, metrics and troubleshooting. |
 
 ## What does “ROS contract” mean?
@@ -36,9 +37,9 @@ Primary ROS background: [interface definitions and patterns](https://github.com/
 
 ### What is the simulation engine: Gazebo, Ignition, or RViz?
 
-**The engine shown by this source is Volley's own C++/ROS implementation.** `volley::sim::Simulator` in `src/sim/src/simulator.cpp` orchestrates scenario events, patron queues, and collision checking. `BaySim` supplies simulated bay hardware; `SimClockRos` supplies time. The supplied architecture guide places simulated AGV movement in `agvhito::sim::SimAgvComponent`, whose implementation is outside this pack.
+**The engine shown by this source is Volley's own C++/ROS implementation.** `volley::sim::Simulator` in `src/sim/src/simulator.cpp` orchestrates scenario events, patron queues, and collision checking. `BaySim` supplies simulated bay hardware; `SimClockRos` supplies time. The launcher confirms the architecture guide places simulated AGV movement in `agvhito::sim::SimAgvComponent`, whose implementation is outside this pack.
 
-There is no Gazebo/Ignition dependency, world loader, physics-server interface, or integration call in the packed `sim` build or implementation. The complete launcher was not supplied, so this confirms the engine used by these components rather than every possible simulation tool in the repository.
+There is no Gazebo/Ignition dependency, world loader, physics-server interface, or integration call in the packed `sim` build or implementation. The supplied launcher also directly launches these C++ components and no Gazebo/Ignition process. Downstream plugin internals remain outside the packs.
 
 **RViz is the display, not the engine.** The documented `vis::visualizer_node` and RViz show the garage state and its 3D assets. Turning off `vis` and `rviz` leaves the documented headless simulation workflow available. A `.dae` mesh depicts an object; it does not decide how many objects exist, register trays, run bay operations, or supply the collision algorithm. This engine checks parameterized boxes, not those meshes.
 
@@ -84,8 +85,8 @@ Alternatively, `initial_conditions` in the scenario can be a scalar string namin
 | --- | --- | --- |
 | Trays | The `trays` configuration list inside the scenario's `initial_conditions` YAML map, or the root `trays` list in a referenced initial-conditions YAML file. | Parser creates generated ROS 2 `AddTraySrv::Request` objects in the internal C++ struct; engine calls the `/central/add_tray` ROS service; later `GarageSnapshot` topic messages provide tracked tray state. |
 | Payloads/cars already parked | Optional `payload` YAML map nested under each starting tray entry. | Parser creates generated `AddPayloadSrv::Request` objects; engine calls the `/central/add_payload` ROS service; snapshot-topic data associates each payload GUID with a tray. |
-| AGVs | The `agvs` YAML configuration list in the resolved initial conditions. | Parser collects generated request objects; engine registers IDs using the `/central/add_agv` ROS service. The documented launcher creates one simulated AGV component per initial AGV and must supply its motion state. |
-| Bays | Bay-like nodes in the selected layout. | The architecture guide documents a per-bay container with production bay logic and a `BaySimComponent`; the engine creates one offer client per `GetBayLikeNodeIds()` result. |
+| AGVs | The `agvs` YAML configuration list in the resolved initial conditions. | Parser collects generated request objects; engine registers IDs using the `/central/add_agv` ROS service. The supplied launcher creates one `agvhito` simulated AGV component per initial AGV, passing node ID, heading, and `initial_lifted=(lift_fraction==1.0)`; it does not pass battery fraction. |
+| Bays | Bay-like nodes in the selected layout. | The launcher confirms a per-layout-bay container with production bay logic and a `BaySimComponent`; the engine creates one offer client per `GetBayLikeNodeIds()` result. |
 | Chargers | Layout nodes of type `TYPE_AGV_CHARGE`. | Engine registers static charger collision boxes during construction. |
 | Extra obstructions | `initial_conditions.obstructions`. | Parser constructs boxes; engine registers them during construction. |
 | New patron vehicles | `patron_arrival` events or live `SimEvent` requests. | Enter the waiting queue, then are accepted by a ready bay and pass through production insert handling. |
@@ -129,7 +130,7 @@ Count the entries in the snapshot's `trays`, `agvs`, `payloads`, and `bays` list
 
 ### How many bays are there, and where are they placed?
 
-**Bays come from the selected layout, not the initial tray list.** The supplied architecture guide says the launcher starts one bay container per bay. In this pack, `Simulator` traverses `layout_->GetBayLikeNodeIds()` to create `/bay/b<ID>/sim_offer_inserting_payload` clients. That establishes which bay-like IDs the engine expects; verifying the precise set of launched bay components still requires `src/launcher/launcher/sim_nodes.py` and the layout.
+**Bays come from the selected layout, not the initial tray list.** The supplied architecture guide says the launcher starts one bay container per bay. In this pack, `Simulator` traverses `layout_->GetBayLikeNodeIds()` to create `/bay/b<ID>/sim_offer_inserting_payload` clients. The supplied launcher traverses Python `layout.get_bay_ids()` to create bay containers; the engine uses C++ `GetBayLikeNodeIds()`. Their exact agreement and selected counts still require the omitted layout/helper implementations.
 
 The bay hardware component receives `bay_id` as a required parameter. That ID ties it to a layout node, its ROS offer-service endpoint, and the snapshot tray position lookup. Collision placement uses the layout node's X/Y, inbound heading, and floor Z in `MakeBoundingBoxForBay()`. Door hardware additionally uses the floor specification and configured open/close times. More bays therefore generally means more configured bay components, while more trays means more registered tray data, not more bay nodes.
 
@@ -159,7 +160,7 @@ flowchart TD
     A --> R["RViz: Fixed Frame map"]
 ```
 
-The supplied RViz template expects `/vis/trays`, `/vis/agvs`, `/vis/payloads`, and `/vis/bays`. Marker output names in C++ are relative, so the launch namespace/remappings must match that configuration. Verify on a running instance:
+The supplied launcher explicitly gives vis namespace `vis`, resolving its relative marker names under `/vis`. It starts RViz without an explicit `-d` configuration file, so display/template loading must be verified. The supplied RViz template expects `/vis/trays`, `/vis/agvs`, `/vis/payloads`, and `/vis/bays`. Marker output names in C++ are relative, so the launch namespace/remappings must match that configuration. Verify on a running instance:
 
 ```bash
 ros2 topic type /vis/trays
@@ -180,7 +181,7 @@ The first command should identify `visualization_msgs/msg/MarkerArray` when laun
 | Bay component creation and snapshot join | `src/sim/src/bay_sim_component.cpp`. | Own a hardware model, accept payload offers, find a tray/payload in the bay, and tick. |
 | Bay hardware and simulated patron behavior | `src/sim/src/bay_sim.cpp`. | Sensor streams, simulated doors, and insert/retrieve confirmations. |
 | Bay operation/state-machine business logic | `src/bay/`; referenced headers include `bay/bay_insert_state_machine.hpp` and `bay/bay_retrieve_state_machine.hpp`. | `BaySim` observes the production bay report and supplies feedback; it does not replace the production state machines. |
-| Bay launch population | `src/launcher/launcher/sim_nodes.py`. | Documented launcher entrypoint; implementation absent from the pack. |
+| Bay launch population | `src/launcher/launcher/sim_nodes.py`. | Confirmed per-layout-bay core plus BaySim containers; plugin selection and BLift bridge are in `bay_nodes.py`. |
 
 To locate the omitted central handler in your checkout:
 
@@ -194,8 +195,12 @@ The practical distinction is that simulation code supplies the environment and f
 
 ## Evidence and remaining limits
 
-Source basis: `sim-repomix(1).md` (28 files), `vis-repomix.md` (30 files), the supplied repository tree and getting-started/simulation/architecture guides. `vis` math assertions were inspected; no ROS build/runtime/test execution was performed. Simulator test source, actual sandbox scenario/layout contents, launcher, most dependency internals, custom interface definitions and simulated AGV implementation remain absent.
+Source basis: `sim-repomix(1).md` (28 files), `vis-repomix.md` (30 files), `launcher-repomix.md` (23 files), the supplied repository tree and getting-started/simulation/architecture guides. `vis` math assertions were inspected; no ROS build/runtime/test execution was performed. Simulator test source, actual sandbox scenario/layout/parameter YAML contents, most dependency internals, custom interface definitions and simulated AGV implementation remain absent.
 
 There is no fixed tray/bay count inferred here. Use the selected initial-conditions YAML for requested starting trays, the selected layout for bay definitions, and live garage snapshots for current tracked entities. These counts describe different stages and can differ after failures or runtime changes.
 
 Use `$...$` and `$$...$$` for math. Mermaid diagrams live in the package guides. All companion files use relative links for portable navigation.
+
+### Launcher evidence added
+
+The [launcher guide](volley_launcher_package.md) explains how scenario data becomes processes and components. On the sim path it selects layout from the scenario and passes installation ID `9998`, irrespective of shell `LAYOUT`/`INSTALLATION_ID`. It configures multithreaded containers for world/AGVs, central, and each bay, with separate VRC/VECS processes. The clock has `use_sim_time=False` while consumers use simulated time; listing it first is not a readiness barrier. The excluded `params/`, `layouts/`, and tests remain outside the source evidence.

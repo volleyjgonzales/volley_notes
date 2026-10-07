@@ -1,6 +1,6 @@
 # Volley `sim` Package: Design and Source Analysis
 
-[Overview and ROS concepts](volley_simulation_guide.md) · [Visualizer package](volley_vis_package.md) · [Setup and runbook](volley_simulation_runbook.md)
+[Overview and ROS concepts](volley_simulation_guide.md) · [Visualizer package](volley_vis_package.md) · [Setup and runbook](volley_simulation_runbook.md) · [Launcher package](volley_launcher_package.md)
 
 ## 1. Summary and evidence scope
 
@@ -8,13 +8,13 @@ The `sim` package supplies a ROS simulation clock, garage-level scenario orchest
 
 The supported full-system entrypoint remains `ros2 launch launcher sim.launch.py`, as documented in the supplied simulation guide. Setup and exact quick-start commands are preserved in [the setup/runbook](volley_simulation_runbook.md). Running an individual `sim` executable does not replace the launcher's responsibility to start the other packages and configure them.
 
-**Evidence:** the 28 files in `sim-repomix(1).md` and the 30 files in `vis-repomix.md` provide the implementation basis. Source behavior takes precedence over the earlier pasted architecture prose. The `sim` tests, 3D asset bytes, Python dynamics, `launcher`, simulated AGV implementation, most dependency internals, and custom interface definitions remain outside these packs. The `vis` math test is included and analyzed. This is static source analysis; no ROS build or runtime test was performed. Paths refer to the Volley repository root, and approximate line counts refer to extracted source, not positions in the packed Markdown.
+**Evidence:** the 28 files in `sim-repomix(1).md` and the 30 files in `vis-repomix.md` provide the implementation basis. Source behavior takes precedence over the earlier pasted architecture prose. The `sim` tests, 3D asset bytes, Python dynamics, simulated AGV implementation, most dependency internals, and custom interface definitions remain outside these packs. The `vis` math test is included and analyzed. This is static source analysis; no ROS build or runtime test was performed. Paths refer to the Volley repository root, and approximate line counts refer to extracted source, not positions in the packed Markdown.
 
 ### Is the Python AGV dynamics project used?
 
 **Confirmed for the supplied `sim` build:** `src/sim/CMakeLists.txt` compiles only the listed C++ libraries/components, installs `3d` and test fixtures, and contains no Python installation, launch, subprocess, import, or linkage to `python/agv_simulation`. None of the packed implementation files references that Python project. It is therefore reasonable to omit it from an analysis of these C++ components.
 
-**Not established for the entire repository:** a launcher or the omitted `agvhito::sim::SimAgvComponent` could reference it. The earlier architecture guide says the simulated AGV is implemented in `agvhito`, but its source is not in this pack. A full-repository usage claim requires inspecting those files. Also, this package consumes AGV state; it does not implement AGV wheel dynamics itself.
+**Confirmed for the inspected launcher too:** none of its 23 files imports or executes the Python dynamics project; it loads the C++ `agvhito::sim::SimAgvComponent`. Indirect use inside that omitted plugin is still unverified, so a full-repository usage claim requires its implementation. Also, this package consumes AGV state; it does not implement AGV wheel dynamics itself.
 
 Run this from the actual repository to find possible integration points:
 
@@ -144,7 +144,7 @@ Component classes defined only in `.cpp` files are plugin entrypoints rather tha
 | `confirm_insert` | Bay client | `SetPayloadInfoSrv`; sends GUID, charging intent, dimensions, and mass. | `bay_sim.cpp` |
 | `confirm_retrieve` | Bay client | `TriggerSrv`; automatic confirmation once per retrieve cycle. | `bay_sim.cpp` |
 
-Relative bay endpoints resolve under the node's launch namespace; the `/bay/b<ID>/...` names above are explicit where the source spells them out. Topic constants, helper QoS, service factory callback groups, and launcher namespaces are not defined in the pack. Do not invent their exact values.
+Relative bay endpoints resolve under the node's launch namespace; the `/bay/b<ID>/...` names above are explicit where the source spells them out. Topic constants, helper QoS, and service factory callback groups are not defined in the sim pack. Launcher source now confirms BaySim namespace `/bay/b<ID>`; see the [launcher guide](volley_launcher_package.md). Do not invent their exact values.
 
 `SimClients` uses explicit service names:
 
@@ -338,7 +338,7 @@ The engine creates its service clients, publisher, snapshot/report subscriptions
 
 On each early timer tick, nonempty initial entity vectors trigger `ProcessInitialConditions`. It returns false while any of the three add services is unavailable; the tick returns before collision checking and reporting. Once ready, registration runs AGVs → trays → payloads, synchronously. An unsuccessful response throws; there is no local rollback. A successful seed clears the entity vectors. Obstruction-only initial conditions count as empty, but their geometry was already registered in construction.
 
-The parsed AGV pose/lift/battery fields are not sent by this package's registration call: `/central/add_agv` receives only the ID. Another layer must initialize AGV state if those values are to take effect; the documented launcher may do so, but it is omitted.
+The parsed AGV pose/lift/battery fields are not sent by this package's registration call: `/central/add_agv` receives only the ID. The supplied launcher initializes node ID and heading in each `agvhito` component and reduces lift fraction to `initial_lifted=(lift_fraction==1.0)`. It does not forward battery fraction. Motion implementation remains omitted.
 
 ### 5.2 Engine steady state
 
@@ -377,7 +377,7 @@ Retrieval automatically confirms once its discriminated retrieve machine is runn
 | `BaySimComponent` / `BaySim` | ROS-time timer, snapshot and bay report/pose subscriptions, factory services, and separate mutually exclusive confirmation response group. | Door-wrapper callbacks are dependency-defined. |
 | `SimClockRos` | Steady-time timer, post-set parameter callback, atomic factor. | No explicit callback group or executor is selected here. |
 
-Separate callback groups do not by themselves create threads. Blocking calls need an executor able to service responses or a helper that spins appropriately. The actual simulator launcher/container executor and `volley::Call` implementation are omitted. The separate supplied `vis` executable uses `rclcpp::spin(node)`, as discussed in [the visualizer guide](volley_vis_package.md). That distinction matters when embedding these components in a single-threaded executor.
+Separate callback groups do not by themselves create threads. Blocking calls need an executor able to service responses or a helper that spins appropriately. The supplied launcher now confirms multithreaded world, central, and per-bay containers. `volley::Call` and dependency callback-group internals remain omitted, so executor configuration alone does not prove blocking progress. The separate supplied `vis` executable uses `rclcpp::spin(node)`, as discussed in [the visualizer guide](volley_vis_package.md). That distinction matters when embedding these components in a single-threaded executor.
 
 ### 5.5 Parameters and constants
 
@@ -391,7 +391,7 @@ Separate callback groups do not by themselves create threads. Blocking calls nee
 | `real_time_factor` | `1.0`; descriptor range 0 through maximum finite double. | `sim_clock_ros.cpp` |
 | `clock_publish_period_ms` | `5.0` ms, fractional milliseconds supported. No local explicit positive-range validation. | `sim_clock_ros.cpp` |
 | `start_time_ns` | `0` ns. | `sim_clock_ros.cpp` |
-| `use_sim_time` | Required operationally for consumers to follow `/clock`; launch config omitted. | `sim_clock_ros.hpp`, earlier guide |
+| `use_sim_time` | Required operationally for consumers to follow `/clock`; launcher now confirms consumers use sim time and clock source explicitly uses wall time. | `sim_clock_ros.hpp`, earlier guide |
 | Engine/bay tick periods | Both `50ms`, fixed constants. | `simulator.cpp`, `bay_sim_component.cpp` |
 | Carried-tray XY tolerance | `0.15` m independently on X and Y. | `simulator.cpp` |
 | Tire broken count | Six tick samples per pulse; mass increases when current count exceeds three. | `bay_sim.cpp` |
@@ -399,7 +399,7 @@ Separate callback groups do not by themselves create threads. Blocking calls nee
 | Initial AGV lift/battery | `0.0` / `1.0` in parser. | `scenario_runner.cpp` |
 | Obstruction Z | `z_loc=0`; `z_len=kHeightDefault+kTrayHeight`. | `scenario_runner.cpp` |
 
-Other launch defaults in [the runbook launch options](volley_simulation_runbook.md#2-full-system-launch-options) come from the earlier documentation, not declarations in this pack. Core geometry constants such as tray mass and AGV dimensions live in omitted `common/constants.hpp`; their numeric values are not inferred here.
+Other launch defaults in [the runbook launch options](volley_simulation_runbook.md#2-full-system-launch-options) are now cross-checked against launcher source; YAML-only values remain unverified because parameter files were excluded. Core geometry constants such as tray mass and AGV dimensions live in omitted `common/constants.hpp`; their numeric values are not inferred here.
 
 ### 5.6 Correct scenario schema
 
@@ -439,7 +439,7 @@ events:
     ev_charge_requested: false
 ```
 
-This C++ parser does not read a scenario `params` block. Parameter merging described in the earlier architecture guide happens in the omitted launcher layer.
+This C++ parser does not read a scenario `params` block. Parameter merging described in the earlier architecture guide happens in `launcher/sim_nodes.py`: scenario overrides follow loaded parameter files, before programmatic and explicit launch-option adjustments.
 
 | Timed YAML event | Required/additional fields | Execution |
 | --- | --- | --- |
@@ -498,7 +498,7 @@ These are static findings or review questions, not runtime reproductions.
 | **RISK: reversed due-event batch** | `ScenarioRunner::GetNextEvents` returns oldest first; `Simulator::HandleEvents` uses `back()/pop_back()`. Late ticks invert chronology. | Test multi-event overdue batches; iterate the returned vector forwards. |
 | **RISK: parsed but unsupported event** | Battery-fraction branch logs an error and consumes the event. | Reject unsupported types or implement the handler and verify state change. |
 | **RISK: acceptance mistaken for success** | Enqueue success only means queued; async wrapper returns mean sent. Handler usually ignores those returns. | Track responses and job completion separately. |
-| **RISK: blocking callback progress** | Seeding, bay offers, planner toggle, and confirmations block; executor/helper behavior omitted. | Verify multithreaded execution or independent response spinning; test unavailable/slow services. |
+| **RISK: blocking callback progress** | Seeding, bay offers, planner toggle, and confirmations block; multithreaded containers confirmed; helper/group behavior omitted. | Verify multithreaded execution or independent response spinning; test unavailable/slow services. |
 | **RISK: confirmation failure latched** | Insert and retrieve call results are ignored; pending/sent flags are set even if the call fails. | Gate flags on successful responses or define bounded retry behavior. |
 | **RISK: wrong payload completes handoff** | Pending insert clears whenever a tray payload exists, without a GUID equality check. | Verify the placed payload matches the inserting GUID. |
 | **RISK: partial initialization** | Some entities may register before a later call throws; no rollback or per-entity completion tracking. | Test failure after first successful registration. |
@@ -699,9 +699,9 @@ Do not copy the raw-this teardown assumptions, response-ignored latches, reverse
 
 ### Open questions
 
-1. Does the actual `sim.launch.py` use an executor that can service all blocking-response groups, and what does `volley::Call` do while waiting?
-2. Is the Python wheel-dynamics project exclusively an offline tool, and does `agvhito` or the launcher import it anywhere?
-3. Who applies parsed AGV pose/lift/battery state when `SimClients` registers only the ID?
+1. With multithreaded containers now confirmed, do effective callback groups permit all blocking-response paths to progress, and what does `volley::Call` do while waiting?
+2. Is the Python wheel-dynamics project exclusively an offline tool, and does the omitted `agvhito` implementation import it indirectly? The inspected launcher does not.
+3. Is launcher conversion of initial lift to a Boolean intentional, and where should initial battery fraction be applied? Node ID/heading are now confirmed as plugin parameters.
 4. Should enqueue reject unsupported events, and should event execution provide acknowledgement or retries?
 5. Is reverse due-batch execution intentional? If not, should equal-time events also receive an insertion-order tie-breaker?
 6. Should clock advancement track actual elapsed steady time or preserve fixed-step behavior even under load?
@@ -716,4 +716,4 @@ Do not copy the raw-this teardown assumptions, response-ignored latches, reverse
 
 ## Source and rendering notes
 
-Primary source: `sim-repomix(1).md`, with `vis-repomix.md` supplying referenced pose math. Scenario/layout contents, simulator test source, launcher, custom interface definitions and simulated AGV implementation remain omitted. This is static analysis; no ROS build or runtime checks were performed. Use `$...$` / `$$...$$` for math and Mermaid fenced blocks for diagrams.
+Primary source: `sim-repomix(1).md`, with `vis-repomix.md` supplying referenced pose math and `launcher-repomix.md` confirming deployment configuration. Scenario/layout contents, simulator test source, custom interface definitions and simulated AGV implementation remain omitted. This is static analysis; no ROS build or runtime checks were performed. Use `$...$` / `$$...$$` for math and Mermaid fenced blocks for diagrams.
