@@ -44,7 +44,7 @@ Uppercase state labels (`AUTO`, `STOPPED`, `OPEN`, `CLOSED`, and similar), enum 
 
 The supported simulation uses Volley's C++/ROS (Robot Operating System) simulation components with production scheduling, tracking, and bay control. RViz displays state through the `vis` package's mesh-marker topics. The supplied source contains clock/sensor/collision logic and visual kinematics; the AGV (automated guided vehicle) motion implementation is now confirmed in `agvhito`: a C++ kinematic model with shared production control logic and in-memory protocol transport.
 
-The documentation is split into six linked files. Keep them together when downloading so relative links work in VS Code (Visual Studio Code).
+The documentation is split into seven linked files. Keep them together when downloading so relative links work in VS Code (Visual Studio Code).
 
 | Document | Read it for |
 | --- | --- |
@@ -53,6 +53,7 @@ The documentation is split into six linked files. Keep them together when downlo
 | [Visualizer package design](volley_vis_package.md) | Nine-part `vis` package/software analysis: 30 files, build/dependency design, APIs, topic contracts, ownership/state diagrams, callbacks, visual equations and tests. |
 | [Launcher package design](volley_launcher_package.md) | Nine-part analysis of 23 files: configuration precedence, deployment topology, namespaces, executors, recording/replay, and safety. |
 | [HITO AGV package design](volley_agvhito_package.md) | Nine-part analysis of 101 files: real/simulated adapters, ROS and MQTT contracts, YASMIN control, kinematics, lift, battery, ownership, and risks. |
+| [AGV state-machine deep dive](volley_agvhito_state_machine.md) | One complete 36-transition graph, every state hook/guard, YASMIN/yasminx library/API, typed blackboard, protocol verification, C++ features, concurrency, and an extension example. |
 | [Setup and runbook](volley_simulation_runbook.md) | Container/environment setup, build, exact launch/exercise commands, metrics and troubleshooting. |
 
 ## What does “ROS contract” mean?
@@ -239,7 +240,7 @@ The practical distinction is that simulation code supplies the environment and f
 
 ## Evidence and remaining limits
 
-Source basis: `sim-repomix(1).md` (28 files), `vis-repomix.md` (30 files), `launcher-repomix.md` (23 files), `agvhito-repomix.md` (101 files), the supplied repository tree and getting-started/simulation/architecture guides. `vis` math assertions were inspected; no ROS build/runtime/test execution was performed. Simulator test source, actual sandbox scenario/layout/parameter YAML contents, most dependency internals, custom interface definitions and `agvhito` test bodies remain absent.
+Source basis: `sim-repomix(1).md` (28 files), `vis-repomix.md` (30 files), `launcher-repomix.md` (23 files), `agvhito-repomix.md` (101 files), `P15-yasminx-part1of1.md` (21 files), the supplied repository tree and getting-started/simulation/architecture guides. `vis` math assertions were inspected; no ROS build/runtime/test execution was performed. Simulator test source, actual sandbox scenario/layout/parameter YAML contents, most dependency internals, custom interface definitions and `agvhito` test bodies remain absent.
 
 There is no fixed tray/bay count inferred here. Use the selected initial-conditions YAML for requested starting trays, the selected layout for bay definitions, and live garage snapshots for current tracked entities. These counts describe different stages and can differ after failures or runtime changes.
 
@@ -256,3 +257,9 @@ The [AGV guide](volley_agvhito_package.md) traces the shared ROS adapter, YASMIN
 The simulated `localize` ROS service returns existing localization status rather than moving the robot. The scenario engine sends `MOVE_AGV` to `/central/move_agv`; that central handler is omitted, so its relationship to robot relocation remains unverified. The supplied AGV `localize` implementation alone does not establish teleport behavior. The battery-fraction ROS subscription is implemented in `agvhito`, while the corresponding `sim` scenario event remains unsupported.
 
 There is no new transform tree for AGV assets in this pack: continuous pose reaches central and then `vis` marker poses in `map`. The separate velocity message names frame `a<ID>`, but this source broadcasts no transform for that frame. Main movement, braking, lift, battery, and heading-filter equations are in the [AGV math section](volley_agvhito_package.md#7-main-kinematic-equations-and-algorithms).
+
+### State-machine architecture and library evidence
+
+The AGV state graph is compiled C++: `src/agvhito/include/agvhito/sm/state_strings.hpp` defines names and routing tables, `src/agvhito/src/sm/root.cpp` registers concrete C++ states, and `src/agvhito/src/agv.cpp` builds/runs the root. Scenario/parameter YAML configures the run but does not define these transitions. The [state-machine guide](volley_agvhito_state_machine.md#24-where-is-the-state-machine-architecture-defined) traces that linkage and now explains the supplied `src/core/yasminx/` implementation, joining worker, hook defaults, cancellation/error rules, typed keys, and inspected tests.
+
+The [AGV math section](volley_agvhito_package.md#7-main-kinematic-equations-and-algorithms) now derives translation braking caps from basic kinematics, explains lift/mode timing, gives a piecewise battery update, and derives magnetic-guide alignment with a Python-generated SVG. Cancellation diagram labels use the literal `yasminx.canceled` to avoid the C++ scope-separator parsing issue in Mermaid.

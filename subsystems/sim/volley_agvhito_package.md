@@ -1,5 +1,7 @@
 # Volley `agvhito` Package: HITO AGV Integration and Simulation
 
+Dedicated deep dive: [HITO AGV state machine](volley_agvhito_state_machine.md).
+
 Companion guides: [overview](volley_simulation_guide.md), [sim](volley_sim_package.md), [vis](volley_vis_package.md), [launcher](volley_launcher_package.md), and [runbook](volley_simulation_runbook.md).
 
 ## Acronyms, abbreviations, and project names
@@ -14,6 +16,7 @@ HITO is a vendor/project label in this source; its formal expansion is not suppl
 | HITO | Project/vendor label used by `agvhito`; its formal expansion is not stated in the supplied source. AGV simulation component and production AGV proxy/driver family. |
 | API | Application programming interface. Callable C++/Python interfaces, ROS endpoints or the web service, depending on context. |
 | UML | Unified Modeling Language. Class diagrams used to explain types and ownership. |
+| SVG | Scalable Vector Graphics; the zoomable, Python-generated sensor geometry illustration. |
 | TF | ROS transform system/library; TF is used as its conventional name, not a supplied formal letter expansion. Relationships between coordinate frames; marker poses here do not imply per-asset TF broadcasts. |
 | QoS | Quality of service. Message delivery policies such as reliability, history depth and durability. |
 | HTTP | Hypertext Transfer Protocol. Map-server web requests; ROS services are a separate request/response interface. |
@@ -52,7 +55,7 @@ HITO is a vendor/project label in this source; its formal expansion is not suppl
 
 **Python dynamics conclusion:** the supplied `sim`, `launcher`, and now `agvhito` source/build files contain no imports, subprocess calls, installation hooks, or links to `src/sim/python/agv_simulation`. The inspected launch path reaches this C++ model directly. That Python project is therefore not used by this inspected simulation path; this is not a claim about every omitted repository tool.
 
-Evidence is all files extracted from `agvhito-repomix.md`; the inventory below includes each packed file. Test bodies, custom ROS interface definitions, `yasminx` internals, and most common/dependency implementations are absent. This is static source analysis; no build or runtime test was executed. Paths are repository relative and line counts describe extracted source, not pack offsets.
+Evidence is all files extracted from `agvhito-repomix.md`; the inventory below includes each packed file. Test bodies, custom ROS interface definitions, and most common/dependency implementations are absent. The separately supplied `yasminx` implementation and tests are now analyzed in the state-machine guide. This is static source analysis; no build or runtime test was executed. Paths are repository relative and line counts describe extracted source, not pack offsets.
 
 CMake defines separate `agvhito_*_lib` libraries for comms, topics, core, state machine, adapter, ROS adapter, simulation core, simulated robot, and simulated ROS adapter. It registers `volley::agvhito::ProxyComponent` (`proxy_node`) and `volley::agvhito::sim::SimAgvComponent` (`sim_agv_node`). CMake minimum is 3.28; exact installation mechanics also depend on the omitted `volley_cmake` macros. JSON, UUID generation, Eigen, MQTT abstractions, HTTP client, common layout/ROS helpers, protocol schemas, and YASMIN extensions are lower layers.
 
@@ -265,45 +268,66 @@ flowchart TD
     H --> Y
 ```
 
-These arrows include direct calls and asynchronous boundaries, not a single call stack. The 50 ms cycle calls inherited `Agv::Step()`, which invokes the `SimAgv::PreStep()` override before processing feedback. Separate simulated telemetry timers publish protocol messages. The state machine runs separately from ROS callbacks; its worker lifecycle is inside omitted `yasminx`.
+These arrows include direct calls and asynchronous boundaries, not a single call stack. The 50 ms cycle calls inherited `Agv::Step()`, which invokes the `SimAgv::PreStep()` override before processing feedback. Separate simulated telemetry timers publish protocol messages. The state machine runs separately from ROS callbacks on the now-confirmed `yasminx::RootStateMachine` joining worker thread.
 
-### 4.3 Root control state machine
+### 4.3 Complete root control state machine
 
-Source: `sm/root.cpp` and the transition maps in `sm/state_strings.hpp`. The normal path is:
+Source: `sm/root.cpp` and `sm/state_strings.hpp`. This one graph shows all nine concrete states and all 36 declared transitions, including each error and cancellation edge. `terminal` is a root outcome rather than a concrete state. `yasminx/outcome.hpp` now confirms the cancellation label `yasminx.canceled`; using the literal also avoids Mermaid's colon parsing conflict. Booting is registered first; initial selection is inherited from upstream YASMIN.
 
 ```mermaid
 stateDiagram-v2
     direction TB
+    state "booting" as Booting
+    state "localizing" as Localizing
+    state "stopped" as Stopped
+    state "idle" as Idle
+    state "executing-order" as ExecutingOrder
+    state "execution-paused" as ExecutionPaused
+    state "execution-recovery" as ExecutionRecovery
+    state "canceling-order" as CancelingOrder
+    state "error" as Error
+    state "terminal (root outcome)" as Terminal
     [*] --> Booting
     Booting --> Localizing: booted
+    Booting --> Error: errored
+    Booting --> Terminal: yasminx.canceled
     Localizing --> Stopped: localized
-    Stopped --> Localizing: not localized
-    Stopped --> Idle: activation requested
-    Idle --> Executing: order requested
-    Idle --> Stopped: controlled stop requested
-    Executing --> Executing: next order requested
-    Executing --> Idle: order complete
-    Executing --> Canceling: controlled stop requested
-    Canceling --> Stopped: canceled order
-```
-
-The additional branches are scoped separately to keep the graph readable:
-
-```mermaid
-stateDiagram-v2
-    direction TB
-    Executing --> Paused: pause requested
-    Paused --> Executing: resumed
-    Executing --> Recovery: order data stale
-    Recovery --> Executing: recovered
-    Executing --> Error: error or hardware/software stop
-    Idle --> Error: error or hardware/software stop
+    Localizing --> Error: errored
+    Localizing --> Terminal: yasminx.canceled
+    Stopped --> Localizing: not-localized
+    Stopped --> Idle: activate-requested
+    Stopped --> Error: errored
+    Stopped --> Terminal: yasminx.canceled
+    Idle --> ExecutingOrder: order-requested
+    Idle --> Stopped: controlled-stop-requested
+    Idle --> Error: hardware-estop-triggered
+    Idle --> Error: soft-estop-triggered
+    Idle --> Error: errored
+    Idle --> Terminal: yasminx.canceled
+    ExecutingOrder --> Idle: order-complete
+    ExecutingOrder --> ExecutingOrder: order-requested
+    ExecutingOrder --> ExecutionRecovery: order-data-stale
+    ExecutingOrder --> Error: errored
+    ExecutingOrder --> CancelingOrder: controlled-stop-requested
+    ExecutingOrder --> Error: hardware-estop-triggered
+    ExecutingOrder --> Error: soft-estop-triggered
+    ExecutingOrder --> ExecutionPaused: pause-requested
+    ExecutingOrder --> Terminal: yasminx.canceled
+    ExecutionPaused --> ExecutingOrder: resumed
+    ExecutionPaused --> Error: errored
+    ExecutionPaused --> Terminal: yasminx.canceled
+    ExecutionRecovery --> ExecutingOrder: recovered
+    ExecutionRecovery --> Error: errored
+    ExecutionRecovery --> Terminal: yasminx.canceled
+    CancelingOrder --> Stopped: canceled-order
+    CancelingOrder --> Error: errored
+    CancelingOrder --> Terminal: yasminx.canceled
     Error --> Stopped: recovered
+    Error --> Terminal: yasminx.canceled
+    Terminal --> [*]
 ```
 
-Every state other than Error has an `errored → error` edge; Error has no additional self-error outcome. Every state maps framework cancellation to the root terminal outcome. Those common edges are omitted from the pictures, but are part of the source transition table. `Booting` is added first by the builder. State labels above shorten the exact identifiers `executing-order`, `execution-paused`, `execution-recovery`, and `canceling-order`.
-
-Booting waits for usable state and prepares maps/stop conditions. Localizing enables the localization map and waits for initialized position. Stopped requires activation. Execution verifies order acceptance and eventually checks node alignment. Recovery waits for state, common data, and filtered pose to become fresh; its pause/unpause verification failures are logged and tolerated. Error requests software stop, clears queued orders, and allows recovery after five seconds once fresh state exists and hardware emergency stop is released.
+See the dedicated [state-machine technical guide](volley_agvhito_state_machine.md) for the equivalent transition table, every hook and guard, YASMIN/yasminx API, blackboard types, verification logic, C++ language features, and extension example. `Continue` is internal polling rather than another declared transition. The helper error category `canceled` and the framework cancellation outcome are distinct; the supplied wrapper makes cancellation win after exit, while entry/Step errors take an earlier return path without exit.
 
 ### 4.4 Enum-driven motion and order status
 
@@ -361,7 +385,7 @@ Production differs: `ProxyComponent` connects to MQTT, creates an HTTP map clien
 | Verification helpers | 100 ms polling; 250 ms publish wait; 35 s verification deadline | Wait for protocol observation/actions, with cancellation checks. |
 | Production instance discovery / health / factsheet | 2 s / 1 s / 2 s | Register and maintain discovered robots. |
 
-`AgvRos` creates a mutually exclusive callback group per AGV. Its protected timer/subscription helpers also place derived simulation callbacks in that group. Thus a multithreaded container can run different AGVs concurrently, while one AGV's ROS callbacks serialize. This does **not** serialize the YASMIN worker with callbacks: queues, trackers, filters, action state, and blackboard conventions provide the cross-thread boundary. The precise worker spawn/join implementation belongs to omitted `yasminx` and cannot be verified from this pack.
+`AgvRos` creates a mutually exclusive callback group per AGV. Its protected timer/subscription helpers also place derived simulation callbacks in that group. Thus a multithreaded container can run different AGVs concurrently, while one AGV's ROS callbacks serialize. This does **not** serialize the YASMIN worker with callbacks: queues, trackers, filters, action state, and blackboard conventions provide the cross-thread boundary. The supplied `yasminx` implementation starts a `std::jthread`, hard-cancels the root during destruction when needed, and joins its last-declared thread member before context teardown. Its loop invokes the registered states independently of the ROS executor.
 
 The cycle uses elapsed node-clock time, so consumers follow the simulated clock configured by the launcher. Nonpositive elapsed time skips simulated motion. A newly dequeued primitive is installed without stepping it in that same cycle; unused time is not carried into the next primitive. A large time jump is not subdivided or capped here. Protocol publication schedules and ROS reports remain separate; a 10 Hz report can contain state flags from a slower protocol message and pose from visualization.
 
@@ -397,7 +421,7 @@ Released order nodes are sorted by sequence ID and converted into lift, rotation
 
 `ActiveOrder` uses order identity, node/sequence progress, requested pose/lift, remaining traversal, and own action completion. After protocol completion, execution waits for common feedback newer than the completion state and alignment within 20 mm and 5 degrees before reporting completion. Simulated magnetic sensor feedback is zero, so this alignment gate is idealized. Simulated reports set tray ID to zero because RFID detection is not implemented.
 
-A failed `Agv::Step()` produces a fault, resets base ROS timers/services, and sets an atomic terminal flag. The production manager checks terminal instances. The base reset does not reset the extra simulation timers/subscriber stored by `SimAgvRos`; that is a lifetime/terminal-behavior review point, not a demonstrated crash. Normal node/component destruction releases ROS handles and owned models. State-machine cancellation/join guarantees cannot be established without `yasminx` and component-container shutdown details.
+A failed `Agv::Step()` produces a fault, resets base ROS timers/services, and sets an atomic terminal flag. The production manager checks terminal instances. The base reset does not reset the extra simulation timers/subscriber stored by `SimAgvRos`; that is a lifetime/terminal-behavior review point, not a demonstrated crash. Normal node/component destruction releases ROS handles and owned models. The supplied `yasminx` root confirms hard cancellation plus a joining-thread member ordered before context teardown. Prompt completion still depends on cooperative hooks/waits and component-container callback shutdown.
 
 ## 6. Ownership, concurrency, error handling, and RISK items
 
@@ -446,35 +470,96 @@ The formulas below describe `src/sim/agv_motion.cpp`, `battery_charge_model.cpp`
 
 ### 7.1 Translation, waypoint caps, and braking
 
-Let $\mathbf{u}=\mathbf{p}_{\rm target}-\mathbf{p}_0$ be the primitive's target displacement and $\mathbf{d}_k$ its traveled displacement. The remaining distance is $r_k=\|\mathbf{u}-\mathbf{d}_k\|_2$, and traveled distance is $d_k=\|\mathbf{d}_k\|_2$. With positive acceleration $a$, final-stop and upcoming-edge speed constraints are:
+#### Start with continuous one-dimensional kinematics
+
+For distance along a straight path $d(t)$, speed $v(t)$, and constant signed acceleration $a_s$:
 
 $$
-v_{\rm stop}=\sqrt{2ar_k},\qquad
+\frac{\mathrm{d}d}{\mathrm{d}t}=v,\qquad
+\frac{\mathrm{d}v}{\mathrm{d}t}=a_s.
+$$
+
+Integrating from a starting instant gives the basic formulas:
+
+$$
+v(t)=v_0+a_s t,\qquad
+d(t)-d_0=v_0t+\tfrac12a_s t^2.
+$$
+
+Eliminate time by applying the chain rule, $\mathrm{d}v/\mathrm{d}t=(\mathrm{d}v/\mathrm{d}d)v$, then integrate over a distance $\Delta d$:
+
+$$
+v\,\mathrm{d}v=a_s\,\mathrm{d}d
+\quad\Longrightarrow\quad
+v_f^2-v_0^2=2a_s\Delta d.
+$$
+
+This last relation derives both braking constraints in `AgvMotion::StepTranslation`. These constraints assume a straight path, constant available deceleration magnitude, and positive acceleration limit $a>0$; they do not model forces, friction, control latency, or changing load.
+
+#### Derive the speed that still permits a final stop
+
+During braking, $a_s=-a$. Let remaining distance be $r_k$ and target final speed be zero:
+
+$$
+0=v_k^2-2ar_k
+\quad\Longrightarrow\quad
+v_{\rm stop}=\sqrt{2ar_k}.
+$$
+
+Thus $v_k\le v_{\rm stop}$ is the continuous-model condition for stopping within that distance. Conversely, a robot already traveling at speed $v_k$ needs stopping distance $v_k^2/(2a)$. For example, $a=0.2\,\mathrm{m/s^2}$ and $r_k=0.4\,\mathrm{m}$ give $v_{\rm stop}=0.4\,\mathrm{m/s}$.
+
+#### Derive braking before a lower-speed edge
+
+At an intermediate waypoint $j$, the robot need not stop; it must arrive no faster than the **following edge's** cap $v_j$. Let $d_k$ be distance already traveled and $d_j>d_k$ the waypoint's distance from the primitive start. The available braking distance is $d_j-d_k$:
+
+$$
+v_j^2=v_k^2-2a(d_j-d_k)
+\quad\Longrightarrow\quad
 v_{\rm approach,j}=\sqrt{v_j^2+2a(d_j-d_k)}.
 $$
 
-For each future intermediate waypoint $j$, $d_j$ is its distance from the primitive start and $v_j$ is the following edge's effective speed cap. The active edge's positive waypoint cap overrides the primitive cap; a zero waypoint cap inherits it. The code takes the minimum of that active cap, final-stop speed, and applicable future-edge approach limits:
+This generalizes the final-stop formula, which is the special case $v_j=0$. The code checks every applicable future intermediate waypoint, so a lower cap several edges ahead can constrain the current speed before the robot reaches it.
+
+Each waypoint stores its distance and the cap of the edge **ending at it**. Therefore the code uses waypoint $j+1$'s cap when planning arrival at waypoint $j$. The active edge uses its positive stored cap; zero inherits the primitive's default speed. A positive cap can override that default rather than being additionally limited by it.
+
+#### Combine constraints and integrate the sampled model
+
+Let $W_{\rm ahead}$ be the applicable future intermediate waypoints. The most restrictive bound wins:
 
 $$
-v_{\rm cap}=\min\left(v_{\rm edge},v_{\rm stop},\min_{j\in W_{\rm ahead}}v_{\rm approach,j}\right).
+v_{\rm cap}=\min\left(v_{\rm edge},\sqrt{2ar_k},
+\min_{j\in W_{\rm ahead}}\sqrt{v_j^2+2a(d_j-d_k)}\right).
 $$
 
-The update accelerates or decelerates toward this cap, then uses the **new speed** for displacement:
+An empty future-waypoint set contributes no additional bound. Speed ramps toward the chosen cap using the elapsed clock step $\Delta t>0$:
 
 $$
 v_{k+1}=\begin{cases}
 \min(v_{\rm cap},v_k+a\Delta t),&v_k<v_{\rm cap},\\
-\max(v_{\rm cap},v_k-a\Delta t),&v_k\ge v_{\rm cap},
+\max(v_{\rm cap},v_k-a\Delta t),&v_k\ge v_{\rm cap}.
 \end{cases}
 $$
 
+This uses the continuous relation $\Delta v=a_s\Delta t$, with clamping to prevent crossing the desired speed cap. If current speed exceeds the cap, it decelerates toward it; it does not instantaneously set speed to the cap.
+
+For map position $\mathbf{p}_k\in\mathbb{R}^2$, target displacement $\mathbf{u}=\mathbf{p}_{\rm target}-\mathbf{p}_0$, and traveled displacement $\mathbf{d}_k\in\mathbb{R}^2$, define:
+
 $$
-\delta d=\min(v_{k+1}\Delta t,r_k),\qquad
-\mathbf{p}_{k+1}=\mathbf{p}_k+
-\frac{\mathbf{u}-\mathbf{d}_k}{r_k}\delta d.
+r_k=\|\mathbf{u}-\mathbf{d}_k\|_2,\qquad d_k=\|\mathbf{d}_k\|_2,\qquad
+\widehat{\mathbf{e}}_k=\frac{\mathbf{u}-\mathbf{d}_k}{r_k}.
 $$
 
-The same integration serves locomotion and strafing; their drive-mode and acceleration/speed options differ. Waypoint sequence progress advances as traveled distance reaches each stored waypoint distance. The code snaps the final remaining displacement and resets the primitive on a subsequent near-zero-remaining step ($10^{-9}$ threshold). With nonpositive acceleration it omits the square-root braking-cap calculations; configuration validity matters.
+The code advances along the remaining displacement direction:
+
+$$
+\Delta d_k=\min(v_{k+1}\Delta t,r_k),\qquad
+\mathbf{p}_{k+1}=\mathbf{p}_k+\widehat{\mathbf{e}}_k\Delta d_k,\qquad
+\mathbf{d}_{k+1}=\mathbf{d}_k+\widehat{\mathbf{e}}_k\Delta d_k.
+$$
+
+**Continuous derivation versus actual numerical update:** the implementation uses the **new speed** times the step duration. It does not use the exact constant-acceleration displacement $v_k\Delta t+\tfrac12a_s\Delta t^2$. In an unclamped ramp, the difference between these two updates is $\tfrac12a_s\Delta t^2$. The code therefore uses a semi-implicit Euler-style displacement update with endpoint clamping. Continuous stopping formulas supply its cap policy; discrete stepping, clock jumps, and waypoint crossing can still affect the realized trajectory.
+
+The remaining-distance clamp prevents overshooting the target in that step, not every intermediate waypoint. Progress advances for each waypoint whose stored distance has been reached. Near-zero remaining distance ($10^{-9}$ threshold) triggers exact endpoint/metadata assignment and resets the primitive on a later step. Locomotion and strafing share this integration but use different limits and drive modes. Nonpositive acceleration omits the square-root braking constraints and invalidates the physical assumptions above; input validation remains important.
 
 ### 7.2 Rotation
 
@@ -521,30 +606,72 @@ It retains waypoint metadata. Angular hard braking shortens total travel using t
 
 ### 7.4 Lift and drive-mode delay
 
-For current lift fraction $\ell_k$, target $\ell_\star$, and full-stroke duration $\tau>0$:
+#### Lift is a normalized actuator coordinate
+
+`KinematicState::lift_position` stores a scalar fraction $\ell\in[0,1]$: zero is fully lowered and one is fully raised. It is not a vertical distance or a lift-force model. `LiftMotion` carries a target fraction $\ell_\star$ and a full-stroke duration $\tau>0$; the parser selects the configured up/down time. Defaults are six seconds in each direction.
+
+A complete unit stroke in $\tau$ seconds implies a constant fractional rate:
 
 $$
-\ell_{k+1}=\ell_k+\operatorname{sgn}(\ell_\star-\ell_k)
-\min\left(|\ell_\star-\ell_k|,\frac{\Delta t}{\tau}\right).
+|\dot{\ell}|=\frac{1}{\tau}\quad\text{fraction per second}.
 $$
 
-The implementation checks its old remaining difference against $10^{-5}$, so completion normally occurs one step after reaching the target. This is a normalized actuator fraction, not vertical position in metres. A drive-mode change accumulates elapsed time and switches mode once $t_{\rm elapsed}\ge\tau_{\rm turn}$; it does not integrate wheel angles.
+The direction is the sign of the remaining error $e_k=\ell_\star-\ell_k$. The unclamped integration would be $\ell_k+\operatorname{sgn}(e_k)\Delta t/\tau$. Clamp the traveled fraction to the remaining error so a large time step cannot cross the target:
+
+$$
+\Delta\ell_k=\operatorname{sgn}(e_k)
+\min\left(|e_k|,\frac{\Delta t}{\tau}\right),\qquad
+\ell_{k+1}=\ell_k+\Delta\ell_k.
+$$
+
+Each part has a purpose: the sign handles raising/lowering; $\Delta t/\tau$ gives progress independent of callback frequency; the minimum prevents overshoot and supports partial strokes. In the ideal continuous model a remaining fraction $|e_k|$ takes $\tau|e_k|$ seconds. For example, moving from 0.25 to 0.75 with $\tau=6$ s takes approximately three simulated seconds; a 50 ms step advances by about 0.00833 fraction until clamped.
+
+In C++, `AgvMotion::Step` visits the `LiftMotion` variant and calls `StepLift(dt, target, 1.0/time_sec)`. `StepLift` measures the **pre-update** error, updates the fraction, then tests that old error against $10^{-5}$ to reset the active primitive. Consequently, reaching the target by clamping generally leaves the primitive active until the next cycle. A controlled or hard lift stop sets its target to its current fraction; the next step recognizes completion. Positive duration is an assumed precondition, not validated by this equation.
+
+The robot report distinguishes Up, Down, and InBetween according to the modeled fraction. Visualization may map that fraction to an apparent height, but that mapping is a separate display concern; do not infer a physical stroke length from this model. The launcher still collapses initial lift fraction to the Boolean `initial_lifted`.
+
+#### Drive-mode changes are timed discrete operations
+
+`ChangeDriveModeMotion` contains a target `DriveMode` and duration $\tau_{\rm turn}$ (default 1.75 s). It represents wheel reorientation as a stationary delay; wheel angles, angular acceleration, and mechanical steering trajectories are not integrated.
+
+Starting the primitive sets elapsed time $h_0=0$. Each step updates:
+
+$$
+h_{k+1}=h_k+\Delta t.
+$$
+
+For starting mode $m_0$ and target mode $m_\star$, the visible state changes at the threshold:
+
+$$
+m_{k+1}=\begin{cases}
+m_0,&h_{k+1}<\tau_{\rm turn},\\
+m_\star,&h_{k+1}\ge\tau_{\rm turn}.
+\end{cases}
+$$
+
+Modes are enum values (LOCOMOTE, STRAFE, ROTATE), not real-valued quantities. The motion queue inserts these delays before primitives requiring another mode; `SetMotion` enforces mode compatibility. On completion the mode is updated and the active primitive is cleared. The next queued primitive starts on a later cycle, and leftover time is not transferred to it. Thus sampled completion is quantized by callback steps. Braking does not shorten a mode-change delay.
+
+This combination deliberately uses a continuous fraction for lift and a timed discrete mode switch for wheels. Both are active primitives, so the simulator's `driving` flag—and moving battery drain—can remain true during them even when map position is stationary.
 
 ### 7.5 Battery fraction
 
-Let $q_k\in[0,1]$ be SOC, $c=0.268$ and $d=0.10$ fraction/hour. The battery model is:
+Let $q_k\in[0,1]$ be battery state of charge (SOC), $d=0.10$ the drain rate, and $c=0.268$ the charge rate, both measured as **fraction of full charge per hour**. Let $\Delta t>0$ be seconds since the last update. Divide by 3600 to convert seconds to hours. Define saturation as $\operatorname{sat}(z)=\min(1,\max(0,z))$.
+
+Write the complete update as a piecewise function so the rate and resulting charge are visible in each case:
 
 $$
-q_{k+1}=\operatorname{clamp}_{[0,1]}\left(q_k+
-\frac{\Delta t}{3600}
-\begin{cases}
--d,&\text{moving},\\
-c,&\text{not moving and charging},\\
-0,&\text{otherwise}.
-\end{cases}\right).
+q_{k+1}=\begin{cases}
+\operatorname{sat}\!\left(q_k-d\,\dfrac{\Delta t}{3600}\right),
+&\text{moving},\\[6pt]
+\operatorname{sat}\!\left(q_k+c\,\dfrac{\Delta t}{3600}\right),
+&\text{not moving and charging},\\[6pt]
+q_k,&\text{not moving and not charging}.
+\end{cases}
 $$
 
-The owner declares moving whenever a primitive is active, and charging when no primitive is active and the current node is a charger. There is no idle drain, electrical voltage/energy conversion, mass/load dependence, or automatic motion cutoff at zero charge. A direct battery update clamps the fraction. Nonpositive time causes no integration.
+Moving has priority if inconsistent inputs report both moving and charging. Nonpositive elapsed time causes no integration. At a fixed mode this is exact integration of a constant fractional rate, followed by saturation; it is not an electrochemical battery model. For example, one minute of movement subtracts $0.10/60\approx0.001667$ fraction (0.167 percentage points), while one minute charging adds $0.268/60\approx0.004467$ fraction (0.447 percentage points), until a boundary is reached.
+
+The owner sets moving while **any motion primitive is active**, including lift and wheel-mode delay; charging requires no active primitive and a charge-node association. There is no idle loss, load-dependent electrical power, voltage/energy conversion, or automatic motion cutoff at zero charge. Direct battery commands clamp a fraction rather than a percentage. The component starts at $q_0=1$; rate options are code defaults, not node parameters read by this component.
 
 ### 7.6 Heading convention and filter
 
@@ -571,22 +698,102 @@ The first accepted pose initializes the filter. It rejects nonincreasing timesta
 
 ### 7.7 Magnetic-guide alignment
 
-Let $f,b,l,r$ be valid front/back/left/right deviations in millimetres; $L_{\rm FB}=2454$ mm, $L_{\rm LR}=1494$ mm. A pair participates only when both sensors are present and valid; let its availability indicator be $a_{\rm FB},a_{\rm LR}\in\{0,1\}$. With unavailable pair sums treated as zero:
+Source: `src/agvhito/include/agvhito/magnetic_guide_sensor.hpp`, `ComputeMgsOffset`. This computes guide-relative alignment from signed front/back/left/right sensor deviations. It does not solve a global map pose or integrate AGV movement. Body-frame signs are +X forward, +Y left, and positive yaw counterclockwise.
+
+![Magnetic-guide sensor geometry and source-consistent pair equations](volley_magnetic_guide_geometry.svg)
+
+The schematic is generated with Python/Matplotlib from the code's two sensor baselines; [SVG](volley_magnetic_guide_geometry.svg) and [generator](generate_magnetic_guide_geometry.py) are included with these guides. It labels robot centre, sensor locations, guide families, baseline distances, and signed readings. Its small example offsets are illustrative, not measured data or an AGV mesh.
+
+#### Sensor locations and sign convention
+
+Let $f,b,l,r$ be signed deviations in millimetres, and use the code's baselines $L_{\rm FB}=2454$ mm and $L_{\rm LR}=1494$ mm. Sensor positions relative to the robot centre are:
 
 $$
-s=\frac{L_{\rm FB}(f+b)+L_{\rm LR}(l+r)}
-{a_{\rm FB}L_{\rm FB}^{2}+a_{\rm LR}L_{\rm LR}^{2}},\qquad
+\mathbf{p}_{f}=\begin{bmatrix}L_{\rm FB}/2\\0\end{bmatrix},\quad
+\mathbf{p}_{b}=\begin{bmatrix}-L_{\rm FB}/2\\0\end{bmatrix},\quad
+\mathbf{p}_{l}=\begin{bmatrix}0\\L_{\rm LR}/2\end{bmatrix},\quad
+\mathbf{p}_{r}=\begin{bmatrix}0\\-L_{\rm LR}/2\end{bmatrix}
+\in\mathbb{R}^{2}.
+$$
+
+Front/back readings have opposite signs for pure lateral displacement: a +Y displacement produces positive front and negative back. Similarly, +X displacement produces negative left and positive right. Rotation contributes with the same sign to the two readings in a pair. These signs explain why the code uses **sums for yaw** and **differences for translation**, instead of averaging the raw readings directly.
+
+A straight guide viewed in the rotated body frame has slope $s=\tan\psi$, where $\psi$ is guide-relative yaw. Introduce pair-intercept offsets $x_0,y_0$ (millimetres) in the source's measurement convention. A source-consistent ideal measurement model is:
+
+$$
+\begin{aligned}
+f&=y_0+\tfrac12L_{\rm FB}s,&
+b&=-y_0+\tfrac12L_{\rm FB}s,\\
+l&=-x_0+\tfrac12L_{\rm LR}s,&
+r&=x_0+\tfrac12L_{\rm LR}s.
+\end{aligned}
+$$
+
+This follows the straight-line relation “intercept plus sensor lever arm times slope,” with the stated sign inversions for rear/right sensors. It reconstructs the estimator's algebra under straight, mutually compatible guide families and symmetric sensor placement. The supplied source defines signs/baselines and the calculation, but supplies no physical sensor calibration specification; this model explains its formula rather than establishing an independent ground-truth transform.
+
+#### Derive yaw from the pair sums
+
+Add each pair so its translation intercept cancels:
+
+$$
+z_{\rm FB}=f+b=L_{\rm FB}s,\qquad
+z_{\rm LR}=l+r=L_{\rm LR}s.
+$$
+
+One valid pair would estimate $s=z/L$. With both pairs, noise or guide inconsistency can give different slopes. The code combines them by least squares. Let $V$ be the set of valid pairs and minimize squared pair-sum residuals:
+
+$$
+J(s)=\sum_{i\in V}(z_i-L_i s)^2.
+$$
+
+Differentiate, set the derivative to zero, and solve:
+
+$$
+\frac{\mathrm{d}J}{\mathrm{d}s}=-2\sum_{i\in V}L_i(z_i-L_i s)=0
+\quad\Longrightarrow\quad
+s=\frac{\sum_{i\in V}L_i z_i}{\sum_{i\in V}L_i^2},\qquad
 \psi=\arctan(s).
 $$
 
-When the relevant pair exists, estimated offsets are:
+For availability indicators $a_{\rm FB},a_{\rm LR}\in\{0,1\}$, with unavailable pair sums set to zero, this is the implemented expression:
+
+$$
+s=\frac{L_{\rm FB}(f+b)+L_{\rm LR}(l+r)}
+{a_{\rm FB}L_{\rm FB}^{2}+a_{\rm LR}L_{\rm LR}^{2}}.
+$$
+
+Equivalently it averages the separate **slope** estimates with weights $L_i^2$. A longer baseline converts the same sensor deviation noise into less slope uncertainty, so it has more weight. Statistical optimality assumes comparable, independent pair-sum errors; the code uses baseline geometry alone and does not estimate sensor variances or perform robust outlier fitting. Its fused angle is the arctangent of the fused slope, not an average of two angles.
+
+#### Derive the reported translation corrections
+
+Subtract the pair equations:
+
+$$
+y_0=\tfrac12(f-b),\qquad x_0=\tfrac12(r-l).
+$$
+
+The sensor-axis intercept must be projected using the estimated guide angle in this model. For an intercept distance $u_0$ and normal offset $u$, the right-triangle relation is $u=u_0\cos\psi$ (equivalently $u_0=u/\cos\psi$). Apply this separately to each available pair:
 
 $$
 x=\tfrac12(r-l)\cos\psi,\qquad
 y=\tfrac12(f-b)\cos\psi.
 $$
 
-With both pairs the consistency residual is $(f+b)/L_{\rm FB}-(l+r)/L_{\rm LR}$. No valid pair returns an expected error. The simulator publishes ideal zero deviations, so this model is used by the common completion path without simulated guide misalignment. Offset unit conversion to metres occurs at the reporting boundary.
+The cosine correction belongs to the estimator's guide-offset convention. It is not multiplication of a global position by a full two-dimensional rotation matrix, and the pair offsets should not automatically be identified with the Cartesian coordinates of the guide intersection. Those interpretations require a complete calibration/frame model not supplied here.
+
+#### Missing pairs, residual, and a numerical check
+
+A pair is usable only when **both** of its readings are available; one missing sensor removes that whole pair from yaw fitting. A valid front/back pair provides yaw and Y offset, a valid left/right pair provides yaw and X offset, and both provide all three. Unobservable offsets remain `std::optional` values, not assumed zeros. Neither valid pair yields an expected error; the algorithm avoids dividing by a zero total baseline weight.
+
+When both pairs exist, the code reports their slope disagreement:
+
+$$
+e_{\rm pair}=\frac{f+b}{L_{\rm FB}}-\frac{l+r}{L_{\rm LR}}.
+$$
+
+This is dimensionless and is not itself an angle or a probabilistic confidence score. The source defines an exclusive deviation bound of 75 mm for sensor-reading interpretation; the offset calculation operates on already-populated optional readings.
+
+For the schematic's ideal values $s=0.04$, $y_0=12$ mm, and $x_0=16$ mm, the four readings are $f=61.08$, $b=37.08$, $l=13.88$, $r=45.88$ mm. Their sums are 98.16 and 59.76 mm, giving the same slope 0.04 and $\psi\approx2.291^\circ$. The estimator returns $x\approx15.987$ mm, $y\approx11.990$ mm, and zero pair residual. `SimAgv` instead supplies ideal zero deviations, making the common completion alignment gate idealized. Reporting converts millimetres to metres.
 
 ## 8. Tests: evidence, intended areas, and gaps
 
@@ -616,6 +823,6 @@ Open questions for the team:
 - Should `localize` implement relocation, or should scenario movement use a dedicated simulated-state API?
 - Should initial battery/lift fractions pass through the launcher, and should the existing battery topic implement the currently unsupported scenario event?
 - Does “driving” intentionally include wheel-turn and lift time for battery drain? Should idle drain or depleted-battery behavior exist?
-- What are the cancellation/join guarantees in `yasminx`, and should terminal simulation adapters cancel their additional timers?
+- With root hard cancellation/join now confirmed, do clock waits and custom hooks terminate promptly, and should terminal simulation adapters cancel their additional timers?
 - What parameter range validation and protocol timestamp-skew limits should construction enforce?
 - Which omitted tests reproduce the identified cases, and which MQTT failure modes need an explicit simulation transport option?

@@ -337,7 +337,7 @@ The world timer does not directly invoke every bay timer or AGV update in a sing
 
 #### E. Loaded AGV construction and runtime call path
 
-`SimAgvComponent` builds the shared context and maps, constructs `SimAgv`, and transfers its unique ownership to `SimAgvRos`. The common `Agv` constructor starts the shared control state machine; the ROS adapter installs timers/services in one mutually exclusive callback group per robot. The framework's worker implementation remains inside omitted `yasminx`.
+`SimAgvComponent` builds the shared context and maps, constructs `SimAgv`, and transfers its unique ownership to `SimAgvRos`. The common `Agv` constructor starts the shared control state machine; the ROS adapter installs timers/services in one mutually exclusive callback group per robot. The newly supplied `yasminx` implementation confirms `RootStateMachine::Run` starts a `std::jthread`; state adapters dispatch to lifecycle hooks, and destruction hard-cancels/joins before context teardown. See the state-machine guide for callback, signal, and cancellation details.
 
 ```mermaid
 flowchart TD
@@ -351,7 +351,7 @@ flowchart TD
     P --> D["DrainInstantActions / DrainOrders"]
     D --> K["SimulateMotion: AgvMotion::Step and battery step"]
     S --> F["Consume protocol feedback into shared trackers"]
-    F -. "shared data" .-> Y["YASMIN worker: order execution and verification"]
+    F -. "shared data" .-> Y["RootStateMachine std::jthread: execution and verification"]
     Y -. "local MQTT order/action" .-> D
     R --> U["Separate simulated telemetry timers"]
     U -. "local MQTT state / pose / common" .-> F
@@ -515,3 +515,5 @@ Open questions for the team:
 The excluded YAML, tests, and downstream implementation files remain necessary to close these questions. Documentation distinguishes source-confirmed factory behavior from assumptions about the deployed runtime.
 
 Related robot implementation: [HITO AGV package design](volley_agvhito_package.md).
+
+Robot control deep dive: [HITO AGV state machine](volley_agvhito_state_machine.md), including all 36 declared transitions in one diagram and the worker/API boundary reached by the launch path.
