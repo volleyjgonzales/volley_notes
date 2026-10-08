@@ -2,7 +2,44 @@
 
 [Overview and ROS concepts](volley_simulation_guide.md) · [Simulation package](volley_sim_package.md) · [Setup and runbook](volley_simulation_runbook.md) · [Launcher package](volley_launcher_package.md)
 
-Source basis: all 30 files in `vis-repomix.md`; inventory below. This is static source analysis. `math_test.cpp` assertions were inspected, but no ROS build or executable/test run was performed. Custom interface definitions, mesh bytes, and the simulated AGV implementation are outside this pack.
+## Acronyms, abbreviations, and project names
+
+This reference is local to this document so it remains readable on its own. Formal expansions are distinguished from product/project names whose full forms are not stated in the supplied source. Acronyms inside code, endpoint names, file paths and diagrams retain their exact spelling.
+
+| Term | Full name or meaning | Role in this document |
+| --- | --- | --- |
+| 2D / 3D | Two-dimensional / three-dimensional. | Planar geometry versus a volume or mesh with height/depth. |
+| DAG | Directed acyclic graph. | Dependency graph for scheduled work; `printdags` controls diagnostic output. |
+| pub/sub | Publish/subscribe. | Topic-stream interaction; no paired response to each publication. |
+| ROS | Robot Operating System; these guides use ROS 2. | Framework for nodes, messages, services, parameters and execution. |
+| AGV | Automated guided vehicle. | Mobile robot that transports parking trays. |
+| VRC | Vertical reciprocating conveyor (standard equipment term). | Here, a floor-to-floor carriage/lift with gates. The project source does not explicitly spell out its name; the conventional expansion is documented by [Wildeck](https://www.wildeck.com/vertical-conveyors-vrcs/). |
+| BLift | Project name for a bay integrated with a lift; not a verified letter-by-letter acronym expansion. | Bay state-machine selection and VRC-to-lift report bridge. |
+| API | Application programming interface. | Callable C++/Python interfaces, ROS endpoints or the web service, depending on context. |
+| GUI | Graphical user interface. | RViz’s displayed interface and frame-rate setting. |
+| UML | Unified Modeling Language. | Class diagrams used to explain types and ownership. |
+| TF | ROS transform system/library; TF is used as its conventional name, not a supplied formal letter expansion. | Relationships between coordinate frames; marker poses here do not imply per-asset TF broadcasts. |
+| QoS | Quality of service. | Message delivery policies such as reliability, history depth and durability. |
+| REST | Representational state transfer. | Web API style; distinct from native ROS service request/response. |
+| HTTP | Hypertext Transfer Protocol. | Web requests to REST endpoints. |
+| MQTT | Messaging protocol name; historically MQ Telemetry Transport, also expanded as Message Queuing Telemetry Transport in [standards-body terminology](https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=mqtt). | Broker-based publish/subscribe transport used by the production proxy; [protocol overview](https://mqtt.org/faq/). |
+| I/O | Input/output. | Sensor/driver interfaces or external data exchanges. |
+| GUID | Globally unique identifier. | Vehicle/payload identity; distinct from numeric tray, bay and AGV IDs. |
+| ID | Identifier. | Numeric resource identity or a named configuration identifier. |
+| FIFO | First in, first out. | Intended waiting-patron queue discipline. |
+| GPU | Graphics processing unit. | Rendering device; distinct from ROS simulation/control execution. |
+| YASMIN | Yet Another State MachINe. | ROS state-machine library named in the review rules; not used by the inspected packages. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
+| YAML | YAML Ain’t Markup Language (recursive acronym). | Scenario, layout and parameter configuration format. |
+| RViz | ROS visualization application; a product/tool name rather than a supplied formal acronym. | Displays MarkerArray messages and meshes; does not simulate physical motion. |
+| XYZ / XY / ZYX | Coordinate or rotation-axis notation, not acronyms. | X/Y are horizontal axes, Z is vertical; ZYX is the stated Euler rotation composition order. |
+| TB / TD | Top-to-bottom / top-down Mermaid layout directives. | Diagram orientation; not application components. |
+| Msg / Srv / SPtr / UPtr | Message / service / shared pointer / unique pointer naming abbreviations. | C++ aliases such as GarageSnapshotMsg and AddTraySrv; ConstSharedPtr is shared ownership of const data. |
+| sim / vis / devc | Simulation / visualization / development-container wrapper names. | Package/tool shorthand, not additional engines or protocols. |
+| rclcpp / rclpy / rclcppx | ROS client library for C++ / ROS client library for Python / this repository’s C++ client-library extensions. | Node/executor APIs and project-specific adapters/factories. |
+
+Uppercase state labels (`AUTO`, `STOPPED`, `OPEN`, `CLOSED`, and similar), enum constants, macro names and build flags are exact code identifiers, not unexplained acronyms. `RISK` is a review label; `TODO` means “to do.” Units use `m` for metres, `s` for seconds, `ms` for milliseconds, `ns` for nanoseconds, and `kg` for kilograms.
+
+Source basis: all 30 files in `vis-repomix.md`; inventory below. This is static source analysis. `math_test.cpp` assertions were inspected, but no ROS (Robot Operating System) build or executable/test run was performed. Custom interface definitions, mesh bytes, and the simulated AGV (automated guided vehicle) implementation are outside this pack.
 
 ## 1. Summary, package design, and dependencies
 
@@ -22,7 +59,7 @@ Source basis: all 30 files in `vis-repomix.md`; inventory below. This is static 
 | `common`, `common_ros` | Domain constants, pose/layout/heading helpers, motion-type interpretation, tape segments, logging and node/parameter utilities. |
 | `interfaces` | Custom snapshot, schedule, report, command, job and pose data definitions. `vis` consumes these types; it does not define new `.msg`, `.srv`, or `.action` files. |
 | `geometry_msgs`, `std_msgs`, `visualization_msgs` | Point/pose/quaternion, color/header, and standard RViz marker interfaces. |
-| `bay_interfaces`, `vrc_interfaces` | Bay light values and VRC gate/report types used in rendering. |
+| `bay_interfaces`, `vrc_interfaces` | Bay light values and VRC (vertical reciprocating conveyor; the floor-to-floor lift) gate/report types used in rendering. |
 | `rclcpp`, `eigen` | ROS callbacks/timers/publishers and rigid-transform computation. |
 | `launcher` | Declared execution dependency; supplies system orchestration/configuration confirmed by `launcher-repomix.md`; see its companion guide. |
 | Installed `sim/3d` assets | Resource dependency when local mesh mode is selected; path is `package://sim/3d/`. `vis/package.xml` does not explicitly declare `sim`, although the local mesh path requires its installed resources. |
@@ -44,7 +81,7 @@ Approximate line counts refer to extracted source, not positions in Repomix outp
 
 | Path | Lines (approx.) | Role |
 | --- | ---: | --- |
-| `src/vis/config/default.rviz.in` | 357 | RViz displays/topics, marker namespaces, map Fixed Frame and GUI settings. |
+| `src/vis/config/default.rviz.in` | 357 | RViz displays/topics, marker namespaces, map Fixed Frame and GUI (graphical user interface) settings. |
 | `src/vis/include/vis/visualizer/agv_visualizer.hpp` | 42 | AGV pose/command rendering interface and cached state/height maps. |
 | `src/vis/include/vis/visualizer/bay_visualizer.hpp` | 44 | Bay rendering interface and per-bay overdrive animation state. |
 | `src/vis/include/vis/visualizer/i_visualizer.hpp` | 34 | Virtual visualizer contract, unique-pointer alias, topic/MarkerArray value. |
@@ -54,7 +91,7 @@ Approximate line counts refer to extracted source, not positions in Repomix outp
 | `src/vis/include/vis/visualizer/tray_visualizer.hpp` | 43 | Tray/payload snapshot caches and VRC height associations. |
 | `src/vis/include/vis/visualizer/vrc_visualizer.hpp` | 39 | VRC snapshot rendering and gate-animation timestamp cache. |
 | `src/vis/include/vis/math.hpp` | 26 | ROS/Eigen quaternion conversions, point/quaternion constructors, pose composition. |
-| `src/vis/include/vis/models.hpp` | 48 | Mesh paths/prefixes, bay-piece and car-model selection APIs. |
+| `src/vis/include/vis/models.hpp` | 48 | Mesh paths/prefixes, bay-piece and car-model selection APIs (application programming interfaces). |
 | `src/vis/include/vis/topics.hpp` | 27 | Relative marker output topic constants. |
 | `src/vis/include/vis/utils.hpp` | 50 | Marker factories and AGV-command/payload display helpers. |
 | `src/vis/include/vis/vis_context.hpp` | 31 | Shared layout, mesh resource prefix and clock context. |
@@ -64,10 +101,10 @@ Approximate line counts refer to extracted source, not positions in Repomix outp
 | `src/vis/src/visualizer/layout_visualizer.cpp` | 317 | Cached graph/tape/nodes/windows/charger/floor geometry. |
 | `src/vis/src/visualizer/queue_visualizer.cpp` | 271 | Waiting-job car illustrations, display queue bookkeeping and deletion. |
 | `src/vis/src/visualizer/schedule_visualizer.cpp` | 54 | Scheduled AGV-command marker overlays from ActionNode entries. |
-| `src/vis/src/visualizer/tray_visualizer.cpp` | 129 | Tray mesh/ID and three-part payload markers with floor/VRC offsets. |
+| `src/vis/src/visualizer/tray_visualizer.cpp` | 129 | Tray mesh/ID (identifier) and three-part payload markers with floor/VRC offsets. |
 | `src/vis/src/visualizer/vrc_visualizer.cpp` | 208 | VRC shaft/door/carriage markers and three-second gate interpolation. |
 | `src/vis/src/math.cpp` | 75 | Euler quaternions, Eigen conversions and rotate-then-translate composition. |
-| `src/vis/src/models.cpp` | 293 | Bay mesh tables and process-salted GUID car/model palette selection. |
+| `src/vis/src/models.cpp` | 293 | Bay mesh tables and process-salted GUID (globally unique identifier) car/model palette selection. |
 | `src/vis/src/utils.cpp` | 212 | map-frame marker defaults, command shapes/arrows, body/wheel/window markers. |
 | `src/vis/src/vis_manager.cpp` | 148 | Load context, route snapshot/report inputs, render and lazily publish. |
 | `src/vis/src/visualizer_node.cpp` | 20 | Initialize ROS, construct manager, spin node, request shutdown. |
@@ -90,20 +127,20 @@ Approximate line counts refer to extracted source, not positions in Repomix outp
 | `CreateDefaultMarker`, `CreateDefaultMeshMarker`, `CreatePayloadMarkers` | `include/vis/utils.hpp` | Markers in `map`; payload helper returns body, wheels, and windows markers. |
 | `VisAgvCommandConfig`, `CreateAgvCommandMarkers` | `include/vis/utils.hpp` | Illustrate motion type/command endpoints; do not execute or simulate commands. |
 | `BayPiece`, `CarModel`, mesh-prefix constants, model/color selection | `include/vis/models.hpp` | Choose mesh resources; absent bay pieces return `optional` empty. GUID hash selects car model/color. |
-| Topic-name constants | `include/vis/topics.hpp` | Relative marker output names, not a TF frame registry. |
+| Topic-name constants | `include/vis/topics.hpp` | Relative marker output names, not a TF (the ROS coordinate-transform system) frame registry. |
 
 
 ### ROS contracts: concrete guarantees and assumptions
 
 A **ROS contract** here means the agreement between a producer and consumer: communication mechanism, resolved endpoint name, generated data type, field meaning, delivery settings, timing, coordinate frame, and missing/stale-data behavior. It is documentation terminology, not an extra ROS transport or a special C++ class. See the [overview's interface explanation](volley_simulation_guide.md#what-does-ros-contract-mean).
 
-`vis` uses **publish/subscribe topics for application communication**. It consumes reports and state and publishes markers. No application-specific ROS service/action or HTTP REST server is created here. Node parameter infrastructure may expose standard ROS endpoints, but those are not hand-written garage-control APIs in this code.
+`vis` uses **publish/subscribe topics for application communication**. It consumes reports and state and publishes markers. No application-specific ROS service/action or HTTP (Hypertext Transfer Protocol) REST (representational state transfer) server is created here. Node parameter infrastructure may expose standard ROS endpoints, but those are not hand-written garage-control APIs in this code.
 
 | Contract aspect | What the source promises | What consumers/producers must arrange |
 | --- | --- | --- |
 | Endpoint names | Inputs are explicit absolute `/central/...`, `/sim/report`, `/agv/a<ID>/command_list`. Outputs are relative strings such as `trays`. | The launch namespace/remappings must match RViz's expected `/vis/...` names. |
 | Input schema | Generated `interfaces::msg::*` types; examples are snapshot and dispatch report. | Publish the correct type and valid layout IDs; complete `.msg` definitions are omitted. |
-| Input delivery | `GetBestEffortQoS(1)` requested at each state subscription. | Use compatible QoS; repeated state delivery is expected. No reliable event log is reconstructed here. |
+| Input delivery | `GetBestEffortQoS(1)` requested at each state subscription. | Use compatible QoS (quality of service); repeated state delivery is expected. No reliable event log is reconstructed here. |
 | Output schema | `visualization_msgs/msg/MarkerArray`, with mesh/shape/text markers. | Configure RViz MarkerArray displays, not a custom snapshot-message display. |
 | Output delivery | `create_publisher<MarkerArray>(name, 1)`, and the supplied RViz config requests reliable/volatile keep-last delivery. | Verify effective QoS in the running deployment; subscriptions cannot assume past data is latched for late joiners. |
 | Coordinate frame | Default marker factory sets `header.frame_id="map"`. | Use RViz Fixed Frame `map`, or supply a valid transform to a different fixed frame. This package broadcasts no TF. |
@@ -203,11 +240,11 @@ flowchart TD
     P --> R["RViz MarkerArray displays"]
 ```
 
-The render timer is driven by the node's ROS clock. Configuration parameters select layout and mesh resources; there is no MQTT, database, physical hardware I/O, or application service/action flow in this package.
+The render timer is driven by the node's ROS clock. Configuration parameters select layout and mesh resources; there is no MQTT (broker-based publish/subscribe messaging; historically MQ Telemetry Transport), database, physical hardware I/O (input/output), or application service/action flow in this package.
 
 ### 4.3 State diagrams
 
-There is **no YASMIN or standalone enum-driven state machine in `vis`**. Reported door/gate enums select presentation behavior. Bay animation retains an offset and last-update timestamp; VRC gate animation retains a movement-start timestamp. This conceptual diagram describes the bay animation, not a new production bay state machine:
+There is **no YASMIN (Yet Another State MachINe) or standalone enum-driven state machine in `vis`**. Reported door/gate enums select presentation behavior. Bay animation retains an offset and last-update timestamp; VRC gate animation retains a movement-start timestamp. This conceptual diagram describes the bay animation, not a new production bay state machine:
 
 ```mermaid
 stateDiagram-v2
@@ -255,11 +292,11 @@ On exit from spin, `main` calls ROS shutdown before its manager goes out of scop
 | `AgvVisualizer` | AGV states, command-list pointers, AGV→VRC height map. | One AGV mesh per cached ID, command footprints/arrows/text. Uses max lift fraction to tint the mesh; does not compute motion. |
 | `TrayVisualizer` | Current tray map, payload map, tray/GUID→VRC height maps. | Tray meshes and labels; each payload car is body, wheels, windows. Active entity maps are cleared/rebuilt per snapshot. |
 | `BayVisualizer` | BayState map and per-bay slide offset/timestamp. | Selects bay/blift mesh pieces, door-open/closed mesh, overdrive slide and patron light. Requires layout plus matching bay state. |
-| `VrcVisualizer` | VRC reports and per-node gate start timestamps. | Shaft/tracks/gate/carriage; carriage follows reported height; gate cube height is visually interpolated. BLift nodes skip duplicated VRC shaft/door structures. |
+| `VrcVisualizer` | VRC reports and per-node gate start timestamps. | Shaft/tracks/gate/carriage; carriage follows reported height; gate cube height is visually interpolated. BLift (bay integrated with a lift) nodes skip duplicated VRC shaft/door structures. |
 | `QueueVisualizer` | GUID→marker groups, display-order vectors, pending deletions. | Inserts from SimReport; unplanned/executing retrieves from DispatchReport. Cars are illustrative positions near the first bay-like node. |
 | `ScheduleVisualizer` | Latest schedule shared pointer. | Draws only AGV-command action nodes; uses a different color and Z offset to distinguish planned overlays. |
 
-The array-per-topic interface is a value return, not a shared scene graph. A strategy can produce several topics; the manager's publisher map creates each topic once and reuses its handle. Small caches and repeated messages favor simplicity over incremental scene updates. There is no graphics GPU/OpenGL renderer in this package; RViz loads/renders the supplied mesh resources.
+The array-per-topic interface is a value return, not a shared scene graph. A strategy can produce several topics; the manager's publisher map creates each topic once and reuses its handle. Small caches and repeated messages favor simplicity over incremental scene updates. There is no graphics GPU (graphics processing unit)/OpenGL renderer in this package; RViz loads/renders the supplied mesh resources.
 
 
 ### Marker generation and presentation rules
@@ -274,7 +311,7 @@ Bay visual markers require both a bay-like layout node and a cached matching Bay
 | Setting | Local `vis` behavior/default |
 | --- | --- |
 | `layout` | Read as a string with no explicit local fallback; resolved with `GetLayoutPathByName`. Resolution failure logs and exits. |
-| `use_remote_meshes` | **`true` in `BuildVisContext`**. Simulation launcher explicitly passes `false` unless overridden; bagplay also passes false. Production central passes shared params, so inspect YAML or application default. |
+| `use_remote_meshes` | **`true` in `BuildVisContext`**. Simulation launcher explicitly passes `false` unless overridden; bagplay also passes false. Production central passes shared params, so inspect YAML (YAML Ain’t Markup Language; configuration format) or application default. |
 | `remote_mesh_prefix` | `https://aws-mesh-proxy.tailfadbb4.ts.net/model/`. |
 | Local mesh prefix | `package://sim/3d/`. |
 | Render period | Fixed 50 ms of the node's ROS clock. |
@@ -304,7 +341,7 @@ There are no explicit mutexes or atomics in these implementations. `rclcpp::spin
 | --- | --- |
 | Stale AGV/bay/VRC caches | Snapshot handlers add/update entries without removing absent entities. Tray and payload caches are cleared/rebuilt. Removed AGVs can continue being rendered/subscribed. |
 | ID narrowing | Manager stores a snapshot AGV ID in `uint8_t` before constructing its command topic/capture; IDs outside that range can be misrouted. |
-| Displayed queue order is not guaranteed FIFO | New inserts/retrieves are traversed from unordered maps before appending their display-order vectors. Engine patron FIFO and display order can differ. |
+| Displayed queue order is not guaranteed FIFO (first in, first out) | New inserts/retrieves are traversed from unordered maps before appending their display-order vectors. Engine patron FIFO and display order can differ. |
 | Visual animation can disagree with hardware | Overdrive uses hardcoded time, cardinal-only translation, state/light heuristics; VRC uses hardcoded 3 s. Formulas and boundary bugs are detailed in Sections 7.3–7.4. |
 | Mesh geometry differs from physical/collision geometry | Car selection is hashed; payload dimensions do not resize each rendered car model here. |
 | Missing layout data silently falls back | Many floor-height lookups use zero fallback; the VRC carriage no-report fallback also differs from its comment. |

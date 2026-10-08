@@ -2,21 +2,75 @@
 
 [Overview](volley_simulation_guide.md) · [Simulation package](volley_sim_package.md) · [Visualizer package](volley_vis_package.md) · [Setup and runbook](volley_simulation_runbook.md)
 
-Source basis: all 23 files in `launcher-repomix.md`. Paths below are relative to `src/launcher/`. The pack intentionally excludes `params/`, `layouts/`, and `test/`; their contents and numerical configuration defaults cannot be reconstructed from callers. This is static source analysis: no ROS launch, component loading, or hardware test was performed.
+## Acronyms, abbreviations, and project names
+
+This reference is local to this document so it remains readable on its own. Formal expansions are distinguished from product/project names whose full forms are not stated in the supplied source. Acronyms inside code, endpoint names, file paths and diagrams retain their exact spelling.
+
+| Term | Full name or meaning | Role in this document |
+| --- | --- | --- |
+| DAG | Directed acyclic graph. | Dependency graph for scheduled work; `printdags` controls diagnostic output. |
+| pub/sub | Publish/subscribe. | Topic-stream interaction; no paired response to each publication. |
+| ROS | Robot Operating System; these guides use ROS 2. | Framework for nodes, messages, services, parameters and execution. |
+| AGV | Automated guided vehicle. | Mobile robot that transports parking trays. |
+| VRC | Vertical reciprocating conveyor (standard equipment term). | Here, a floor-to-floor carriage/lift with gates. The project source does not explicitly spell out its name; the conventional expansion is documented by [Wildeck](https://www.wildeck.com/vertical-conveyors-vrcs/). |
+| VECS | Project label for the electric-vehicle charging subsystem (`vecs`); its complete formal expansion is not stated in the supplied source. | Charging core, simulated feedback and physical charging drivers. |
+| EV | Electric vehicle. | Patron car charging, distinct from AGV battery charging. |
+| BLift | Project name for a bay integrated with a lift; not a verified letter-by-letter acronym expansion. | Bay state-machine selection and VRC-to-lift report bridge. |
+| HITO | Project/vendor label used by `agvhito`; its formal expansion is not stated in the supplied source. | AGV simulation component and production AGV proxy/driver family. |
+| ODP | Overdrive plate. | Bay floor-plate observer feedback and visual slide animation. |
+| API | Application programming interface. | Callable C++/Python interfaces, ROS endpoints or the web service, depending on context. |
+| CLI | Command-line interface. | Commands/options entered in a terminal. |
+| UML | Unified Modeling Language. | Class diagrams used to explain types and ownership. |
+| QoS | Quality of service. | Message delivery policies such as reliability, history depth and durability. |
+| REST | Representational state transfer. | Web API style; distinct from native ROS service request/response. |
+| HTTP | Hypertext Transfer Protocol. | Web requests to REST endpoints. |
+| MQTT | Messaging protocol name; historically MQ Telemetry Transport, also expanded as Message Queuing Telemetry Transport in [standards-body terminology](https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=mqtt). | Broker-based publish/subscribe transport used by the production proxy; [protocol overview](https://mqtt.org/faq/). |
+| I/O | Input/output. | Sensor/driver interfaces or external data exchanges. |
+| IO-Link | Industrial sensor/actuator communication interface; IO means input/output. | Bay sensor messages and the physical driver; not ordinary network pub/sub. |
+| PLC | Programmable logic controller. | Physical bay-control hardware accessed by production drivers. |
+| NOC | Network operations center (conventional expansion). | Source comments use NOC for the operations interface consuming exported grid XML; project-specific naming is not further defined. |
+| OTEL | OpenTelemetry; OTEL is a common abbreviation for the project name. | Telemetry endpoint environment variables and metrics configuration. |
+| ID | Identifier. | Numeric resource identity or a named configuration identifier. |
+| YASMIN | Yet Another State MachINe. | ROS state-machine library named in the review rules; not used by the inspected packages. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
+| YAML | YAML Ain’t Markup Language (recursive acronym). | Scenario, layout and parameter configuration format. |
+| XML | Extensible Markup Language. | Recorder launch file and exported grid format. |
+| MCAP | File-format name; the cited specification supplies no letter-by-letter expansion. | Container for timestamped messages, used for ROS bag artifacts. [Format specification](https://mcap.dev/spec). |
+| MD5 | Message Digest Algorithm 5. | Layout-file checksum helper name; no security claim is implied. |
+| SHA | Secure Hash Algorithm. | Git revision hash in `GITSHA`; the launcher does not choose its algorithm. |
+| UTC | Coordinated Universal Time. | Timezone used for artifact directory timestamps. |
+| RViz | ROS visualization application; a product/tool name rather than a supplied formal acronym. | Displays MarkerArray messages and meshes; does not simulate physical motion. |
+| TB / TD | Top-to-bottom / top-down Mermaid layout directives. | Diagram orientation; not application components. |
+| sim / vis / devc | Simulation / visualization / development-container wrapper names. | Package/tool shorthand, not additional engines or protocols. |
+| rclcpp / rclpy / rclcppx | ROS client library for C++ / ROS client library for Python / this repository’s C++ client-library extensions. | Node/executor APIs and project-specific adapters/factories. |
+
+Environment variables are configuration names, rather than independent protocols:
+
+| Name | Meaning |
+| --- | --- |
+| `GITSHA` | Git source-revision hash (SHA means Secure Hash Algorithm); defaults to `unknown` only when unset. |
+| `ROS_DOMAIN_ID` | ROS discovery-domain identifier; same domain allows discovery, different domains separate graphs. |
+| `ARTIFACTS_DIR` | Artifact root directory override. |
+| `DEVICE_ID` | Numeric device identifier; launcher defaults it to zero when unset. |
+| `INSTALLATION_ID` | Installation identifier; sim path explicitly uses 9998. |
+| `LAYOUT` | Layout-name environment variable for production loading; sim chooses scenario layout. |
+
+Uppercase state labels (`AUTO`, `STOPPED`, `OPEN`, `CLOSED`, and similar), enum constants, macro names and build flags are exact code identifiers, not unexplained acronyms. `RISK` is a review label; `TODO` means “to do.” Units use `m` for metres, `s` for seconds, `ms` for milliseconds, `ns` for nanoseconds, and `kg` for kilograms.
+
+Source basis: all 23 files in `launcher-repomix.md`. Paths below are relative to `src/launcher/`. The pack intentionally excludes `params/`, `layouts/`, and `test/`; their contents and numerical configuration defaults cannot be reconstructed from callers. This is static source analysis: no ROS (Robot Operating System) launch, component loading, or hardware test was performed.
 
 ## 1. Summary, package design, and dependencies
 
 `launcher` turns scenarios, layouts, parameter files, environment variables, and command-line options into ROS launch descriptions. It decides which processes and C++ components exist, their namespaces, configuration, log routing, and optional visualization/recording. It supplies the orchestration layer used by simulation and production deployments; it does not implement scheduling, vehicle dynamics, bay transitions, or visualization algorithms.
 
-The package is Python (`ament_python`), not a C++ component library. `setup.py` installs the `launcher` Python module, package-index marker, manifest, launch files, layouts, and parameter YAML. It exposes one console entry point: `layout_plotter = launcher.layout_plotter:main`. The two files under `scripts/` are source utilities, with no console entry points or explicit script installation in this setup file.
+The package is Python (`ament_python`), not a C++ component library. `setup.py` installs the `launcher` Python module, package-index marker, manifest, launch files, layouts, and parameter YAML (YAML Ain’t Markup Language; configuration format). It exposes one console entry point: `layout_plotter = launcher.layout_plotter:main`. The two files under `scripts/` are source utilities, with no console entry points or explicit script installation in this setup file.
 
 | Layer | Files | Design responsibility |
 | --- | --- | --- |
 | Launch entry points | `launch/*.launch.py` | Return a `LaunchDescription`; choose simulation, production device, or replay deployment. |
 | Deployment factories | `launcher/*_nodes.py` | Construct standalone `Node` actions, `ComposableNode` descriptions, containers, and includes. |
 | Configuration/path helpers | `launcher/utils.py`, `launcher/paths.py` | Merge parameters and resolve package/environment/artifact paths. |
-| Recorder configuration | `launch/support/recorder.launch.xml` | Configure an MCAP recorder through launch arguments. |
-| Offline layout tools | `launcher/layout_plotter.py`, `scripts/*.py` | Plot a graph, generate layout YAML, or export grid XML. |
+| Recorder configuration | `launch/support/recorder.launch.xml` | Configure an MCAP (timestamped-message container file format) recorder through launch arguments. |
+| Offline layout tools | `launcher/layout_plotter.py`, `scripts/*.py` | Plot a graph, generate layout YAML, or export grid XML (Extensible Markup Language). |
 
 Important dependencies used by the source include `launch`, `launch_ros`, `rclcpp_components`, `common_py`, `interfaces`, and deployed packages `sim`, `agvhito`, `central`, `scheduler`, `bay`, `lift`, `vecs`, `vrc`, `vis`, and `rviz2`. The manifest explicitly lists `ament_index_python`, `central_api`, `common_py`, `foxglove_bridge`, `rcl_logging_noop`, `rclpy`, MCAP/rosbag transport, and `scenario`. Many imported or launched packages are not direct manifest dependencies; availability therefore depends on the wider workspace. `yaml`, `click`, and Matplotlib are also used; `install_requires` lists only `setuptools`.
 
@@ -35,23 +89,23 @@ Approximate lines count extracted source rather than Repomix headers. Empty mark
 | `launch/support/recorder.launch.xml` | 67 | MCAP storage, topic selection, splitting, and recorder arguments. |
 | `launch/bagplay.launch.py` | 60 | Loop rosbag playback with visualizer and Foxglove bridge. |
 | `launch/bay.launch.py` | 77 | Launch one production bay's core/driver components plus recorder. |
-| `launch/central.launch.py` | 126 | Launch production central/scheduler, API/proxy, metrics, vis, bridge, recorder. |
+| `launch/central.launch.py` | 126 | Launch production central/scheduler, API (application programming interface)/proxy, metrics, vis, bridge, recorder. |
 | `launch/lift.launch.py` | 36 | Launch one standalone production lift component container. |
 | `launch/sim.launch.py` | 12 | Thin simulation entry point delegating to `sim_nodes`. |
-| `launch/vecs.launch.py` | 39 | Launch production EV-charging core and driver container. |
+| `launch/vecs.launch.py` | 39 | Launch production EV (electric vehicle)-charging core and driver container. |
 | `launcher/__init__.py` | 1 | Python package marker. |
-| `launcher/bay_nodes.py` | 146 | Select ordinary/BLift core components, bridge and hardware drivers. |
-| `launcher/central_nodes.py` | 133 | Define central/scheduler components, REST API, and production AGV proxy. |
+| `launcher/bay_nodes.py` | 146 | Select ordinary/BLift (bay integrated with a lift) core components, bridge and hardware drivers. |
+| `launcher/central_nodes.py` | 133 | Define central/scheduler components, REST (representational state transfer) API, and production AGV (automated guided vehicle) proxy. |
 | `launcher/layout_plotter.py` | 199 | Matplotlib layout graph plotter and installed Click command. |
-| `launcher/lift_nodes.py` | 15 | Construct `lift::LiftComponent` description for a device ID. |
+| `launcher/lift_nodes.py` | 15 | Construct `lift::LiftComponent` description for a device ID (identifier). |
 | `launcher/paths.py` | 19 | Resolve ROS home and artifact directory environment fallbacks. |
 | `launcher/sim_nodes.py` | 497 | Parse simulation options, merge scenario configuration, assemble all processes. |
 | `launcher/utils.py` | 103 | Boolean parsing, YAML loading, parameter precedence and device environment. |
 | `launcher/vecs_nodes.py` | 90 | Build standalone charging core/simulator and production driver descriptions. |
-| `launcher/vrc_nodes.py` | 53 | Build per-VRC processes with floors, motion limits, doors and initial floor. |
+| `launcher/vrc_nodes.py` | 53 | Build per-VRC (vertical reciprocating conveyor; the floor-to-floor lift) processes with floors, motion limits, doors and initial floor. |
 | `resource/launcher` | 1 | Ament package-index registration marker. |
 | `scripts/generate_layout.py` | 54 | Generate corridor layout YAML through `common_py` and Click. |
-| `scripts/layout_yaml_to_xml.py` | 32 | Export layout to NOC grid XML with layout checksum. |
+| `scripts/layout_yaml_to_xml.py` | 32 | Export layout to NOC (network operations center / operations interface) grid XML with layout checksum. |
 | `package.xml` | 25 | Package identity, ament_python build type and dependency declarations. |
 | `setup.cfg` | 4 | Install Python scripts beneath `lib/launcher`. |
 | `setup.py` | 49 | Install Python/package data and layout-plotter console entry point. |
@@ -76,7 +130,7 @@ These factories return descriptions of future runtime objects. Constructing a `C
 | `load_param_file(name)`, `string_to_bool(value)` | Same | Load installed YAML or recognize affirmative strings. Unknown Boolean text becomes false. |
 | `get_artifacts_dir()`, `get_ros_home_dir()` | `launcher/paths.py` | Resolve artifacts and ROS home paths. |
 | `write_grid_to_file(layout, layout_md5sum)` | `launcher/sim_nodes.py` | Export XML to fixed temporary `grid.xml`; not called by the supplied sim entry path. |
-| `plot_grid`, `plot_nodes`, `render_layout`, `main` | `launcher/layout_plotter.py` | Draw/serialize floor-separated graph figures; CLI available with `ros2 run launcher layout_plotter`. |
+| `plot_grid`, `plot_nodes`, `render_layout`, `main` | `launcher/layout_plotter.py` | Draw/serialize floor-separated graph figures; CLI (command-line interface) available with `ros2 run launcher layout_plotter`. |
 
 ### Interfaces versus deployment configuration
 
@@ -87,12 +141,12 @@ The Python launcher itself does not create garage-topic publishers/subscribers, 
 | Scenario/layout/parameters → launcher | Disk YAML via `common_py` and `yaml.FullLoader`; ament package-share lookup. | Python scenario loader and excluded YAML contents are not provided. |
 | Launcher → component containers | `ComposableNode` plugin strings plus ROS parameter lists. | Plugin implementation, callback groups, component-load internals are in dependencies. |
 | Simulation clock → consumers | Clock component configured to produce `/clock`; other simulation params use simulated time. | Clock recurrence is in the [sim math section](volley_sim_package.md#7-mathematics-and-algorithms). |
-| Central/sim/AGVs → visualizer → RViz | Topic pub/sub; vis process uses explicit namespace `vis`. | Message type/QoS tables are in the [vis guide](volley_vis_package.md). |
+| Central/sim/AGVs → visualizer → RViz | Topic pub/sub; vis process uses explicit namespace `vis`. | Message type/QoS (quality of service) tables are in the [vis guide](volley_vis_package.md). |
 | VRC → BLift bridge → bay | Source comment identifies `/vrc/r<ID>/report` to `/lift/l<bay-ID>/report`, converting VRC to lift reports. | Bridge implementation and exact QoS/schema conversion are omitted. |
-| User/web client → `central_api` | Standalone `central_api/rest_api` process, with `introspection_mode=metadata`. | Routes, HTTP port and REST-to-ROS mapping are not configured in these factories. |
-| Production AGV proxy → external systems | Environment supplies MQTT broker and map-server host/port parameters. Proxy omitted when `is_simulation` is truthy. | MQTT topics/payloads, map protocol, retry/security behavior belong to proxy implementation. |
+| User/web client → `central_api` | Standalone `central_api/rest_api` process, with `introspection_mode=metadata`. | Routes, HTTP (Hypertext Transfer Protocol) port and REST-to-ROS mapping are not configured in these factories. |
+| Production AGV proxy → external systems | Environment supplies MQTT (broker-based publish/subscribe messaging; historically MQ Telemetry Transport) broker and map-server host/port parameters. Proxy omitted when `is_simulation` is truthy. | MQTT topics/payloads, map protocol, retry/security behavior belong to proxy implementation. |
 | ROS data → recorded artifacts | `rosbag2_transport/recorder`, MCAP, regex-based topic selection and discovery enabled. | Exact recorded set depends on live graph and rosbag version; service/action recording is not established by the XML's comment. |
-| Metrics process → telemetry endpoint | Production central adds `metrics_recorder`; OTEL host/port become `metrics.otel_endpoint`. | Transport/data schema is in central; this specific metrics process is not added by the sim factory. |
+| Metrics process → telemetry endpoint | Production central adds `metrics_recorder`; OTEL (OpenTelemetry) host/port become `metrics.otel_endpoint`. | Transport/data schema is in central; this specific metrics process is not added by the sim factory. |
 
 The simulation visualizer is launched as `Node(package="vis", namespace="vis", name="visualizer", ...)`. This supplies the missing namespace evidence for relative marker outputs resolving to `/vis/...`. Simulation forces local meshes by default; production central passes only shared params, so its mesh mode depends on YAML or the application's default.
 
@@ -100,7 +154,7 @@ The simulation visualizer is launched as `Node(package="vis", namespace="vis", n
 
 ### 4.1 UML: launch descriptions and runtime ownership
 
-There are no package-defined application classes. This UML models framework objects the factories compose, and distinguishes descriptions from runtime ownership.
+There are no package-defined application classes. This UML (Unified Modeling Language) models framework objects the factories compose, and distinguishes descriptions from runtime ownership.
 
 ```mermaid
 classDiagram
@@ -145,7 +199,7 @@ The diagram groups runtime ROS contracts; the launcher orchestrates them, rather
 
 ### 4.3 State machines
 
-**No state machine.** This package defines no YASMIN or enum-driven control machine. It selects bay state-machine plugins implemented in `bay`. `OnProcessExit` is a launch event handler, not a parking-system state transition.
+**No state machine.** This package defines no YASMIN (Yet Another State MachINe) or enum-driven control machine. It selects bay state-machine plugins implemented in `bay`. `OnProcessExit` is a launch event handler, not a parking-system state transition.
 
 The following diagram shows deployment lifecycle only:
 
@@ -162,6 +216,123 @@ stateDiagram-v2
 ```
 
 An exit of the main simulation container requests global shutdown even for return code zero, unless the launch context is already shutting down. Equivalent exit supervision is not explicitly registered for every other child.
+
+### 4.4 Launch call path into the simulation
+
+This is a **call path across three execution phases**, not one continuous stack frame: Python first constructs descriptions and returns them, the launch framework then starts processes and loads C++ plugins, and executors later call timer/subscription/service callbacks. Solid arrows below identify direct calls or ordered return flow; dashed arrows mark framework startup, plugin loading, or ROS message/service boundaries. Framework internals and `agvhito` constructor details are omitted from the supplied source, so those boundaries are named without inventing a call stack inside them.
+
+#### A. Python launch-description construction
+
+Start command: `ros2 launch launcher sim.launch.py scenario:=<scenario.yaml>`.
+
+```mermaid
+sequenceDiagram
+    participant Entry as sim.launch.py
+    participant Factory as sim_nodes.py
+    participant Config as utils and common_py
+    participant Builders as node factories
+    participant Framework as ROS launch framework
+    Framework->>Entry: generate_launch_description()
+    Entry->>Factory: get_sim_launch_description(sys.argv, True)
+    Factory->>Factory: parse options and resolve scenario path
+    Factory->>Factory: load_params_and_initial_conditions(path)
+    Factory->>Config: load_scenario(path)
+    Config-->>Factory: scenario dictionary
+    Factory->>Config: load_params(sim, layout, 9998, use_sim_time=True)
+    Config->>Config: load_param_file() and merge_params_dict()
+    Config-->>Factory: parameters and device ID
+    Factory->>Config: load_initial_conditions(scenario)
+    Config-->>Factory: initial entity dictionaries
+    Factory->>Factory: apply scenario and explicit option overrides
+    Factory->>Config: load_scenario() and load_layout()
+    Factory->>Factory: get_sim_launch_description_entities(...)
+    Factory->>Factory: get_sim_clock_node() and AGV/world descriptions
+    Factory->>Builders: bay_nodes.get_core_composable_nodes(params)
+    Builders-->>Factory: per-bay core descriptions
+    Factory->>Factory: append BaySim and per-bay containers
+    Factory->>Builders: vecs_nodes.get_vecs_sim_nodes(params)
+    Factory->>Builders: vrc_nodes.get_vrc_sim_nodes(params, conditions)
+    Factory->>Builders: central_nodes.get_composable_nodes(params)
+    Factory->>Builders: central_nodes.get_standalone_nodes(params)
+    Factory->>Factory: append vis, bridge, optional RViz/recorder, main container, exit handler
+    Factory-->>Entry: entities plus scenario metadata
+    Entry-->>Framework: LaunchDescription(entities)
+```
+
+The final “append” line groups action construction for readability; exact action-list order is in `launcher/sim_nodes.py`. The first clock description is in the main container's component list, while that container's action is appended after several other processes. Constructing descriptions therefore does not establish a clock-ready barrier or a cross-process constructor order.
+
+#### B. Runtime process loading and C++ construction
+
+```mermaid
+flowchart TD
+    L["ROS launch executes returned actions"] -. "starts separate processes" .-> C["Main sim component container"]
+    L -. "starts one per layout bay" .-> B["Per-bay component container"]
+    L -. "starts other deployment units" .-> X["Central, VRC, VECS, REST, vis"]
+    C -. "loads registered plugin" .-> S["SimulatorComponent(options)"]
+    S --> N["Create volley::Node and read simulator.scenario"]
+    N --> P["ParseScenarioFile(path): C++ YAML parser"]
+    P --> O["Construct ScenarioRunner(events) and Simulator(...)"]
+    O --> I["Simulator constructor: SimClients, ROS handles, static bodies, 50 ms timer"]
+    C -. "loads clock adapter" .-> K["SimClockComponent → SimClockRos(node)"]
+    K --> KT["Create steady-clock timer and /clock publisher"]
+    C -. "loads one plugin per initial AGV" .-> A["agvhito::sim::SimAgvComponent: implementation omitted"]
+    B -. "loads simulated hardware plugin" .-> H["BaySimComponent(options)"]
+    H --> HB["Construct BaySim; offer service, snapshot subscription, 50 ms timer"]
+    B -. "loads production core plugins" .-> BC["Bay state machine, estimator, guidance, optional BLift bridge"]
+```
+
+Python initial conditions control how many AGV descriptions are created and their starting parameters. `SimulatorComponent` separately parses the scenario in C++ to seed central and run events. Neither a tray nor a payload receives its own component in this launch path: those entities are registered through central services and tracked in snapshots. Exact framework plugin-loader call names are not included in the pack.
+
+#### C. Executor callbacks: clock and world update
+
+```mermaid
+flowchart TD
+    W["Steady-time callback: default 5 ms wall interval"] --> K["SimClockRos::Tick() → Publish()"]
+    K -. "/clock messages" .-> T["ROS-time timer: 50 ms simulated interval"]
+    T --> U["Simulator::Update(now)"]
+    U --> Q{"Initial conditions remain?"}
+    Q -- "yes" --> S["SimClients::ProcessInitialConditions()"]
+    S -. "request / response" .-> C["Central add-AGV, add-tray, add-payload services"]
+    S --> OK{"Seeding succeeded?"}
+    OK -- "no" --> R["Return; retry on later tick"]
+    OK -- "yes: clear conditions" --> G{"running_ is true?"}
+    Q -- "no" --> G
+    G -- "yes" --> E["HandleEvents(now) → GetNextEvents(elapsed)"]
+    E --> M["OfferWaitingPayloadsToBays()"]
+    M -. "payload offer service" .-> B["BaySimComponent offer callback → BaySim::SetInsertingPayload()"]
+    M --> D["RunCollisionCheck() → CollisionDetector::FindCollisions()"]
+    G -- "no" --> D
+    D --> P["PublishReport(now)"]
+    P --> F["If not running and IsDispatchStopped(now): set running_ and start_time_"]
+```
+
+`HandleEvents()` dispatches the due event's type to `SimClients` operations or the local patron queue; those calls are detailed in the [sim API/event guide](volley_sim_package.md#3-public-api-and-dependent-usage). Central snapshots feed the collision bodies; they arrive through subscription callbacks independently of the timer. The diagram follows `Update()`'s call order, not a guarantee that all external processes have fresh state at that instant. An unhandled service exception or a shutdown request can alter this normal path.
+
+#### D. Independent bay hardware callback path
+
+```mermaid
+flowchart TD
+    T["50 ms ROS-time bay timer callback"] --> K["BaySimComponent::Tick(now)"]
+    K --> G["GetTrayInBay(): join tray and payload from cached snapshot"]
+    G --> B["BaySim::Tick(tray_opt, now)"]
+    B --> S["Compute and publish load cells, IO-Link, proximity, ODP"]
+    B --> P["Apply patron insert/retrieve handoff and confirmation logic"]
+    S -. "sensor topics" .-> C["Production bay core callbacks and reports"]
+    P -. "confirmation services" .-> C
+    C -. "report subscription" .-> B
+```
+
+The world timer does not directly invoke every bay timer or AGV update in a single stack. Each executor schedules its callbacks; simulated time synchronizes the clock basis, while topic/service exchanges connect the business logic. Internal AGV motion callbacks and equations remain outside the supplied `agvhito` source evidence.
+
+| Execution boundary | Source paths to follow |
+| --- | --- |
+| Entry and Python configuration/factories | `src/launcher/launch/sim.launch.py`, `src/launcher/launcher/sim_nodes.py`, `src/launcher/launcher/utils.py`, `src/launcher/launcher/*_nodes.py`. |
+| World component and parser | `src/sim/src/simulator_component.cpp`, `src/sim/src/scenario_runner.cpp`. |
+| World construction/update and service calls | `src/sim/src/simulator.cpp`, `src/sim/src/sim_clients.cpp`, `src/sim/src/collision_detector.cpp`. |
+| Clock adapter/application | `src/sim/src/sim_clock_component.cpp`, `src/sim/src/sim_clock_ros.cpp`; adapter internals in omitted `rclcppx`. |
+| Bay hardware construction/tick | `src/sim/src/bay_sim_component.cpp`, `src/sim/src/bay_sim.cpp`. |
+| AGV plugin implementation | `agvhito` package, plugin `volley::agvhito::sim::SimAgvComponent`; implementation not supplied. |
+
 
 ## 5. Behavior: construction, execution, shutdown, and defaults
 
@@ -201,7 +372,7 @@ Review layer 9 when adding per-instance settings: shared configuration can overr
 | `vis` | `true` | Enables visualizer and Foxglove bridge; also gates RViz creation. |
 | `rviz` | `true` | Creates RViz only when `vis` is also enabled. |
 | `record_artifacts` | `false` | Adds simulation recorder. Lower-level entities factory defaults to true. |
-| `artifacts_output_dir` | Artifact root plus UTC timestamp | Timestamp format `YYYYMMDDTHHMMSSZ`; root uses `ARTIFACTS_DIR`, otherwise ROS home/artifacts. |
+| `artifacts_output_dir` | Artifact root plus UTC (Coordinated Universal Time) timestamp | Timestamp format `YYYYMMDDTHHMMSSZ`; root uses `ARTIFACTS_DIR`, otherwise ROS home/artifacts. |
 | `artifact_basename` | Unset → `sim` in recorder include | Output subdirectory/name prefix. |
 | `use_remote_meshes` | `false` | Explicitly overrides visualizer application's true default. |
 | `remote_mesh_prefix` | Unset | Only passed when truthy; otherwise visualizer retains built-in prefix. |
@@ -220,7 +391,7 @@ These sim options are manually parsed, not declared with `DeclareLaunchArgument`
 | Main simulation container | Clock first in description list, then initial AGVs, then `SimulatorComponent`; `component_container --executor-type multi-threaded`. |
 | One container per layout bay | State machine, vehicle estimator, guidance, optional BLift bridge, and BaySim; multithreaded executor. |
 | Central simulation container | AGV/safety/consistency monitors, dispatcher, tracker, garage monitor, scheduler; multithreaded executor. |
-| VECS | One standalone core plus simulator process per layout EV-charge ID. |
+| VECS (the project’s electric-vehicle charging subsystem; formal expansion not supplied) | One standalone core plus simulator process per layout EV-charge ID. |
 | VRC | One `vrc/vrc` standalone executable per layout VRC; launcher passes speed/accel and door times, not the internal motion algorithm. |
 | Visualization | Standalone vis, included Foxglove launch, optionally standalone RViz. |
 | REST API | Standalone central_api in both central and simulation paths. |
@@ -234,7 +405,7 @@ RViz is launched as `Node(package="rviz2", executable="rviz2")` with no explicit
 
 `bay_nodes` traverses `layout.get_bay_ids()`. It chooses `bay::BliftStateMachineComponent` when the node is TYPE_BLIFT, has multiple system floors, or its system floor differs from insert floor; otherwise it chooses `bay::StateMachineComponent`. Every bay also gets vehicle estimation and guidance. TYPE_BLIFT sets external lift driving and requires a matching VRC membership; missing membership raises `RuntimeError`. Its bridge lets the bay observe scheduler-controlled VRC movement. Legacy multi-floor bays keep internal lift driving according to the configured flag.
 
-Production bay deployment replaces BaySim with PLC, IO-Link, and load-cell drivers. Production central additionally launches the HITO proxy when `is_simulation` is false, plus metrics recorder and visualization. Production lift and VECS entry points use the environment's selected device ID. VRC simulation initial floor comes from `initial_conditions.vrcs` by ID, falling back to `-1`; the meaning of `-1` is delegated to `vrc`.
+Production bay deployment replaces BaySim with PLC (programmable logic controller), IO-Link (industrial input/output communication interface), and load-cell drivers. Production central additionally launches the HITO (the `agvhito` AGV integration family; formal expansion not supplied) proxy when `is_simulation` is false, plus metrics recorder and visualization. Production lift and VECS entry points use the environment's selected device ID. VRC simulation initial floor comes from `initial_conditions.vrcs` by ID, falling back to `-1`; the meaning of `-1` is delegated to `vrc`.
 
 ### Recording and replay
 

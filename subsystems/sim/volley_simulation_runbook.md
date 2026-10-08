@@ -2,7 +2,51 @@
 
 [Overview and ROS concepts](volley_simulation_guide.md) · [Simulation package](volley_sim_package.md) · [Visualizer package](volley_vis_package.md) · [Launcher package](volley_launcher_package.md)
 
-This preserves the supplied setup/simulation guides and adds source-backed visualization checks. The supplied launcher pack now confirms option parsing, topology and namespace settings; no commands were executed against a live ROS system.
+## Acronyms, abbreviations, and project names
+
+This reference is local to this document so it remains readable on its own. Formal expansions are distinguished from product/project names whose full forms are not stated in the supplied source. Acronyms inside code, endpoint names, file paths and diagrams retain their exact spelling.
+
+| Term | Full name or meaning | Role in this document |
+| --- | --- | --- |
+| 2D / 3D | Two-dimensional / three-dimensional. | Planar geometry versus a volume or mesh with height/depth. |
+| DAG | Directed acyclic graph. | Dependency graph for scheduled work; `printdags` controls diagnostic output. |
+| ROS | Robot Operating System; these guides use ROS 2. | Framework for nodes, messages, services, parameters and execution. |
+| AGV | Automated guided vehicle. | Mobile robot that transports parking trays. |
+| VRC | Vertical reciprocating conveyor (standard equipment term). | Here, a floor-to-floor carriage/lift with gates. The project source does not explicitly spell out its name; the conventional expansion is documented by [Wildeck](https://www.wildeck.com/vertical-conveyors-vrcs/). |
+| CLI | Command-line interface. | Commands/options entered in a terminal. |
+| UUID | Universally unique identifier. | Identifier type/notation used by generated interfaces and helper tools. |
+| ID | Identifier. | Numeric resource identity or a named configuration identifier. |
+| YAML | YAML Ain’t Markup Language (recursive acronym). | Scenario, layout and parameter configuration format. |
+| JSON | JavaScript Object Notation. | Docker configuration file format. |
+| CSV | Comma-separated values. | Metrics-table serialization format. |
+| MCAP | File-format name; the cited specification supplies no letter-by-letter expansion. | Container for timestamped messages, used for ROS bag artifacts. [Format specification](https://mcap.dev/spec). |
+| UTC | Coordinated Universal Time. | Timezone used for artifact directory timestamps. |
+| URL | Uniform Resource Locator. | Web/resource address including a mesh base URL. |
+| AWS | Amazon Web Services. | Cloud service provider for the documented container-image workflow. |
+| ECR | Elastic Container Registry. | Amazon’s container-image registry used by the Docker pull workflow. |
+| IAM | Identity and Access Management. | AWS account/permission management used by authentication setup. |
+| STS | Security Token Service. | AWS service used by `aws sts get-caller-identity`. |
+| ACL | Access control list. | Tailscale access policy/tag requirement in the setup guide. |
+| SSH | Secure Shell. | Authenticated repository access using SSH keys. |
+| APT | Advanced Package Tool. | Ubuntu package management via the `apt` command/proxy. |
+| VS Code | Visual Studio Code. | Editor used to open the development container and preview Markdown. |
+| RViz | ROS visualization application; a product/tool name rather than a supplied formal acronym. | Displays MarkerArray messages and meshes; does not simulate physical motion. |
+| sim / vis / devc | Simulation / visualization / development-container wrapper names. | Package/tool shorthand, not additional engines or protocols. |
+
+Environment variables are configuration names, rather than independent protocols:
+
+| Name | Meaning |
+| --- | --- |
+| `ROS_DOMAIN_ID` | ROS discovery-domain identifier; same domain allows discovery, different domains separate graphs. |
+| `ROS_DISTRO` | ROS distribution name used to select the installed underlay. |
+| `ROS_HOME` | ROS runtime-data home directory; fallback is `~/.ros`. |
+| `ARTIFACTS_DIR` | Artifact root directory override. |
+| `INSTALLATION_ID` | Installation identifier; sim path explicitly uses 9998. |
+| `LAYOUT` | Layout-name environment variable for production loading; sim chooses scenario layout. |
+
+Uppercase state labels (`AUTO`, `STOPPED`, `OPEN`, `CLOSED`, and similar), enum constants, macro names and build flags are exact code identifiers, not unexplained acronyms. `RISK` is a review label; `TODO` means “to do.” Units use `m` for metres, `s` for seconds, `ms` for milliseconds, `ns` for nanoseconds, and `kg` for kilograms.
+
+This preserves the supplied setup/simulation guides and adds source-backed visualization checks. The supplied launcher pack now confirms option parsing, topology and namespace settings; no commands were executed against a live ROS (Robot Operating System) system.
 
 ## 1. Setup and documented launch walkthrough
 
@@ -80,12 +124,12 @@ Press `Ctrl+C` in the event-driver terminal and the launch terminal to stop both
 
 | Environment | Responsibilities |
 | --- | --- |
-| Host | Docker, Tailscale, Git/SSH access, AWS image-pull authentication, `devc`, and the VS Code application. |
+| Host | Docker, Tailscale, Git/SSH (Secure Shell) access, AWS (Amazon Web Services) image-pull authentication, `devc`, and the VS Code (Visual Studio Code) application. |
 | Development container | ROS 2, compiler and libraries, workspace build, launch commands, event scripts, and ROS inspection. |
 
 The supplied getting-started guide targets an Ubuntu Linux x86 host. Apple Silicon users should complete the repository's `docs/guides/mac-setup.md` first; those instructions were not included in the supplied material.
 
-There is no need to install ROS packages on the host for the documented container workflow. The source checkout is bind-mounted into the container. The guide describes matching host/container user IDs and a persistent container home volume.
+There is no need to install ROS packages on the host for the documented container workflow. The source checkout is bind-mounted into the container. The guide describes matching host/container user IDs (identifiers) and a persistent container home volume.
 
 #### 2.1 Docker and Tailscale on the host
 
@@ -102,7 +146,7 @@ sudo tailscale up
 tailscale status --peers=false
 ```
 
-Ask a Volley Tailscale administrator to apply the machine's required ACL tag. The development container uses an internal apt proxy reachable through that tailnet. The guide states that `.devcontainer/scripts/initialize.sh` refuses to start when Tailscale is down.
+Ask a Volley Tailscale administrator to apply the machine's required ACL (access control list) tag. The development container uses an internal apt proxy reachable through that tailnet. The guide states that `.devcontainer/scripts/initialize.sh` refuses to start when Tailscale is down.
 
 #### 2.2 Repository access and `devc`
 
@@ -125,7 +169,7 @@ You can use another parent directory. An existing checkout does not need to be c
 
 #### 2.3 Authenticate container image pulls
 
-On the host, install AWS CLI and the Amazon ECR credential helper. Configure the AWS credentials prescribed by your organization; the supplied guide describes an IAM access key configured with:
+On the host, install AWS CLI (command-line interface) and the Amazon ECR (Elastic Container Registry) credential helper. Configure the AWS credentials prescribed by your organization; the supplied guide describes an IAM (Identity and Access Management) access key configured with:
 
 ```bash
 aws --version
@@ -237,15 +281,15 @@ Components can be loaded into containers without a separate executable for every
 | `scenario` | `None` in manual sim entry; named tests may supply one | Scenario file containing initial conditions. Supply it explicitly for this workflow. |
 | `real_time_factor` | `1.0` for manual runs; `10.0` for system tests | Ratio of simulated to wall time; `0` pauses simulated time. |
 | `enable_dispatch_charging_mode` | `true` | Enable automatic dispatch charging behavior. |
-| `garage_dirtiness_threshold_ratio` | YAML default retained; earlier guide says `0.1`, unverified | Threshold for queuing an idle AUTO-mode garage-cleaning job. |
-| `record_artifacts` | `false` | Enable ROS MCAP artifact recording. |
+| `garage_dirtiness_threshold_ratio` | YAML (YAML Ain’t Markup Language; configuration format) default retained; earlier guide says `0.1`, unverified | Threshold for queuing an idle AUTO-mode garage-cleaning job. |
+| `record_artifacts` | `false` | Enable ROS MCAP (timestamped-message container file format) artifact recording. |
 | `artifacts_output_dir` | Timestamped directory under `ARTIFACTS_DIR` | Artifact output location. |
 | `artifact_basename` | `sim` | Artifact subdirectory and file base name. |
 | `vis` | `true` for manual runs | Enable the 3D visualizer. |
 | `rviz` | `true` | Enable RViz. |
 | `use_remote_meshes` | `false` in supplied launcher | Explicitly overrides `vis` application default `true`; local assets required. |
-| `remote_mesh_prefix` | `https://aws-mesh-proxy.tailfadbb4.ts.net/model/` in supplied `vis` code | Remote mesh base URL; launcher only passes a supplied nonempty override. |
-| `printdags` | `false` | Print scheduler DAGs to standard output. |
+| `remote_mesh_prefix` | `https://aws-mesh-proxy.tailfadbb4.ts.net/model/` in supplied `vis` code | Remote mesh base URL (Uniform Resource Locator); launcher only passes a supplied nonempty override. |
+| `printdags` | `false` | Print scheduler DAGs (directed acyclic graphs) to standard output. |
 | `auto_confirm_insert` | YAML default retained; value unverified | Let simulated patron insert confirmations happen automatically. |
 
 These options are confirmed by `launcher/sim_nodes.py`. Unset auto-confirm and dirtiness threshold preserve YAML values; those files were excluded. Dispatch charging is only forced when its option is false. In particular, `auto_confirm_insert` maps to `simulator.auto_confirm_insert` in the bay component.
@@ -278,7 +322,7 @@ Replace placeholders and omit the square brackets when supplying `-o`. The archi
 | --- | --- | --- |
 | `-l`, `--layout` | Yes | Layout name. |
 | `-e`, `--events` | Yes | Events YAML name. The supplied quick start uses a name without `.yaml`. |
-| `-o`, `--output` | No | CSV output path. Pass it explicitly when metrics are needed. |
+| `-o`, `--output` | No | CSV (comma-separated values) output path. Pass it explicitly when metrics are needed. |
 
 The script waits for the dispatcher to be running. It monitors `/central/discrete_garage_state` and `/central/report` for bay readiness and job progress.
 
@@ -286,7 +330,7 @@ The script waits for the dispatcher to be running. It monitors `/central/discret
 | --- | --- | --- |
 | `patron_arrival` | `payload_id`, `mass`, dimensions, `wait_for_job_completion` | Wait for a bay ready to insert; inject arrival and optionally wait for the job. |
 | `retrieve_request` | Optional `payload_id`, `wait_for_job_completion` | Retrieve specified payload, or randomly select a stored payload when omitted. |
-| `move_agv` | `agv_id`, `pose.node_id`, `pose.heading` | Move/teleport AGV; track scheduler job completion. |
+| `move_agv` | `agv_id`, `pose.node_id`, `pose.heading` | Move/teleport AGV (automated guided vehicle); track scheduler job completion. |
 | `move_tray` | `tray_id`, `pose.node_id`, `pose.heading` | Move/teleport tray; track scheduler job completion. |
 | `repark_tray` | `tray_id`, pose fields, `allow_reciprocal` | Reposition a parked tray. |
 | `sleep` | `duration` | Wait in wall-clock time, not simulated time. |
@@ -301,7 +345,7 @@ The documented writer is `SimMetricsWriter` in `src/sim_metrics/sim_metrics/csv_
 | Column | Meaning |
 | --- | --- |
 | `event_type` | Arrival, retrieval, move, or another recorded job-bearing event. |
-| `payload_id` | Payload UUID from the scheduler job, where applicable. |
+| `payload_id` | Payload UUID (universally unique identifier) from the scheduler job, where applicable. |
 | `request_time(s)` | Simulated timestamp when the scheduler registered the job. |
 | `start_time(s)` | Simulated timestamp when the scheduler produced a plan. |
 | `end_time(s)` | Simulated timestamp when the job reached a terminal state. |
@@ -358,7 +402,7 @@ Use `ros2 interface show <returned_type>` for its actual message definition. Exa
 | Meshes fail to load | Check `use_remote_meshes` and prefix; local mode needs installed `sim/3d` assets, remote mode needs resource access from RViz's environment. |
 | Objects look frozen | Check `/clock` progression, `use_sim_time`, snapshot delivery and whether source state changes. |
 | Removed AGV still appears | Source AGV cache is not reconciled on absence; a continually republished mesh is not proof of current garage membership. |
-| Doors look out of sync | Visual overdrive and VRC gate animations use hardcoded 4 s / 3 s durations; changing hardware parameters does not reconfigure them. |
+| Doors look out of sync | Visual overdrive and VRC (vertical reciprocating conveyor; the floor-to-floor lift) gate animations use hardcoded 4 s / 3 s durations; changing hardware parameters does not reconfigure them. |
 | Displayed cars have unexpected size/color | Car mesh/color are process-salted choices; displayed mesh dimensions are not resized to each physical payload in this code. |
 
 ```bash
@@ -380,5 +424,5 @@ Setup commands derive from the supplied repository getting-started/simulation gu
 - The source starts RViz without an explicit display config. Select the installed vis configuration and Fixed Frame `map` if needed.
 - `vis:=false` gates visualizer, bridge, and RViz. `rviz:=false` keeps visualizer/bridge available when vis is enabled.
 - The clock is configured first in the main container, with no startup-readiness barrier. Check `/clock` and component/service discovery if startup stalls.
-- Artifact output defaults to a UTC timestamp under `ARTIFACTS_DIR`, otherwise `${ROS_HOME:-~/.ros}/artifacts`. Recorder source subdirectories are flattened during installation, so its installed include is `launch/recorder.launch.xml`.
+- Artifact output defaults to a UTC (Coordinated Universal Time) timestamp under `ARTIFACTS_DIR`, otherwise `${ROS_HOME:-~/.ros}/artifacts`. Recorder source subdirectories are flattened during installation, so its installed include is `launch/recorder.launch.xml`.
 - Bagplay loops playback but does not request `--clock` or pass layout/use_sim_time to vis; see the [launcher guide](volley_launcher_package.md) before treating it as a complete simulation replay.

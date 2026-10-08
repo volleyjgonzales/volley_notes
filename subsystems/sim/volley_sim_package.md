@@ -2,13 +2,49 @@
 
 [Overview and ROS concepts](volley_simulation_guide.md) · [Visualizer package](volley_vis_package.md) · [Setup and runbook](volley_simulation_runbook.md) · [Launcher package](volley_launcher_package.md)
 
+## Acronyms, abbreviations, and project names
+
+This reference is local to this document so it remains readable on its own. Formal expansions are distinguished from product/project names whose full forms are not stated in the supplied source. Acronyms inside code, endpoint names, file paths and diagrams retain their exact spelling.
+
+| Term | Full name or meaning | Role in this document |
+| --- | --- | --- |
+| 2D / 3D | Two-dimensional / three-dimensional. | Planar geometry versus a volume or mesh with height/depth. |
+| pub/sub | Publish/subscribe. | Topic-stream interaction; no paired response to each publication. |
+| ROS | Robot Operating System; these guides use ROS 2. | Framework for nodes, messages, services, parameters and execution. |
+| AGV | Automated guided vehicle. | Mobile robot that transports parking trays. |
+| ODP | Overdrive plate. | Bay floor plate, observer feedback and visual slide animation. |
+| API | Application programming interface. | Callable C++/Python interfaces, ROS endpoints or the web service, depending on context. |
+| GUI | Graphical user interface. | RViz’s displayed interface and frame-rate setting. |
+| QoS | Quality of service. | Message delivery policies such as reliability, history depth and durability. |
+| REST | Representational state transfer. | Web API style; distinct from native ROS service request/response. |
+| MQTT | Messaging protocol name; historically MQ Telemetry Transport, also expanded as Message Queuing Telemetry Transport in [standards-body terminology](https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=mqtt). | Broker-based publish/subscribe transport used by the production proxy; [protocol overview](https://mqtt.org/faq/). |
+| DB | Database. | Persistent storage; linkage alone does not prove database operations. |
+| CRUD | Create, read, update and delete. | Operations on the collision-body registry, not proof of database I/O. |
+| I/O | Input/output. | Sensor/driver interfaces or external data exchanges. |
+| IO-Link | Industrial sensor/actuator communication interface; IO means input/output. | Bay sensor messages and the physical driver; not ordinary network pub/sub. |
+| GUID | Globally unique identifier. | Vehicle/payload identity; distinct from numeric tray, bay and AGV IDs. |
+| UUID | Universally unique identifier. | Identifier type/notation used by generated interfaces and helper tools. |
+| ID | Identifier. | Numeric resource identity or a named configuration identifier. |
+| FIFO | First in, first out. | Intended waiting-patron queue discipline. |
+| OBB | Oriented bounding box. | Yaw-oriented collision volume; includes height in the 3D type. |
+| SAT | Separating axis theorem. | Box-overlap test based on projected intervals. |
+| YASMIN | Yet Another State MachINe. | ROS state-machine library named in the review rules; not used by the inspected packages. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
+| YAML | YAML Ain’t Markup Language (recursive acronym). | Scenario, layout and parameter configuration format. |
+| XYZ / XY / ZYX | Coordinate or rotation-axis notation, not acronyms. | X/Y are horizontal axes, Z is vertical; ZYX is the stated Euler rotation composition order. |
+| TB / TD | Top-to-bottom / top-down Mermaid layout directives. | Diagram orientation; not application components. |
+| Msg / Srv / SPtr / UPtr | Message / service / shared pointer / unique pointer naming abbreviations. | C++ aliases such as GarageSnapshotMsg and AddTraySrv; ConstSharedPtr is shared ownership of const data. |
+| sim / vis / devc | Simulation / visualization / development-container wrapper names. | Package/tool shorthand, not additional engines or protocols. |
+| rclcpp / rclpy / rclcppx | ROS client library for C++ / ROS client library for Python / this repository’s C++ client-library extensions. | Node/executor APIs and project-specific adapters/factories. |
+
+Uppercase state labels (`AUTO`, `STOPPED`, `OPEN`, `CLOSED`, and similar), enum constants, macro names and build flags are exact code identifiers, not unexplained acronyms. `RISK` is a review label; `TODO` means “to do.” Units use `m` for metres, `s` for seconds, `ms` for milliseconds, `ns` for nanoseconds, and `kg` for kilograms.
+
 ## 1. Summary and evidence scope
 
-The `sim` package supplies a ROS simulation clock, garage-level scenario orchestration and collision checking, and per-bay simulated hardware. These let production control packages operate on simulated sensor feedback and garage state. Dependents primarily use ROS components, topics, and services; the library also exposes scenario, queue, tray-pose, and collision utilities through C++ headers.
+The `sim` package supplies a ROS (Robot Operating System) simulation clock, garage-level scenario orchestration and collision checking, and per-bay simulated hardware. These let production control packages operate on simulated sensor feedback and garage state. Dependents primarily use ROS components, topics, and services; the library also exposes scenario, queue, tray-pose, and collision utilities through C++ headers.
 
 The supported full-system entrypoint remains `ros2 launch launcher sim.launch.py`, as documented in the supplied simulation guide. Setup and exact quick-start commands are preserved in [the setup/runbook](volley_simulation_runbook.md). Running an individual `sim` executable does not replace the launcher's responsibility to start the other packages and configure them.
 
-**Evidence:** the 28 files in `sim-repomix(1).md` and the 30 files in `vis-repomix.md` provide the implementation basis. Source behavior takes precedence over the earlier pasted architecture prose. The `sim` tests, 3D asset bytes, Python dynamics, simulated AGV implementation, most dependency internals, and custom interface definitions remain outside these packs. The `vis` math test is included and analyzed. This is static source analysis; no ROS build or runtime test was performed. Paths refer to the Volley repository root, and approximate line counts refer to extracted source, not positions in the packed Markdown.
+**Evidence:** the 28 files in `sim-repomix(1).md` and the 30 files in `vis-repomix.md` provide the implementation basis. Source behavior takes precedence over the earlier pasted architecture prose. The `sim` tests, 3D asset bytes, Python dynamics, simulated AGV (automated guided vehicle) implementation, most dependency internals, and custom interface definitions remain outside these packs. The `vis` math test is included and analyzed. This is static source analysis; no ROS build or runtime test was performed. Paths refer to the Volley repository root, and approximate line counts refer to extracted source, not positions in the packed Markdown.
 
 ### Is the Python AGV dynamics project used?
 
@@ -31,7 +67,7 @@ Inspect any matches and the AGV component build definitions. An absence of direc
 | Earlier assumption/documentation | What this source actually shows |
 | --- | --- |
 | Initial payloads in a top-level `initial_conditions.payloads` list | This parser reads payloads from `initial_conditions.trays[].payload`; a separate top-level payload list is not consumed. |
-| Disabledness events use `disabled` | Timed event YAML uses `disable`. A tray's initial-condition field is separately named `disabled`. |
+| Disabledness events use `disabled` | Timed event YAML (YAML Ain’t Markup Language; configuration format) uses `disable`. A tray's initial-condition field is separately named `disabled`. |
 | Readiness event takes `ratio` | Timed YAML requires `bay_readiness_ratio`. |
 | `set_agv_battery_fraction` changes the battery | It is parsed and enumerated, but its execution branch only logs “not implemented.” |
 | Events execute in timestamp order | The runner returns ascending timestamps, but the simulator consumes the vector from the back: each due batch executes in reverse order. |
@@ -45,19 +81,19 @@ The table includes every file in the `sim` pack; the `vis` pack has its own comp
 
 | Path | Lines (approx.) | Role |
 | --- | ---: | --- |
-| `src/sim/include/sim/bay_sim.hpp` | 118 | Bay hardware model API, ROS handles, and insert/retrieve latches. |
+| `src/sim/include/sim/bay_sim.hpp` | 118 | Bay hardware model API (application programming interface), ROS handles, and insert/retrieve latches. |
 | `src/sim/include/sim/collision_detector.hpp` | 85 | Typed body identifiers and owned collision-volume registry API. |
-| `src/sim/include/sim/collision_utils.hpp` | 35 | Vertex/projection/SAT and interval-intersection declarations. |
+| `src/sim/include/sim/collision_utils.hpp` | 35 | Vertex/projection/SAT (separating axis theorem) and interval-intersection declarations. |
 | `src/sim/include/sim/oriented_bounding_box.hpp` | 32 | Yaw-only box types and entity geometry factory declarations. |
-| `src/sim/include/sim/patrons.hpp` | 46 | GUID comparator and unique patron-insertion FIFO API. |
+| `src/sim/include/sim/patrons.hpp` | 46 | GUID (globally unique identifier) comparator and unique patron-insertion FIFO (first in, first out) API. |
 | `src/sim/include/sim/scenario_runner.hpp` | 117 | Initial conditions, typed events, YAML parser entrypoint, priority queue. |
 | `src/sim/include/sim/sim_clients.hpp` | 66 | Service-client facade for central and scheduler controls/jobs. |
 | `src/sim/include/sim/sim_msgs.hpp` | 151 | Generated ROS message/service includes and global aliases. |
 | `src/sim/include/sim/simulator.hpp` | 98 | Engine ownership, timer callbacks, queue/client/collision orchestration. |
 | `src/sim/include/sim/tray.hpp` | 29 | Tray/payload value model and payload-pose helper declaration. |
-| `src/sim/scripts/confirm_insert.bash` | 7 | REST helper posting a random GUID to hardcoded localhost bay 39. |
+| `src/sim/scripts/confirm_insert.bash` | 7 | REST (representational state transfer) helper posting a random GUID to hardcoded localhost bay 39. |
 | `src/sim/scripts/trigger_patron_arrival.bash` | 37 | Environment/domain setup and direct SimEvent patron-arrival call. |
-| `src/sim/src/collision_detector.cpp` | 159 | Body registry CRUD, ordered identifiers, pairwise checks, body messages. |
+| `src/sim/src/collision_detector.cpp` | 159 | Body registry CRUD (create, read, update and delete), ordered identifiers, pairwise checks, body messages. |
 | `src/sim/src/collision_utils.cpp` | 69 | Planar box vertices, separating-axis checks, strict Z interval overlap. |
 | `src/sim/src/oriented_bounding_box.cpp` | 114 | AGV/tray/bay/payload/charger geometry from constants and floor height. |
 | `src/sim/src/patrons.cpp` | 37 | Unique FIFO admission, logging, optional front, copied queue reporting. |
@@ -97,7 +133,7 @@ All simulator types below are in `volley::sim`, except the ROS message aliases i
 | `SimulatorComponent` | `src/sim/src/simulator_component.cpp` | Load the registered ROS plugin, or use its declared executable. Creates a `volley::Node("simulator", "sim", options)`, reads the required scenario path, and owns the engine. |
 | `Simulator(NodeSPtr, LayoutSPtr, InitialConditions, ScenarioRunner)` | `src/sim/include/sim/simulator.hpp` | Construct with shared node/layout and value inputs. Its behavior thereafter is timer/service driven; update methods are private. |
 | `BaySimComponent` | `src/sim/src/bay_sim_component.cpp` | Load once per configured bay. Owns the hardware model, joins tray/payload snapshot data, exposes the offer service, and ticks it. |
-| `BaySim` | `src/sim/include/sim/bay_sim.hpp` | Construct with bay ID, door travel times, auto-confirm flag, and node. Call `Tick(optional<Tray>, now)`; use `SetInsertingPayload` to offer a patron vehicle. Copy operations are deleted. |
+| `BaySim` | `src/sim/include/sim/bay_sim.hpp` | Construct with bay ID (identifier), door travel times, auto-confirm flag, and node. Call `Tick(optional<Tray>, now)`; use `SetInsertingPayload` to offer a patron vehicle. Copy operations are deleted. |
 | `SimClockComponent` | `src/sim/src/sim_clock_component.cpp` | Alias for `rclcppx::Component<SimClockRos>`; registered as a component. |
 | `SimClockRos` | `src/sim/include/sim/sim_clock_ros.hpp` | Construct with `rclcpp::Node::SharedPtr`; owns publisher, timer, and parameter callback. `kNodeName` is `"sim_clock"`. Consumers use `/clock` with `use_sim_time=true`. |
 | `SimClients` | `src/sim/include/sim/sim_clients.hpp` | Construct on an existing node; call job/control wrappers. Most booleans indicate a request was sent, not that its remote operation succeeded. |
@@ -137,8 +173,8 @@ Component classes defined only in `.cpp` files are plugin entrypoints rather tha
 | `/bay/b<ID>/sim_offer_inserting_payload` | Bay service / engine client | `PlacePayloadInBaySrv`; accepts only a ready bay with no inserting payload. | `bay_sim_component.cpp`, `simulator.cpp` |
 | `TopicBayReport().Name()` | Bay input | `BayReportMsg`, reliable depth 1. | `bay_sim.cpp` |
 | `TopicBayVehiclePose().Name()` | Bay input | `VehicleBayPoseMsg`, depth 1; axle-count changes reset sensor counter. | `bay_sim.cpp` |
-| `kLoadCellsTopic`, `kIoLinkSensorsTopic`, `kVehicleProxSensorTopic` | Bay outputs | Synthetic load cells, break beams, and proximity; names/QoS supplied by omitted `bay_interfaces/topics.hpp`. | `bay_sim.cpp` |
-| `TopicBayOdpObserver(OVERDRIVE_LEFT).Name()` | Bay output | Default-initialized ODP observer with timestamp. | `bay_sim.cpp` |
+| `kLoadCellsTopic`, `kIoLinkSensorsTopic`, `kVehicleProxSensorTopic` | Bay outputs | Synthetic load cells, break beams, and proximity; names/QoS (quality of service) supplied by omitted `bay_interfaces/topics.hpp`. | `bay_sim.cpp` |
+| `TopicBayOdpObserver(OVERDRIVE_LEFT).Name()` | Bay output | Default-initialized ODP (overdrive plate) observer with timestamp. | `bay_sim.cpp` |
 | `reset_hardware` | Bay service | `TriggerSrv`; reports success but does not reset model state in this callback. | `bay_sim.cpp` |
 | `patron_light_control` | Bay service | `PatronLightControlSrv`; stores requested light state and returns success. | `bay_sim.cpp` |
 | `confirm_insert` | Bay client | `SetPayloadInfoSrv`; sends GUID, charging intent, dimensions, and mass. | `bay_sim.cpp` |
@@ -160,7 +196,7 @@ Relative bay endpoints resolve under the node's launch namespace; the `/bay/b<ID
 | Auto planner | `/central/start_auto_planner`, `/central/stop_auto_planner` | Blocking call; returns response success if present. |
 | Planner trigger | `/central/trigger_plan_call` | Asynchronous; wrapper returns `void`. |
 
-There are no ROS action clients/servers, direct MQTT operations, or direct database queries in the packed implementations. `mysqlcppconn` is linked and `libmysqlcppconn-dev` is declared, but linkage alone does not establish runtime DB I/O here. Door hardware is represented by `bay::GarageDoorRos` wrapping `bay::sim::GarageDoorSimRt`, whose internals are omitted.
+There are no ROS action clients/servers, direct MQTT (broker-based publish/subscribe messaging; historically MQ Telemetry Transport) operations, or direct database queries in the packed implementations. `mysqlcppconn` is linked and `libmysqlcppconn-dev` is declared, but linkage alone does not establish runtime DB (database) I/O (input/output) here. Door hardware is represented by `bay::GarageDoorRos` wrapping `bay::sim::GarageDoorSimRt`, whose internals are omitted.
 
 ## 4. Diagrams
 
@@ -272,7 +308,7 @@ These flows show asynchronous ROS relationships, not one synchronous call stack.
 
 ### 4.3 State behavior
 
-There is **no YASMIN state machine in this pack**. `Event::Type` and `BodyType` select operations/categories; they are not state machines. `ScenarioRunner`, `Patrons`, `CollisionDetector`, and `SimClients` have **no state machine**. The following diagrams describe the engine's boolean lifecycle and the bay model's flag-driven behavior. The actual enum-driven production insert/retrieve/door state machines belong to `bay` and are not packed, so their complete transitions cannot be reconstructed here.
+There is **no YASMIN (Yet Another State MachINe) state machine in this pack**. `Event::Type` and `BodyType` select operations/categories; they are not state machines. `ScenarioRunner`, `Patrons`, `CollisionDetector`, and `SimClients` have **no state machine**. The following diagrams describe the engine's boolean lifecycle and the bay model's flag-driven behavior. The actual enum-driven production insert/retrieve/door state machines belong to `bay` and are not packed, so their complete transitions cannot be reconstructed here.
 
 #### Simulator startup gate
 
@@ -511,7 +547,7 @@ These are static findings or review questions, not runtime reproductions.
 | **RISK: floor fallback masks invalid IDs** | Geometry builders use `GetFloorZForNodeId(...).value_or(0)`. | Validate layout associations; distinguish missing floor from a true zero-height floor. |
 | **RISK: door status approximated** | True door callback map is not transferred into `state_`; system closure follows high-level report state. | Verify collision doors match actual simulated hardware travel. |
 | **RISK: fragile machine discriminator** | Correctness depends on prefixes `Insert State:` / `Retrieve State:` because enum integers overlap. | Expose a typed active-machine discriminator in bay reporting. |
-| **RISK: hardcoded/diagnostic scripts** | Insert helper uses bay 39 and localhost REST; arrival helper prints an unrelated UUID string and sends random bytes. | Parameterize bay/endpoint; derive printed GUID from the sent bytes. |
+| **RISK: hardcoded/diagnostic scripts** | Insert helper uses bay 39 and localhost REST; arrival helper prints an unrelated UUID (universally unique identifier) string and sends random bytes. | Parameterize bay/endpoint; derive printed GUID from the sent bytes. |
 
 `InitialConditions::Clear()` leaves obstructions, and `IsEmpty()` ignores them. In current flow that is consistent with construction-time registration, but the method names could mislead future reuse. `AddEvent(Event&&)` passes its named argument as an lvalue into `emplace`, so it copies rather than moves the event. `SET_AUTO_PLANNER`'s YAML switch branch falls through into a no-op group without an explicit `break`; presently behavior is unchanged, but intent should be made explicit. The floor-spec logging ternary prints an empty string for empty input and `"default"` for a nonempty filename, which appears reversed.
 
