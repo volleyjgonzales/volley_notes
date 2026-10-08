@@ -459,7 +459,7 @@ Step waits for nonstale state and for hardware emergency stop to be released. On
 | Key constant / stored name | Type | Writers and readers |
 | --- | --- | --- |
 | `kKeyCommonMessage` / `common-message` | Shared `TrackedMessage<vendor CommonMessage>` | Initialized by Agv, filled by subscription drain; completion/recovery reads. |
-| `kKeyState` / `state` | Shared `TrackedMessage<protocol State>` | Initialized/updated by Agv; almost every state reads. |
+| `kKeyState` / `state` | `std::shared_ptr<TrackedMessage<protocol State>>` | Handle installed by Agv initialization; subscription drain updates tracker contents; states read message copies. |
 | `kKeyVisualization` / `visualization` | Shared `TrackedMessage<Visualization>` | Agv tracks pose-stream telemetry; filtered pose is separate. |
 | `kKeyInstantAssembler` / `instant-assembler` | `InstantActionAssemblerSPtr` | Initialized by Agv; action publication helper reads. |
 | `kKeyMqttPublisher` / `mqtt-publisher` | `mqtt::IPublisherSPtr` | Initialized by Agv; worker publishes actions/orders. |
@@ -476,24 +476,217 @@ Step waits for nonstale state and for hardware emergency stop to be released. On
 
 Required-key `.value()` accesses assume initialization succeeded and values persist for the worker lifetime. Optional active-order, callback, request, and diagnostic-error records are handled conditionally. A shared pointer extends lifetime; it does not make its pointed-to object's mutations thread-safe.
 
-### 6.2 Reading the template syntax
+### 6.2 Reading the template syntax: key name, stored handle, message value
 
-This actual declaration nests the message tracker and its shared-pointer alias inside a typed key:
+**The runtime key name is `"state"`. The blackboard value is a shared pointer to a message tracker, not a raw protocol State.** `kKeyState` is the C++ variable naming a typed key descriptor. This descriptor tells the helper both which name to look up and which value type to request.
+
+**File:** `src/agvhito/include/agvhito/sm/blackboard.hpp`  
+**Declaration:** `volley::agvhito::bb::kKeyState`
 
 ```cpp
+/// Tracked VDA5050 State published from AGV.
 inline constexpr
   yasminx::bb::Key<TrackedMessageSPtr<vda5050_interfaces::v2::state::State>>
     kKeyState {"state"};
 ```
 
-`State` is the protocol value type. `TrackedMessageSPtr<State>` denotes a shared tracker for those messages. `Key<...>` specifies the type that `Get/Set` should use for the name `"state"`. `inline` permits a header definition to appear in multiple translation units; `constexpr` makes the key a compile-time constant object. It does not make tracked robot state immutable.
+Read the nested types from the inside out:
+
+| Expression | What it means | Is it the stored blackboard value? |
+| --- | --- | --- |
+| `vda5050_interfaces::v2::state::State` | The C++ protocol data type parsed from a robot's MQTT state-message payload, with fields such as `paused`, `action_states`, order/position/error data. | No: the tracker holds this data internally. |
+| `TrackedMessage<State>` | Holder for the latest accepted protocol message, timestamps, age thresholds, and a mutex. | No: this heap object is reached through the stored pointer. |
+| `TrackedMessageSPtr<State>` | Alias for `std::shared_ptr<TrackedMessage<State>>`. | **Yes.** This shared ownership handle is stored under `"state"`. |
+| `yasminx::bb::Key<TrackedMessageSPtr<State>>` | Key descriptor carrying a name and a compile-time value-type association. | No: it describes the entry; it does not contain the message or pointer value. |
+| `kKeyState` | Constant C++ object of that descriptor type. | No: it is passed to `bb::Get`/`bb::Set`. |
+| `"state"` | Runtime lookup name; unrelated to the full MQTT topic path. | This is the entry's **name**, not its value. |
+
+Here `State` in the middle two rows abbreviates the fully qualified **protocol** type. It is different from `yasminx::State`, the executable state-machine base class. They share a short name, not a role or inheritance relationship.
+
+#### What does `Key<T>` actually contain?
+
+**File:** `src/core/yasminx/include/yasminx/blackboard_constants.hpp`  
+**Type:** `volley::yasminx::bb::Key<T>`
 
 ```cpp
-const auto tracker = yasminx::bb::Get(*blackboard, bb::kKeyState).value();
-const auto state_or = tracker->GetIfNotStale();
+template <typename T>
+struct Key {
+  std::string_view name;
+  using value_type = T;
+};
 ```
 
-The first operation resolves a **required resource handle**; the second asks that tracker for an **optional usable observation**. These are separate absence/error boundaries. The supplied helper now confirms `Get<T>` returns `std::optional<T>`. It calls upstream `blackboard.get<T>(std::string{key.name})` and catches `std::runtime_error` to return nullopt. Other exception classes are not caught. `Set<T>` moves a typed value into upstream storage; `Remove` and `Contains` delegate directly. No wrapper mutex or atomic consume transaction is added. `ContainsKeys(Key<Ts>... keys)` uses the short-circuit fold `(Contains(blackboard, keys) && ...)`; the empty pack is true. Upstream storage locking still requires its source.
+`kKeyState.name` is a `std::string_view` viewing the literal `"state"`; the literal has static lifetime. `value_type` is a type alias, not an instance member storing data. The aggregate initializer `{"state"}` initializes only `name`. There is no tracker construction, subscription, message parsing or background update in this declaration.
+
+The helper converts that view to `std::string` and invokes upstream typed storage access:
+
+**File:** `src/core/yasminx/include/yasminx/blackboard_utils.hpp`  
+**Functions:** `volley::yasminx::bb::Get<T>`, `Set<T>`
+
+```cpp
+template <typename T>
+[[nodiscard]] std::optional<T> Get(const yasmin::Blackboard& blackboard, Key<T> key) {
+  try {
+    return blackboard.get<T>(std::string {key.name});
+  }
+  catch(const std::runtime_error&) {
+    return std::nullopt;
+  }
+}
+
+template <typename T>
+void Set(yasmin::Blackboard& blackboard, Key<T> key, T value) {
+  blackboard.set<T>(std::string {key.name}, std::move(value));
+}
+```
+
+For `kKeyState`, template deduction supplies `T = std::shared_ptr<TrackedMessage<ProtocolState>>`; `ProtocolState` here is an explanatory alias for the full protocol type. Thus `Get` returns `std::optional<std::shared_ptr<TrackedMessage<ProtocolState>>>`. The optional concerns lookup success; the pointer concerns ownership of the tracker; neither is the latest State message itself.
+
+`inline` permits this header definition across translation units; `constexpr` makes the descriptor constant. Neither makes the tracker or received message immutable. The typed descriptor does not enforce globally unique names or turn the upstream string-keyed store into a compile-time map. The wrapper catches `std::runtime_error`; other exception classes are not caught.
+
+### 6.2a How MQTT updates the stored tracker asynchronously
+
+**The blackboard does not update itself from MQTT.** Application code first installs a tracker handle, then the ROS cycle writes messages into that same tracker while the separate state-machine worker reads snapshots.
+
+#### Install the handle once during AGV construction
+
+**File:** `src/agvhito/src/agv.cpp`  
+**Function:** `Agv::InitializeBlackboard`, relevant existing-source scope:
+
+```cpp
+void Agv::InitializeBlackboard() {
+  // ... other required keys omitted ...
+  {
+    auto state =
+        std::make_shared<TrackedMessage<vstate::State>>(context_.clock, kStateDegradedAge, kStateStaleAge);
+    yasminx::bb::Set(*blackboard_, bb::kKeyState, std::move(state));
+  }
+  // ... other required keys omitted ...
+}
+```
+
+`vstate` is the source's namespace alias for `vda5050_interfaces::v2::state`. Despite its local name `state`, this variable is a **shared pointer**, not a protocol message. It is allocated and stored before the root worker starts. The tracker initially has no received message. State thresholds are 4.5 s degraded and 6 s stale.
+
+#### Poll the subscription, parse payloads, then mutate the holder
+
+`Agv::SetupMqtt` subscribes to the robot state topic. MQTT delivery makes packets available to `mqtt::ISubscription`; the supplied host integration reads them with `TryReceive`. This pack does not establish the production MQTT client's internal network-thread/callback implementation.
+
+On the ROS executor, the 50 ms cycle calls `AgvRos::CycleCallback → Agv::Step → Agv::DrainSubscriptions`. The file-local `Drain<Type>` helper in `src/agvhito/src/agv.cpp` calls `TryReceive`, parses payloads through `ToJson`, validates the schema and converts valid payloads with `payload.get<Type>()`. For this subscription, `Type` is the protocol State, not a ROS message or executable state object.
+
+**File:** `src/agvhito/src/agv.cpp`  
+**Function:** `Agv::DrainSubscriptions`, relevant existing-source scope:
+
+```cpp
+void Agv::DrainSubscriptions() {
+  // ... common-message subscription omitted ...
+  {
+    auto state_msgs = Drain<vstate::State>(context_.logger, *mqtt_state_sub_, vstate::Validate);
+    for(auto& state_msg : state_msgs) {
+      yasminx::bb::Get(*blackboard_, bb::kKeyActionStateManager).value()->Upsert(state_msg.action_states);
+      // ... position/pose-filter update omitted ...
+      yasminx::bb::Get(*blackboard_, bb::kKeyState).value()->Set(std::move(state_msg));
+    }
+  }
+  // ... visualization subscription omitted ...
+}
+```
+
+The last line contains **two different APIs**: `yasminx::bb::Get(...).value()` retrieves the previously installed pointer; `->Set(...)` invokes **`TrackedMessage<State>::Set` on the pointed-to object**. It is not `yasminx::bb::Set` and does not replace the blackboard entry for each packet. Readers holding a copy of the same pointer see subsequent tracker contents when they ask for a new snapshot.
+
+The action-state manager is updated separately before the tracker. There is no single transaction locking the action manager, pose filter and tracked State together. In particular, action statuses can be inserted from a packet whose older source timestamp then causes the tracker to reject that packet. Do not infer an atomic, same-packet snapshot across these objects.
+
+#### Synchronization is inside the tracker
+
+**File:** `src/agvhito/src/tracked_message.cpp`  
+**Function:** `TrackedMessage<T>::Set(T message)`, relevant existing-source statements:
+
+```cpp
+template <VdaMessage T>
+void TrackedMessage<T>::Set(T message) {
+  const rclcpp::Time now_timestamp = clock_->now();
+  // ... derive timestamp from message.timestamp, or now if absent ...
+  // timestamp is declared/calculated in that omitted source block.
+  std::lock_guard lock(mutex_);
+  if(message_.has_value() && timestamp < timestamp_) {
+    return;
+  }
+  message_ = std::move(message);
+  timestamp_ = timestamp;
+  received_timestamp_ = now_timestamp;
+}
+```
+
+The actual function parses the timestamp before acquiring the mutex. Under that mutex it rejects strictly older timestamps, accepts equal timestamps, replaces its optional message and records source/receipt times. The vector overload calls this function for each message. RAII releases the lock when the function exits. A `shared_ptr` shares lifetime; this mutex, not shared ownership, protects message data.
+
+### 6.2b What the worker reads: a new copy, not a live reference
+
+**File:** `src/agvhito/src/sm/context_utils.cpp`  
+**Function:** `VerifyState`, existing-source read/check pattern:
+
+```cpp
+stdx::Expected<void, yasminx::Error> VerifyState(const yasmin::Blackboard& blackboard,
+    const yasminx::StateContext& context, StatePredicate predicate, std::function<bool()> is_canceled) {
+  // ... timeout setup omitted ...
+  while(!is_canceled()) {
+    const auto state_or = yasminx::bb::Get(blackboard, bb::kKeyState).value()->GetIfNotStale();
+    if(state_or.has_value() && predicate.holds(state_or.value())) {
+      return {};
+    }
+    // ... timeout, logging and polling sleep omitted ...
+  }
+  // ... canceled error return omitted ...
+}
+```
+
+`GetIfNotStale` locks the same mutex and returns an optional **message copy**:
+
+**File:** `src/agvhito/src/tracked_message.cpp`  
+**Function:** `TrackedMessage<T>::GetIfNotStale`
+
+```cpp
+template <VdaMessage T>
+std::optional<T> TrackedMessage<T>::GetIfNotStale() const {
+  const rclcpp::Time now = clock_->now();
+  std::lock_guard lock(mutex_);
+  if(!message_.has_value() || ComputeStaleness(ComputeAge(now)) == MessageStaleness::Stale) {
+    return {};
+  }
+  return message_;
+}
+```
+
+The return copy is made while the lock is held. After the read returns, its local message does not change when another packet arrives. A worker must call `GetIfNotStale()` again to observe a newer message. The outer lookup optional and inner message optional have different meanings:
+
+| Read layer | Result | Absence means |
+| --- | --- | --- |
+| `bb::Get(blackboard, bb::kKeyState)` | Optional shared pointer to tracker. | Lookup did not produce the required resource handle; common callers assume initialization and use `.value()`. That can throw when absent; an engaged optional also does not itself prove a non-null pointer. |
+| `tracker->GetIfNotStale()` | Optional protocol State copy. | No message accepted yet, or the held message is stale. A valid tracker can exist while this result is absent. |
+
+Age/staleness uses the message's source timestamp; receipt age is recorded separately. “Nonstale” does not mean “sampled after this unpause” or “firmware is ready.” A missing timestamp uses current clock time; timestamp/clock assumptions still matter.
+
+```mermaid
+flowchart TB
+    Packet["AGV MQTT state packet"]
+    Queue["Subscription: TryReceive"]
+    Parse["ROS cycle: Drain validates and parses protocol State"]
+    Lookup["bb Get using key name state"]
+    Stored["Blackboard entry: shared pointer to tracker"]
+    Write["Tracker Set: lock, timestamp check, replace message"]
+    Poll["Independent worker: VerifyState or state Step"]
+    Read["Tracker GetIfNotStale: same mutex, copy message"]
+    Use["Local optional State copy: evaluate predicate"]
+    Packet -.-> Queue
+    Queue --> Parse
+    Parse --> Lookup
+    Lookup --> Stored
+    Stored --> Write
+    Poll --> Stored
+    Stored --> Read
+    Read --> Use
+    Use -.-> Poll
+```
+
+Writes and reads of the tracker are synchronized, not its surrounding algorithm as a whole. The `yasminx` key helpers add no blackboard lock; upstream raw store synchronization remains outside the supplied pack. A per-robot mutually exclusive ROS callback group does not serialize the separate root worker. `Remove`/`Contains` delegate to the upstream store; `ContainsKeys` uses `(Contains(blackboard, keys) && ...)`, with an empty pack true. None of that establishes an atomic multi-key consume operation.
 
 ### 6.3 One request slot, not an event queue
 

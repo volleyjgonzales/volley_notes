@@ -389,6 +389,33 @@ Production differs: `ProxyComponent` connects to MQTT, creates an HTTP map clien
 
 The cycle uses elapsed node-clock time, so consumers follow the simulated clock configured by the launcher. Nonpositive elapsed time skips simulated motion. A newly dequeued primitive is installed without stepping it in that same cycle; unused time is not carried into the next primitive. A large time jump is not subdivided or capped here. Protocol publication schedules and ROS reports remain separate; a 10 Hz report can contain state flags from a slower protocol message and pose from visualization.
 
+### Shared protocol State: what the blackboard actually stores
+
+**File:** `src/agvhito/include/agvhito/sm/blackboard.hpp`  
+**Declaration:** `volley::agvhito::bb::kKeyState`
+
+```cpp
+inline constexpr
+  yasminx::bb::Key<TrackedMessageSPtr<vda5050_interfaces::v2::state::State>>
+    kKeyState {"state"};
+```
+
+The runtime lookup name is `"state"`; `kKeyState` is a constant **typed key descriptor**, not a message. `Key<T>` contains a `std::string_view name` and a type alias `value_type = T`. The actual stored value is `std::shared_ptr<TrackedMessage<protocol State>>`; `TrackedMessageSPtr<T>` is that shared-pointer alias. The protocol State is the C++ telemetry data type parsed from MQTT JSON, distinct from the executable `yasminx::State` class.
+
+`Agv::InitializeBlackboard` allocates the tracker and stores its pointer once. The 50 ms ROS cycle calls `Agv::Step → DrainSubscriptions`; the local `Drain<vstate::State>` helper reads the MQTT subscription, parses/validates payloads and produces protocol State values. The update is:
+
+```cpp
+// File: src/agvhito/src/agv.cpp
+// Function: Agv::DrainSubscriptions() -- inside its state-message loop.
+yasminx::bb::Get(*blackboard_, bb::kKeyState).value()->Set(std::move(state_msg));
+```
+
+This retrieves the installed pointer and calls **the tracker object's `Set`**, rather than replacing the blackboard entry. The blackboard does not subscribe to MQTT or update itself. The independent worker reads the same shared tracker via `GetIfNotStale()`. The tracker's mutex serializes writes/reads; a shared pointer alone does not protect data. The returned optional protocol State is a **copy** that remains unchanged when new packets arrive. A new read is required to see a new message.
+
+There are two absence boundaries: `bb::Get` returns an optional handle (required initialization is assumed by `.value()`), while `GetIfNotStale` returns an optional message (empty before first telemetry or when stale). The tracker rejects strictly older timestamps and accepts equal ones. Its age test uses source time, separately recording receipt age. Action-status and pose-filter updates are separately locked operations, not one transaction with the tracked State. None of these observations establishes firmware `auto_run` readiness.
+
+See the [state-machine guide's complete key and asynchronous-update explanation](volley_agvhito_state_machine.md#62-reading-the-template-syntax-key-name-stored-handle-message-value), including setter/getter implementations and the thread/data-flow diagram.
+
 ### Parameters and defaults
 
 All keys below are node parameters; startup YAML overlays can change them. They are not all launch arguments. Source: `param_utils.hpp`, `speed_limits.hpp`, and `sim_agv_component.cpp`.
