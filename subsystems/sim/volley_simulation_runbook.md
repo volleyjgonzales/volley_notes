@@ -330,8 +330,8 @@ The script waits for the dispatcher to be running. It monitors `/central/discret
 | --- | --- | --- |
 | `patron_arrival` | `payload_id`, `mass`, dimensions, `wait_for_job_completion` | Wait for a bay ready to insert; inject arrival and optionally wait for the job. |
 | `retrieve_request` | Optional `payload_id`, `wait_for_job_completion` | Retrieve specified payload, or randomly select a stored payload when omitted. |
-| `move_agv` | `agv_id`, `pose.node_id`, `pose.heading` | Move/teleport AGV (automated guided vehicle); track scheduler job completion. |
-| `move_tray` | `tray_id`, `pose.node_id`, `pose.heading` | Move/teleport tray; track scheduler job completion. |
+| `move_agv` | `agv_id`, `pose.node_id`, `pose.heading` | Request AGV movement through central; central handler and exercise-script implementation are omitted, so teleport/job semantics are not confirmed. |
+| `move_tray` | `tray_id`, `pose.node_id`, `pose.heading` | Request tray movement through central; exact movement/job semantics require the omitted handler/script. |
 | `repark_tray` | `tray_id`, pose fields, `allow_reciprocal` | Reposition a parked tray. |
 | `sleep` | `duration` | Wait in wall-clock time, not simulated time. |
 
@@ -426,3 +426,13 @@ Setup commands derive from the supplied repository getting-started/simulation gu
 - The clock is configured first in the main container, with no startup-readiness barrier. Check `/clock` and component/service discovery if startup stalls.
 - Artifact output defaults to a UTC (Coordinated Universal Time) timestamp under `ARTIFACTS_DIR`, otherwise `${ROS_HOME:-~/.ros}/artifacts`. Recorder source subdirectories are flattened during installation, so its installed include is `launch/recorder.launch.xml`.
 - Bagplay loops playback but does not request `--clock` or pass layout/use_sim_time to vis; see the [launcher guide](volley_launcher_package.md) before treating it as a complete simulation replay.
+
+## AGV motion and battery observations
+
+The [HITO AGV guide](volley_agvhito_package.md) documents the now-supplied C++ robot engine, shared control state machine, and motion equations. Each initial AGV gets its own simulation component. The inspected launch path does not run the Python wheel-dynamics project.
+
+Use `ros2 topic list` and `ros2 service list` to inspect resolved per-robot endpoints. The adapter publishes a relative `velocity` topic as `geometry_msgs/msg/TwistStamped`; its frame name is `a<ID>`, but the pack contains no broadcaster for that transform. Observe garage snapshots and `vis` marker poses for map placement. `localize` checks existing localization rather than teleporting the model.
+
+Battery updates are supported by the `interfaces/msg/AgvBatteryFraction` subscription in `SimAgvRos`; its literal endpoint comes from the omitted `TopicAgvBatteryFraction()` helper, so inspect the workspace instead of guessing a topic name. The `sim` scenario-event variant `SET_AGV_BATTERY_FRACTION` is still unimplemented. Initial battery YAML is not forwarded by the launcher; the model starts at fraction 1.0.
+
+Related robot implementation: [HITO AGV package design](volley_agvhito_package.md).

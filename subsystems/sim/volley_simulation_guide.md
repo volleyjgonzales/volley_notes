@@ -25,6 +25,8 @@ This reference is local to this document so it remains readable on its own. Form
 | URL | Uniform Resource Locator. | Web/resource address including a mesh base URL. |
 | URI | Uniform Resource Identifier. | Resource identifier such as `package://sim/3d/...`. |
 | VS Code | Visual Studio Code. | Editor used to open the development container and preview Markdown. |
+| MQTT | Message Queuing Telemetry Transport (historical expansion); publish/subscribe protocol used by the production robot adapter and emulated locally in simulation. | Protocol boundary; no network broker is needed by SimAgv. |
+| YASMIN | Yet Another State MachINe. | Shared production/simulated AGV control state machine; yasminx is its repository extension layer. |
 | RViz | ROS visualization application; a product/tool name rather than a supplied formal acronym. | Displays MarkerArray messages and meshes; does not simulate physical motion. |
 | XYZ / XY / ZYX | Coordinate or rotation-axis notation, not acronyms. | X/Y are horizontal axes, Z is vertical; ZYX is the stated Euler rotation composition order. |
 | TB / TD | Top-to-bottom / top-down Mermaid layout directives. | Diagram orientation; not application components. |
@@ -40,9 +42,9 @@ Environment variables are configuration names, rather than independent protocols
 
 Uppercase state labels (`AUTO`, `STOPPED`, `OPEN`, `CLOSED`, and similar), enum constants, macro names and build flags are exact code identifiers, not unexplained acronyms. `RISK` is a review label; `TODO` means “to do.” Units use `m` for metres, `s` for seconds, `ms` for milliseconds, `ns` for nanoseconds, and `kg` for kilograms.
 
-The supported simulation uses Volley's C++/ROS (Robot Operating System) simulation components with production scheduling, tracking, and bay control. RViz displays state through the `vis` package's mesh-marker topics. The supplied source contains clock/sensor/collision logic and visual kinematics; the AGV (automated guided vehicle) motion implementation still requires the omitted `agvhito` source.
+The supported simulation uses Volley's C++/ROS (Robot Operating System) simulation components with production scheduling, tracking, and bay control. RViz displays state through the `vis` package's mesh-marker topics. The supplied source contains clock/sensor/collision logic and visual kinematics; the AGV (automated guided vehicle) motion implementation is now confirmed in `agvhito`: a C++ kinematic model with shared production control logic and in-memory protocol transport.
 
-The documentation is split into five linked files. Keep them together when downloading so relative links work in VS Code (Visual Studio Code).
+The documentation is split into six linked files. Keep them together when downloading so relative links work in VS Code (Visual Studio Code).
 
 | Document | Read it for |
 | --- | --- |
@@ -50,6 +52,7 @@ The documentation is split into five linked files. Keep them together when downl
 | [Simulation package design](volley_sim_package.md) | Nine-part `sim` source analysis: 28 files, APIs (application programming interfaces), ROS endpoints, diagrams, lifecycle, safety, math, tests and idioms. |
 | [Visualizer package design](volley_vis_package.md) | Nine-part `vis` package/software analysis: 30 files, build/dependency design, APIs, topic contracts, ownership/state diagrams, callbacks, visual equations and tests. |
 | [Launcher package design](volley_launcher_package.md) | Nine-part analysis of 23 files: configuration precedence, deployment topology, namespaces, executors, recording/replay, and safety. |
+| [HITO AGV package design](volley_agvhito_package.md) | Nine-part analysis of 101 files: real/simulated adapters, ROS and MQTT contracts, YASMIN control, kinematics, lift, battery, ownership, and risks. |
 | [Setup and runbook](volley_simulation_runbook.md) | Container/environment setup, build, exact launch/exercise commands, metrics and troubleshooting. |
 
 ## What does “ROS contract” mean?
@@ -77,16 +80,16 @@ Primary ROS background: [interface definitions and patterns](https://github.com/
 
 ### What is the simulation engine: Gazebo, Ignition, or RViz?
 
-**The engine shown by this source is Volley's own C++/ROS implementation.** `volley::sim::Simulator` in `src/sim/src/simulator.cpp` orchestrates scenario events, patron queues, and collision checking. `BaySim` supplies simulated bay hardware; `SimClockRos` supplies time. The launcher confirms the architecture guide places simulated AGV movement in `agvhito::sim::SimAgvComponent`, whose implementation is outside this pack.
+**The engine shown by this source is Volley's own C++/ROS implementation.** `volley::sim::Simulator` in `src/sim/src/simulator.cpp` orchestrates scenario events, patron queues, and collision checking. `BaySim` supplies simulated bay hardware; `SimClockRos` supplies time. `agvhito::sim::SimAgvComponent` owns one `SimAgvRos` adapter and one `SimAgv` model per initial AGV. `SimAgv` uses `AgvMotion` for translation, rotation, lift, and drive-mode delay, plus `BatteryChargeModel` for charge/drain. Its inherited adapter runs the same YASMIN (Yet Another State MachINe) control machine as the production driver.
 
-There is no Gazebo/Ignition dependency, world loader, physics-server interface, or integration call in the packed `sim` build or implementation. The supplied launcher also directly launches these C++ components and no Gazebo/Ignition process. Downstream plugin internals remain outside the packs.
+There is no Gazebo/Ignition dependency, world loader, physics-server interface, or integration call in the packed `sim` build or implementation. The supplied launcher also directly launches these C++ components and no Gazebo/Ignition process. The supplied `agvhito` implementation also contains no Gazebo/Ignition integration; its simulated transport and motion are implemented locally.
 
 **RViz is the display, not the engine.** The documented `vis::visualizer_node` and RViz show the garage state and its 3D assets. Turning off `vis` and `rviz` leaves the documented headless simulation workflow available. A `.dae` mesh depicts an object; it does not decide how many objects exist, register trays, run bay operations, or supply the collision algorithm. This engine checks parameterized boxes, not those meshes.
 
 | Layer | What it does | Implementation/location |
 | --- | --- | --- |
 | Scenario engine | Inject events, queue patrons, offer vehicles to bays, check collisions. | `src/sim/src/simulator.cpp`. |
-| Simulated hardware | Produce bay sensors/doors and AGV motion feedback. | `src/sim/src/bay_sim.cpp`; AGV implementation in omitted `agvhito` package. |
+| Simulated hardware | Produce bay sensors/doors and AGV motion feedback. | `src/sim/src/bay_sim.cpp`; `src/agvhito/src/sim/sim_agv.cpp` and `agv_motion.cpp`. |
 | Production business logic | Decide jobs, plans, garage state, and bay insert/retrieve transitions. | `central`, `scheduler`, and `bay`; their implementations are mostly outside the pack. |
 | Visualization | Publish mesh-marker poses in the `map` frame and display them. | Supplied `vis` code; RViz configuration is `src/vis/config/default.rviz.in`. |
 
@@ -214,6 +217,7 @@ The first command should identify `visualization_msgs/msg/MarkerArray` when laun
 
 | Responsibility | Source to read | What this pack establishes |
 | --- | --- | --- |
+| AGV movement and shared robot control | `src/agvhito/src/sim/agv_motion.cpp`, `sim_agv.cpp`, `src/agvhito/src/agv_ros.cpp`, `src/agvhito/src/sm/`. | C++ kinematics generates feedback; the production-compatible adapter/state machine controls order execution. |
 | Tray population and initial placement request | `src/sim/src/scenario_runner.cpp`, `src/sim/src/sim_clients.cpp`. | Decode tray data and send add-tray/add-payload requests. |
 | Authoritative tray state and service handling | `src/central/` implementation of `/central/add_tray` and garage tracking. | Engine consumes central snapshots; exact central handler source was not packed. |
 | Tray assignment and movement plans | `src/planner/scheduler/`, `src/planner/task_planner/`, `src/planner/motion_planner/`, plus central dispatch. | Earlier architecture guide says production planning logic is reused; its implementations were not packed. |
@@ -235,7 +239,7 @@ The practical distinction is that simulation code supplies the environment and f
 
 ## Evidence and remaining limits
 
-Source basis: `sim-repomix(1).md` (28 files), `vis-repomix.md` (30 files), `launcher-repomix.md` (23 files), the supplied repository tree and getting-started/simulation/architecture guides. `vis` math assertions were inspected; no ROS build/runtime/test execution was performed. Simulator test source, actual sandbox scenario/layout/parameter YAML contents, most dependency internals, custom interface definitions and simulated AGV implementation remain absent.
+Source basis: `sim-repomix(1).md` (28 files), `vis-repomix.md` (30 files), `launcher-repomix.md` (23 files), `agvhito-repomix.md` (101 files), the supplied repository tree and getting-started/simulation/architecture guides. `vis` math assertions were inspected; no ROS build/runtime/test execution was performed. Simulator test source, actual sandbox scenario/layout/parameter YAML contents, most dependency internals, custom interface definitions and `agvhito` test bodies remain absent.
 
 There is no fixed tray/bay count inferred here. Use the selected initial-conditions YAML for requested starting trays, the selected layout for bay definitions, and live garage snapshots for current tracked entities. These counts describe different stages and can differ after failures or runtime changes.
 
@@ -244,3 +248,11 @@ Use `$...$` and `$$...$$` for math. Mermaid diagrams live in the package guides.
 ### Launcher evidence added
 
 The [launcher guide](volley_launcher_package.md) explains how scenario data becomes processes and components. On the sim path it selects layout from the scenario and passes installation ID `9998`, irrespective of shell `LAYOUT`/`INSTALLATION_ID`. It configures multithreaded containers for world/AGVs, central, and each bay, with separate VRC/VECS (the project’s electric-vehicle charging subsystem; formal expansion not supplied) processes. The clock has `use_sim_time=False` while consumers use simulated time; listing it first is not a readiness barrier. The excluded `params/`, `layouts/`, and tests remain outside the source evidence.
+
+### HITO AGV evidence added
+
+The [AGV guide](volley_agvhito_package.md) traces the shared ROS adapter, YASMIN control machine, in-memory MQTT-compatible transport, and C++ motion model. The inspected simulation path does not execute the omitted Python wheel-dynamics project. Starting position comes from the configured layout node; lift becomes raised/lowered, and the simulated battery starts full. Initial central registration still sends only the AGV ID.
+
+The simulated `localize` ROS service returns existing localization status rather than moving the robot. The scenario engine sends `MOVE_AGV` to `/central/move_agv`; that central handler is omitted, so its relationship to robot relocation remains unverified. The supplied AGV `localize` implementation alone does not establish teleport behavior. The battery-fraction ROS subscription is implemented in `agvhito`, while the corresponding `sim` scenario event remains unsupported.
+
+There is no new transform tree for AGV assets in this pack: continuous pose reaches central and then `vis` marker poses in `map`. The separate velocity message names frame `a<ID>`, but this source broadcasts no transform for that frame. Main movement, braking, lift, battery, and heading-filter equations are in the [AGV math section](volley_agvhito_package.md#7-main-kinematic-equations-and-algorithms).

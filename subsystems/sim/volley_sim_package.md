@@ -28,7 +28,7 @@ This reference is local to this document so it remains readable on its own. Form
 | FIFO | First in, first out. | Intended waiting-patron queue discipline. |
 | OBB | Oriented bounding box. | Yaw-oriented collision volume; includes height in the 3D type. |
 | SAT | Separating axis theorem. | Box-overlap test based on projected intervals. |
-| YASMIN | Yet Another State MachINe. | ROS state-machine library named in the review rules; not used by the inspected packages. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
+| YASMIN | Yet Another State MachINe. | ROS state-machine library used by the `agvhito` adapter and simulated robot; not implemented in `sim`, `vis`, or `launcher`. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
 | YAML | YAML Ain’t Markup Language (recursive acronym). | Scenario, layout and parameter configuration format. |
 | XYZ / XY / ZYX | Coordinate or rotation-axis notation, not acronyms. | X/Y are horizontal axes, Z is vertical; ZYX is the stated Euler rotation composition order. |
 | TB / TD | Top-to-bottom / top-down Mermaid layout directives. | Diagram orientation; not application components. |
@@ -44,13 +44,13 @@ The `sim` package supplies a ROS (Robot Operating System) simulation clock, gara
 
 The supported full-system entrypoint remains `ros2 launch launcher sim.launch.py`, as documented in the supplied simulation guide. Setup and exact quick-start commands are preserved in [the setup/runbook](volley_simulation_runbook.md). Running an individual `sim` executable does not replace the launcher's responsibility to start the other packages and configure them.
 
-**Evidence:** the 28 files in `sim-repomix(1).md` and the 30 files in `vis-repomix.md` provide the implementation basis. Source behavior takes precedence over the earlier pasted architecture prose. The `sim` tests, 3D asset bytes, Python dynamics, simulated AGV (automated guided vehicle) implementation, most dependency internals, and custom interface definitions remain outside these packs. The `vis` math test is included and analyzed. This is static source analysis; no ROS build or runtime test was performed. Paths refer to the Volley repository root, and approximate line counts refer to extracted source, not positions in the packed Markdown.
+**Evidence:** the 28 files in `sim-repomix(1).md` and the 30 files in `vis-repomix.md` provide the implementation basis. Source behavior takes precedence over the earlier pasted architecture prose. The `sim` tests, 3D asset bytes, Python dynamics, most dependency internals, and custom interface definitions remain outside these packs. The `vis` math test is included and analyzed. The separately supplied `agvhito` implementation is now analyzed in the [AGV guide](volley_agvhito_package.md). This is static source analysis; no ROS build or runtime test was performed. Paths refer to the Volley repository root, and approximate line counts refer to extracted source, not positions in the packed Markdown.
 
 ### Is the Python AGV dynamics project used?
 
 **Confirmed for the supplied `sim` build:** `src/sim/CMakeLists.txt` compiles only the listed C++ libraries/components, installs `3d` and test fixtures, and contains no Python installation, launch, subprocess, import, or linkage to `python/agv_simulation`. None of the packed implementation files references that Python project. It is therefore reasonable to omit it from an analysis of these C++ components.
 
-**Confirmed for the inspected launcher too:** none of its 23 files imports or executes the Python dynamics project; it loads the C++ `agvhito::sim::SimAgvComponent`. Indirect use inside that omitted plugin is still unverified, so a full-repository usage claim requires its implementation. Also, this package consumes AGV state; it does not implement AGV wheel dynamics itself.
+**Confirmed along the inspected simulation path:** the launcher loads the C++ `agvhito::sim::SimAgvComponent`; the supplied `agvhito` build and implementation contain no direct or indirect invocation of the Python wheel-dynamics project. `SimAgv` uses its own C++ `AgvMotion` and `BatteryChargeModel`. This conclusion covers the packed launch path, not all omitted repository utilities.
 
 Run this from the actual repository to find possible integration points:
 
@@ -374,7 +374,7 @@ The engine creates its service clients, publisher, snapshot/report subscriptions
 
 On each early timer tick, nonempty initial entity vectors trigger `ProcessInitialConditions`. It returns false while any of the three add services is unavailable; the tick returns before collision checking and reporting. Once ready, registration runs AGVs → trays → payloads, synchronously. An unsuccessful response throws; there is no local rollback. A successful seed clears the entity vectors. Obstruction-only initial conditions count as empty, but their geometry was already registered in construction.
 
-The parsed AGV pose/lift/battery fields are not sent by this package's registration call: `/central/add_agv` receives only the ID. The supplied launcher initializes node ID and heading in each `agvhito` component and reduces lift fraction to `initial_lifted=(lift_fraction==1.0)`. It does not forward battery fraction. Motion implementation remains omitted.
+The parsed AGV pose/lift/battery fields are not sent by this package's registration call: `/central/add_agv` receives only the ID. The supplied launcher initializes node ID and heading in each `agvhito` component and reduces lift fraction to `initial_lifted=(lift_fraction==1.0)`. It does not forward battery fraction. `SimAgv` initializes position from the layout node, starts the lift raised/lowered, and starts battery fraction at 1.0; see the [AGV guide](volley_agvhito_package.md#5-behavior-construction-steady-state-shutdown-and-defaults).
 
 ### 5.2 Engine steady state
 
@@ -553,7 +553,7 @@ These are static findings or review questions, not runtime reproductions.
 
 ## 7. Mathematics and algorithms
 
-Sections 7.1–7.5 describe the supplied `sim` algorithms. Rigid transforms and visual kinematic-animation equations are in the [visualizer math section](volley_vis_package.md#7-mathematics-and-kinematic-animation). Vehicle force/acceleration and AGV motion integration remain outside the supplied source.
+Sections 7.1–7.5 describe the supplied `sim` algorithms. Rigid transforms and visual kinematic-animation equations are in the [visualizer math section](volley_vis_package.md#7-mathematics-and-kinematic-animation). The now-supplied AGV implementation integrates constrained C++ kinematics; its movement and braking formulas are in the [AGV math section](volley_agvhito_package.md#7-main-kinematic-equations-and-algorithms). It contains no force/torque wheel-dynamics solver.
 
 ### Notation conventions
 
@@ -682,7 +682,7 @@ There is no yaw normalization in this helper. `reciprocal_to_agv` exists in `Tra
 
 ### 7.6 Motion-model boundary
 
-The supplied `sim` source advances the clock, produces simplified bay sensor values, executes scenario controls, and checks collision boxes. It consumes tracked AGV/tray poses rather than implementing the AGV wheel model. The exact velocity/acceleration and force/torque equations require the omitted `agvhito::sim::SimAgvComponent` implementation.
+The supplied `sim` source advances the clock, produces simplified bay sensor values, executes scenario controls, and checks collision boxes. It consumes tracked AGV/tray poses rather than implementing the AGV wheel model. The supplied `agvhito::sim::SimAgvComponent` constructs `SimAgv`, whose `AgvMotion` integrates translation/rotation with acceleration and braking limits. Lift fraction, mode-change delay, and battery charge/drain are separate models. See the [AGV equations](volley_agvhito_package.md#7-main-kinematic-equations-and-algorithms); no force/torque solver is implemented there.
 
 The simulator also calls `vis` pose composition when constructing bay/charger collision geometry. Its rigid-transform equations are documented in [the visualizer math section](volley_vis_package.md#7-mathematics-and-kinematic-animation). Visual door motion is separate from the omitted `bay` door-hardware dynamics.
 
@@ -752,4 +752,6 @@ Do not copy the raw-this teardown assumptions, response-ignored latches, reverse
 
 ## Source and rendering notes
 
-Primary source: `sim-repomix(1).md`, with `vis-repomix.md` supplying referenced pose math and `launcher-repomix.md` confirming deployment configuration. Scenario/layout contents, simulator test source, custom interface definitions and simulated AGV implementation remain omitted. This is static analysis; no ROS build or runtime checks were performed. Use `$...$` / `$$...$$` for math and Mermaid fenced blocks for diagrams.
+Primary source: `sim-repomix(1).md`, with `vis-repomix.md` supplying referenced pose math and `launcher-repomix.md` confirming deployment configuration. Scenario/layout contents, simulator test source, custom interface definitions remain omitted; AGV implementation is now supplied and documented separately. This is static analysis; no ROS build or runtime checks were performed. Use `$...$` / `$$...$$` for math and Mermaid fenced blocks for diagrams.
+
+Related robot implementation: [HITO AGV package design](volley_agvhito_package.md).

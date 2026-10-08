@@ -24,6 +24,7 @@ This reference is local to this document so it remains readable on its own. Form
 | QoS | Quality of service. | Message delivery policies such as reliability, history depth and durability. |
 | REST | Representational state transfer. | Web API style; distinct from native ROS service request/response. |
 | HTTP | Hypertext Transfer Protocol. | Web requests to REST endpoints. |
+| VDA5050 | VDA = Verband der Automobilindustrie (German Association of the Automotive Industry); 5050 is the robot/control interface specification number. | Protocol used by the AGV adapter; its source pins message version 2.1.0. |
 | MQTT | Messaging protocol name; historically MQ Telemetry Transport, also expanded as Message Queuing Telemetry Transport in [standards-body terminology](https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=mqtt). | Broker-based publish/subscribe transport used by the production proxy; [protocol overview](https://mqtt.org/faq/). |
 | I/O | Input/output. | Sensor/driver interfaces or external data exchanges. |
 | IO-Link | Industrial sensor/actuator communication interface; IO means input/output. | Bay sensor messages and the physical driver; not ordinary network pub/sub. |
@@ -31,7 +32,7 @@ This reference is local to this document so it remains readable on its own. Form
 | NOC | Network operations center (conventional expansion). | Source comments use NOC for the operations interface consuming exported grid XML; project-specific naming is not further defined. |
 | OTEL | OpenTelemetry; OTEL is a common abbreviation for the project name. | Telemetry endpoint environment variables and metrics configuration. |
 | ID | Identifier. | Numeric resource identity or a named configuration identifier. |
-| YASMIN | Yet Another State MachINe. | ROS state-machine library named in the review rules; not used by the inspected packages. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
+| YASMIN | Yet Another State MachINe. | ROS state-machine library used by the `agvhito` adapter and simulated robot; not implemented in `sim`, `vis`, or `launcher`. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
 | YAML | YAML Ain’t Markup Language (recursive acronym). | Scenario, layout and parameter configuration format. |
 | XML | Extensible Markup Language. | Recorder launch file and exported grid format. |
 | MCAP | File-format name; the cited specification supplies no letter-by-letter expansion. | Container for timestamped messages, used for ROS bag artifacts. [Format specification](https://mcap.dev/spec). |
@@ -78,7 +79,7 @@ Important dependencies used by the source include `launch`, `launch_ros`, `rclcp
 
 `launcher/sim_nodes.py` launches the C++ plugin `volley::agvhito::sim::SimAgvComponent`, one per entry in the Python-loaded initial `agvs` list. It passes `agv_id`, `initial_node_id`, `initial_heading`, and `initial_lifted = (lift_fraction == 1.0)`. Fractional lift positions are collapsed to a Boolean here; battery fraction is not forwarded by this factory. Central registration is a separate flow implemented by `sim`.
 
-No supplied launcher file imports or executes `src/sim/python/agv_simulation`. Combined with the `sim` CMake/source analysis, this confirms no direct use of that Python wheel-dynamics project along the inspected launch path. An indirect call inside the omitted `agvhito` implementation remains unverified. No Gazebo/Ignition process is launched by this simulation factory.
+No supplied launcher file imports or executes `src/sim/python/agv_simulation`. The newly supplied `agvhito` implementation confirms that this launch path uses C++ `AgvMotion` and `BatteryChargeModel`, with no invocation of the Python wheel-dynamics project. No Gazebo/Ignition process is launched by this simulation factory.
 
 ## 2. Files
 
@@ -144,7 +145,7 @@ The Python launcher itself does not create garage-topic publishers/subscribers, 
 | Central/sim/AGVs → visualizer → RViz | Topic pub/sub; vis process uses explicit namespace `vis`. | Message type/QoS (quality of service) tables are in the [vis guide](volley_vis_package.md). |
 | VRC → BLift bridge → bay | Source comment identifies `/vrc/r<ID>/report` to `/lift/l<bay-ID>/report`, converting VRC to lift reports. | Bridge implementation and exact QoS/schema conversion are omitted. |
 | User/web client → `central_api` | Standalone `central_api/rest_api` process, with `introspection_mode=metadata`. | Routes, HTTP (Hypertext Transfer Protocol) port and REST-to-ROS mapping are not configured in these factories. |
-| Production AGV proxy → external systems | Environment supplies MQTT (broker-based publish/subscribe messaging; historically MQ Telemetry Transport) broker and map-server host/port parameters. Proxy omitted when `is_simulation` is truthy. | MQTT topics/payloads, map protocol, retry/security behavior belong to proxy implementation. |
+| Production AGV proxy → external systems | Environment supplies MQTT (broker-based publish/subscribe messaging; historically MQ Telemetry Transport) broker and map-server host/port parameters. Proxy omitted when `is_simulation` is truthy. | The now-supplied proxy uses VDA5050 MQTT payloads and an HTTP map client; see the AGV guide for endpoints, discovery gates, and error behavior. |
 | ROS data → recorded artifacts | `rosbag2_transport/recorder`, MCAP, regex-based topic selection and discovery enabled. | Exact recorded set depends on live graph and rosbag version; service/action recording is not established by the XML's comment. |
 | Metrics process → telemetry endpoint | Production central adds `metrics_recorder`; OTEL (OpenTelemetry) host/port become `metrics.otel_endpoint`. | Transport/data schema is in central; this specific metrics process is not added by the sim factory. |
 
@@ -219,7 +220,7 @@ An exit of the main simulation container requests global shutdown even for retur
 
 ### 4.4 Launch call path into the simulation
 
-This is a **call path across three execution phases**, not one continuous stack frame: Python first constructs descriptions and returns them, the launch framework then starts processes and loads C++ plugins, and executors later call timer/subscription/service callbacks. Solid arrows below identify direct calls or ordered return flow; dashed arrows mark framework startup, plugin loading, or ROS message/service boundaries. Framework internals and `agvhito` constructor details are omitted from the supplied source, so those boundaries are named without inventing a call stack inside them.
+This is a **call path across three execution phases**, not one continuous stack frame: Python first constructs descriptions and returns them, the launch framework then starts processes and loads C++ plugins, and executors later call timer/subscription/service callbacks. Solid arrows below identify direct calls or ordered return flow; dashed arrows mark framework startup, plugin loading, or ROS message/service boundaries. Framework internals remain omitted; the supplied `agvhito` pack now establishes robot construction and callback paths below.
 
 #### A. Python launch-description construction
 
@@ -275,7 +276,7 @@ flowchart TD
     O --> I["Simulator constructor: SimClients, ROS handles, static bodies, 50 ms timer"]
     C -. "loads clock adapter" .-> K["SimClockComponent → SimClockRos(node)"]
     K --> KT["Create steady-clock timer and /clock publisher"]
-    C -. "loads one plugin per initial AGV" .-> A["agvhito::sim::SimAgvComponent: implementation omitted"]
+    C -. "loads one plugin per initial AGV" .-> A["agvhito::sim::SimAgvComponent: construct model and ROS adapter"]
     B -. "loads simulated hardware plugin" .-> H["BaySimComponent(options)"]
     H --> HB["Construct BaySim; offer service, snapshot subscription, 50 ms timer"]
     B -. "loads production core plugins" .-> BC["Bay state machine, estimator, guidance, optional BLift bridge"]
@@ -322,7 +323,7 @@ flowchart TD
     C -. "report subscription" .-> B
 ```
 
-The world timer does not directly invoke every bay timer or AGV update in a single stack. Each executor schedules its callbacks; simulated time synchronizes the clock basis, while topic/service exchanges connect the business logic. Internal AGV motion callbacks and equations remain outside the supplied `agvhito` source evidence.
+The world timer does not directly invoke every bay timer or AGV update in a single stack. Each executor schedules its callbacks; simulated time synchronizes the clock basis, while topic/service exchanges connect the business logic. The independent AGV callback path is now traced below from the supplied `agvhito` source.
 
 | Execution boundary | Source paths to follow |
 | --- | --- |
@@ -331,8 +332,35 @@ The world timer does not directly invoke every bay timer or AGV update in a sing
 | World construction/update and service calls | `src/sim/src/simulator.cpp`, `src/sim/src/sim_clients.cpp`, `src/sim/src/collision_detector.cpp`. |
 | Clock adapter/application | `src/sim/src/sim_clock_component.cpp`, `src/sim/src/sim_clock_ros.cpp`; adapter internals in omitted `rclcppx`. |
 | Bay hardware construction/tick | `src/sim/src/bay_sim_component.cpp`, `src/sim/src/bay_sim.cpp`. |
-| AGV plugin implementation | `agvhito` package, plugin `volley::agvhito::sim::SimAgvComponent`; implementation not supplied. |
+| AGV plugin implementation | `src/agvhito/src/sim/sim_agv_component.cpp`, `sim_agv_ros.cpp`, `sim_agv.cpp`, `agv_motion.cpp`, `src/agvhito/src/agv_ros.cpp`, and `src/agvhito/src/sm/`; see the [AGV guide](volley_agvhito_package.md). |
 
+
+#### E. Loaded AGV construction and runtime call path
+
+`SimAgvComponent` builds the shared context and maps, constructs `SimAgv`, and transfers its unique ownership to `SimAgvRos`. The common `Agv` constructor starts the shared control state machine; the ROS adapter installs timers/services in one mutually exclusive callback group per robot. The framework's worker implementation remains inside omitted `yasminx`.
+
+```mermaid
+flowchart TD
+    L["get_sim_launch_description_entities: initial AGV descriptions"] -. "component loader" .-> C["SimAgvComponent constructor"]
+    C --> M["Layout, limits, SimMapClient, SimMqttClient"]
+    M --> A["SimAgv constructor and initial pose"]
+    A --> R["SimAgvRos / AgvRos construction"]
+    R --> T["50 ms CycleCallback"]
+    T --> S["Agv::Step"]
+    S --> P["SimAgv::PreStep"]
+    P --> D["DrainInstantActions / DrainOrders"]
+    D --> K["SimulateMotion: AgvMotion::Step and battery step"]
+    S --> F["Consume protocol feedback into shared trackers"]
+    F -. "shared data" .-> Y["YASMIN worker: order execution and verification"]
+    Y -. "local MQTT order/action" .-> D
+    R --> U["Separate simulated telemetry timers"]
+    U -. "local MQTT state / pose / common" .-> F
+    R --> O["100 ms ReportCallback: Agv::GetReport"]
+    O -. "ROS AGV report" .-> G["Central garage snapshot"]
+    G -. "ROS snapshot" .-> V["vis markers in map, then RViz"]
+```
+
+The 50 ms cycle does not itself execute every state-machine step or telemetry timer. It first runs the simulated pre-step through virtual dispatch, then consumes available protocol feedback. Robot control publishes orders/actions from the separate worker. The in-memory bus is asynchronous queue routing, not a network broker. Central and visualizer callbacks are separate ROS execution boundaries. Source: `src/agvhito/src/sim/sim_agv_component.cpp`, `sim_agv_ros.cpp`, `sim_agv.cpp`, `src/agvhito/src/agv.cpp`, `agv_ros.cpp`, and `src/agvhito/src/sm/`.
 
 ## 5. Behavior: construction, execution, shutdown, and defaults
 
@@ -397,7 +425,7 @@ These sim options are manually parsed, not declared with `DeclareLaunchArgument`
 | REST API | Standalone central_api in both central and simulation paths. |
 | Recorder | Optional standalone recorder in simulation; included by production bay/central entry points. |
 
-Clock-first ordering is a description order, not a readiness barrier. Other actions are appended before the main simulation container, and no `OnProcessStart`/service-ready/clock-message condition delays their startup. Components must tolerate discovery and initialization races. Multithreaded execution permits callback overlap; it does not establish which component callback groups are mutually exclusive or make application state thread-safe.
+Clock-first ordering is a description order, not a readiness barrier. Other actions are appended before the main simulation container, and no `OnProcessStart`/service-ready/clock-message condition delays their startup. Components must tolerate discovery and initialization races. Multithreaded execution permits callback overlap; it does not make all application state thread-safe. The supplied AGV adapter now establishes a mutually exclusive callback group per robot; its independent state-machine worker needs synchronized trackers/queues.
 
 RViz is launched as `Node(package="rviz2", executable="rviz2")` with no explicit `-d` configuration file or parameters. This source therefore does not guarantee loading `vis/config/default.rviz.in`, Fixed Frame `map`, or the matching displays automatically.
 
@@ -456,7 +484,7 @@ $$
 b_{\mathrm{lifted}}=\begin{cases}1,&\ell=1.0,\\0,&\ell\ne1.0.\end{cases}
 $$
 
-Clock timing and collision math are in the [sim guide](volley_sim_package.md#7-mathematics-and-algorithms), and rigid transforms/visual animation in the [vis guide](volley_vis_package.md#7-mathematics-and-kinematic-animation). AGV physical motion equations still require `agvhito` implementation.
+Clock timing and collision math are in the [sim guide](volley_sim_package.md#7-mathematics-and-algorithms), and rigid transforms/visual animation in the [vis guide](volley_vis_package.md#7-mathematics-and-kinematic-animation). Translation, rotation, braking, lift, drive-mode delay, battery and heading-filter equations are in the [AGV guide](volley_agvhito_package.md#7-main-kinematic-equations-and-algorithms).
 
 Offline graph plotting draws each edge between the layout node vectors $\mathbf{p}_i=[x_i,y_i]^{\mathsf T}\in\mathbb{R}^2$ in metres, filters both endpoints by floor membership, and uses equal axis aspect. It renders graph topology; it does not solve routing or collision avoidance. Grid generation and layout checksum computation delegate to `common_py`.
 
@@ -485,3 +513,5 @@ Open questions for the team:
 11. Are missing manifest dependencies and flattened data-file paths deliberate workspace conventions?
 
 The excluded YAML, tests, and downstream implementation files remain necessary to close these questions. Documentation distinguishes source-confirmed factory behavior from assumptions about the deployed runtime.
+
+Related robot implementation: [HITO AGV package design](volley_agvhito_package.md).

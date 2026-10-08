@@ -28,7 +28,7 @@ This reference is local to this document so it remains readable on its own. Form
 | ID | Identifier. | Numeric resource identity or a named configuration identifier. |
 | FIFO | First in, first out. | Intended waiting-patron queue discipline. |
 | GPU | Graphics processing unit. | Rendering device; distinct from ROS simulation/control execution. |
-| YASMIN | Yet Another State MachINe. | ROS state-machine library named in the review rules; not used by the inspected packages. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
+| YASMIN | Yet Another State MachINe. | ROS state-machine library used by the `agvhito` adapter and simulated robot; not implemented in `sim`, `vis`, or `launcher`. [Project documentation](https://github.com/uleroboticsgroup/yasmin). |
 | YAML | YAML Ain’t Markup Language (recursive acronym). | Scenario, layout and parameter configuration format. |
 | RViz | ROS visualization application; a product/tool name rather than a supplied formal acronym. | Displays MarkerArray messages and meshes; does not simulate physical motion. |
 | XYZ / XY / ZYX | Coordinate or rotation-axis notation, not acronyms. | X/Y are horizontal axes, Z is vertical; ZYX is the stated Euler rotation composition order. |
@@ -39,7 +39,7 @@ This reference is local to this document so it remains readable on its own. Form
 
 Uppercase state labels (`AUTO`, `STOPPED`, `OPEN`, `CLOSED`, and similar), enum constants, macro names and build flags are exact code identifiers, not unexplained acronyms. `RISK` is a review label; `TODO` means “to do.” Units use `m` for metres, `s` for seconds, `ms` for milliseconds, `ns` for nanoseconds, and `kg` for kilograms.
 
-Source basis: all 30 files in `vis-repomix.md`; inventory below. This is static source analysis. `math_test.cpp` assertions were inspected, but no ROS (Robot Operating System) build or executable/test run was performed. Custom interface definitions, mesh bytes, and the simulated AGV (automated guided vehicle) implementation are outside this pack.
+Source basis: all 30 files in `vis-repomix.md`; inventory below. This is static source analysis. `math_test.cpp` assertions were inspected, but no ROS (Robot Operating System) build or executable/test run was performed. Custom interface definitions, mesh bytes, are outside this pack. The simulated AGV (automated guided vehicle) implementation is separately supplied and analyzed in the [AGV guide](volley_agvhito_package.md).
 
 ## 1. Summary, package design, and dependencies
 
@@ -356,7 +356,7 @@ Additional design implications: the map coordinate frame and mesh-origin offsets
 
 ## 7. Mathematics and kinematic animation
 
-These are implemented geometric and visual kinematic equations, not AGV force/velocity integration. The simulation's clock, sensor-load and collision formulas are in the [sim math section](volley_sim_package.md#7-mathematics-and-algorithms). Scalars are italic, vectors bold lowercase, matrices bold uppercase; their dimensions and units are defined with each equation. Inline math uses `$...$`, display math uses `$$...$$`.
+These are implemented geometric and visual kinematic equations. Actual simulated AGV movement is integrated in `agvhito::sim::AgvMotion`; see the [AGV equations](volley_agvhito_package.md#7-main-kinematic-equations-and-algorithms). The simulation's clock, sensor-load and collision formulas are in the [sim math section](volley_sim_package.md#7-mathematics-and-algorithms). Scalars are italic, vectors bold lowercase, matrices bold uppercase; their dimensions and units are defined with each equation. Inline math uses `$...$`, display math uses `$$...$$`.
 
 ### 7.1 Rigid transforms and Euler-to-quaternion conversion
 
@@ -539,3 +539,5 @@ Primary source: `vis-repomix.md`, all 30 files listed above. The companion `sim`
 ### Confirmed launcher integration
 
 `launcher/sim_nodes.py` creates `/vis/visualizer`, passes `use_remote_meshes=False` by default, and includes Foxglove when `vis` is enabled. RViz creation is nested under that same condition: `vis:=false` disables RViz regardless of `rviz`. The RViz action has no explicit `-d` config argument. Production central and bagplay also use namespace `vis`; bagplay does not pass layout or simulated time. See [launcher design](volley_launcher_package.md) for option precedence, replay limitations and startup timing.
+
+Related robot implementation: [HITO AGV package design](volley_agvhito_package.md).
