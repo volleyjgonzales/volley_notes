@@ -54,3 +54,37 @@ ax.annotate("jump > 0.5 rad: filter bypassed",xy=(4.5,np.degrees(1.37)),xytext=(
 ax.set_xlabel("time [s]  (T = 0.1 s between samples, illustrative)"); ax.set_ylabel("heading [deg]"); ax.grid(alpha=.3); ax.legend(fontsize=8,loc="upper left")
 ax.set_title("Heading IIR in PoseFilter: ψ ← wrap(ψ + α·wrap(θ − ψ)) unless |wrap(θ − ψ)| > 0.5 rad",fontsize=9.5,loc="left")
 go(fig,"pose_filter"); print("ok")
+
+# ---- Figure 3: simulator braking envelope (verbatim logic of AgvMotion::StepTranslation) ----
+def simulate(waypoints, vmax, a, dt=0.05):
+    total=waypoints[-1][0]; trav=0.0; v=0.0; t=0.0; T=[0.0]; S=[0.0]; V=[0.0]; LIM=[]
+    cap_of=lambda w: w[1] if w[1]>0 else vmax
+    while total-trav>1e-9:
+        rem=total-trav
+        cap=vmax
+        for w in waypoints:
+            if w[0]>trav: cap=cap_of(w); break
+        lim=min(cap, np.sqrt(2*a*rem))
+        for i in range(len(waypoints)-1):
+            d=waypoints[i][0]-trav
+            if d<=0: continue
+            nxt=cap_of(waypoints[i+1]); lim=min(lim, np.sqrt(nxt**2+2*a*d))
+        v = min(lim, v+a*dt) if v<lim else max(lim, v-a*dt)
+        mv=min(v*dt, rem); trav+=mv; t+=dt
+        T.append(t); S.append(trav); V.append(v)
+        if t>200: break
+    return np.array(T),np.array(S),np.array(V)
+wps=[(4.0,1.0),(8.0,0.4),(12.0,1.0)]   # distance [m], edge speed cap [m/s] (0.4 = restricted edge)
+T,S,V=simulate(wps,1.0,0.2)
+fig,axs=plt.subplots(1,2,figsize=(13,3.8))
+ax=axs[0]; ax.plot(S,V,color=C["s1"],lw=2,label="simulated speed")
+x=np.linspace(0,12,400)
+cap=np.where(x<=4,1.0,np.where(x<=8,0.4,1.0)); ax.plot(x,cap,":",color=C["aux"],label="edge speed caps")
+env=np.minimum.reduce([np.sqrt(2*0.2*np.maximum(12-x,0)), np.where(x<4,np.sqrt(0.4**2+2*0.2*np.maximum(4-x,0)),9), cap])
+ax.plot(x,env,"--",color=C["hl"],lw=1,label="braking envelope min(cap, √(v²_next + 2a·d), √(2a·r))")
+for d,_ in wps[:-1]: ax.axvline(d,color=C["aux"],lw=.5)
+ax.set_xlabel("distance along the chain [m]"); ax.set_ylabel("speed [m/s]"); ax.legend(fontsize=7.5,loc="lower center"); ax.grid(alpha=.3)
+ax.set_title("Speed versus distance: slows before the restricted edge",fontsize=9.5)
+ax=axs[1]; ax.plot(T,V,color=C["s1"],lw=2); ax.set_xlabel("time [s]"); ax.set_ylabel("speed [m/s]"); ax.grid(alpha=.3)
+ax.set_title(f"Speed versus time: 12 m in {T[-1]:.1f} s (dt = 50 ms)",fontsize=9.5)
+fig.tight_layout(); go(fig,"sim_braking_envelope"); print("ok3", round(T[-1],2))
