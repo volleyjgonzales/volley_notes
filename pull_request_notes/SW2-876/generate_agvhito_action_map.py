@@ -168,11 +168,17 @@ def node_rows(state: str, records: list) -> list:
             rows.append(('order', 'VerifiedPublish(new_order)', None))
             rows.append(('note', 'Publishes an already assembled order; not an action factory.', None))
         step_calls = [r for r in owned if r['method'] == 'Step']
-        rows.append(('hook' if step_calls else 'note', 'Step' if step_calls else 'Step: no Make*Action call sites', None))
+        rows.append(('separator', 'Step', None))
+        rows.append(('hook', 'Step', None))
         rows += [('call', r['expression'], r) for r in step_calls]
+        if not step_calls:
+            rows.append(('blank', '', None))
         exit_calls = [r for r in owned if r['method'] == 'OnExit']
-        rows.append(('hook' if exit_calls else 'note', 'OnExit' if exit_calls else 'OnExit: inherited; no factory calls in this class', None))
+        rows.append(('separator', 'OnExit', None))
+        rows.append(('hook', 'OnExit', None))
         rows += [('call', r['expression'], r) for r in exit_calls]
+        if not exit_calls:
+            rows.append(('blank', '', None))
     return rows
 
 
@@ -184,6 +190,10 @@ def expression_lines(expression: str) -> list[str]:
 
 
 def row_height(row: tuple) -> int:
+    if row[0] == 'separator':
+        return 16
+    if row[0] == 'blank':
+        return 24
     return len(expression_lines(row[1])) * 28 + 24 if row[0] == 'call' else 34
 
 
@@ -191,9 +201,9 @@ def generate(repo_path: Path, output_dir: Path, dpi: int = 130) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     pack = repo_path.read_text(encoding='utf-8')
     records, expected = audit(pack)
-    W, H = 3500, 5260
+    W, H = 3500, 5810
     plt.rcParams.update({'font.family': 'Nimbus Sans', 'svg.fonttype': 'path'})
-    fig = plt.figure(figsize=(35, 52.6), dpi=100, facecolor=BG)
+    fig = plt.figure(figsize=(35, 58.1), dpi=100, facecolor=BG)
     ax = fig.add_axes([0, 0, 1, 1]); ax.set_xlim(0, W); ax.set_ylim(H, 0); ax.axis('off')
     def txt(x, y, text, size=16, color=INK, weight='normal', ha='left', mono=False, **kwargs):
         return ax.text(x, y, text, fontsize=size, color=color, fontweight=weight,
@@ -227,10 +237,14 @@ def generate(repo_path: Path, output_dir: Path, dpi: int = 130) -> None:
                         'bold' if record['highlight'] else 'normal', mono=True)
                 note = condition(record)
                 txt(x + 31, cursor + 28 * len(lines) + 17, note, 10, MUTED)
-            else:
+            elif kind == 'separator':
+                line, = ax.plot([x + 25, x + 655], [cursor + 8, cursor + 8],
+                                color=BORDER, lw=1.5, linestyle=(0, (5, 4)), zorder=5)
+                line.set_gid('hook-separator-' + state + '-' + text)
+            elif kind != 'blank':
                 txt(x + 29, cursor + 17, text, 12 if kind != 'hook' else 14,
                     TEAL if kind in ('hook', 'helper', 'order') else MUTED,
-                    'bold' if kind == 'hook' else 'normal', mono=kind in ('helper', 'order'))
+                    'bold' if kind == 'hook' else 'normal', mono=kind in ('hook', 'helper', 'order'))
             cursor += height_row
         return (x, y, 680, height)
     drawn = []
@@ -257,12 +271,12 @@ def generate(repo_path: Path, output_dir: Path, dpi: int = 130) -> None:
     rect(70,203,780,52,'#FFFBEB','#FDE68A',10)
     txt(92,229,'AMBER  MakeStartPauseAction / MakeStopPauseAction / MakeSoftEStopAction',13,AMBER,'bold')
     txt(3430,229,'23 call sites  /  11 highlighted  /  36 routes',15,MUTED,ha='right',mono=True)
-    panel(50,290,3400,3330)
+    panel(50,290,3400,3880)
     txt(90,342,'01   State hooks and control flow',25,weight='bold')
     txt(90,387,'Current source behavior. Action-factory calls create commands; VerifiedPublish sends and verifies them.',15,MUTED)
-    positions={'booting':(200,460),'localizing':(200,1360),'stopped':(200,1730),'idle':(200,2260),
-               'executing-order':(1450,2260),'execution-paused':(2600,1360),
-               'execution-recovery':(2600,2900),'canceling-order':(1450,3300),'error':(1450,460)}
+    positions={'booting':(200,460),'localizing':(200,1320),'stopped':(200,1820),'idle':(200,2390),
+               'executing-order':(1450,2390),'execution-paused':(2600,1360),
+               'execution-recovery':(2600,3200),'canceling-order':(1450,3600),'error':(1450,460)}
     boxes = {s: action_node(s,*p) for s,p in positions.items()}
     def port(s,side,f=.5):
         x,y,w,h=boxes[s]
@@ -281,39 +295,40 @@ def generate(repo_path: Path, output_dir: Path, dpi: int = 130) -> None:
     p,q=port('idle','right',.15),port('executing-order','left',.15)
     edge('idle','order-requested','executing-order',[p,(1340,p[1]),(1340,q[1]),q],(1165,p[1]),size=13)
     p,q=port('executing-order','left',.8),port('idle','right',.8)
-    edge('executing-order','order-complete','idle',[p,(1360,p[1]),(1360,3120),(970,3120),(970,q[1]),q],(1165,3120))
+    edge('executing-order','order-complete','idle',[p,(1360,p[1]),(1360,3260),(970,3260),(970,q[1]),q],(1165,3260))
     p,q=port('executing-order','top',.25),port('executing-order','top',.7)
-    edge('executing-order','order-requested','executing-order',[p,(p[0],2110),(q[0],2110),q],(1770,2080))
-    txt(1770,2138,'next queued order',11,MUTED,ha='center')
+    edge('executing-order','order-requested','executing-order',[p,(p[0],2230),(q[0],2230),q],(1770,2200))
+    txt(1770,2258,'next queued order',11,MUTED,ha='center')
     p,q=port('executing-order','right',.12),port('execution-paused','left',.25)
     edge('executing-order','pause-requested','execution-paused',[p,(2390,p[1]),(2390,q[1]),q],(2390,1860))
     p,q=port('execution-paused','left',.75),port('executing-order','top',.88)
-    edge('execution-paused','resumed','executing-order',[p,(2260,p[1]),(2260,2190),(q[0],2190),q],(2260,1940))
+    edge('execution-paused','resumed','executing-order',[p,(2260,p[1]),(2260,2320),(q[0],2320),q],(2260,1940))
     p,q=port('executing-order','right',.78),port('execution-recovery','left',.2)
     edge('executing-order','order-data-stale','execution-recovery',[p,(2480,p[1]),(2480,q[1]),q],(2480,(p[1]+q[1])/2))
     p,q=port('execution-recovery','bottom'),port('executing-order','bottom',.88)
-    edge('execution-recovery','recovered','executing-order',[p,(p[0],3510),(2290,3510),(2290,3020),(q[0],3020),q],(2650,3510))
+    edge('execution-recovery','recovered','executing-order',[p,(p[0],3900),(2290,3900),(2290,3100),(q[0],3100),q],(2650,3900))
     p,q=port('executing-order','bottom',.45),port('canceling-order','top',.45)
     edge('executing-order','controlled-stop-requested','canceling-order',[p,q],(p[0],(p[1]+q[1])/2))
     p,q=port('canceling-order','left',.5),port('stopped','right',.8)
-    edge('canceling-order','canceled-order','stopped',[p,(1210,p[1]),(1210,q[1]),q],(1210,3270))
+    edge('canceling-order','canceled-order','stopped',[p,(1210,p[1]),(1210,q[1]),q],(1210,3480))
     p,q=port('error','left',.25),port('stopped','right',.2)
     edge('error','recovered','stopped',[p,(1170,p[1]),(1170,q[1]),q],(1170,1350))
-    txt(2940,1930,'No state Step contains a Make*Action call site.',14,TEAL,'bold',ha='center')
-    txt(2940,1970,'Step may still process orders, requests, or callbacks.',13,MUTED,ha='center')
-    txt(2940,2010,'Factories inside VerifiedUnpause are attributed to OnEntry.',13,MUTED,ha='center')
-    txt(90,3570,'Conditions and batch notes are source-audited. Vector order is not a firmware execution-order guarantee.',14,MUTED)
+    txt(2940,1940,'Each lifecycle card shows OnEntry / Step / OnExit.',14,TEAL,'bold',ha='center')
+    txt(2940,1980,'Blank section = no action call shown for that method.',13,MUTED,ha='center')
+    txt(2940,2020,'Step may still process orders, requests, or callbacks.',13,MUTED,ha='center')
+    txt(2940,2060,'Factories inside VerifiedUnpause are attributed to OnEntry.',13,MUTED,ha='center')
+    txt(90,4120,'Conditions and batch notes are source-audited. Vector order is not a firmware execution-order guarantee.',14,MUTED)
     for px,target,title,count,color in [(50,'error','Failure routes',12,ROSE),(1780,'terminal','Cancellation routes',9,MUTED)]:
-        panel(px,3670,1670,1000)
-        txt(px+40,3725,('02   ' if target=='error' else '03   ')+title,23,weight='bold')
-        txt(px+1620,3725,str(count)+' OUTCOME ROUTES',12,MUTED,'bold','right')
+        panel(px,4220,1670,1000)
+        txt(px+40,4275,('02   ' if target=='error' else '03   ')+title,23,weight='bold')
+        txt(px+1620,4275,str(count)+' OUTCOME ROUTES',12,MUTED,'bold','right')
         subset=[e for e in expected if e[2]==target]
         sources=[s for s in CLASSES if any(e[0]==s for e in subset)]
         tx=px+1390
-        rect(tx,3780,240,810,'#FFF1F2' if target=='error' else '#F1F5F9',color,15,z=4,lw=2)
-        txt(tx+120,3810,target,16,color,'bold','center',mono=True)
-        txt(tx+120,3840,'ErrorState' if target=='error' else 'root outcome',12,MUTED,ha='center')
-        y=3790
+        rect(tx,4330,240,810,'#FFF1F2' if target=='error' else '#F1F5F9',color,15,z=4,lw=2)
+        txt(tx+120,4360,target,16,color,'bold','center',mono=True)
+        txt(tx+120,4390,'ErrorState' if target=='error' else 'root outcome',12,MUTED,ha='center')
+        y=4340
         for state in sources:
             labels=[o for a,o,b in subset if a==state]
             height=112 if len(labels)==3 else 62
@@ -323,9 +338,9 @@ def generate(repo_path: Path, output_dir: Path, dpi: int = 130) -> None:
             for label,py in zip(labels,ports):
                 edge(state,label,target,[(px+633,py),(tx-3,py)],(px+1000,py),color,size=12)
             y+=height+24
-        txt(px+40,4630,'Repeated cards are the same states; all failure/cancellation outcomes remain included.',12,MUTED)
-    panel(50,4720,3400,360)
-    txt(90,4770,'04   Related publishers outside the registered state hooks',22,weight='bold')
+        txt(px+40,5180,'Repeated cards are the same states; all failure/cancellation outcomes remain included.',12,MUTED)
+    panel(50,5270,3400,360)
+    txt(90,5320,'04   Related publishers outside the registered state hooks',22,weight='bold')
     outside=[('Agv constructor','MakeStateRequestAction()','Initial telemetry request; fire-and-forget.'),
              ('Agv::RequestSoftEStop','MakeSoftEStopAction(true)','Explicit severe stop; ignored while Booting / Localizing.'),
              ('Agv::Step','MakeSoftEStopAction(true)','Terminal/PostStep failure; best-effort publication.'),
@@ -334,15 +349,15 @@ def generate(repo_path: Path, output_dir: Path, dpi: int = 130) -> None:
     if 'MakeFactsheetRequestAction()' not in manager:
         raise ValueError('Missing expected discovery factsheet action.')
     for i,(caller,expr,note) in enumerate(outside):
-        y=4820+i*55
+        y=5370+i*55
         txt(95,y,caller,14,weight='bold',mono=True)
         if 'MakeSoftEStopAction' in expr:
             rect(960,y-20,560,40,'#FFFBEB','#FDE68A',8,z=5)
         txt(980,y,expr,14,AMBER if 'MakeSoftEStopAction' in expr else INK,mono=True)
         txt(1630,y,note,14,MUTED)
-    txt(70,5140,'Instant-action factories: 23 state call sites / 11 highlighted. Step has 0 direct sites in the nine state classes.',14,weight='bold')
-    txt(70,5180,'Order payloads may already contain actions (e.g. lift) assembled elsewhere; publishing an order does not call their factories here.',13,MUTED)
-    txt(70,5218,'SW2-876 proposal is not applied. No action is implied by Continue{}, a graph edge, or the adapter state name alone.',13,MUTED)
+    txt(70,5690,'Instant-action factories: 23 state call sites / 11 highlighted. Step has 0 direct sites in the nine state classes.',14,weight='bold')
+    txt(70,5730,'Order payloads may already contain actions (e.g. lift) assembled elsewhere; publishing an order does not call their factories here.',13,MUTED)
+    txt(70,5768,'SW2-876 proposal is not applied. No action is implied by Continue{}, a graph edge, or the adapter state name alone.',13,MUTED)
     if set(drawn)!=set(expected) or len(drawn)!=36:
         raise ValueError('Rendered transitions do not exactly match the source map.')
     png,svg=output_dir/'agvhito-state-machine-actions.png',output_dir/'agvhito-state-machine-actions.svg'
@@ -370,6 +385,7 @@ def generate(repo_path: Path, output_dir: Path, dpi: int = 130) -> None:
            '- `Make*Action` constructs a protocol action; `VerifiedPublish` publishes and verifies it.',
            '- `ExecutingOrderState::OnEntry` reaches `MakeStopPauseAction` and exception-clear indirectly through its private `VerifiedUnpause` helper, before enabling a map / publishing a new order. Resume/recovery re-entry skips this new-order path.',
            '- None of the eight lifecycle Step implementations directly calls an instant-action factory. This does not mean Step has no side effects: it can mutate tracking, consume requests, and invoke callbacks.',
+           '- Each lifecycle-state card has explicit `OnEntry`, `Step`, and `OnExit` sections separated by dashed lines. Sections without action calls remain blank. Inherited hooks are included as empty sections; a blank section does not mean the method has no other behavior.',
            '- `VerifiedPublish(new_order)` publishes an already assembled order. Embedded actions, such as `MakeLiftAction` in `OrderAssembler`, are assembled elsewhere and are not factory calls inside this state hook.',
            '- Recovery logs/tolerates pause/unpause verification failures; Error logs/tolerates its software-stop verification failure. Other listed verification failures propagate through the existing outcomes.',
            '- Related publishers outside the graph include the initial state request, explicit severe-stop service, terminal/PostStep E-stop, and InstanceManager factsheet discovery request.',
