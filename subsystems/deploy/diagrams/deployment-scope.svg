@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="650" viewBox="0 0 1000 650" role="img" aria-labelledby="title desc">
+<title id="title">Stack ownership and placement</title><desc id="desc">Example: two central managers share a swarm; east is the designated root.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#52708a"/></marker></defs>
+<rect width="100%" height="100%" fill="#f5f8fc"/>
+<text x="35" y="40" font-family="DejaVu Sans, sans-serif" font-size="24" font-weight="bold" fill="#173451">Stack ownership and placement</text>
+<text x="35" y="68" font-family="DejaVu Sans, sans-serif" font-size="14" fill="#52708a">Example: two central managers share a swarm; east is the designated root.</text>
+<polyline points="120,210 120,340" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="130" y="285" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">root deploys</text>
+<polyline points="310,195 340,195 340,300 500,300 500,340" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="385" y="287" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">root deploys</text>
+<polyline points="80,210 15,210 15,570 35,570" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="25" y="480" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">east deploys</text>
+<polyline points="650,170 675,170 675,570 695,570" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="680" y="480" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">west deploys</text>
+<polyline points="460,340 460,235 280,235 280,210" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="325" y="250" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">task on east</text>
+<polyline points="560,340 560,210" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="570" y="280" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">task on west</text>
+<polyline points="260,525 800,450 800,210" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="540" y="473" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">east bay placement</text>
+<polyline points="830,525 830,210" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="845" y="465" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">west bay placement</text>
+<rect x="35" y="110" width="285" height="100" rx="10" fill="#ffffff" stroke="#8ca6bb" stroke-width="1.5"/>
+<text x="177.5" y="137" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Root central: east</text>
+<text x="177.5" y="160" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">SWARM_ROOT=true</text>
+<text x="177.5" y="183" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">engine role=root</text>
+<text x="177.5" y="206" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">fq_site_name=garage-east</text>
+<rect x="365" y="110" width="285" height="100" rx="10" fill="#ffffff" stroke="#8ca6bb" stroke-width="1.5"/>
+<text x="507.5" y="137" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Central: west</text>
+<text x="507.5" y="160" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">SWARM_ROOT=false</text>
+<text x="507.5" y="183" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">fq_site_name=garage-west</text>
+<rect x="695" y="110" width="270" height="100" rx="10" fill="#ffffff" stroke="#8ca6bb" stroke-width="1.5"/>
+<text x="830.0" y="137" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Bay workers</text>
+<text x="830.0" y="160" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">device=bay-x86-64</text>
+<text x="830.0" y="183" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">fq_site_name and bay_id labels</text>
+<rect x="35" y="340" width="285" height="95" rx="10" fill="#e0f5ef" stroke="#16836e" stroke-width="1.5"/>
+<text x="177.5" y="367" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">site (one stack)</text>
+<text x="177.5" y="390" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">map / MQTT / OTEL / Prometheus</text>
+<text x="177.5" y="413" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Placed on role=root</text>
+<rect x="365" y="340" width="285" height="95" rx="10" fill="#e0f5ef" stroke="#16836e" stroke-width="1.5"/>
+<text x="507.5" y="367" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">global (one stack)</text>
+<text x="507.5" y="390" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Fluentd task on every central</text>
+<text x="507.5" y="413" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Root deploys it once</text>
+<rect x="35" y="525" width="285" height="95" rx="10" fill="#e0f5ef" stroke="#16836e" stroke-width="1.5"/>
+<text x="177.5" y="552" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">app-east</text>
+<text x="177.5" y="575" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Central + discovered east bays</text>
+<text x="177.5" y="598" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Own stack-scoped overlay</text>
+<rect x="695" y="525" width="270" height="95" rx="10" fill="#e0f5ef" stroke="#16836e" stroke-width="1.5"/>
+<text x="830.0" y="552" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">app-west</text>
+<text x="830.0" y="575" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Central + discovered west bays</text>
+<text x="830.0" y="598" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Own stack-scoped overlay</text>
+</svg>

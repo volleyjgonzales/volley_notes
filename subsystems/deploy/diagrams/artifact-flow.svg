@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="665" viewBox="0 0 1000 665" role="img" aria-labelledby="title desc">
+<title id="title">Artifact build and delivery</title><desc id="desc">The Mender bundle ships configuration and a CLI; application images are retrieved separately.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#52708a"/></marker></defs>
+<rect width="100%" height="100%" fill="#f5f8fc"/>
+<text x="35" y="40" font-family="DejaVu Sans, sans-serif" font-size="24" font-weight="bold" fill="#173451">Artifact build and delivery</text>
+<text x="35" y="68" font-family="DejaVu Sans, sans-serif" font-size="14" fill="#52708a">The Mender bundle ships configuration and a CLI; application images are retrieved separately.</text>
+<polyline points="175,195 175,255" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="185" y="225" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">build</text>
+<polyline points="310,295 390,295" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="335" y="280" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">copy</text>
+<polyline points="525,195 525,255" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="535" y="225" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">copy</text>
+<polyline points="525,340 525,415" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="535" y="380" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">wrap</text>
+<polyline points="390,460 180,460 180,550" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="225" y="447" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">upload</text>
+<polyline points="320,587 385,587" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="330" y="575" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">delivery</text>
+<polyline points="665,587 730,587" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="675" y="575" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">deploy</text>
+<polyline points="850,500 850,550" fill="none" stroke="#52708a" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="860" y="528" font-family="DejaVu Sans, sans-serif" font-size="13" fill="#31546b">pull</text>
+<rect x="40" y="110" width="270" height="85" rx="10" fill="#ffffff" stroke="#8ca6bb" stroke-width="1.5"/>
+<text x="175.0" y="137" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">swarmctl source + pyproject</text>
+<text x="175.0" y="160" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">uv / Poe → shiv build</text>
+<text x="175.0" y="183" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Hatchling packages the Python code</text>
+<rect x="40" y="255" width="270" height="85" rx="10" fill="#e0f5ef" stroke="#16836e" stroke-width="1.5"/>
+<text x="175.0" y="282" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">bin/swarmctl</text>
+<text x="175.0" y="305" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Executable Python zipapp</text>
+<text x="175.0" y="328" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Requires a device Python interpreter</text>
+<rect x="390" y="110" width="270" height="85" rx="10" fill="#ffffff" stroke="#8ca6bb" stroke-width="1.5"/>
+<text x="525.0" y="137" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Tracked swarm/ files</text>
+<text x="525.0" y="160" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">.env, manifest, YAML, templates</text>
+<text x="525.0" y="183" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Service configuration files</text>
+<rect x="390" y="255" width="270" height="85" rx="10" fill="#ffffff" stroke="#8ca6bb" stroke-width="1.5"/>
+<text x="525.0" y="282" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Staged tree → normalized tar</text>
+<text x="525.0" y="305" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Add bin/swarmctl</text>
+<text x="525.0" y="328" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Metadata is a separate Mender input</text>
+<rect x="390" y="415" width="270" height="85" rx="10" fill="#e0f5ef" stroke="#16836e" stroke-width="1.5"/>
+<text x="525.0" y="442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Mender artifact</text>
+<text x="525.0" y="465" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">swarm-deploy-&lt;version&gt;.mender</text>
+<text x="525.0" y="488" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Compatible: central-x86-64</text>
+<rect x="40" y="550" width="280" height="75" rx="10" fill="#e0f5ef" stroke="#16836e" stroke-width="1.5"/>
+<text x="180.0" y="577" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Hosted Mender</text>
+<text x="180.0" y="600" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Stores the uploaded artifact</text>
+<rect x="385" y="550" width="280" height="75" rx="10" fill="#fff3db" stroke="#bc8418" stroke-width="1.5"/>
+<text x="525.0" y="577" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Device /data/swarm</text>
+<text x="525.0" y="600" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">OS module extracts and drives CLI</text>
+<rect x="730" y="415" width="235" height="85" rx="10" fill="#e0f5ef" stroke="#16836e" stroke-width="1.5"/>
+<text x="847.5" y="442" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Container registries</text>
+<text x="847.5" y="465" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">AWS / public registries</text>
+<text x="847.5" y="488" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Referenced by Compose</text>
+<rect x="730" y="550" width="235" height="75" rx="10" fill="#ffffff" stroke="#8ca6bb" stroke-width="1.5"/>
+<text x="847.5" y="577" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="bold" fill="#173451">Docker Swarm tasks</text>
+<text x="847.5" y="600" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="normal" fill="#173451">Images fetched on swarm nodes</text>
+</svg>
