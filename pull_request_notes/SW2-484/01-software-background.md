@@ -102,53 +102,75 @@ The base schedule is described by its `.msg` as the immutable part of an existin
 
 ## 4. ROS messages and services
 
-The `interfaces` package defines the wire contracts under `msg/` and `srv/`. `rosidl_generate_interfaces` creates corresponding C++ message and service types. This is **data exchange**, not class inheritance. Most fields in these messages are public by design.
+The `interfaces` package defines the wire contracts under `msg/` and `srv/`. `rosidl_generate_interfaces` turns those text definitions into generated C++ structs, introspection support, and serialization code. This is **data exchange**, not C++ inheritance. In other words, when one ROS message appears inside another, the relationship is **composition**: one struct contains another struct or an array of such structs as a field.
 
-| Interface | Significant contents | Why to read it |
+For a new engineer, the most useful way to read these interfaces is from **outside in**:
+
+1. Start with `srv/Plan.srv`, because it is the service boundary for the Scheduler.
+2. Open `PlanRequest.msg` and `PlanResponse.msg` to see the request/response payloads.
+3. Then expand the nested messages that matter most: `DiscreteGarageState`, `Schedule`, `ActionNode`, and `SchedulerJob`.
+4. Only after that should you drill into utility types such as `GaragePose`, `AgvGoal`, or the resource-specific command messages.
+
+| Interface | What it contains | Why it matters to the Scheduler |
 |---|---|---|
-| `msg/PlanRequest.msg` | `base_state`, `base_schedule`, `pending_jobs` | Scheduler input |
-| `msg/PlanResponse.msg` | success, schedule, scheduled jobs | Scheduler result |
-| `msg/SchedulerJob.msg` | type, resource IDs, desired destination, job state | User intent |
-| `msg/DiscreteGarageState.msg` | AGVs, trays, bays, VECS, VRCs, disabled nodes | Snapshot of the garage |
-| `msg/GarageLayout.msg` | nodes, edges, floors, permitted orientation restrictions | Navigation topology |
-| `msg/GarageNode.msg` | geometry, type, floor, valid headings | Converts node IDs into physical locations |
-| `msg/GaragePose.msg` | `node_id`, `heading` | Discrete pose in an abstract graph |
-| `msg/ActionNode.msg` | action type, `parents`, command, duration | Output execution DAG |
-| `msg/Schedule.msg` | topologically ordered action nodes | Full schedule |
-| `srv/Plan.srv` | `PlanRequest` → `PlanResponse` | ROS service contract |
+| `srv/Plan.srv` | A `PlanRequest` and a `PlanResponse`. | This is the ROS service contract that `SchedulerRos` exposes. When another node “calls the Scheduler”, this is the exact boundary crossing. |
+| `msg/PlanRequest.msg` | A planning ID, the current `DiscreteGarageState`, the immutable `base_schedule`, and three job arrays: `planned_jobs`, `active_jobs`, and `pending_jobs`. | This message tells the Scheduler both **what the world looks like now** and **what work still needs to be planned**. |
+| `msg/PlanResponse.msg` | A success flag, human-readable message, plan-call ID, an output `Schedule`, and `ScheduledJobData[]`. | This is how the Scheduler returns both the executable schedule and job-level bookkeeping information back to the caller. |
+| `msg/SchedulerJob.msg` | A high-level job request, including job type, state, IDs for AGV/bay/tray/payload, and an optional destination. | This message expresses user or dispatcher intent. It is still much more abstract than the final action schedule. |
+| `msg/DiscreteGarageState.msg` | Arrays of AGVs, bays, VECS, trays, payloads, VRCs, plus disabled nodes and a hash. | This is the Scheduler’s snapshot of the garage at the beginning of a plan call. The in-process C++ `DiscreteGarageState` class is built around this same conceptual information. |
+| `msg/GarageLayout.msg` | Layout name, nodes, floors, edges, disallowed orientations, and resource windows. | This message defines the static topology over which AGVs, trays, and payloads move. |
+| `msg/GarageNode.msg` | Node geometry, node type, floor, allowed headings, rotation permission, and bay-specific metadata. | This tells the rest of the software what a particular node ID actually means in physical and operational terms. |
+| `msg/GaragePose.msg` | A node ID and a discrete heading. | This is the canonical discrete pose type used throughout scheduling, assignment, and action generation. |
+| `msg/Schedule.msg` | A topologically ordered array of `ActionNode`s. | This is the output execution DAG that downstream execution software consumes. |
+| `msg/ActionNode.msg` | An action type, dependency indices, timing/status fields, and type-specific command payloads. | This is the final bridge from in-memory planning logic to executable ROS-level commands. |
 
 ![ROS message relationships](figures/13_uml_ros_messages.svg)
 
-*Figure 3 — As-built ROS message relationships derived from the `.msg` and `.srv` definitions. Composition means a message contains another message or array; this figure is not a C++ inheritance diagram.*
+*Figure 3 — As-built ROS service and message composition derived from the `.msg` and `.srv` definitions. A **filled diamond** means “contains as a field or array element.” Blue boxes sit on the **request / intent** side, violet boxes describe the **garage-state snapshot**, green boxes describe the **response / schedule** side, and amber boxes are **nested command or utility messages**. The dashed outer frame marks the `Plan.srv` boundary.*
 
-`ActionNode.parents` contains **indices** into the output schedule, not `shared_ptr` references to `ScheduleEvent` objects. The transition from in-process event objects to serialized action indices happens near the end of planning.
+A few important reading notes help prevent confusion:
+
+- `PlanRequest` and `PlanResponse` are ROS message **types**, not C++ service handler classes.
+- `Schedule.nodes` is a topologically ordered array of `ActionNode` messages, so dependencies in the serialized schedule are represented by **integer parent indices**, not pointers.
+- `ActionNode` is intentionally wide: it contains several command fields, but only the field corresponding to the node’s `type` is semantically active.
+- `SchedulerJob.destination` and `DiscreteAgvState.pose` both use `GaragePose`, which keeps the discrete graph interpretation consistent across request, state, and output data.
+
+`ActionNode.parents` therefore contains **indices** into the output schedule, not `shared_ptr` references to `ScheduleEvent` objects. The transition from in-process event objects to serialized action indices happens near the end of planning.
 
 ## 5. C++ classes: orientation and source map
 
-Read this table as a map of the *current implementation*. Paths refer to the repository root; declarations in included headers not uploaded are marked as such.
+Once the ROS interfaces are clear, the next question is: **which C++ objects hold, transform, and emit those data?** The table below is deliberately more descriptive than a quick reference sheet, because these classes are the vocabulary of the rest of the guide.
+
+Read the rows in three passes:
+
+1. First, identify the *orchestrator* types such as `Scheduler` and `ScheduleContext`.
+2. Next, identify the *domain-model* types such as `ScheduleEvent`, `TrayMove`, `AgvMove`, and `DiscreteGarageState`.
+3. Finally, identify the *infrastructure* types such as `ScheduleEventDag`, `GarageGraph`, `GarageOccupancyChecker`, and the collision / cost helpers.
 
 | Class / type | What it does | Declared in | Key members / methods |
 |---|---|---|---|
-| `Scheduler` | Orchestrates job expansion, assignments, validation, and motion planning | `src/planner/scheduler/include/scheduler/scheduler.hpp` | `Plan`, `DoTrayAssignments`, `DoAgvAssignments`, `PlanMotions` |
-| `SchedulerParams` | Constructor settings and motion-cost configuration | Same `scheduler.hpp` | `motion_cost`, `bay_readiness_ratio`, `cost_audit` |
-| `ScheduleContext` | Mutable working data for a single plan | Same `scheduler.hpp` | `initial_state`, `events`, `scheduled_jobs`, `first_tray_event` |
-| `ScheduleEvent` | Polymorphic base of abstract schedule work | `src/planner/planner_core/include/planner_core/schedule_events.hpp` | `Apply`, `GetGarageEntityId`, `GetJobIndex`, `GetType` |
-| `TrayMove` | Represents a pending/assigned tray relocation | Same `schedule_events.hpp` | `GetTrayId`, `SetTrayId`, `GetDest`, `SetDest`, `SetAgvId` |
-| `AgvMove` | Represents a pose or lift change | Same `schedule_events.hpp` | `GetDiscreteChange`, `GetAgvId`, `Apply` |
-| `BayTransition` | Represents bay command/state change | Same `schedule_events.hpp` | `GetSourceState`, `GetCommand`, `Apply` |
-| `VecsTransition` | Represents EV charging state change | Same `schedule_events.hpp` | `GetStateChange`, `Apply` |
-| `VrcTransition` | Represents VRC state/floor transfer | Same `schedule_events.hpp` | `GetFromVrcNodeId`, `GetToVrcNodeId`, `Apply` |
-| `DagBase<T>` | Generic Boost graph container and algorithms | `src/planner/planner_core/include/planner_core/event_dag.hpp` | `Add`, `AddDependency`, `Reduce`, `GetTopologicalOrdering` |
-| `ScheduleEventDag` | DAG specialization with job-aware ordering | Same `event_dag.hpp` | `AddEvent`, `GetTopologicalOrdering`, `Apply` |
-| `DiscreteGarageState` | In-memory state and event application | `src/common_ros/include/common_ros/discrete_garage_state.hpp` (included; implementation not supplied) | `GetAgv`, `GetTray`, `OnEvent` |
-| `GarageGraph` / `PoseGraph` | Navigation/pose graph structures | `src/common_ros/include/common_ros/garage_graph.hpp` and `pose_graph.hpp` (included; bodies not supplied) | `GetVertexFromPose`, `GetPoseFromVertex` |
-| `GarageOccupancyChecker<T>` | Tracks occupancy and freeing-event dependencies | `src/common_ros/include/common_ros/garage_occupancy_checker.hpp` (included; body not supplied) | `GetBlockers`, `AddOccupant` |
-| `CollisionTable` | Tests collision geometry compatibility | Exact class declaration not established by snapshots | `Query` (used by Scheduler) |
-| `MotionCostModel` | Motion-time cost parameters and estimates | `cost_functions/motion_cost_model.hpp` (included; body not supplied) | `Params` |
+| `Scheduler` | The main planner object. It validates requests, expands jobs into abstract events, performs tray and AGV assignment, checks the resulting plan, and invokes motion planning. In other words, this is the *orchestrator* of the entire pipeline. | `src/planner/scheduler/include/scheduler/scheduler.hpp` | `Plan`, `DoTrayAssignments`, `DoAgvAssignments`, `PlanMotions` |
+| `SchedulerParams` | A bundle of constructor-time configuration and planning parameters. It lets the planner be configured without encoding every setting as a separate constructor argument. | Same `scheduler.hpp` | `motion_cost`, `bay_readiness_ratio`, `cost_audit` |
+| `ScheduleContext` | The mutable working set for a single plan call. It carries the initial garage state, the evolving event DAG, scheduled-job metadata, and several helper maps used to preserve dependency relationships. | Same `scheduler.hpp` | `initial_state`, `events`, `scheduled_jobs`, `first_tray_event` |
+| `ScheduleEvent` | The abstract base class for in-memory schedule events. Each concrete subclass represents a state-changing operation that can be replayed against a `DiscreteGarageState`. | `src/planner/planner_core/include/planner_core/schedule_events.hpp` | `Apply`, `GetGarageEntityId`, `GetJobIndex`, `GetType` |
+| `TrayMove` | A partially or fully assigned tray-relocation event. Before assignment, it may be missing the tray ID, destination, or AGV ID; after assignment, it becomes much more concrete. | Same `schedule_events.hpp` | `GetTrayId`, `SetTrayId`, `GetDest`, `SetDest`, `SetAgvId` |
+| `AgvMove` | A concrete AGV movement or lift-change event. Unlike `TrayMove`, this represents *robot* motion rather than abstract tray intent. | Same `schedule_events.hpp` | `GetDiscreteChange`, `GetAgvId`, `Apply` |
+| `BayTransition` | A state transition or command affecting a bay. It captures the bay-side operations required for insert/retrieve workflows. | Same `schedule_events.hpp` | `GetSourceState`, `GetCommand`, `Apply` |
+| `VecsTransition` | A state transition for EV charging equipment. This is the scheduler-facing representation of charging-resource state changes. | Same `schedule_events.hpp` | `GetStateChange`, `Apply` |
+| `VrcTransition` | A transition involving a VRC, including floor movement and gate-related state changes. It matters in multi-floor garages even though the Pecos YAML used in the figures has no VRC node. | Same `schedule_events.hpp` | `GetFromVrcNodeId`, `GetToVrcNodeId`, `Apply` |
+| `DagBase<T>` | A reusable directed-graph template implemented with Boost Graph. It provides graph storage and generic algorithms such as adding edges and obtaining a topological order. | `src/planner/planner_core/include/planner_core/event_dag.hpp` | `Add`, `AddDependency`, `Reduce`, `GetTopologicalOrdering` |
+| `ScheduleEventDag` | The Scheduler-specific DAG specialization whose vertices are `ScheduleEvent` objects. This is where abstract event dependencies are stored before action generation. | Same `event_dag.hpp` | `AddEvent`, `GetTopologicalOrdering`, `Apply` |
+| `DiscreteGarageState` | The in-memory state model that answers questions like “where is tray 19?” or “is AGV 4 disabled?” It is replayed and mutated repeatedly during planning. | `src/common_ros/include/common_ros/discrete_garage_state.hpp` (included; implementation not supplied) | `GetAgv`, `GetTray`, `OnEvent` |
+| `GarageGraph` / `PoseGraph` | Graph structures used to map between node/heading poses and search vertices. These help the Scheduler and motion planner reason about movement feasibility. | `src/common_ros/include/common_ros/garage_graph.hpp` and `pose_graph.hpp` (included; bodies not supplied) | `GetVertexFromPose`, `GetPoseFromVertex` |
+| `GarageOccupancyChecker<T>` | An occupancy/dependency helper that remembers who currently blocks a pose and which event would free it. This helper is especially relevant when tray moves and AGV arrivals must wait on one another. | `src/common_ros/include/common_ros/garage_occupancy_checker.hpp` (included; body not supplied) | `GetBlockers`, `AddOccupant` |
+| `CollisionTable` | A geometry / compatibility helper used by the Scheduler to reject incompatible co-occupancy and movement combinations. The exact class definition was not included in the uploaded snapshots, but its role is visible through its use sites. | Exact class declaration not established by snapshots | `Query` (used by Scheduler) |
+| `MotionCostModel` | A cost / duration model for estimating travel- and action-related costs. It supplies the timing assumptions that later influence assignment and scheduling. | `cost_functions/motion_cost_model.hpp` (included; body not supplied) | `Params` |
 
 ![Current class relationships](figures/11_uml_existing_core.svg)
 
-*Figure 4 — Existing core-class relationships. `Scheduler` works with one `ScheduleContext`; that context owns a schedule DAG and initial garage state. This depicts the as-built architecture, not the proposed interface extraction.*
+*Figure 4 — Existing core-class relationships. `Scheduler` orchestrates planning, `ScheduleContext` packages one plan attempt’s mutable working data, `ScheduleEventDag` stores abstract event dependencies, and `DiscreteGarageState` models the world that those events mutate. The diagram is intentionally compact, so it shows the dominant ownership / usage relationships rather than every helper member.*
+
+If you are looking for the shortest possible mental model, use this one: **`Scheduler` is the conductor, `ScheduleContext` is the score currently being annotated, `ScheduleEventDag` is the dependency structure of abstract work, and `DiscreteGarageState` is the simulated world on which the work is replayed.**
 
 ## 6. Objects and ownership: the Scheduler and ScheduleContext
 
@@ -184,11 +206,18 @@ class ScheduleContext {
 
 ## 7. Event types and polymorphism
 
-`ScheduleEvent` is an abstract base class; each concrete event knows how to apply its state change to a discrete state. `TrayMove` stores optional tray ID, destination, and AGV ID because assignments happen in stages.
+At this point we can finally explain `ScheduleEventDag` cleanly, because we now know what a **schedule event** is. A `ScheduleEvent` is an in-memory C++ object representing an abstract operation that can be replayed against a `DiscreteGarageState`. The base class is intentionally small: it provides a virtual destructor, a virtual `Apply(...)`, and query functions such as `GetGarageEntityId()`.
+
+The key design idea is **runtime polymorphism**. The DAG stores `std::shared_ptr<ScheduleEvent>`, but at runtime those pointers may actually point to `TrayMove`, `AgvMove`, `BayTransition`, `VecsTransition`, or `VrcTransition` objects. When the Scheduler replays the DAG, the correct subclass implementation of `Apply(...)` runs through virtual dispatch.
 
 ![Existing event inheritance](figures/12_uml_event_hierarchy.svg)
 
-*Figure 5 — Existing C++ inheritance hierarchy, not proposed solver architecture. Each concrete transition is a kind of `ScheduleEvent` and implements `Apply`.*
+*Figure 5 — Existing C++ inheritance hierarchy, not proposed solver architecture. A **hollow triangle** means public inheritance and points toward the base class. Blue marks the abstract base type, green marks movement / assignment events, and violet marks other resource-transition events. The arrow therefore reads as “`TrayMove` **is a** `ScheduleEvent`,” not “`ScheduleEvent` contains a `TrayMove`.”*
+
+This figure often causes two kinds of confusion:
+
+1. The inheritance arrow does **not** mean execution order. It only expresses the C++ type relationship.
+2. The subclasses are **siblings**, not phases. For example, a `TrayMove` does not “turn into” an `AgvMove`; rather, both appear as separate event objects in the overall event DAG.
 
 ```cpp
 // Abridged from planner_core/schedule_events.hpp.
@@ -211,7 +240,7 @@ class TrayMove : public ScheduleEvent {
 };
 ```
 
-A `TrayMove` is therefore **not an AGV command**. Before assignment, it may mean “find an empty tray for this bay” or “find somewhere to repark this specified tray.” `AgvMove` differs: it owns a `std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>` and uses `std::visit` to apply one concrete discrete change. `BayTransition`, `VecsTransition`, and `VrcTransition` encapsulate other resource changes.
+A `TrayMove` is therefore **not an AGV command**. Before assignment, it may mean “find an empty tray for this bay” or “find somewhere to repark this specified tray.” `AgvMove` differs: it owns a `std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>` and uses `std::visit` to apply one concrete discrete change. `BayTransition`, `VecsTransition`, and `VrcTransition` encapsulate other resource changes. The common base class lets all of them coexist inside the same `ScheduleEventDag`.
 
 ## 8. Directed acyclic graphs, then ScheduleEventDag
 
@@ -227,7 +256,7 @@ $$
 
 *Figure 6 — Abstract prerequisite ordering. The arrows express dependencies, not geometric movement and not wall-clock travel time.*
 
-**Now the implementation.** `DagBase<T>` is a C++ template implemented on a Boost `adjacency_list`; its vertices hold `std::shared_ptr<T>`. The specialized subclass `ScheduleEventDag : DagBase<ScheduleEvent>` stores abstract events and computes a topological ordering prioritizing earlier job indices among currently eligible events.
+**Now the implementation.** `DagBase<T>` is a C++ template implemented on a Boost `adjacency_list`; its vertices hold `std::shared_ptr<T>`. The specialized subclass `ScheduleEventDag : DagBase<ScheduleEvent>` stores abstract event objects and dependency edges between them. In practical terms, this means the Scheduler can ask questions such as “which work has no unsatisfied prerequisites yet?” or “if I add this dependency, would I create a cycle?” The custom topological ordering also biases earlier job indices among currently eligible events, so job grouping influences the replay order when multiple events are otherwise ready.
 
 ```cpp
 // Representative of the existing scheduler_tests.cpp style.
