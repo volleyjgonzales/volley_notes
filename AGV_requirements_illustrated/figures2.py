@@ -6,7 +6,7 @@ import math
 import figures as F
 from figures import status_chip_for, W
 from svgkit import SVG, C, STATUS, PX, AGV_L, AGV_W
-import uml
+import uml2 as uml
 
 
 def m(v):
@@ -372,6 +372,115 @@ def fig_8_3():
     return s
 
 
+def gamepad(s, cx, cy, sc=1.0):
+    """Generic console-style gamepad (two grips, offset thumbsticks, d-pad, four face buttons)."""
+    def P(x, y):
+        return f"{cx + x*sc:.1f} {cy + y*sc:.1f}"
+    body = (f"M {P(-60,-34)} C {P(-30,-44)} {P(30,-44)} {P(60,-34)} "
+            f"C {P(84,-28)} {P(100,10)} {P(104,40)} "
+            f"C {P(108,66)} {P(92,80)} {P(76,72)} "
+            f"C {P(62,64)} {P(52,42)} {P(36,34)} "
+            f"C {P(16,28)} {P(-16,28)} {P(-36,34)} "
+            f"C {P(-52,42)} {P(-62,64)} {P(-76,72)} "
+            f"C {P(-92,80)} {P(-108,66)} {P(-104,40)} "
+            f"C {P(-100,10)} {P(-84,-28)} {P(-60,-34)} Z")
+    s.raw(f'<path d="{body}" fill="{C["card"]}" stroke="{C["fg"]}" stroke-width="2.2" stroke-linejoin="round"/>')
+    # shoulder bumpers
+    s.raw(f'<path d="M {P(-74,-30)} Q {P(-58,-44)} {P(-34,-41)}" stroke="{C["fg"]}" stroke-width="4" fill="none" stroke-linecap="round"/>')
+    s.raw(f'<path d="M {P(74,-30)} Q {P(58,-44)} {P(34,-41)}" stroke="{C["fg"]}" stroke-width="4" fill="none" stroke-linecap="round"/>')
+    # left stick (upper left), d-pad (lower left)
+    for (x, y) in [(-56, -8), (28, 16)]:
+        s.circle(cx + x*sc, cy + y*sc, 15*sc, fill=C["muted"], stroke=C["fg"], sw=1.6)
+        s.circle(cx + x*sc, cy + y*sc, 9*sc, fill=C["fg"])
+    dx, dy = cx - 28*sc, cy + 16*sc
+    s.raw(f'<path d="M {dx-4*sc} {dy-13*sc} h {8*sc} v {9*sc} h {9*sc} v {8*sc} h {-9*sc} v {9*sc} h {-8*sc} v {-9*sc} '
+          f'h {-9*sc} v {-8*sc} h {9*sc} Z" fill="{C["slate"]}"/>')
+    # face buttons (diamond)
+    for (x, y, col) in [(56, -20, C["accent"]), (56, 4, C["green"]), (44, -8, C["primary"]), (68, -8, C["red"])]:
+        s.circle(cx + x*sc, cy + y*sc, 6.5*sc, fill=col)
+    # centre buttons
+    s.circle(cx, cy - 22*sc, 7*sc, fill=C["bg"], stroke=C["fg"], sw=1.4)
+    for x in (-14, 14):
+        s.rect(cx + x*sc - 4*sc, cy - 6*sc, 8*sc, 5*sc, fill=C["slate"], rx=2)
+
+
+def fig_5_1():
+    s = SVG(W, 666, "Where commonMessage lives, and the fields requested in it",
+            "5.1 RFID signal strength   5.3 tape sensor no-reading   5.13 RFID reading   5.15 selected laser field")
+    # topic strip
+    s.text(28, 104, "1. Topic: a separate MQTT message, next to the standard VDA5050 topics", size=13, weight=600, color=C["fg"])
+    parts = ["uagv", "v2", "HITO", "AGV001"]
+    x = 28
+    for i, p in enumerate(parts):
+        w = 18 + len(p) * 8
+        s.rect(x, 118, w, 28, fill=C["bg"], stroke=C["border"], rx=5)
+        s.text(x + w / 2, 137, p, size=13, anchor="middle", mono=True, color=C["fg"])
+        x += w
+        s.text(x + 7, 137, "/", size=14, anchor="middle", mono=True, color=C["mutedfg"])
+        x += 14
+    sx = x
+    topics = [("state", False), ("visualization", False), ("connection", False), ("factsheet", False),
+              ("order", False), ("instantActions", False), ("commonMessage", True)]
+    for i, (t, custom) in enumerate(topics):
+        y = 118 + (0 if custom else 0)
+    # stack topics as a column of choices
+    tx = sx
+    bx, by = tx, 118
+    for i, (t, custom) in enumerate(topics):
+        w = 18 + len(t) * 8
+        if bx + w > 932:
+            bx, by = tx, by + 34
+        s.rect(bx, by, w, 28, fill="#FFF7ED" if custom else C["card"], stroke=C["accent"] if custom else C["border"], rx=5,
+               sw=2 if custom else 1)
+        s.text(bx + w / 2, by + 19, t, size=12.5, anchor="middle", mono=True,
+               color=C["accent"] if custom else C["mutedfg"], weight=700 if custom else 400)
+        bx += w + 8
+    s.text(tx, 200, "grey: standard VDA5050 topics     orange: HITO's own topic (name assumed; to be confirmed in the 2.8 documentation)",
+           size=11.5, color=C["mutedfg"])
+    s.text(28, 200, "", size=11)
+    # payload
+    s.text(28, 240, "2. Payload: what the AGV screen shows, and the JSON HITO would publish", size=13, weight=600, color=C["fg"])
+    s.rect(28, 256, 240, 196, fill=C["ink"], rx=10)
+    s.text(46, 284, "AGV HMI screen", size=12, color="#94A3B8")
+    s.lines(46, 318, ["S   78", "RFID 0x00A7", "Tape  --", "Field 12"], size=15, color="#E2E8F0", mono=True, lh=30)
+    jx = 340
+    s.rect(jx, 256, 592, 316, fill=C["bg"], stroke=C["border"], rx=8)
+    s.text(jx + 16, 278, "topic …/AGV001/commonMessage   (field names are placeholders)", size=11.5, color=C["mutedfg"], italic=True)
+    rows = [
+        ("{", None, None),
+        ('  "headerId": 1042,', None, "hdr"),
+        ('  "timestamp": "2026-10-13T08:30:12Z",', None, "hdr"),
+        ('  "version": "2.0.0",', None, "hdr"),
+        ('  "manufacturer": "HITO",', None, "hdr"),
+        ('  "serialNumber": "AGV001",', None, "hdr"),
+        ('  "rfidSignalStrength": 78,', "5.1", None),
+        ('  "rfidReading": "0x00A7",', "5.13", None),
+        ('  "tapeSensor": "",', "5.3", None),
+        ('  "laserField": 12', "5.15", None),
+        ("}", None, None),
+    ]
+    from data import BY_ID
+    ys = {}
+    for i, (t, rid, kind) in enumerate(rows):
+        y = 304 + i * 25
+        col = C["slate"] if kind == "hdr" else C["fg"]
+        s.text(jx + 18, y, t, size=13, mono=True, color=col, weight=600 if rid else 400)
+        if rid:
+            st = BY_ID[rid][1]
+            s.chip(jx + 360, y - 16, st, f"{rid}  {STATUS[st][0]}")
+            ys[rid] = y
+    # bracket for header
+    s.line(jx + 344, 329 - 12, jx + 344, 429 + 4, C["slate"], 1.4)
+    s.text(jx + 352, 370, "header, assumed to match", size=10.5, color=C["slate"])
+    s.text(jx + 352, 384, "the VDA5050 message header", size=10.5, color=C["slate"])
+    for i, rid in enumerate(["5.1", "5.13", "5.3", "5.15"]):
+        s.arrow(250, 314 + i * 30, jx - 6, ys[rid] - 5, "slate", 1.2, dash="4 4")
+    s.note(28, 588, 904, ["5.3 Volley asks for an empty string or omitted value when the sensor reads nothing. HITO proposes instead that",
+                          "a value stuck at 0 for 1 second means no reading. 0 is also a valid reading, so this needs a decision."],
+           color=C["accent"], size=12)
+    return s
+
+
 # ------------------------------------------------------------------ 8.6 at scale
 def fig_8_6():
     s = SVG(W, 370, "Remote joystick to recover an AGV that left the tape",
@@ -387,13 +496,11 @@ def fig_8_6():
     s.robot(480, y, 0, ghost=True, color=C["primary"])
     s.text(480, y + 46, "back on tape", size=12.5, anchor="middle", color=C["primary"], weight=600)
     s.scale_bar(60, y + 50, 1)
-    jx = 780
-    s.rect(jx - 80, 110, 160, 180, fill=C["bg"], stroke=C["border"], rx=12)
-    s.circle(jx, 190, 44, fill=C["card"], stroke=C["fg"], sw=2)
-    s.circle(jx + 10, 180, 16, fill=C["fg"])
-    s.text(jx, 270, "operator joystick", size=12, anchor="middle", color=C["mutedfg"])
-    s.arrow(jx - 82, 200, 420, y - 70, "slate", 1.6, dash="5 4")
-    s.text(600, 150, "MQTT topic (new)", size=12, anchor="middle", color=C["mutedfg"], mono=True)
+    jx = 800
+    gamepad(s, jx, 190, 1.05)
+    s.text(jx, 290, "operator gamepad (not to scale)", size=12, anchor="middle", color=C["mutedfg"])
+    s.arrow(jx - 116, 180, 420, y - 70, "slate", 1.6, dash="5 4")
+    s.text(560, 192, "MQTT topic (new)", size=12, anchor="middle", color=C["mutedfg"], mono=True)
     status_chip_for(s, 60, 330, "8.6", "30 + 30 days")
     return s
 
@@ -517,7 +624,7 @@ def fig_uml_8():
 ALL = []
 _over = {
     "robot_key": fig_robot_key, "3_1_cancel_stop": fig_3_1, "3_6_precision": fig_3_6, "7_6_lateral_error": fig_7_6,
-    "7_7_deceleration": fig_7_7, "8_1_lidar_fields": fig_8_1, "8_3_pallet_payload": fig_8_3, "8_6_joystick": fig_8_6,
+    "7_7_deceleration": fig_7_7, "5_1_common_message": fig_5_1, "8_1_lidar_fields": fig_8_1, "8_3_pallet_payload": fig_8_3, "8_6_joystick": fig_8_6,
 }
 for name, fn in F.ALL:
     ALL.append((name, _over.get(name, fn)))

@@ -58,7 +58,7 @@ Each section that involves VDA5050 messages ends with a structure figure in UML 
 
 ![Figure 8. Message structure for group 1](images/uml_1.svg)
 
-**Figure 8. Message structure for group 1.** Read left to right as nesting. A filled diamond means the box on the right exists only inside the box on the left (UML composition), and the multiplicity says how many there can be: [ ] marks a JSON array. Each child box shows its JSON key in bold and its schema type above. So the heading in 1.1 and 1.2 is found at order.nodes[i].nodePosition.theta, in radians, and the driving flag for 1.3 and 1.4 is a top-level boolean in state. Highlighted rows are fields a requirement depends on; '+n fields / parts' counts what has been left out for clarity.
+**Figure 8. Message structure for group 1.** Read left to right as nesting. A filled diamond means the box on the right exists only inside the box on the left (UML composition), and the multiplicity says how many there can be; [ ] marks a JSON array. Each box lists every field of that object: fields a requirement depends on are highlighted in orange with the requirement number, the rest are grey with their type on the right, and rows with a small diamond are nested objects that aren't expanded. Dark boxes are whole messages, and their header row stands for the five fields every VDA5050 message starts with. So the heading in 1.1 and 1.2 sits at order.nodes[i].nodePosition.theta, in radians, and the driving flag for 1.3 and 1.4 is a top-level boolean in state.
 
 | ID | Requirement | HITO response | Status | Effort |
 |---|---|---|---|---|
@@ -144,9 +144,9 @@ Each section that involves VDA5050 messages ends with a structure figure in UML 
 
 ## 5. State, commonMessage and error reporting
 
-![Figure 19. New fields in commonMessage](images/5_1_common_message.svg)
+![Figure 19. Where commonMessage lives, and the fields requested in it](images/5_1_common_message.svg)
 
-**Figure 19. New fields in commonMessage.** The dark panel is what the AGV's own screen shows today. The light panel is the commonMessage the AGV sends to the fleet manager, and the dashed arrows show which on-screen value each new field should carry: RFID signal strength (5.1), the RFID tag read (5.13), the tape sensor reading (5.3) and which laser field is active (5.15). The tape sensor here reads nothing, so the field is an empty string — that's what Volley asked for. The note underneath explains HITO's different proposal.
+**Figure 19. Where commonMessage lives, and the fields requested in it.** Part 1 answers where the message travels. commonMessage is not one of the six standard VDA5050 topics (grey); it is HITO's own extra MQTT topic (orange), published by the AGV under the same topic path as the others: uagv / v2 / manufacturer / serialNumber / commonMessage. The source doesn't give the exact topic name or payload format, so both are assumptions until HITO delivers the documentation promised in 2.8. Part 2 shows the payload. The dark panel is what the AGV's own screen shows today; the light panel is the JSON message, starting with the same header fields every VDA5050 message carries (assumed), followed by the four new fields. The dashed arrows show which on-screen value each field carries: RFID signal strength (5.1), the RFID tag read (5.13), the tape sensor reading (5.3) and the active laser field (5.15). The tape sensor reads nothing here, so the field is an empty string, as Volley asked. The note explains HITO's different proposal. The structure figure at the end of section 5 shows commonMessage next to state and visualization.
 
 ![Figure 20. How errors should be reported](images/5_4_errors.svg)
 
@@ -235,7 +235,7 @@ Each section that involves VDA5050 messages ends with a structure figure in UML 
 
 ![Figure 31. Driving the AGV back onto the tape by remote control](images/8_6_joystick.svg)
 
-**Figure 31. Driving the AGV back onto the tape by remote control.** To scale: the AGV has drifted about 1 m off the tape, so automatic mode stops. An operator drives it back with a remote joystick whose commands travel over a new MQTT topic (blue dashed path). HITO agreed, at 30 + 30 days. While joystick-driven, the AGV would normally report operatingMode MANUAL.
+**Figure 31. Driving the AGV back onto the tape by remote control.** To scale: the AGV has drifted about 1 m off the tape, so automatic mode stops. An operator drives it back with a handheld gamepad whose commands travel to the AGV over a new MQTT topic (blue dashed path). The gamepad is not drawn to scale. HITO agreed, at 30 + 30 days. While driven this way, the AGV would normally report operatingMode MANUAL in its state message.
 
 ![Figure 32. Message structure for group 8](images/uml_8.svg)
 

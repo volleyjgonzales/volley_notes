@@ -279,11 +279,13 @@ CAPTIONS.update({
     "uml_1": (
         "Message structure for group 1",
         "Read left to right as nesting. A filled diamond means the box on the right exists only inside the box "
-        "on the left (UML composition), and the multiplicity says how many there can be: [ ] marks a JSON "
-        "array. Each child box shows its JSON key in bold and its schema type above. So the heading in 1.1 "
-        "and 1.2 is found at order.nodes[i].nodePosition.theta, in radians, and the driving flag for 1.3 and "
-        "1.4 is a top-level boolean in state. Highlighted rows are fields a requirement depends on; '+n "
-        "fields / parts' counts what has been left out for clarity.",
+        "on the left (UML composition), and the multiplicity says how many there can be; [ ] marks a JSON "
+        "array. Each box lists every field of that object: fields a requirement depends on are highlighted in "
+        "orange with the requirement number, the rest are grey with their type on the right, and rows with a "
+        "small diamond are nested objects that aren't expanded. Dark boxes are whole messages, and their header "
+        "row stands for the five fields every VDA5050 message starts with. So the heading in 1.1 and 1.2 sits at "
+        "order.nodes[i].nodePosition.theta, in radians, and the driving flag for 1.3 and 1.4 is a top-level "
+        "boolean in state.",
     ),
     "uml_2": (
         "Message structure for group 2",
@@ -325,5 +327,29 @@ CAPTIONS.update({
         "instant action or attached to one edge (order.edges[].actions[]) so it expires with that edge. "
         "Joystick driving (8.6) would show as operatingMode MANUAL. The active lidar field (5.15, 8.2) goes in "
         "HITO's commonMessage. Group 7 has no structure figure because it adds no message fields.",
+    ),
+})
+
+CAPTIONS.update({
+    "5_1_common_message": (
+        "Where commonMessage lives, and the fields requested in it",
+        "Part 1 answers where the message travels. commonMessage is not one of the six standard VDA5050 "
+        "topics (grey); it is HITO's own extra MQTT topic (orange), published by the AGV under the same topic "
+        "path as the others: uagv / v2 / manufacturer / serialNumber / commonMessage. The source doesn't give "
+        "the exact topic name or payload format, so both are assumptions until HITO delivers the "
+        "documentation promised in 2.8. Part 2 shows the payload. The dark panel is what the AGV's own screen "
+        "shows today; the light panel is the JSON message, starting with the same header fields every VDA5050 "
+        "message carries (assumed), followed by the four new fields. The dashed arrows show which on-screen "
+        "value each field carries: RFID signal strength (5.1), the RFID tag read (5.13), the tape sensor "
+        "reading (5.3) and the active laser field (5.15). The tape sensor reads nothing here, so the field is "
+        "an empty string, as Volley asked. The note explains HITO's different proposal. The structure figure "
+        "at the end of section 5 shows commonMessage next to state and visualization.",
+    ),
+    "8_6_joystick": (
+        "Driving the AGV back onto the tape by remote control",
+        "To scale: the AGV has drifted about 1 m off the tape, so automatic mode stops. An operator drives it "
+        "back with a handheld gamepad whose commands travel to the AGV over a new MQTT topic (blue dashed "
+        "path). The gamepad is not drawn to scale. HITO agreed, at 30 + 30 days. While driven this way, the "
+        "AGV would normally report operatingMode MANUAL in its state message.",
     ),
 })
