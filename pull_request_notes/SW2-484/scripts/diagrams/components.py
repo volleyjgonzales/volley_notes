@@ -19,6 +19,8 @@ BADGES = {
     "yaml+hyp": ("YAML GEOMETRY · HYPOTHETICAL OCCUPANCY", T.amber),
     "conceptual": ("CONCEPTUAL · NOT IN PECOS YAML", T.violet),
     "schematic": ("SCHEMATIC · NOT TO SCALE", T.sky),
+    "concept": ("CONCEPTUAL · INTERNALS NOT IN SNAPSHOT", T.violet),
+    "yaml+concept": ("YAML GEOMETRY · CONCEPTUAL INTERNALS", T.violet),
 }
 
 
