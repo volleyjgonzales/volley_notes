@@ -6,7 +6,7 @@ import math
 import figures as F
 from figures import status_chip_for, W
 from svgkit import SVG, C, STATUS, PX, AGV_L, AGV_W
-import uml2 as uml
+import uml3 as uml
 
 
 def m(v):
@@ -481,6 +481,69 @@ def fig_5_1():
     return s
 
 
+def agv_side(s, x, ground, load):
+    """Side view of the AGV, front to the right. load: 0 none, 1 empty pallet, 2 loaded pallet."""
+    s.rect(x, ground - 20, 74, 15, fill=C["card"], stroke=C["fg"], sw=1.6, rx=3)
+    s.rect(x + 70, ground - 19, 4, 13, fill=C["accent"], rx=1)
+    for wx in (14, 60):
+        s.circle(x + wx, ground - 4, 4, fill=C["ink"])
+    s.line(x - 6, ground, x + 82, ground, C["tape"], 1.2)
+    if load >= 1:
+        py = ground - 26
+        s.rect(x - 4, py, 82, 5, fill=C["card"], stroke=C["fg"], sw=1.4)
+        for fx in (6, 36, 66):
+            s.rect(x + fx - 4, py + 5, 8, 1.5, fill=C["fg"])
+    if load == 2:
+        by = ground - 26 - 24
+        s.rect(x + 4, by, 66, 24, fill=C["accent"], stroke=C["accent"], sw=1.4, rx=2, opacity=0.35)
+        s.rect(x + 4, by, 66, 24, fill="none", stroke=C["accent"], sw=1.4, rx=2)
+        s.line(x + 4, by + 12, x + 70, by + 12, C["accent"], 1)
+        s.line(x + 37, by, x + 37, by + 24, C["accent"], 1)
+
+
+def fig_7_4():
+    s = SVG(W, 560, "Tuning the tape-following controller: speed axis vs payload axis",
+            "7.4 parameters vary with commanded speed   7.5 one set must hold across all payloads (closed as duplicate)")
+    x0, y0, cw, ch = 300, 124, 100, 72
+    speeds = ["0.2", "0.5", "1.0", "1.5", "2.0"]
+    loads = ["unloaded", "empty pallet", "max payload"]
+    shades = ["#DBEAFE", "#BFDBFE", "#93C5FD", "#60A5FA", "#3B82F6"]
+    s.text(x0 + 2.5 * cw, y0 - 30, "commanded speed (m/s)", size=12, anchor="middle", color=C["mutedfg"])
+    for j, sp in enumerate(speeds):
+        s.text(x0 + j * cw + cw / 2, y0 - 10, sp, size=12, anchor="middle", mono=True, color=C["mutedfg"])
+    for i, ld in enumerate(loads):
+        ry = y0 + i * ch
+        s.raw(f'<g transform="translate(52 {ry + ch - 5}) scale(1.3)">')
+        agv_side(s, 0, 0, i)
+        s.raw("</g>")
+        s.text(x0 - 16, ry + ch / 2 + 4, ld, size=12.5, anchor="end", weight=600)
+        for j in range(5):
+            s.rect(x0 + j * cw + 2, ry + 2, cw - 4, ch - 4, fill=shades[j], rx=4)
+            s.text(x0 + j * cw + cw / 2, ry + ch / 2 + 5, f"K{j+1}", size=13, anchor="middle",
+                   mono=True, weight=600, color=C["fg"] if j < 3 else "#fff")
+    gx = x0 + 5 * cw
+    s.arrow(x0, y0 + 3 * ch + 16, gx, y0 + 3 * ch + 16, "primary", 2.2)
+    s.text(x0, y0 + 3 * ch + 38, "7.4  gains change smoothly with commanded speed", size=12.5, color=C["primary"], weight=600)
+    s.line(gx + 18, y0, gx + 18, y0 + 3 * ch, C["teal"], 2.2)
+    s.line(gx + 12, y0, gx + 24, y0, C["teal"], 2.2)
+    s.line(gx + 12, y0 + 3 * ch, gx + 24, y0 + 3 * ch, C["teal"], 2.2)
+    s.text(gx + 30, y0 + 98, "7.5  same", size=12.5, color=C["teal"], weight=600)
+    s.text(gx + 30, y0 + 116, "column for", size=12.5, color=C["teal"], weight=600)
+    s.text(gx + 30, y0 + 134, "every load", size=12.5, color=C["teal"], weight=600)
+    s.text(40, y0 - 10, "load condition (side view)", size=12, color=C["mutedfg"])
+    yb = y0 + 3 * ch + 76
+    s.text(40, yb, "Ruled out", size=13, weight=600, color=C["red"])
+    s.okx(54, yb + 30, False, 8)
+    s.text(72, yb + 34, "one hard-coded set per motion primitive (violates 7.4)", size=12.5)
+    s.okx(54, yb + 58, False, 8)
+    s.text(72, yb + 62, "separate tables per payload weight (violates 7.5)", size=12.5)
+    s.note(520, yb - 8, 412, ["8.5: the AGV can't measure payload weight today,", "so it couldn't pick a per-weight table anyway.",
+                               "Ask HITO to test 7.4 at all three loads."], color=C["accent"], size=12.5)
+    status_chip_for(s, 40, yb + 84, "7.4", "30 + 30 days")
+    status_chip_for(s, 400, yb + 84, "7.5")
+    return s
+
+
 # ------------------------------------------------------------------ 8.6 at scale
 def fig_8_6():
     s = SVG(W, 370, "Remote joystick to recover an AGV that left the tape",
@@ -548,7 +611,7 @@ def S(title, sub, roots, notes=None):
 def fig_uml_1():
     return S("Where the group 1 fields live", "order → nodes[] → nodePosition.theta, and state.driving",
              [("order", [("order.nodes.nodeId", None, None), ("order.nodes.released", None, None),
-                         ("order.nodes.nodePosition.theta", "1.1 1.2", "target heading, rad")]),
+                         ("order.nodes.nodePosition.theta", "1.1 1.2", "target heading")]),
               ("state", [("state.driving", "1.3 1.4", "true while wheels are commanded")])],
              ["theta is in radians in the order; the figures show degrees for readability (90° = π/2)."])
 
@@ -624,7 +687,7 @@ def fig_uml_8():
 ALL = []
 _over = {
     "robot_key": fig_robot_key, "3_1_cancel_stop": fig_3_1, "3_6_precision": fig_3_6, "7_6_lateral_error": fig_7_6,
-    "7_7_deceleration": fig_7_7, "5_1_common_message": fig_5_1, "8_1_lidar_fields": fig_8_1, "8_3_pallet_payload": fig_8_3, "8_6_joystick": fig_8_6,
+    "7_7_deceleration": fig_7_7, "5_1_common_message": fig_5_1, "7_4_gain_scheduling": fig_7_4, "8_1_lidar_fields": fig_8_1, "8_3_pallet_payload": fig_8_3, "8_6_joystick": fig_8_6,
 }
 for name, fn in F.ALL:
     ALL.append((name, _over.get(name, fn)))

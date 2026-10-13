@@ -353,3 +353,27 @@ CAPTIONS.update({
         "AGV would normally report operatingMode MANUAL in its state message.",
     ),
 })
+
+CAPTIONS.update({
+    "uml_1": (
+        "Message structure for group 1",
+        "How to read these structure figures. The badge above each message shows who publishes it and who "
+        "receives it: here the fleet manager sends order to the AGV, and the AGV sends state back. Each box "
+        "lists every field of one JSON object with its data type and unit (for example float64 · m). Nested "
+        "objects are fields too, marked with a small diamond; the ones on the path to a requirement are "
+        "highlighted in blue, and a line runs from that row to the object's own box. The line is labelled "
+        "with the JSON key and how many there can be ([ ] means an array). Fields a requirement depends on "
+        "are highlighted in orange. So 1.1 and 1.2 read order → nodes[ ] → nodePosition → theta (float64, "
+        "radians), and 1.3 / 1.4 read state → driving (boolean).",
+    ),
+    "7_4_gain_scheduling": (
+        "Tuning the tape-following controller",
+        "Each row is one load condition, drawn on the left as a side view of the AGV: empty, carrying an empty "
+        "pallet, and carrying a full load. The grid shows which controller settings (K1 to K5) the AGV uses "
+        "at each combination of commanded speed (columns) and load (rows). Moving left to right, the settings "
+        "change with speed, which is 7.4. Moving top to bottom they stay the same whatever the load, which is "
+        "7.5. The two requirements constrain different directions of the grid, so meeting one doesn't "
+        "guarantee the other, even though HITO closed 7.5 as a duplicate. The note explains why one set for "
+        "all loads is the only practical option: the AGV can't weigh its load (8.5).",
+    ),
+})

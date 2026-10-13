@@ -58,7 +58,7 @@ Each section that involves VDA5050 messages ends with a structure figure in UML 
 
 ![Figure 8. Message structure for group 1](images/uml_1.svg)
 
-**Figure 8. Message structure for group 1.** Read left to right as nesting. A filled diamond means the box on the right exists only inside the box on the left (UML composition), and the multiplicity says how many there can be; [ ] marks a JSON array. Each box lists every field of that object: fields a requirement depends on are highlighted in orange with the requirement number, the rest are grey with their type on the right, and rows with a small diamond are nested objects that aren't expanded. Dark boxes are whole messages, and their header row stands for the five fields every VDA5050 message starts with. So the heading in 1.1 and 1.2 sits at order.nodes[i].nodePosition.theta, in radians, and the driving flag for 1.3 and 1.4 is a top-level boolean in state.
+**Figure 8. Message structure for group 1.** How to read these structure figures. The badge above each message shows who publishes it and who receives it: here the fleet manager sends order to the AGV, and the AGV sends state back. Each box lists every field of one JSON object with its data type and unit (for example float64 · m). Nested objects are fields too, marked with a small diamond; the ones on the path to a requirement are highlighted in blue, and a line runs from that row to the object's own box. The line is labelled with the JSON key and how many there can be ([ ] means an array). Fields a requirement depends on are highlighted in orange. So 1.1 and 1.2 read order → nodes[ ] → nodePosition → theta (float64, radians), and 1.3 / 1.4 read state → driving (boolean).
 
 | ID | Requirement | HITO response | Status | Effort |
 |---|---|---|---|---|
@@ -200,7 +200,7 @@ Each section that involves VDA5050 messages ends with a structure figure in UML 
 
 ![Figure 26. Tuning the tape-following controller](images/7_4_gain_scheduling.svg)
 
-**Figure 26. Tuning the tape-following controller.** The grid shows which controller settings (K1 to K5) the AGV uses at each combination of speed (columns) and load (rows). Moving left to right, the settings change with speed — that's 7.4. Moving top to bottom, they stay the same whatever the load — that's 7.5. The two requirements constrain different directions of the grid, so meeting one doesn't guarantee the other, even though HITO closed 7.5 as a duplicate. The note explains why one set for all loads is the only practical option: the AGV can't weigh its load (8.5).
+**Figure 26. Tuning the tape-following controller.** Each row is one load condition, drawn on the left as a side view of the AGV: empty, carrying an empty pallet, and carrying a full load. The grid shows which controller settings (K1 to K5) the AGV uses at each combination of commanded speed (columns) and load (rows). Moving left to right, the settings change with speed, which is 7.4. Moving top to bottom they stay the same whatever the load, which is 7.5. The two requirements constrain different directions of the grid, so meeting one doesn't guarantee the other, even though HITO closed 7.5 as a duplicate. The note explains why one set for all loads is the only practical option: the AGV can't weigh its load (8.5).
 
 ![Figure 27. How far the AGV may drift from the tape](images/7_6_lateral_error.svg)
 
