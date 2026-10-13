@@ -197,3 +197,133 @@ CAPTIONS = {
         "it can resume normal operation. HITO agreed, at 30 + 30 days.",
     ),
 }
+
+CAPTIONS.update({
+    "robot_key": (
+        "How to read the robot, and the drawing scale",
+        "Every plan view is drawn to the same scale: 1 m = 40 px, with a scale bar in each figure. The AGV is "
+        "assumed to be 1.8 m × 1.1 m because the source gives no dimensions; change svgkit.AGV_L / AGV_W and "
+        "rebuild if the real size differs. The orange bumper marks the front, the chevron points forward and "
+        "the two slots mark the rear. Tape is drawn at its real 50 mm width (never thinner than 2.5 px); "
+        "nodes and RFID tags are symbols and are drawn larger than real. Millimetre-level details are shown "
+        "in zoomed insets, marked by an orange magnifier circle with dashed leader lines.",
+    ),
+    "3_1_cancel_stop": (
+        "Where the AGV stops after its order is cancelled",
+        "Speed (m/s) against distance (m), using example values: braking at 0.25 m/s², nodes 6 m apart, cancel "
+        "arriving at 2.5 m. Stopping distance is v² / 2a. The blue AGV at 0.8 m/s needs only 1.3 m, so it "
+        "keeps going and brakes to stop exactly at the next node N2 (3.1, HITO will try). The green AGV at "
+        "2.0 m/s needs 8 m but only 3.5 m remain before N2, so it passes N2 and stops at N3 instead (3.2, "
+        "already works).",
+    ),
+    "3_6_precision": (
+        "How precisely the AGV must stop and turn",
+        "Top row: the AGV at true scale, where both tolerances are far too small to see. Left inset (100× "
+        "zoom, 4 px = 1 mm): the tape is 50 mm wide; the AGV's reference point must end inside the 10 mm "
+        "circle around the node centre and must never cross the centre line (red hatching), so a stop 6 mm "
+        "short is valid (3.6). Right inset: an angle error is easier to judge as sideways movement of the front "
+        "bumper, 0.9 m ahead of the turning centre. There ±1.5° becomes ±23.6 mm and 0.5° becomes 7.9 mm. The "
+        "curve shows the bumper swinging past the target during the turn, peaking under the 7.9 mm overshoot "
+        "limit and settling inside the ±1.5° band. HITO rejected the 0.5° overshoot limit (3.7).",
+    ),
+    "7_6_lateral_error": (
+        "How far the AGV may drift from the tape",
+        "Top: 20 m of tape and the AGV at true scale. A 10 mm error would be 0.4 px here, which is why the "
+        "requirement can't be seen at this scale. The inset zooms in on the tape sensor at the front of the AGV "
+        "(4 px = 1 mm) and plots its sideways error along the whole 20 m run. The blue band is the ±10 mm "
+        "limit; the grey dotted lines are the tape edges at ±25 mm, beyond which the sensor would lose the "
+        "tape altogether. In this illustrative trace the error grows as speed rises from 0.3 to 1.5 m/s and "
+        "breaks the limit near the end. HITO says it can't guarantee ±10 mm at every speed and load.",
+    ),
+    "7_7_deceleration": (
+        "Braking early enough for a short last edge",
+        "Drawn to scale with example values: speed 1.2 m/s, braking 0.25 m/s², which gives a 2.9 m stopping "
+        "distance (orange bracket). The final edge N3 → N4 is only 1.5 m. The chart above plots speed against "
+        "the same distance axis. Red dashed: today the AGV brakes only once it reaches the final edge, so it "
+        "stops 1.4 m past N4. Blue: the requirement is to start braking at 14.6 m, back on edge 2, so speed "
+        "reaches zero exactly at N4 (7.7). That needs the stopping point worked out across several edges, not "
+        "just the last one (7.8, 7.9).",
+    ),
+    "8_1_lidar_fields": (
+        "Choosing and overriding the lidar safety zone",
+        "Top left, to scale: the orange outlines are three of the scanner's protective fields, reaching 0.4 m, "
+        "1.0 m and 2.2 m ahead of the bumper (example values); faster driving needs a longer field. If "
+        "anything enters the active field, the AGV stops. Volley wants all 64 fields usable (8.1) and chosen "
+        "automatically from speed, type of motion and load overhang (8.2), shown by the selector on the right. "
+        "Bottom: an operator may remotely override a protective stop, and the override is limited to one edge "
+        "(orange) before it switches off again (8.4).",
+    ),
+    "8_3_pallet_payload": (
+        "Confirming the pallet is seated and knowing its weight",
+        "Top left: side view at 1 m = 100 px. At this scale the pins and cups are only a few pixels, so the "
+        "inset zooms ten times (1 px = 1 mm) on one of them, assuming a 60 mm cup and a 40 mm pin. When the "
+        "AGV is centred, the pin enters the cup. When it is 35 mm off, the pin lands on the pallet deck beside "
+        "the cup. Volley wants the AGV to tell these apart and report it (8.3). Right: Volley wants the load's "
+        "weight estimated from lift-cylinder pressure (8.5). HITO says the current hardware has no sensor for "
+        "either.",
+    ),
+    "8_6_joystick": (
+        "Driving the AGV back onto the tape by remote control",
+        "To scale: the AGV has drifted about 1 m off the tape, so automatic mode stops. An operator drives it "
+        "back with a remote joystick whose commands travel over a new MQTT topic (blue dashed path). HITO "
+        "agreed, at 30 + 30 days. While joystick-driven, the AGV would normally report operatingMode MANUAL.",
+    ),
+    "vda_topics": (
+        "Where VDA5050 data travels",
+        "VDA5050 splits communication into separate MQTT topics. Each row is one topic: blue arrows are "
+        "messages from the fleet manager to the AGV, green arrows go the other way. The last column lists "
+        "the requirements that touch each topic. commonMessage (orange) is HITO's own addition and not part "
+        "of the standard. The topic path follows the pattern interfaceName / majorVersion / manufacturer / "
+        "serialNumber / topic, for example uagv/v2/HITO/AGV001/state.",
+    ),
+    "uml_1": (
+        "Message structure for group 1",
+        "Read left to right as nesting. A filled diamond means the box on the right exists only inside the box "
+        "on the left (UML composition), and the multiplicity says how many there can be: [ ] marks a JSON "
+        "array. Each child box shows its JSON key in bold and its schema type above. So the heading in 1.1 "
+        "and 1.2 is found at order.nodes[i].nodePosition.theta, in radians, and the driving flag for 1.3 and "
+        "1.4 is a top-level boolean in state. Highlighted rows are fields a requirement depends on; '+n "
+        "fields / parts' counts what has been left out for clarity.",
+    ),
+    "uml_2": (
+        "Message structure for group 2",
+        "connection.connectionState carries ONLINE, OFFLINE or CONNECTIONBROKEN; the Last Will registered in "
+        "2.2 is a connection message with CONNECTIONBROKEN. 2.1 concerns the whole factsheet message, which "
+        "is sent with MQTT's retain flag (a transport setting, not a field). For 2.5 and 2.6, a command sent "
+        "in instantActions.actions[] is tracked through state.actionStates[]: the actionId matches, and "
+        "actionStatus may only become FINISHED once the firmware has applied the action.",
+    ),
+    "uml_3": (
+        "Message structure for group 3",
+        "cancelOrder (3.1, 3.2) is an actionType sent through instantActions. The release horizon (3.3, 3.4) "
+        "is the released flag on each node and edge of the order. VDA5050 already has per-node tolerance "
+        "fields: allowedDeviationXY (metres) and allowedDeviationTheta (radians) in nodePosition, so the 10 mm "
+        "and 1.5° of 3.6 and 3.7 can be sent as 0.01 and about 0.026. There is no standard field for the "
+        "0.5° overshoot limit.",
+    ),
+    "uml_5": (
+        "Message structure for groups 4 and 5",
+        "Position appears twice: state.agvPosition and visualization.agvPosition, both holding x, y and theta "
+        "from the state estimate (5.10–5.12). Velocity for 5.14 sits in visualization.velocity as vx, vy and "
+        "omega. Each error in 5.4–5.9 is one entry in state.errors[], with errorType, errorDescription and "
+        "the optional errorHint, which comes from a newer revision of the standard. The visualization rate "
+        "(4.1) and the whole commonMessage (4.2, 5.1, 5.3, 5.13, 5.15) are on separate topics; commonMessage "
+        "is HITO's own format, so its field names here are placeholders.",
+    ),
+    "uml_6": (
+        "Message structure for group 6",
+        "The rotation-direction request of 6.1 is an action inside the node: order.nodes[i].actions[j], with "
+        "blockingType NONE and the direction passed as a key/value pair in actionParameters[]. The action's "
+        "name is custom, so 6.2 asks both sides to agree it. VDA5050 expects the AGV to advertise every custom "
+        "action it supports in factsheet.protocolFeatures.agvActions[].",
+    ),
+    "uml_8": (
+        "Message structure for group 8",
+        "Payload weight (8.5) has a standard home in state.loads[].weight. Pallet coupling (8.3) has no "
+        "standard field, so it would need an agreed extension. A protective-field breach shows as "
+        "state.safetyState.fieldViolation; the override for 8.4 would be a custom action, sent either as an "
+        "instant action or attached to one edge (order.edges[].actions[]) so it expires with that edge. "
+        "Joystick driving (8.6) would show as operatingMode MANUAL. The active lidar field (5.15, 8.2) goes in "
+        "HITO's commonMessage. Group 7 has no structure figure because it adds no message fields.",
+    ),
+})

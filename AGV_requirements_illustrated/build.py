@@ -5,7 +5,7 @@
 Styling tokens: design-system/agv-spec/MASTER.md (UI UX Pro Max).
 """
 import os
-import figures
+import figures2 as figures
 from data import R, GROUPS, BY_ID
 from svgkit import STATUS
 from captions import CAPTIONS
@@ -97,6 +97,18 @@ meaning = {
 for k in ["works", "implement", "conditional", "duplicate", "process", "blocked", "rejected"]:
     A(f"| **{STATUS[k][2]}** | {STATUS[k][0]} | {meaning[k]} |")
 A("")
+A("## Scale and data structure conventions")
+A("")
+A("All plan views share one scale, 1 m = 40 px, and carry a scale bar. Where a requirement is in millimetres or "
+  "fractions of a degree, an orange magnifier marks the spot and a zoomed inset shows it at its own stated scale. "
+  "Numbers labelled *example values* (speeds, braking rate, field sizes, AGV size) are assumptions for "
+  "illustration; the source document doesn't specify them.")
+A("")
+A("Each section that involves VDA5050 messages ends with a structure figure in UML composition style, showing "
+  "where each relevant field sits inside its message. The field set follows VDA 5050 version 2.0, abbreviated; "
+  "check it against the version the two companies agree on.")
+A("")
+figure("vda_topics")
 A("## Overview")
 A("")
 figure("overview")
@@ -107,6 +119,15 @@ for g, gname in GROUPS.items():
     A("")
     for img, _ in FIGS[g]:
         figure(img)
+    uml_name = {"1": "uml_1", "2": "uml_2", "3": "uml_3", "5": "uml_5", "6": "uml_6", "8": "uml_8"}.get(g)
+    if uml_name:
+        figure(uml_name)
+    if g == "4":
+        A("*The message structure for group 4 is shown with group 5, which uses the same messages.*")
+        A("")
+    if g == "7":
+        A("*Group 7 is internal control behaviour and adds no VDA5050 fields, so it has no structure figure.*")
+        A("")
     A("| ID | Requirement | HITO response | Status | Effort |")
     A("|---|---|---|---|---|")
     for r in R:

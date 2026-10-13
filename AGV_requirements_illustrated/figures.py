@@ -14,12 +14,12 @@ def status_chip_for(s, x, y, rid, note=None, note_color=None):
     return w
 
 
-def rotation_sequence(s, x, y, headings, labels, gap=120, color=None, scale=0.85, arrow_label=None):
+def rotation_sequence(s, x, y, headings, labels, gap=120, color=None, scale=1.0, arrow_label=None):
     """Draw the same robot at successive headings, left to right, joined by arrows."""
     for i, (h, lab) in enumerate(zip(headings, labels)):
         cx = x + i * gap
-        s.tape(cx - 44, y, cx + 44, y, w=6)
-        s.tape(cx, y - 44, cx, y + 44, w=6)
+        s.tape(cx - 50, y, cx + 50, y)
+        s.tape(cx, y - 50, cx, y + 50)
         s.node(cx, y, None, r=4)
         last = i == len(headings) - 1
         s.robot(cx, y, h, scale=scale, color=(color if last and color else None))
@@ -126,7 +126,7 @@ def fig_robot_key():
     s.text(x + 86, 176, "node (order waypoint)", size=12.5)
     s.rfid(x + 35, 206)
     s.text(x + 86, 210, "RFID tag", size=12.5)
-    s.robot(x + 35, 246, 0, scale=0.6, ghost=True)
+    s.robot(x + 35, 246, 0, ghost=True)
     s.text(x + 86, 250, "dashed = target or later pose", size=12.5)
     s.tag(x + 20, 268, "1.1")
     s.text(x + 86, 283, "requirement id", size=12.5)
@@ -146,6 +146,7 @@ def fig_1_1():
     s.text(250, 166, "extra node needed", size=12, anchor="middle", color=C["mutedfg"])
     s.text(60, 310, "An order with a single node is not acted on;", size=12.5, color=C["mutedfg"])
     s.text(60, 328, "current logic expects at least two.", size=12.5, color=C["mutedfg"])
+    s.scale_bar(60, 358, 1)
     s.line(480, 96, 480, 370, C["border"], 1.2)
     s.text(520, 104, "Required", size=14, weight=600, color=C["fg"])
     rotation_sequence(s, 600, 210, [0, -90], ["θ = 0°", "θ = 90°"], gap=220, color=C["primary"],
@@ -167,21 +168,22 @@ def fig_1_2():
     s.robot(320, y, 0, ghost=True)
     s.arrow(370, y - 40, 470, y - 40, "slate", 1.6)
     s.text(420, y - 50, "arrives", size=12, anchor="middle", color=C["mutedfg"])
-    s.robot(530, y, 0, scale=0.85)
+    s.robot(530, y, 0)
     s.text(530, y + 66, "θ = 0°", size=12.5, anchor="middle", mono=True, weight=600)
     # after-pose inset
     s.arrow(600, y, 700, y, "primary", 2)
     s.text(650, y - 12, "then rotates", size=12, anchor="middle", color=C["primary"])
     cx = 790
-    s.tape(cx - 44, y, cx + 44, y, w=6)
-    s.tape(cx, y - 44, cx, y + 44, w=6)
+    s.tape(cx - 50, y, cx + 50, y)
+    s.tape(cx, y - 50, cx, y + 50)
     s.node(cx, y, None, r=4)
-    s.robot(cx, y, 90, scale=0.85, color=C["primary"])
+    s.robot(cx, y, 90, color=C["primary"])
     s.text(cx, y + 66, "final θ = −90°", size=12.5, anchor="middle", mono=True, weight=600, color=C["primary"])
     s.text(cx, y - 66, "N4", size=12, anchor="middle", mono=True, weight=600, color=C["fg"])
     s.text(40, 300, "If the final node's theta differs from the AGV's theta, the AGV turns to it before finishing the order.",
            size=12.5, color=C["mutedfg"])
     status_chip_for(s, 700, 82, "1.2")
+    s.scale_bar(40, 260, 1)
     return s
 
 
@@ -376,7 +378,7 @@ def fig_3_release():
         for i, x in enumerate(xs):
             rel = i < released_upto
             s.node(x, y, f"N{i+1}", color=C["fg"] if rel else C["tape"], filled=rel)
-        s.robot(robot_x, y, 0, scale=0.8)
+        s.robot(robot_x, y, 0)
         last = xs[released_upto - 1]
         if stop:
             s.rect(last - 3, y - 34, 6, 68, fill=C["red"], rx=2)
@@ -389,6 +391,7 @@ def fig_3_release():
     track(150, 4, 360, "Horizon not extended in time", "3.3", True)
     track(310, 6, 360, "Horizon extended before reaching N4", "3.4", False)
     s.text(28, 380, "Solid edges are released (base); dashed edges are horizon, not yet released.", size=12, color=C["mutedfg"])
+    s.scale_bar(820, 376, 1)
     status_chip_for(s, 720, 92, "3.3")
     status_chip_for(s, 720, 252, "3.4")
     return s
@@ -454,7 +457,7 @@ def fig_3_precision():
     s.text(rx - 148, ry - 150, "overshoot < 0.5°", size=12.5, color=C["accent"], weight=600, mono=True)
     s.line(rx - 40, ry - 145, rx - 22, ry - 132, C["accent"], 1.2)
     s.text(rx + 130, ry + 20, "start", size=12, anchor="middle", color=C["mutedfg"])
-    s.robot(rx, ry, -90, scale=0.8)
+    s.robot(rx, ry, -90)
     s.text(520, 380, "angles drawn 20× larger than real", size=11.5, color=C["mutedfg"], italic=True)
     status_chip_for(s, 520, 402, "3.7", "overshoot limit too tight", C["red"])
     return s
@@ -568,7 +571,7 @@ def fig_5_pose():
         n = 10
         pts = [(x0 + 20 + i * 34, y - 110 * (i / n) ** 1.7) for i in range(n + 1)]
         d = "M " + " L ".join(f"{px:.1f} {py:.1f}" for px, py in pts)
-        s.path(d, C["tape"], 8)
+        s.path(d, C["tape"], 2.5)
         for k in (0, 4, 8):
             s.rfid(*pts[k])
         col = C["primary"] if good else C["red"]
@@ -585,7 +588,7 @@ def fig_5_pose():
             s.line(px, py, px + 22 * math.cos(th), py + 22 * math.sin(th), col, 2)
         lx, ly = pts[-1]
         th = math.degrees(math.atan2(ly - pts[-2][1], lx - pts[-2][0]))
-        s.robot(lx, ly, th, scale=0.6)
+        s.robot(lx, ly, th)
         return y
 
     panel(40, "Not acceptable: y and θ frozen", False)
@@ -595,6 +598,7 @@ def fig_5_pose():
     panel(520, "Required: x, y, θ all estimated", True)
     s.text(520, 310, "Samples follow the curved edge with matching", size=12.5, color=C["mutedfg"])
     s.text(520, 328, "heading, straight from the state estimate.", size=12.5, color=C["mutedfg"])
+    s.scale_bar(860, 300, 1)
     # bottom message line
     s.rect(28, 356, 904, 96, fill=C["bg"], rx=8)
     s.text(46, 384, 'agvPosition: { x, y, theta }    in state and visualization, at TBD Hz', size=13, mono=True, color=C["fg"])
@@ -612,7 +616,7 @@ def fig_6():
     for i, (lab, hs, ls) in enumerate(rows):
         y = 196 + i * 180
         s.text(28, y - 80, f"action: {lab}", size=13, weight=600, color=C["primary"])
-        rotation_sequence(s, 90, y, hs, ls, gap=180, color=C["primary"], scale=0.72)
+        rotation_sequence(s, 90, y, hs, ls, gap=180, color=C["primary"])
         # direction glyph
         gx = 520
         if lab == "clockwise":
@@ -627,6 +631,7 @@ def fig_6():
     s.text(638, 290, "names illustrative; to be agreed (6.2)", size=11.5, color=C["mutedfg"], italic=True)
     w = status_chip_for(s, 620, 320, "6.1", "no estimate")
     status_chip_for(s, 620, 352, "6.2")
+    s.scale_bar(28, 462, 1)
     return s
 
 
@@ -641,7 +646,7 @@ def fig_7_tracking():
         y = 170 + i * 80
         # longitudinal
         s.tape(40, y, 420, y)
-        s.robot(200, y, 0, scale=0.75)
+        s.robot(200, y, 0)
         if i >= 1:
             s.rect(178, y - 14, 44, 28, fill="none", stroke=C["accent"], sw=1.5, rx=2, dash="3 2")
         if i == 2:
@@ -651,7 +656,7 @@ def fig_7_tracking():
         s.okx(400, y - 22, True, 8)
         # lateral: robot body perpendicular to tape, moving along tape
         s.tape(500, y, 900, y)
-        s.robot(660, y, 90, scale=0.75)
+        s.robot(660, y, 90)
         if i >= 1:
             s.rect(646, y - 22, 28, 44, fill="none", stroke=C["accent"], sw=1.5, rx=2, dash="3 2")
         if i == 2:
@@ -662,6 +667,7 @@ def fig_7_tracking():
     s.text(500, 400, "HITO: current vehicle can't strafe stably at high speed", size=12, color=C["red"])
     status_chip_for(s, 40, 386, "7.1")
     status_chip_for(s, 680, 92 - 26, "7.3")
+    s.scale_bar(300, 398, 1)
     return s
 
 
@@ -721,7 +727,7 @@ def fig_7_6():
     s.text(x0 + 60, 112, "low speed: inside band", size=12.5, color=C["green"], weight=600)
     s.text(x1 - 260, 112, "high speed, heavy load: exceeds", size=12.5, color=C["red"], weight=600)
     tdeg = math.degrees(math.atan2(pts[-1][1] - pts[-4][1], pts[-1][0] - pts[-4][0]))
-    s.robot(pts[-1][0] - 4, pts[-1][1], tdeg, scale=0.55)
+    s.robot(pts[-1][0] - 4, pts[-1][1], tdeg)
     s.text(x1, 278, "commanded speed →", size=12, anchor="end", color=C["mutedfg"])
     status_chip_for(s, 60, 290, "7.6", "HITO: can't be guaranteed with current vehicle", C["red"])
     return s
@@ -739,7 +745,7 @@ def fig_7_decel():
     s.text(x0 + 0.21 * w, yt - 14, "edge 1", size=12, anchor="middle", color=C["mutedfg"])
     s.text(x0 + 0.60 * w, yt - 14, "edge 2", size=12, anchor="middle", color=C["mutedfg"])
     s.text(x0 + 0.85 * w, yt - 14, "short final edge", size=12, anchor="middle", color=C["mutedfg"])
-    s.robot(x0 + 0.08 * w, yt, 0, scale=0.7)
+    s.robot(x0 + 0.08 * w, yt, 0)
     # stopping distance bracket
     sd0, sd1 = x0 + 0.62 * w, x0 + 0.92 * w
     s.line(sd0, yt + 56, sd1, yt + 56, C["accent"], 2)
@@ -774,7 +780,7 @@ def fig_8_lidar():
     for k, (L, Wd, op) in enumerate([(240, 150, 0.06), (180, 120, 0.1), (120, 96, 0.16)]):
         s.raw(f'<path d="M {cx+30} {cy-Wd/2} L {cx+30+L*0.7} {cy-Wd/2} Q {cx+30+L} {cy} {cx+30+L*0.7} {cy+Wd/2} L {cx+30} {cy+Wd/2} Z" '
               f'fill="{C["accent"]}" opacity="{op+0.04}" stroke="{C["accent"]}" stroke-width="1.2" stroke-dasharray="4 3"/>')
-    s.robot(cx, cy, 0, scale=1.1)
+    s.robot(cx, cy, 0)
     for lab, L in (("f3", 120), ("f12", 180), ("f41", 240)):
         s.text(cx + 30 + L - 6, cy + 4, lab, size=11.5, color=C["accent"], mono=True, anchor="end", weight=600)
     s.text(cx - 40, cy + 98, "nested fields grow with speed (f = field index)", size=12, color=C["mutedfg"])
@@ -805,7 +811,7 @@ def fig_8_lidar():
             s.tape(xs[i], y, xs[i + 1], y)
     for x in xs:
         s.node(x, y)
-    s.robot(560, y, 0, scale=0.6)
+    s.robot(560, y, 0)
     status_chip_for(s, 40, 478, "8.4", "10 + 10 days")
     w = status_chip_for(s, 300, 478, "8.1")
     status_chip_for(s, 300 + w + 12, 478, "8.2")
@@ -872,7 +878,7 @@ def fig_8_6():
     s.okx(360, y - 128, False, 9)
     s.text(380, y - 124, "off tape: auto mode halts", size=12.5, color=C["red"])
     s.path(f"M 380 {y-50} Q 430 {y-10} 470 {y-2}", C["primary"], 2.4, dash="6 4", arrow="primary")
-    s.robot(470, y, 0, ghost=True, color=C["primary"], scale=0.8)
+    s.robot(470, y, 0, ghost=True, color=C["primary"])
     s.text(470, y + 50, "back on tape", size=12.5, anchor="middle", color=C["primary"], weight=600)
     # joystick
     jx = 780

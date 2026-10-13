@@ -41,6 +41,12 @@ STATUS = {
 }
 
 
+# ---- real-world scale used by every plan view ----
+PX = 40.0          # pixels per metre in plan views
+AGV_L, AGV_W = 1.8, 1.1   # assumed AGV footprint in metres (source gives none)
+TAPE_W = 0.05      # magnetic tape width in metres
+
+
 def f(v):
     return f"{v:.1f}".rstrip("0").rstrip(".") if isinstance(v, float) else str(v)
 
@@ -147,11 +153,32 @@ class SVG:
         self.lines(x + 14, yy, rows, size=size, color=C["ink"])
         return h
 
-    def tape(self, x1, y1, x2, y2, w=8):
+    def tape(self, x1, y1, x2, y2, w=None):
+        """Magnetic tape at true width (50 mm), never thinner than 2.5 px so it stays visible."""
+        w = w or max(2.5, TAPE_W * PX)
         self.line(x1, y1, x2, y2, C["tape"], sw=w, cap="butt")
-        self.line(x1, y1, x2, y2, "#CBD5E1", sw=1, cap="butt", dash="2 6")
+        if w >= 6:
+            self.line(x1, y1, x2, y2, "#CBD5E1", sw=1, cap="butt", dash="2 6")
 
-    def node(self, x, y, label=None, color=None, r=7, filled=True, label_dy=-14):
+    def scale_bar(self, x, y, metres=1.0, px_per_m=None, label=None):
+        px_per_m = px_per_m or PX
+        L = metres * px_per_m
+        self.rect(x, y - 3, L / 2, 6, fill=C["ink"])
+        self.rect(x + L / 2, y - 3, L / 2, 6, fill=C["card"], stroke=C["ink"], sw=1)
+        lab = label or (f"{metres:g} m" if metres >= 1 else f"{metres*1000:g} mm")
+        self.text(x + L + 8, y + 4, lab, size=11.5, color=C["mutedfg"], mono=True)
+
+    def magnifier(self, cx, cy, r, box):
+        """Circle marking a zoomed area, with leader lines to an inset box (x, y, w, h)."""
+        bx, by, bw, bh = box
+        self.circle(cx, cy, r, fill="none", stroke=C["accent"], sw=1.8)
+        corners = [(bx, by), (bx + bw, by)] if by > cy else [(bx, by + bh), (bx + bw, by + bh)]
+        for (qx, qy) in corners:
+            ang = math.atan2(qy - cy, qx - cx)
+            self.line(cx + r * math.cos(ang), cy + r * math.sin(ang), qx, qy, C["accent"], 1, dash="3 3")
+        self.rect(bx, by, bw, bh, fill=C["card"], stroke=C["accent"], sw=1.8, rx=6)
+
+    def node(self, x, y, label=None, color=None, r=5, filled=True, label_dy=-12):
         color = color or C["fg"]
         self.circle(x, y, r, fill=color if filled else C["card"], stroke=color, sw=2)
         if label:
@@ -160,7 +187,7 @@ class SVG:
     def rfid(self, x, y):
         self.rect(x - 5, y - 5, 10, 10, fill=C["card"], stroke=C["accent"], sw=1.5, rx=1)
 
-    def robot(self, cx, cy, heading=0, L=74, W=46, ghost=False, color=None, label=None, scale=1.0):
+    def robot(self, cx, cy, heading=0, L=AGV_L * PX, W=AGV_W * PX, ghost=False, color=None, label=None, scale=1.0):
         """Top-down rectangular AGV.
 
         heading: degrees, SVG convention (0 = facing right, +90 = facing down).
