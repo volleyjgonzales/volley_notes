@@ -79,6 +79,40 @@ inline Result Outer(Board board) { return Inner(board); }
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents)
 
+    def test_helper_argument_actions_precede_helper_body(self):
+        self.write('src/sm/alpha_state.cpp', """
+namespace volley::agvhito::sm {
+Result AlphaState::Execute(Board board) {
+  MakeFirstAction();
+  Inner(MakeMapAction());
+  MakeLastAction();
+  return go;
+}
+}
+""")
+        records, sections = audit(parse_package(self.root))
+        self.assertEqual([r['factory'] for r in records],
+                         ['MakeFirstAction', 'MakeMapAction',
+                          'MakeStopPauseAction', 'MakeLastAction'])
+        self.assertEqual([r['sequence'] for r in sections['alpha']['Execute']],
+                         [1, 2, 3, 4])
+
+    def test_initializer_list_and_helper_call_site_order(self):
+        self.write('src/sm/alpha_state.cpp', """
+namespace volley::agvhito::sm {
+Result AlphaState::Execute(Board board) {
+  Publish({MakeMapAction(), MakeSecondAction()});
+  detail::Outer(board);
+  Publish({MakeFinalAction()});
+  return go;
+}
+}
+""")
+        records, _ = audit(parse_package(self.root))
+        self.assertEqual([r['factory'] for r in records],
+                         ['MakeMapAction', 'MakeSecondAction',
+                          'MakeStopPauseAction', 'MakeFinalAction'])
+
     def test_registered_names_classes_and_terminal(self):
         model = parse_package(self.root)
         self.assertEqual([s['cpp_class'] for s in model['states']], ['AlphaState', 'BetaState'])

@@ -6,34 +6,128 @@ An onboarding guide to artifact production, release orchestration, and device de
 
 ## Table of contents
 
+Start with [Background: containers, Swarm, and Mender](#background-containers-swarm-and-mender), then read the repository overview. The detailed implementation sections follow that overview.
+
 1. [What this repository does](#1-what-this-repository-does)
 2. [Repository map and reading order](#2-repository-map-and-reading-order)
 3. [Artifacts and their lifecycle](#3-artifacts-and-their-lifecycle)
 4. [Python packaging and developer tooling](#4-python-packaging-and-developer-tooling)
+   - [Repository tools inventory](#43-repository-tools-inventory)
 5. [CI/CD and release versioning](#5-cicd-and-release-versioning)
 6. [Runtime architecture and service dependencies](#6-runtime-architecture-and-service-dependencies)
 7. [Configuration, stack selection, and templates](#7-configuration-stack-selection-and-templates)
 8. [The deployment call flow](#8-the-deployment-call-flow)
 9. [Mender install, rollback, and commit](#9-mender-install-rollback-and-commit)
 10. [Operator commands and troubleshooting](#10-operator-commands-and-troubleshooting)
+    - [What swarmctl is and who owns it](#101-what-swarmctl-is-and-who-owns-it)
 11. [Tests, guarantees, and engineering considerations](#11-tests-guarantees-and-engineering-considerations)
 12. [Missing files and context requested](#12-missing-files-and-context-requested)
 13. [Technical terms and acronyms](#13-technical-terms-and-acronyms)
 14. [Source index](#14-source-index)
 
+## Background: containers, Swarm, and Mender
+
+This section supplies the vocabulary used in the overview. Read it first if Docker clustering or device software updates are new to you; the complete glossary remains available in section 13.
+
+### Containers and tooling containers
+
+A **container image** is the packaged filesystem and execution configuration used to start a container. A **container** is an instance running from that image. For example, an application image can include application code and libraries; a container started from it executes that application.
+
+A **builder image** or **build container** uses the same Docker mechanisms as an application container. “Builder” describes its job, not a special category of container. It contains the tools needed to produce and check deliverables. In this repository that includes Python, uv, Mender tools, and shell/Dockerfile checking tools. CI starts a container from this image and runs tests, packages the CLI, or constructs an update file inside it.
+
+| Container role | What it does here | Typical lifetime/output |
+| --- | --- | --- |
+| CI builder/tooling container | Runs checks and packaging commands | Exists for a CI job; produces files such as `swarmctl` and `.mender` artifacts |
+| Development container | Gives an engineer a similar toolchain locally | Exists during development; extends the builder with user/shell setup |
+| Application container | Runs central, bay, map-server, or other production services | Runs as a Swarm task; produces application behavior and runtime data |
+
+Building the tooling image is therefore different work from building the production application images. The supplied Dockerfile defines the tooling environment. Production images are referenced in service configuration and are built in other repositories.
+
+### Docker Swarm, managers, workers, and the leader
+
+A **Docker Swarm** is a group of Docker nodes managed together. A node is a participating Docker Engine, typically on one of the garage computers. Managers maintain cluster configuration and assign tasks; workers execute those tasks. Managers can also run application tasks, so the central can both manage the swarm and host services.
+
+With multiple managers, Docker selects one **leader** automatically to coordinate orchestration. This is “election” by a distributed algorithm, not an engineer selecting a machine in the UI. Docker's managers use **Raft**, a protocol for agreeing on shared cluster state. Leader availability and election depend on sufficient managers participating. See [Docker's Swarm concepts](https://docs.docker.com/engine/swarm/key-concepts/) and [Raft overview](https://docs.docker.com/engine/swarm/raft/).
+
+In this repository, a **service** describes a workload such as central or MySQL; a **task** is one scheduled service instance; a **stack** groups related services and resources described by Compose YAML. These YAML files tell Docker which images to run and which placement constraints, mounts, ports, and settings to use.
+
+There are three different meanings of “root” or “leader” to keep separate:
+
+| Name | Who determines it | Meaning in this codebase |
+| --- | --- | --- |
+| Swarm manager leader | Docker's manager election | Coordinates Docker orchestration; visible in manager status |
+| Volley swarm root | Device configuration and engine labels | Central designated to own shared `site`/`global` stacks |
+| Unix root user | Operating system user account | Privileged user, normally UID 0 |
+
+The Volley root is a project policy role. A change in Docker's elected leader does not automatically transfer that role or rewrite `SWARM_ROOT`/`role=root`. A garage with just one manager has no second manager to take over its management role.
+
+### swarmctl: the internal application in this repository
+
+**`swarmctl` is Volley's internal Python command-line application for operating these deployments.** Its source is included under `swarmctl/src/swarmctl/`. It reads garage configuration and prepares Docker operations—for example, selecting the correct stacks, generating bay services, and creating missing declared secrets. Docker Swarm carries out the scheduling and container execution.
+
+Engineers use commands such as `swarmctl info` and `swarmctl deploy app`. The update system uses its hidden release commands. It is packaged into a single executable Python archive using the third-party tool shiv; it still requires Python on the device. The detailed command/API explanation is in section 10.1.
+
+### Mender and a Mender artifact
+
+**Mender** is a third-party device software update platform. Its server manages update delivery, and device-side software applies updates. This repository uploads its release bundles to Hosted Mender. Uploading makes software available; a deployment is the separate decision to deliver it to particular devices.
+
+A **Mender artifact** is an update package in the `.mender` format. It carries an update payload and metadata used to identify and apply it, including compatibility information. For this repository:
+
+| Part of the update package | Concrete contents/settings |
+| --- | --- |
+| Payload | Tar archive of tracked `swarm/` configuration files plus packaged `bin/swarmctl` |
+| Identity/metadata | Deployment version, branch, commit, and dirty-worktree flag |
+| Compatible device type | `central-x86-64` |
+| Update-module type | `swarm-deploy` |
+
+The package is not a Docker image. Here it delivers configuration and an operator application; the running services' images are retrieved separately by Docker. A software **artifact** is a general name for a build output; a Mender artifact is one particular update format. See [Mender artifact documentation](https://docs.mender.io/overview/artifact).
+
+### Update modules and state transitions
+
+A **Mender update module** is device-side code that knows how to apply a particular payload type. The artifact's type identifies the module to use. Here the module named `swarm-deploy` ships with vngOS, the device OS, and its source is not included in this repository.
+
+An update proceeds through **states**, meaning stages of the update process. A **state transition** is movement from one stage to another after an action succeeds, fails, or requires recovery. For example, finishing installation allows the process to continue toward acceptance; a failure can take it toward rollback. The stages describe the update, not whether a Docker task is running or whether the garage is idle.
+
+| Stage / representative Mender state | Meaning | Repository connection |
+| --- | --- | --- |
+| Download and preparation | Obtain the package and prepare its files | Staging/extraction belongs to the external device integration |
+| `ArtifactInstall` | Apply the incoming payload | This repo implements `swarmctl release install` |
+| `ArtifactCommit` | Accept the installed update | `release commit` clears the local pending marker |
+| `ArtifactRollback` | Attempt to undo an unsuccessful update | `release rollback` can restore the previous release tree |
+
+These names explain the standard module lifecycle and the README's intended integration. They are not a verified trace of this device's module: its exact invocation mapping, checks, retries, and reboot behavior remain unknown. See [Mender update modules](https://docs.mender.io/artifact-creation/create-a-custom-update-module). The table omits additional lifecycle states; commit does not prove that this CLI itself checked application health.
+
 ## 1. What this repository does
 
-`swarm-deploy` distributes **a deployment configuration tree and the Python application that operates it**. It manages a Docker Swarm for a Volley garage: central computers act as managers, and bay computers act as workers. One central computer is designated the *swarm root* for shared resources. This designation is distinct from Docker's elected manager leader and from the Unix root user.
+`swarm-deploy` is the codebase that packages and operates a garage's deployment configuration. It ships two things together: **the files describing what Docker should run**, and **`swarmctl` (Volley's internal Python CLI that reads those files and invokes Docker)**.
 
-There are three responsibilities:
+The deployed configuration is a directory tree at `/data/swarm`. It contains stack definitions, service configuration files, templates, and baseline environment settings such as image versions and ports. The bundle also supplies `bin/swarmctl`. It describes the desired application deployment; it does not include the container image layers or replace the whole device OS.
 
-- **Build and publish:** produce a builder container, package `swarmctl`, bundle the deployment tree into a Mender artifact, and publish release assets.
-- **Install releases:** expose hidden CLI commands that an OS-owned Mender update module uses to replace `/data/swarm`, retain the previous tree, and redeploy stacks.
-- **Operate workloads:** select stacks for the local central node, load configuration, create missing external resources, render bay services, and invoke Docker.
+### The garage it operates
 
-The application containers themselves are **referenced here but built elsewhere**. For example, `central-26.41.1` is an image tag selected by the supplied `.env`; it is not an image built by this repository's Dockerfile. The Dockerfile builds CI/development tooling.
+Central computers are Swarm managers and host central application services. Bay computers are workers and run bay workloads assigned through Swarm. Most garages have a single central, which also owns shared services. With multiple centrals, each can operate its own sub-site application stack, while the designated **Volley swarm root** owns the common stacks.
 
-Uploading a Mender artifact publishes deployable software. The supplied workflow does not create a device deployment or select a fleet. The device download, staging, and Mender state transitions belong to external infrastructure and an external OS module.
+That designated root is separate from Docker's automatically elected manager leader and from the Unix root user, as explained above. `swarmctl` checks the root setting to decide which stacks it may operate; the stack definitions use engine labels to decide where services run.
+
+### The three responsibilities
+
+| Responsibility | What happens | Where to find the implementation |
+| --- | --- | --- |
+| **Build and publish release files** | Build a tooling image, run checks, package `swarmctl`, combine it with the configuration tree into a `.mender` update file, and upload it. Tag builds also publish GitHub release assets. | `docker/`, `swarmctl/pyproject.toml`, `tools/swarm-artifact`, `.github/workflows/` |
+| **Provide device installation operations** | Expose hidden `swarmctl release` commands that remove owned stacks, promote a staged tree to `/data/swarm`, retain the previous tree for rollback, and redeploy automatic stacks. The external Mender module drives those commands. | `commands/release.py`, `release_tree.py`; external OS module required for complete integration |
+| **Operate and inspect running workloads** | Read environment/manifest, select this central's stacks, create missing declared resources, render bay definitions, submit deployment/removal commands, and display status/logs. | `swarmctl/src/swarmctl/`, `swarm/stacks/` |
+
+### What a release changes
+
+For example, the supplied `.env` selects `VOLLEY_VERSION=26.41.1`, and the app definition references an image tag such as `central-26.41.1`. This repository chooses that image and supplies its settings; the image is built elsewhere. A later release could change that version, alter a service setting, update a mounted config, or fix `swarmctl` itself. A release can also keep the same application image version and change only deployment tooling/configuration.
+
+The **builder container** is the ordinary Docker container that provides the tools for making these release files. It is not the central application's production container. The repository's Dockerfile builds that tooling image and its development variant.
+
+### Where the repository hands off to other systems
+
+The sequence is: CI produces an update package → Hosted Mender stores it → an external rollout delivers it to a central → the OS update module stages it and calls the release commands → `swarmctl` submits stack specifications → Docker schedules containers and retrieves referenced images.
+
+Only the build/upload and the Python release/deployment operations are supplied here. The CI workflow does not choose a fleet or initiate a Mender device deployment. The device module's download/staging behavior, exact state transitions, and acceptance checks require its missing source. Section 12 lists those inputs explicitly.
 
 ## 2. Repository map and reading order
 
@@ -153,7 +247,60 @@ The output is an executable Python **zipapp** containing packaged code and depen
 
 `py.typed` marks the package as typed. Frozen dataclasses model shared context, stack definitions, environment settings, and Docker summaries. `TYPE_CHECKING` imports and lazy imports reduce loading of heavy dependencies until a command needs them. Expected operator failures use `SwarmError`; the CLI translates these into clean Click errors with optional tips. Unexpected exceptions retain tracebacks outside specific display/retry boundaries.
 
-### 4.3 Builder and development environment
+### 4.3 Repository tools inventory
+
+This table covers build/deployment tools, developer tooling, and infrastructure services. **Used** means an invocation, dependency, or service definition is visible in the supplied snapshot. **External** means a required component is documented but its implementation is not included. Versions below come from source configuration, not an inspection of installed devices.
+
+| Tool or platform | Where it runs | Purpose in this repository | Evidence / configured version |
+| --- | --- | --- | --- |
+| swarmctl — internal Volley tool | Central device managers; developer environments | Apply Volley-specific stack policy, prepare resources, invoke Docker, inspect workloads, and expose release transitions for Mender | Its implementation is in this repository: `swarmctl/src/swarmctl/`; built into `bin/swarmctl` |
+| Docker Engine / Docker CLI | Developers, CI builder hosts, device swarm nodes | Build/run containers; manage stacks, services, secrets, configs, nodes, volumes | `docker.py`, stack YAML, devcontainer scripts; device version external |
+| Docker Swarm | Garage central managers and bay workers | Schedule distributed service tasks; apply placement labels and stack ownership conventions | `swarm/stacks/`, `selection.py`, `docker.py` |
+| Docker Buildx / BuildKit / Bake | CI and local developers | Build the tooling container with named targets and caches | `docker-bake.hcl`, `.call-builder-image.yml`; `linux/amd64` |
+| Compose specification | Interpreted by Docker stack deployment | Describe and merge services/networks/configs; standalone `docker compose` is not invoked here | `*.yaml`, rendered `bay.yaml.j2`, `stack.deploy` |
+| Mender artifact writer (`mender-artifact`) | Builder container / local build environment | Wrap payload tar and metadata as a compatible module artifact | Dockerfile and `tools/swarm-artifact`; installed from stable Mender APT repository |
+| Mender CLI (`mender-cli`) | Builder container / local publisher | Upload `.mender` files to Hosted Mender | `push_artifact`; package version not pinned |
+| Hosted Mender | External service | Store artifacts, associate release labels, expose management APIs for cleanup | Artifact upload/tag calls and pruning script |
+| Mender device client + vngOS update module | Device OS; external implementation | Retrieve/apply updates and invoke hidden release commands | README contract; client/module source absent |
+| Git | CI, developer checkout, artifact builder | Select tracked payload paths, record revisions/dirty state, resolve patch tags | Artifact script and release workflow |
+| GitHub Actions | Hosted CI runners | Orchestrate checks, builds, artifacts, cleanup, release creation | `.github/workflows/` |
+| GitHub CLI (`gh`) | GitHub release job | Publish release notes and attach CLI/Mender assets | `.call-github-release.yml`: `gh release create` |
+| GitHub App token / `github-script` | Release-trigger job | Create release branches and Git tags through the API | `release-trigger.yml`; App installation/permissions external |
+| GHCR | External container registry | Store per-commit builder images | Bake default registry and builder workflow |
+| AWS container registry reference | Devices; upstream image production external | Supply Volley, guidance, and discovery images | `${AWS_REGISTRY}` references; endpoint/service and login provisioning not supplied |
+| Python | CI builder, developer environment, device | Implement CLI and release support scripts; execute zipapp | Project requires `>=3.14`; builder uses Python 3.14 |
+| uv | CI/development | Manage Python environments and run project tasks | Digest-pinned builder base `uv:0.12.0-python3.14-trixie`; `uv run` |
+| Hatchling | Python packaging build environment | Build the Python package consumed by shiv | `pyproject.toml` build backend; exact resolved version absent |
+| shiv | CI/development | Package CLI and dependencies into one executable zipapp | `poe build`; requirement `shiv>=1.0.6` |
+| Poe the Poet | CI/development | Name and compose build/test/lint/typecheck tasks | `pyproject.toml`; `poethepoet>=0.29` |
+| Bash / GNU tar / core utilities | Artifact builder and devcontainer | Stage payload, normalize tar bytes, install executable, manage temporary files | `tools/swarm-artifact`, shell scripts |
+| curl / GnuPG / APT | Builder/container build; publishing | Fetch tooling, verify Mender repository key fingerprint, install packages, tag Mender release | Dockerfile and artifact script |
+| AWS Secrets Manager | External service; CLI calls from device | Retrieve JSON fields for missing Docker secrets | `aws.py`, manifest; HTTP SigV4 via requests libraries |
+| Jinja2 | Device CLI | Generate services for discovered or overridden bay IDs | `template.py`, `bay.yaml.j2`; `jinja2>=3.1` |
+| prek | CI/development | Run repository checks and install Git hooks | Dockerfile `0.4.11`; `prek.toml` |
+| pytest / pytest-mock | CI/development | Run unit tests and mocks | `poe test`; minimum versions `8.0` / `3.12` |
+| Ruff / mypy | CI/development | Lint code and run strict static typing | `poe static-analysis`; minimum versions `0.6` / `1.10` |
+| Hadolint | CI/development | Lint Dockerfile | Dockerfile/hook `2.14.0` |
+| ShellCheck / shfmt | CI/development | Check and format shell scripts | Dockerfile packages and prek hooks |
+| yamllint / markdownlint-cli2 | CI/development | Check YAML and Markdown formatting | `prek.toml`, associated config files |
+| Commitlint | Developer commit-message hook | Check Conventional Commit message format | `prek.toml`; hook stage `commit-msg` |
+| pre-commit-hooks collection | CI/development via prek | Whitespace, conflicts, symlinks, large files, private-key checks | `prek.toml`; this is the hook collection, not a shown invocation of the `pre-commit` runner |
+| VS Code Dev Containers | Local development | Share the builder toolchain and match host UID/GID | `.devcontainer/` |
+| pdoc | Declared development dependency | Documentation generator available to developers; no invoked generation task shown | `pyproject.toml`: `pdoc>=14.0` |
+| Fluentd | Global stack, every eligible central | Receive container log traffic and write service-grouped files | Global stack/config; `v1.19.3-1.0` plus digest |
+| OpenTelemetry Collector | Site root | Receive OTLP metrics and expose Prometheus scrape data | Site stack/config; `0.156.0` plus digest |
+| Prometheus / Grafana Cloud | Site root / external service | Scrape, persist, and remotely store metrics | Site stack/config; Prometheus `v3.13.1` plus digest |
+| Mosquitto | Site root | Shared MQTT broker with persistent storage | Site stack/config; `2.0.22` plus digest |
+| MySQL | Each application central | Persist scheduler/patron databases | App support stack and SQL init; `5.7` plus digest |
+| Nginx | Each application central | Reverse-proxy API traffic and expose local health endpoint | App support stack/config; `1.30.0-alpine3.23-slim` plus digest |
+| Fast DDS / ROS discovery server | Application containers | ROS communication, restricted transport profile, discovery | DDS XML and discovery service; external image tag `lyrical-discovery-server-20260911` |
+| NFS | OS-provisioned server and bay volume clients | Share ROS artifacts from bays with central storage | Bay template volume driver options; server setup external |
+| Ansible | **Not found in supplied snapshot** | No playbook, inventory, role, dependency, or invocation shown | Do not infer use in external OS provisioning |
+| Terraform / Jenkins / Fabric / Poetry / Twine / pip-tools | **Not found as configured or invoked tools** | No corresponding infrastructure/build/deployment workflow shown | HCL file is Docker Bake; Hatchling is the Python build backend |
+
+Python libraries used inside the CLI are listed in section 4.2; service-level connections and storage are detailed in section 6. The table is an inventory of the supplied snapshot, not a claim about tools used in other Volley repositories.
+
+### 4.4 Builder and development environment
 
 The builder is based on a digest-pinned `astral/uv:0.12.0-python3.14-trixie` image. It installs Mender tools, Git, curl, shell tooling, Hadolint, and prek. The Mender repository key fingerprint is checked. The Mender packages come from its stable APT repository without explicit package-version pins; the builder's complete toolchain is therefore not fixed solely by the base image digest.
 
@@ -423,6 +570,68 @@ If first install has no previous tree, rollback warns and redeploys the installe
 
 ## 10. Operator commands and troubleshooting
 
+### 10.1 What swarmctl is and who owns it
+
+**The `swarmctl` described here is an internal Volley tool implemented in this repository.** It is the project-specific Python CLI for operating the garage's Docker Swarm deployment. It is not a third-party package merely configured by this repository, and it is not a built-in Docker command. This conclusion comes from the supplied source: the `swarmctl/` project declares its own package, console entry point, commands, deployment rules, and tests. The name alone does not identify the implementation; an unrelated project could use the same executable name.
+
+“Internal” describes ownership and purpose, not a claim about this repository's public/private visibility. The implementation belongs to the supplied Volley codebase; Docker, Mender, Click, Rich, and the packaging libraries are separate third-party tools it uses.
+
+#### Why a dedicated CLI exists
+
+Docker understands stacks, services, tasks, networks, and secrets. `swarmctl` adds the **garage-specific decisions** needed before those operations: which stacks this central owns, whether it is the designated swarm root, which sub-site suffix to use, where configuration lives, which bays to render, and which AWS secrets/host directories must exist. Operators can express an intent such as `swarmctl deploy app` without assembling the environment, Compose files, and resource setup themselves.
+
+The architecture has three cooperating layers:
+
+| Layer | Ownership | Responsibility |
+| --- | --- | --- |
+| `swarmctl` | Internal Volley Python code | Interpret garage configuration, select stacks, prepare resources, render templates, issue operations, and show useful output |
+| `python-on-whales` and Docker CLI | Third-party library/tool | Translate the Python adapter calls into Docker CLI operations |
+| Docker Engine / Swarm | Third-party container platform | Store desired service specifications, schedule tasks, retrieve images, run containers, and reconcile workloads |
+
+Thus `swarmctl` is an application/policy layer over Docker. The long-running scheduler and reconciliation engine are Docker Swarm. The supplied CLI is invoked on demand; `watch` and following `logs` stay active for observation rather than acting as background deployment controllers.
+
+#### A concrete deploy example
+
+Suppose a central has `SITE_NAME=garage`, `SITE_SUB_NAME=east`, and `SWARM_ROOT=false`. The operator runs:
+
+```sh
+swarmctl deploy app
+```
+
+The command loads the device, shipped, and local environment files; reads the manifest; checks that `app` is eligible; and resolves the deployed name to `app-east`. It creates missing declared bind directories and Docker secrets, collects `main.yaml` and `support.yaml`, and renders bay services from discovered/overridden IDs. Finally, it passes those Compose paths and deployment flags through `SwarmClient` to Docker stack deployment. Docker then schedules the central and bay tasks according to engine-label constraints.
+
+The named command still deploys `app` when it is listed in `MANUAL_STACKS`. The same non-root central cannot use this CLI's policy to deploy `site` or `global`. These are implementation rules in `selection.py` and `commands/deploy.py`, not rules inherent to every Docker Swarm installation. Deployment submission does not itself establish that all containers are healthy; see sections 8 and 11.
+
+#### Two entry points: operators and the update system
+
+| Caller | Commands | Purpose |
+| --- | --- | --- |
+| Engineer/operator | `deploy`, `remove`, `info`, `watch`, `logs` | Operate or inspect the stacks owned by this central |
+| OS-owned Mender update module | Hidden `release install`, `release rollback`, `release commit` | Apply a staged tree, restore the previous tree, or accept the installed release |
+
+The default configuration root is `/data/swarm`; `--root` can change it. The CLI is shipped at `/data/swarm/bin/swarmctl`. The source does not establish how the OS adds it to `PATH` or which absolute executable the update module invokes; those details require the external module/provisioning configuration. The expected Mender contract is documented in the README, while the implemented release transitions are covered in section 9.
+
+`swarmctl` does not build the production application images, publish the Mender bundle, or select a fleet rollout. Image builds belong to upstream repositories; bundle production/upload belongs to `tools/swarm-artifact` and CI; device rollout belongs to Mender and the external module. It does participate in the final on-device install by swapping the release tree and invoking stack removal/deployment.
+
+#### Where to change the implementation
+
+| Concern | Source location under `swarmctl/src/swarmctl/` |
+| --- | --- |
+| Command registration and shared `--root` option | `cli.py`, `context.py` |
+| Environment layering and node identity | `env.py` |
+| Manifest parsing and deployed names | `manifest.py` |
+| Ownership policy and bay discovery | `selection.py` |
+| Deploy/remove setup and sequencing | `commands/deploy.py`, `commands/remove.py` |
+| Docker operations and summaries | `docker.py` |
+| AWS secret retrieval | `aws.py` |
+| Bay template rendering | `template.py` |
+| Release install/rollback/commit | `commands/release.py`, `release_tree.py` |
+| Inspection and streaming | `commands/info.py`, `commands/watch.py`, `commands/logs.py` |
+
+The executable entry point is declared as `swarmctl = "swarmctl.cli:main"` in `pyproject.toml`. Hatchling builds the Python package, and shiv bundles that package and its dependencies into the executable zipapp. These packaging tools are third-party; the code they package is internal. A compatible device Python interpreter and Docker CLI are still required. Rebuilding `swarmctl` changes the internal tool; changing stack YAML or `.env` changes the configuration the tool operates.
+
+### 10.2 Operator command reference
+
 Commands below illustrate existing interfaces. Run mutation commands only on the intended manager and deployment root.
 
 | Command | Scope and behavior |
@@ -590,3 +799,22 @@ Actual secret values are unnecessary. A redacted schema/configuration example is
 Python source paths in shortened entries above are under `swarmctl/src/swarmctl/`; abbreviated workflow paths are under `.github/workflows/`.
 
 The companion SVGs are generated by `generate_diagrams.py` using Python's standard library. Keep the `diagrams/` folder beside this Markdown file when sharing or previewing it. Mathematical expressions use conventional `$`/`$$` Markdown math; SVG diagrams do not require Mermaid support.
+
+
+### Diagram design tokens
+
+The SVG styling adapts the general readability and consistency guidance in [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/blob/main/.claude/skills/ui-ux-pro-max/SKILL.md). That project is a multi-style design catalog, not one fixed theme. Its palette datasets could not be retrieved during this update; the tokens below are a deliberate developer-documentation adaptation, not a claimed search-generated preset.
+
+| Element | Applied style |
+| --- | --- |
+| Visual family | Minimal technical cards, subtle depth, restrained accents, explicit labels |
+| Heading/body fonts | Inter with Liberation Sans / Arial fallbacks |
+| Code/identifier fonts | JetBrains Mono with DejaVu Sans Mono fallback |
+| Canvas / normal card | Slate white `#F8FAFC` / white `#FFFFFF` |
+| Main / secondary text | `#0F172A` / `#475569` |
+| Deployment/output accent | Blue `#2563EB`, pale blue `#EFF6FF` cards |
+| External/recovery accent | Amber `#B45309`, pale amber `#FFFBEB` cards |
+| Borders / geometry | `#CBD5E1`, 8-unit corners, consistent card padding |
+| Accessibility | Text labels and legend supplement color; SVG title/description; high-contrast text |
+
+Font files are not embedded and no remote font requests are made. Renderers select available fonts from the fallback lists; the verified local rendering uses Liberation Sans and DejaVu Sans Mono. The Python generator centralizes these tokens for future changes.

@@ -119,6 +119,78 @@ Order payloads already assembled elsewhere can contain actions without a factory
 
 PNG/SVG are omitted with `--renderer none`.
 
+## Diff the generated action maps
+
+`compare_agvhito_action_maps.py` is standalone: it does not need either generator beside it. It reads the full JSON model and action inventory in two output folders, even when the images in those folders were generated in split mode.
+
+```bash
+python3 compare_agvhito_action_maps.py main feat --out-dir diff
+```
+
+Default output is a **connected Graphviz graph**, with each state drawn once and transitions connecting those state nodes, matching the connected layout of the original generators. Unchanged actions are gray, removed actions have red strikethrough, and new actions have a green `+`. Failure/cancellation routes remain separate from main control flow. Lifecycle hooks remain separated by table rules.
+
+Install the native Graphviz executable once on Ubuntu:
+
+```bash
+sudo apt install graphviz
+```
+
+When running inside your uv project, use:
+
+```bash
+uv run python pull_request_notes/SW2-876/compare_agvhito_action_maps.py \
+  /home/jon-gonzales/Desktop/main \
+  /home/jon-gonzales/Desktop/feat \
+  --out-dir /home/jon-gonzales/Desktop/diff
+```
+
+Graphviz assigns positions automatically; adding/deleting states can move nodes, so the layout is connected but does not lock exact old pixel coordinates. Retained routes influence placement; added/deleted routes are drawn without forcing new ranks. Removed routes are dashed red, added routes are green, and retained routes are muted gray. `--renderer routing` explicitly selects the previous Matplotlib view with repeated destination cards. Retained actions whose helper path changed show the old red path and the new green path; moving a call into a helper does not count as removing and re-adding the action. Factory argument changes and moves between hooks do count as deletion/addition. Duplicate factory occurrences are preserved.
+
+```bash
+# Focus on changed states/actions/routes; omit unchanged rows.
+python3 compare_agvhito_action_maps.py main feat --out-dir diff-changes --changes-only
+
+# Put every route into one diagram.
+python3 compare_agvhito_action_maps.py main feat --out-dir diff-all --no-split
+
+# DOT/JSON/Markdown only: no rendering dependencies required.
+python3 compare_agvhito_action_maps.py main feat --out-dir diff-data --no-render
+```
+
+Inputs required in each folder:
+
+- `agvhito-action-inventory.json`
+- `agvhito-action-model.json`, or `agvhito-state-machine.json`
+
+Older original snapshot-only outputs may lack the model JSON; regenerate them with the source-driven generators first. The older inventory's `lifecycle_hook`/`method` schema is also recognized when a model is available.
+
+Outputs:
+
+- `agvhito-action-diff.png` / `.svg` / `.dot`: connected action and main control-flow differences
+- `agvhito-action-diff-errors.png` / `.svg` / `.dot`: connected failure-route differences
+- `agvhito-action-diff-cancellation.png` / `.svg` / `.dot`: connected cancellation/terminal differences
+- `agvhito-action-diff.json`: full comparison, raw old/new records, source anchors, counts, and provenance
+- `agvhito-action-diff.md`: counts and tables of changed actions/transitions
+
+Line-number shifts, whitespace outside argument literals, generation timestamps, and Git metadata do not create action changes. State class/kind/constant/map changes and initial/terminal outcome changes are reported. Ordered alignment shows insertions at their feature position and moved actions as deletion/addition pairs; source order does not establish firmware execution order.
+
+This compares **action factory inventories and declared routes**, not complete C++ behavior. Changed guard conditions, verification logic, batching, wait durations, and callbacks cannot be inferred from these JSON files. Helpers retain their logical identity when moved between files; raw old/new source locations remain in JSON. In particular, changing the settling interval does not show up as a factory addition/deletion.
+
+The comparison uses ordered alignment for each hook. It preserves both input sequences: ignore red deletions to read feature order; ignore green additions to read main order. Diagram labels show the action expression without position annotations; sequence positions remain available in JSON. An action moved within a hook appears red at its old position and green at its new position. Duplicate expressions are retained as separate occurrences; among equally long alignments, identical helper paths are preferred.
+
+The action generator numbers each hook's static action sequence. Helpers expand at their call sites, and factories in arguments appear before factories inside the called helper. Initializer-list expressions retain source order. This is not a runtime trace: branch alternatives are displayed in lexical order, loops are not unrolled, and C++ does not guarantee the lexical evaluation order of sibling ordinary function arguments. It does not infer MQTT publication or firmware execution order.
+
+Replace **all three scripts** together. The comparator can correct insertion/reorder display using existing inventories; regenerate both branch inventories to benefit from the argument-before-helper correction. Generate main outputs with the main checkout selected and feature outputs with the feature checkout selected:
+
+```bash
+uv run python pull_request_notes/SW2-876/generate_agvhito_action_map.py --out-dir /home/jon-gonzales/Desktop/main
+# After selecting the feature checkout:
+uv run python pull_request_notes/SW2-876/generate_agvhito_action_map.py --out-dir /home/jon-gonzales/Desktop/feat
+uv run python pull_request_notes/SW2-876/compare_agvhito_action_maps.py /home/jon-gonzales/Desktop/main /home/jon-gonzales/Desktop/feat --out-dir /home/jon-gonzales/Desktop/diff
+```
+
+Forty-one regression checks pass; one native Graphviz rendering check is skipped because `dot` is unavailable here. Ordered-projection checks cover insertions, deletions, duplicates and reorders; source fixtures cover initializer lists and helper argument/body ordering. Connected DOT checks verify unique nodes, preserved routes, escaped labels and red-struck/green-added actions. Native rendering still needs execution on a machine with Graphviz installed. The script checks the resulting SVG for every expected transition.
+
 ## Bounds and validation
 
 This is a small lexical parser, not a C++ AST. It masks comments and ordinary/raw string literals, tracks balanced braces/parentheses, and resolves straightforward namespace/member helper calls. It expects the registration and transition forms above and out-of-line state method definitions. Preprocessor conditions are not evaluated; macro-generated definitions, function pointers, aliases, custom intermediate state bases, and arbitrary C++ expressions are not supported. Overloaded helpers are followed conservatively rather than resolved by argument type.
@@ -130,10 +202,28 @@ Validation performed against the supplied original snapshot and available featur
 - Original snapshot: 9 states, 36 routes, 23 unique factory sites, 11 highlighted paths.
 - Available feature recovery/refactor code: 9 states, 37 routes; shared stop-pause and cancellation helpers are attributed to their callers.
 - Both Matplotlib diagrams rendered successfully; SVG arrow counts match parsed routes.
-- Sixteen parser/split-view/metadata regression tests passed. Graphviz was not available in the validation environment, so its rendering path was not executed there.
+- Eighteen parser/split-view/metadata/sequence regression tests passed. Graphviz was not available in the validation environment, so its rendering path was not executed there.
 
 Run the bundled tests without ROS or Matplotlib rendering:
 
 ```bash
-python3 -m unittest discover -s . -p test_generators.py -v
+python3 -m unittest discover -s . -p 'test_*.py' -v
 ```
+
+## Confirm the comparator copy
+
+The uploaded inventories confirm that `LocalizingState::OnEntry` adds
+`MakeStopPauseAction()` through `StopPauseAndSettle` **before**
+`MakeEnableMapAction(localization_map_id, kHitoMapVersion)`. The comparator
+must display +stopPause before the unchanged map action, without main/feat
+position annotations. A regression test covers this insertion through the
+connected DOT renderer.
+
+Verify the copy in your repository before rerunning it:
+
+```bash
+uv run python pull_request_notes/SW2-876/compare_agvhito_action_maps.py --version
+```
+
+Expected: `AGVHITO action comparator: ordered-alignment-v1 (plain labels)`.
+If `--version` is unrecognized, that path still contains an older script.

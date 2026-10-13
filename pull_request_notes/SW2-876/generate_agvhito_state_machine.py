@@ -111,6 +111,25 @@ def calls(text: str):
         yield match[1], text[start + 1:end], match.start()
 
 
+def ordered_calls(text: str):
+    """Expand argument calls before callee bodies, retaining source offsets.
+
+    Sibling expressions retain lexical order; this does not resolve C++'s
+    unspecified argument evaluation order or evaluate control-flow guards.
+    """
+    code = mask_cpp(text)
+    pattern = re.compile(r'\b((?:[A-Za-z_]\w*::)*[A-Za-z_]\w*)\s*\(')
+    def visit(lo, hi):
+        cursor = lo
+        while (match := pattern.search(code, cursor, hi)) is not None:
+            opening = code.index('(', match.start())
+            end = closing(code, opening, '(', ')')
+            yield from visit(opening + 1, end)
+            yield match[1], text[opening + 1:end], match.start()
+            cursor = end + 1
+    yield from visit(0, len(code))
+
+
 def functions(files: dict[str, str]) -> list[dict]:
     """Recognize ordinary free/member definitions, excluding declarations/calls."""
     found = []
@@ -283,7 +302,7 @@ def graph_dot(model: dict, sections: dict | None = None) -> str:
                     rows.append('<TR><TD> </TD></TR>')
                 for record in records:
                     color_call = AMBER if record['highlight'] else INK
-                    rows.append(f'<TR><TD ALIGN="LEFT"><FONT FACE="DejaVu Sans Mono" COLOR="{color_call}">{esc(record["expression"])}</FONT></TD></TR>')
+                    rows.append(f'<TR><TD ALIGN="LEFT"><FONT FACE="DejaVu Sans Mono" COLOR="{color_call}">{esc(str(record.get("sequence", "")) + ". " + record["expression"])}</FONT></TD></TR>')
                     rows.append(f'<TR><TD ALIGN="LEFT"><FONT POINT-SIZE="9">{esc(record["via"])}</FONT></TD></TR>')
         label = '<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="' + color + '" BGCOLOR="white">' + ''.join(rows) + '</TABLE>'
         lines.append(f'{quote(state["name"])} [label=<{label}>];')
@@ -315,7 +334,7 @@ def render_routing(model: dict, output: Path, stem: str, dpi: int, sections=None
             for hook, records in sections[s['name']].items():
                 source_height += 45
                 for r in records:
-                    source_height += 22 * len(textwrap.wrap(r['expression'], 56)) + 18 * len(textwrap.wrap(r['via'], 68)) + 12
+                    source_height += 22 * len(textwrap.wrap(str(r.get('sequence', '')) + '. ' + r['expression'], 56)) + 18 * len(textwrap.wrap(r['via'], 68)) + 12
         routes = sum(e['source'] == s['name'] for e in model['edges'])
         heights[s['name']] = max(source_height + 20, routes * 82 + 20)
     header_lines = [wrapped for line in subtitle_lines(model)
@@ -350,7 +369,7 @@ def render_routing(model: dict, output: Path, stem: str, dpi: int, sections=None
                 text(75, cursor + 8, hook, 13, TEAL, 'bold')
                 cursor += 45
                 for r in records:
-                    for line in textwrap.wrap(r['expression'], 56):
+                    for line in textwrap.wrap(str(r.get('sequence', '')) + '. ' + r['expression'], 56):
                         text(75, cursor, line, 12, AMBER if r['highlight'] else INK, 'bold' if r['highlight'] else 'normal')
                         cursor += 22
                     for line in textwrap.wrap(r['via'], 68):

@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 from generate_agvhito_state_machine import (
-    HIGHLIGHTS, HOOKS, arguments, calls, parse_package, render_views, serializable,
+    HIGHLIGHTS, HOOKS, arguments, calls, ordered_calls, parse_package, render_views, serializable,
     subtitle_lines,
 )
 
@@ -50,13 +50,13 @@ def audit(model: dict) -> tuple[list[dict], dict]:
                 model['warnings'].append(warning)
             return
         stack = stack | {fn['id']}
-        for name, args, offset in calls(fn['body']):
+        for name, args, offset in ordered_calls(fn['body']):
             line = fn['body_line'] + fn['body'].count('\n', 0, offset)
             short = name.split('::')[-1]
             if re.fullmatch(r'Make\w*Action', short):
                 args = re.sub(r'\s+', ' ', args).strip()
                 record = {'state': state['name'], 'cpp_class': state['cpp_class'],
-                          'hook': hook, 'factory': short, 'arguments': args,
+                          'hook': hook, 'sequence': len(sections[state['name']][hook]) + 1, 'factory': short, 'arguments': args,
                           'expression': short + '(' + args + ')',
                           'highlight': short in HIGHLIGHTS,
                           'source': fn['source'], 'line': line,
@@ -128,7 +128,7 @@ def generate(package_root: Path, output_dir: Path, dpi=130, renderer='auto', spl
             if not owned:
                 rows.append(f'| `{state["name"]}` | `{state["cpp_class"]}` | `{hook}` | — | — |')
             for r in owned:
-                expr = r['expression'].replace('|', '&#124;').replace('`', '&#96;')
+                expr = (str(r['sequence']) + '. ' + r['expression']).replace('|', '&#124;').replace('`', '&#96;')
                 via = r['via'].replace('|', '&#124;').replace('`', '&#96;')
                 if r['highlight']:
                     expr = '**`' + expr + '`**'
@@ -136,6 +136,8 @@ def generate(package_root: Path, output_dir: Path, dpi=130, renderer='auto', spl
                     expr = '`' + expr + '`'
                 rows.append(f'| `{state["name"]}` | `{state["cpp_class"]}` | `{hook}` | {expr} | `{via}` |')
     rows += ['', '## Interpretation', '',
+             '- Sequence numbers preserve source order within each hook, expanding helpers at their call site and argument calls before the callee body.',
+             '- Sibling argument expressions retain lexical order; C++ may evaluate them in a different order. Branches, loops, and callback timing are not inferred.',
              '- This is a bounded lexical source scan, not a compiler or runtime trace.',
              '- Conditions and early returns are not evaluated. Calls are possible static paths, not promises that each action executes.',
              '- A factory inside a shared helper appears under each hook that can call that helper; this is distinct from the number of unique factory sites.',
