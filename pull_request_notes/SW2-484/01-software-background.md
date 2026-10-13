@@ -41,15 +41,21 @@ The essential distinction is **what** should happen versus **how and when** it h
 
 ![Planning stages](figures/01_pipeline.svg)
 
-*Figure 1 — Scheduler's principal phases, from input jobs to output actions. Each stage refines or constrains the result of the prior stage; the diagram does not represent a ROS thread or executor schedule.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#01_pipeline) · [standalone SVG](figures/01_pipeline.svg)</sub>
+
+*Figure 1 — Scheduler's principal phases, from `PlanRequest` to `PlanResponse`. Each stage refines the result of the prior stage; the strip underneath shows the same `ctx->events` DAG being enriched (incomplete tray moves get IDs and destinations, blocker moves and AGV events are added, and finally the reduced DAG becomes `ActionNode[]` with parent indices). The diagram does not represent a ROS thread or executor schedule.*
 
 ## 2. The physical garage and its coordinate system
+
+> **Viewing the figures.** Markdown previews (VS Code, GitHub) show SVGs as static images, so the figures are drawn to be readable at preview width. For pan and zoom, open [`figures/viewer.html`](figures/viewer.html) in a browser (all figures, scroll to zoom, drag to pan, arrow keys to switch), or open any `.svg` file directly in a browser — each one carries its own zoom controls. Every figure has a status badge: **AS-BUILT**, **PROPOSED**, **ILLUSTRATIVE**, **SCHEMATIC**, **CONCEPTUAL**, or **YAML GEOMETRY · HYPOTHETICAL OCCUPANCY**.
 
 The supplied **Pecos** layout has **28 nodes and 37 undirected edges**. It defines **two bays** (`B7`, `B21`), **three AGV charging nodes** (`C10`, `C14`, `C16`), plus parking and waypoint nodes. It does not define a VRC. Node positions come from the YAML; connectivity comes from the `edges` list. The graph is not inferred from visual distance between stalls.
 
 ![Pecos facility graph](figures/15_facility_topology.svg)
 
-*Figure 2 — Pecos facility graph reconstructed from YAML coordinates in meters. Rectangular outlines indicate parking locations, green outlines indicate customer bays, violet circles indicate AGV chargers, and grey circles indicate waypoints. The illustrated trays and AGV are hypothetical; they are **not** initial states supplied by the YAML. The edges depict allowed node connections, not physical aisle width or measured collision envelopes.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#15_facility_topology) · [standalone SVG](figures/15_facility_topology.svg)</sub>
+
+*Figure 2 — Pecos facility graph drawn from the YAML coordinates in metres. Blue rectangles are **parking nodes**, drawn with the layout's XL parking window (5.79 m along x by 2.21 m along y) centred on the node; teal rectangles are **bays** with the customer door on the garage side; violet circles are **AGV chargers**; grey dots are **waypoints**; thin lines are **garage-graph edges**; shaded bands mark waypoint corridors; dashed outlines are the two YAML sections (`sandbox_eng`, `sandbox_qa`). The edges depict allowed node connections, not aisle widths or measured collision envelopes. No AGVs or trays are drawn: the YAML contains no occupancy.*
 
 ### Geometric versus logical position
 
@@ -100,6 +106,27 @@ PlanResponse
 
 The base schedule is described by its `.msg` as the immutable part of an existing schedule. The Scheduler's observed `Plan()` marks certain resources from base actions disabled in its planning initial state. This matters when trying to understand why apparently available nodes or AGVs cannot be reused.
 
+### `DiscreteGarageState` as the bridge between the garage and the planner
+
+`DiscreteGarageState` is one of the most important types in the entire system because it is the **bridge** between the physical garage and the planner's internal reasoning. The Scheduler does not plan directly over a photo-realistic scene or over raw continuous geometry; instead, it plans over a structured discrete snapshot containing arrays of AGVs, trays, bays, payloads, VRCs, and disabled nodes.
+
+That means every physical fact the planner cares about must eventually be expressible in this data structure. For example, saying “AGV 4 is parked at charge node 10” becomes an entry in `agvs[]` whose `pose` field stores `GaragePose{node_id=10, heading=...}`. Saying “tray 15 is at parking node 3 and carries a payload” becomes an entry in `trays[]`, plus a matching `payloads[]` entry whose `tray_id` is `15`.
+
+![DiscreteGarageState bridge](figures/16_discrete_garage_state_bridge.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#16_discrete_garage_state_bridge) · [standalone SVG](figures/16_discrete_garage_state_bridge.svg)</sub>
+
+*Figure 3 — `DiscreteGarageState` ties the floor layout to the planner's C++/ROS data structures. The left side reuses the Pecos facility drawing: ① AGV 4 parked at charger `C10`, ② tray 15 at parking node `P3`, ③ the payload riding on tray 15, and ④ bay 7 in `READY_TO_RETRIEVE`. Each number points to the matching record on the right; the filled diamond marks containment inside the single `DiscreteGarageState` snapshot. Values are illustrative.*
+
+A useful way to read the figure is bottom-up:
+
+1. Start with the **layout entities** on the left, such as the AGV, tray, and bay.
+2. Follow the bridge arrows to the **state records** on the right.
+3. Observe that both `DiscreteAgvState` and `DiscreteTrayState` reuse `GaragePose`, which is how the planner ties an entity back to a discrete graph node and heading.
+4. Finally, notice that all of those arrays are contained by the single top-level `DiscreteGarageState` snapshot.
+
+Once this picture is clear, much of the Scheduler becomes easier to understand: `ScheduleEvent::Apply(...)` is essentially “take one abstract event and mutate this structured world snapshot.”
+
 ## 4. ROS messages and services
 
 The `interfaces` package defines the wire contracts under `msg/` and `srv/`. `rosidl_generate_interfaces` turns those text definitions into generated C++ structs, introspection support, and serialization code. This is **data exchange**, not C++ inheritance. In other words, when one ROS message appears inside another, the relationship is **composition**: one struct contains another struct or an array of such structs as a field.
@@ -126,7 +153,9 @@ For a new engineer, the most useful way to read these interfaces is from **outsi
 
 ![ROS message relationships](figures/13_uml_ros_messages.svg)
 
-*Figure 3 — As-built ROS service and message composition derived from the `.msg` and `.srv` definitions. A **filled diamond** means “contains as a field or array element.” Blue boxes sit on the **request / intent** side, violet boxes describe the **garage-state snapshot**, green boxes describe the **response / schedule** side, and amber boxes are **nested command or utility messages**. The dashed outer frame marks the `Plan.srv` boundary.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#13_uml_ros_messages) · [standalone SVG](figures/13_uml_ros_messages.svg)</sub>
+
+*Figure 4 — As-built ROS service and message composition derived from the `.msg` and `.srv` definitions. A **filled diamond** means “contains as a field or array element”; each connector leaves the owning message at the field that holds the value. Blue boxes sit on the **request / intent** side, violet boxes describe the **garage-state snapshot**, green boxes the **response / schedule** side, amber boxes are **command payloads**, and teal marks the **`GaragePose` utility type** (teal type names show where else it is used). The `Plan` box at the top is the `srv/Plan.srv` boundary.*
 
 A few important reading notes help prevent confusion:
 
@@ -168,7 +197,9 @@ Read the rows in three passes:
 
 ![Current class relationships](figures/11_uml_existing_core.svg)
 
-*Figure 4 — Existing core-class relationships. `Scheduler` orchestrates planning, `ScheduleContext` packages one plan attempt’s mutable working data, `ScheduleEventDag` stores abstract event dependencies, and `DiscreteGarageState` models the world that those events mutate. The diagram is intentionally compact, so it shows the dominant ownership / usage relationships rather than every helper member.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#11_uml_existing_core) · [standalone SVG](figures/11_uml_existing_core.svg)</sub>
+
+*Figure 5 — Existing core-class relationships. `Scheduler` creates one `ScheduleContext` per `Plan()` call; the context owns the `initial_state` (`DiscreteGarageState`) and the `events` DAG. `ScheduleEventDag` specialises the Boost-based `DagBase<T>` template and holds its `ScheduleEvent` vertices through `shared_ptr` (shared, not exclusive, ownership). Each event's `Apply()` mutates a `DiscreteGarageState` during replay.*
 
 If you are looking for the shortest possible mental model, use this one: **`Scheduler` is the conductor, `ScheduleContext` is the score currently being annotated, `ScheduleEventDag` is the dependency structure of abstract work, and `DiscreteGarageState` is the simulated world on which the work is replayed.**
 
@@ -212,7 +243,9 @@ The key design idea is **runtime polymorphism**. The DAG stores `std::shared_ptr
 
 ![Existing event inheritance](figures/12_uml_event_hierarchy.svg)
 
-*Figure 5 — Existing C++ inheritance hierarchy, not proposed solver architecture. A **hollow triangle** means public inheritance and points toward the base class. Blue marks the abstract base type, green marks movement / assignment events, and violet marks other resource-transition events. The arrow therefore reads as “`TrayMove` **is a** `ScheduleEvent`,” not “`ScheduleEvent` contains a `TrayMove`.”*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#12_uml_event_hierarchy) · [standalone SVG](figures/12_uml_event_hierarchy.svg)</sub>
+
+*Figure 6 — Existing C++ inheritance hierarchy, not proposed solver architecture. The single **hollow triangle** under `ScheduleEvent` means public inheritance; every branch of the spine reads “`TrayMove` **is a** `ScheduleEvent`,” not “`ScheduleEvent` contains a `TrayMove`.” Blue marks the abstract base type, green the movement / assignment events, and violet the other resource-state transitions.*
 
 This figure often causes two kinds of confusion:
 
@@ -254,7 +287,9 @@ $$
 
 ![Dependencies](figures/04_dependencies.svg)
 
-*Figure 6 — Abstract prerequisite ordering. The arrows express dependencies, not geometric movement and not wall-clock travel time.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#04_dependencies) · [standalone SVG](figures/04_dependencies.svg)</sub>
+
+*Figure 7 — Abstract prerequisite ordering. Swimlanes group events by resource and the columns give one valid topological order. The arrows express dependencies, not geometric movement and not wall-clock travel time. The dashed edge is implied by a longer path, which is exactly the kind of redundant edge `Reduce()` removes.*
 
 **Now the implementation.** `DagBase<T>` is a C++ template implemented on a Boost `adjacency_list`; its vertices hold `std::shared_ptr<T>`. The specialized subclass `ScheduleEventDag : DagBase<ScheduleEvent>` stores abstract event objects and dependency edges between them. In practical terms, this means the Scheduler can ask questions such as “which work has no unsatisfied prerequisites yet?” or “if I add this dependency, would I create a cycle?” The custom topological ordering also biases earlier job indices among currently eligible events, so job grouping influences the replay order when multiple events are otherwise ready.
 
@@ -316,17 +351,23 @@ for (const auto& vertex : *total_ordering_opt) {
 
 These three views replace the earlier generic AGV scenes. **Every node position and graph edge comes from the attached YAML**, while the shown AGV/tray occupancies and movement intents are *teaching examples*. Routes are graph walks, **not** asserted collision-free, trajectory-feasible schedules. For readability, labels appear outside objects, and location markers use prefixes `P` (parking), `W` (waypoint), `B` (bay), and `C` (AGV charge).
 
-![Pecos overview with robot](figures/15_facility_topology.svg)
+![Pecos overview with robot](figures/15_facility_scenario.svg)
 
-*Figure 7 — Facility overview. Bays `B7` and `B21` appear at the customer side of the graph. Parking positions and charger nodes are located at their YAML coordinates. The AGV and trays shown are explanatory stand-ins rather than measured occupancy.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#15_facility_scenario) · [standalone SVG](figures/15_facility_scenario.svg)</sub>
+
+*Figure 8 — Facility overview with a hypothetical scene. Bays `B7` and `B21` sit on the customer side of the graph; parking and charger nodes are at their YAML coordinates. AGV A at `C10`, tray T15 (with a payload) at `P3`, blocker K at `P15`, root tray R at `P17` and tray T20 at `P20` are explanatory stand-ins rather than measured occupancy; Figures 9 and 10 reuse them.*
 
 ![Pecos AGV approach](figures/15_agv_approach_and_pickup.svg)
 
-*Figure 8 — Unloaded approach example. A hypothetical AGV begins at charge node `C10` and approaches a hypothetical tray at `P3` via the connected sequence `10 → 9 → 11 → 6 → 3`. The green arrows depict required navigation through graph nodes. The eventual lift and tray-carrying segment are separate scheduling concerns, not represented as an actual recorded run.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#15_agv_approach_and_pickup) · [standalone SVG](figures/15_agv_approach_and_pickup.svg)</sub>
+
+*Figure 9 — Unloaded approach example. A hypothetical AGV begins at charge node `C10` and approaches a hypothetical tray at `P3` via the connected sequence `10 → 9 → 11 → 6 → 3`, driving under the empty stall `P6`. The green route depicts navigation through graph nodes; the strip below restates the intent as simplified abstract events. The lift and the tray-carrying segment are separate scheduling concerns, not an actual recorded run.*
 
 ![Pecos blocker scenario](figures/15_blocking_tray_move.svg)
 
-*Figure 9 — Blocking-tray reasoning example. A hypothetical root tray is at `P15`, a hypothetical blocker is at `P19`, and the amber and green routes show distinct proposed graph walks. This figure illustrates **why relocation decisions and dependencies must be jointly reasoned about**. It does **not** claim `P19` is necessarily a collision blocker in this layout or that the displayed route is accepted by the current solver.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#15_blocking_tray_move) · [standalone SVG](figures/15_blocking_tray_move.svg)</sub>
+
+*Figure 10 — Blocking-tray reasoning example. A hypothetical root tray R at `P17` must reach bay `B21`. In the Pecos graph `P17` connects only to `P15`, `P20` and charger `C16`; with blocker K at `P15` and tray T20 at `P20`, every exit is occupied. AGV A therefore ① drives from `W13` under K and lifts it, ② reparks K at the free stall `P19`, ③ returns unloaded to lift R, and ④ carries R out via `P15 → W13 → W18 → W22 → W41 → B21`. This illustrates **why relocation decisions and dependencies must be jointly reasoned about**; it does **not** claim that the current solver would choose this relocation target or route.*
 
 The reason the planner uses pose graphs rather than simple straight-line geometry is that valid transitions depend on graph edges, headings, and collision footprints. For two planar positions **$\mathbf p_a,\mathbf p_t\in\mathbb R^2$**, the displacement **$\Delta\mathbf p=\mathbf p_t-\mathbf p_a\in\mathbb R^2$** is useful to draw, but its Euclidean length **$d=\|\Delta\mathbf p\|_2\in\mathbb R_{\ge0}$** does *not* establish that a valid AGV path exists.
 
@@ -354,7 +395,9 @@ A bay and VRC are not interchangeable: bay commands orchestrate customer handoff
 
 ![VRC conceptual transfer](figures/14_vrc_floors.svg)
 
-*Figure 10 — Conceptual VRC connecting two floors. The Pecos YAML does not contain a VRC; the diagram represents general code-supported functionality and is not placed on the Pecos map.*
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#14_vrc_floors) · [standalone SVG](figures/14_vrc_floors.svg)</sub>
+
+*Figure 11 — Conceptual VRC connecting two floors, shown as a side elevation. The platform carries an AGV and its tray from the VRC node on F1 (`from_vrc_node_id`) to the VRC node on F2 (`to_vrc_node_id`); the strip shows the discrete simulation in `VrcTransition::Apply` (idle → moving → idle, then entities at the source node move to the destination). The Pecos YAML does not contain a VRC; the diagram represents general code-supported functionality and is not placed on the Pecos map.*
 
 The Pecos YAML does include two `Bay` nodes and three `AgvCharge` nodes. The ROS types also define VECS charging state and `TYPE_EV_CHARGE` nodes, but no such explicit node appears in this particular YAML. Do not infer a VECS station or VRC from the mere presence of a generic interface.
 
@@ -399,4 +442,4 @@ The available sources establish the Scheduler's high-level planning pipeline, ev
 - `src/planner/planner_core/src/{event_dag,schedule_events}.cpp` — event order and state-change behavior
 - `src/planner/scheduler/test/scheduler_tests.cpp` — existing illustrative and regression fixtures
 - `src/interfaces/msg/*.msg`, `src/interfaces/srv/*.srv` — generated interface definitions (supplied as Repomix XML)
-- `5675_pecos_combined.yaml` — coordinates, node metadata, and graph edges for figures 2, 7–9
+- `5675_pecos_combined.yaml` — coordinates, node metadata, and graph edges for figures 2, 3 and 8–10

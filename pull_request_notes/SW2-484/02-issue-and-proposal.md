@@ -18,7 +18,9 @@ Source anchors: `scheduler.hpp` declarations (`DoTrayAssignments`, `DoAgvAssignm
 
 ![Target design](figures/02_target_architecture.svg)
 
-**Figure 2 — Proposed architecture.** Solver contracts separate policy from orchestration; concrete default solvers may still depend on graph, collision, and cost services. This is a proposed design, not an implementation already present.
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#02_target_architecture) · [standalone SVG](figures/02_target_architecture.svg)</sub>
+
+**Figure 2 — Proposed architecture.** Solver contracts separate policy from orchestration; concrete default solvers may still depend on graph, collision, and cost services, injected by `const` reference at construction. Both solvers mutate the `planner_core` event DAG through their request. This is a proposed design, not an implementation already present.
 
 ## 3. Current versus target responsibilities
 
@@ -75,7 +77,9 @@ The sequential tray move example in the SVG is illustrative; the concrete graph 
 
 ![Garage setup](figures/03_garage_xy.svg)
 
-**Figure 3 — Top-down garage setup.** AGV 1 faces the positive $x$ direction. Trays T2 and T3 lie along the illustrative route to the goal. Coordinates are schematic; node IDs and distances are not an actual customer layout.
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#03_garage_xy) · [standalone SVG](figures/03_garage_xy.svg)</sub>
+
+**Figure 3 — Top-down garage setup.** AGV 1 faces the positive $x$ direction and carries tray T1 toward the goal. Trays T2 and T3 lie along the illustrative route, so two prerequisite tray moves (T2 → S3, T3 → S4) must complete first; they are independent of each other. Coordinates are schematic; node IDs and distances are not an actual customer layout.
 
 ## 6. Why the first change should be small
 
@@ -124,13 +128,17 @@ Run `colcon test --packages-select planner_core scheduler scheduler_advanced_tes
 
 ![Solver UML](figures/08_uml_solver.svg)
 
-**Figure 8 — Proposed UML class structure.** `Scheduler` uses the `TrayMoveSolver` interface, which `DefaultTrayMoveSolver` implements. The diagram reference-based ownership is one possible first-pass design.
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#08_uml_solver) · [standalone SVG](figures/08_uml_solver.svg)</sub>
+
+**Figure 8 — Proposed UML class structure.** `Scheduler` holds a `TrayMoveSolver` and creates the `TraySolveRequest` it passes in; `DefaultTrayMoveSolver` and a test double realize the interface. The reference-based ownership shown is one possible first-pass design.
 
 The design uses the **Strategy** pattern: `Scheduler` calls a stable solver interface without embedding the concrete algorithm. The relationship from `DefaultTrayMoveSolver` to `TrayMoveSolver` is interface realization (dashed line with hollow triangle). A test fake can implement the same interface.
 
 ![Solver call sequence](figures/09_sequence_tray.svg)
 
-**Figure 9 — Proposed tray solver interaction.** The Scheduler delegates to the solver, which reads the input event ordering and adds moves and dependencies to the event DAG before returning a diagnostic result.
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#09_sequence_tray) · [standalone SVG](figures/09_sequence_tray.svg)</sub>
+
+**Figure 9 — Proposed tray solver interaction.** The Scheduler delegates to the solver, which reads the topological event order, fills tray IDs and destinations, inserts blocker moves and dependencies into the event DAG when a route is blocked, records `first_tray_event`, and returns a success flag with a diagnostic. AGV assignment then continues in the Scheduler.
 
 ### C++ contract and calling code (proposed)
 
