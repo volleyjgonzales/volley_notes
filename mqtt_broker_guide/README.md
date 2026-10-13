@@ -80,7 +80,29 @@ inet 10.0.1.254/22 brd 10.0.3.255
 
 The `/22` is a **CIDR prefix length**: 22 network bits out of a 32-bit IPv4 address. The equivalent subnet mask is **`255.255.252.0`**. The third octet's mask is `252` (`11111100` in binary), so the third-octet network boundaries advance in groups of four: `0–3`, `4–7`, etc. Since your IP's third octet is `1`, the network starts at **`10.0.0.0`**, not `10.0.1.0`.
 
-![Four /24 blocks inside one /22 subnet](assets/02-subnet.svg)
+![The actual 32 IPv4 bits, with 22 network bits and 10 host bits](assets/02-subnet.svg)
+
+### Read the 32-bit diagram
+
+An IPv4 address has **four octets**, each containing 8 bits: `8 + 8 + 8 + 8 = 32` bits. In the diagram, **teal** marks the first **22 fixed network bits**, while **amber** marks the **10 changeable host bits**.
+
+```text
+IPv4 address:  00001010 . 00000000 . 00000001 . 11111110   = 10.0.1.254
+Subnet mask:   11111111 . 11111111 . 11111100 . 00000000   = 255.255.252.0
+              |-------- 16 --------|------ 6 --|-- 2 --|--- 8 ---|
+              |--------- 22 network bits ------|-- 10 host bits --|
+```
+
+The third octet is the key: its **first six bits must be `000000`**, but its **last two bits can be any combination**. Those two bits are `00`, `01`, `10`, or `11`, corresponding to third-octet decimal values **0, 1, 2, and 3**. The fourth octet contributes another eight variable bits, from `0` through `255`.
+
+| Third octet (binary) | Third octet (decimal) | Addresses in this block |
+|---|---:|---|
+| `00000000` | `0` | `10.0.0.0` – `10.0.0.255` |
+| `00000001` | `1` | `10.0.1.0` – `10.0.1.255` (laptop and discovered broker) |
+| `00000010` | `2` | `10.0.2.0` – `10.0.2.255` |
+| `00000011` | `3` | `10.0.3.0` – `10.0.3.255` |
+
+Therefore, the host portion contains **2 + 8 = 10 bits**, allowing **2¹⁰ = 1,024 addresses**. The first address (`10.0.0.0`) identifies the network and the last (`10.0.3.255`) is its broadcast address, leaving **1,022 conventional host addresses**.
 
 | Concept | Address |
 |---|---|

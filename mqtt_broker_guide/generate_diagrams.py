@@ -20,13 +20,40 @@ rect(a,690,140,245,110,'AGV',['Possible MQTT client','Address not verified'],ORA
 path(a,'M 230 251 L 230 304 L 383 304','Connect + subscribe',270,288)
 path(a,'M 810 251 L 810 310 L 643 310','Publish / subscribe',749,288)
 save('01-topology.svg',a)
-a=canvas('IPv4 subnet | Why /22 starts at 10.0.0.0','10.0.1.254/22 has mask 255.255.252.0; /22 covers four consecutive /24 ranges.',1000,340)
+# Bit-level /22 explanation: 32 columns in four octets.
+a=canvas('IPv4 address anatomy | 10.0.1.254/22','22 network bits stay fixed; 10 host bits vary across 1,024 addresses.',1100,560)
+left=60; cw=29.2; space=13; gap=1.6
+starts=[left+i*(8*cw+space) for i in range(4)]
+net='#0b9488';host='#e6a044';
+a.append(f'<rect x="60" y="105" width="16" height="16" rx="3" fill="{net}"/><text x="84" y="118" font-family="Inter,Arial" font-size="14" fill="{INK}">Network prefix (22 bits)</text>')
+a.append(f'<rect x="300" y="105" width="16" height="16" rx="3" fill="{host}"/><text x="324" y="118" font-family="Inter,Arial" font-size="14" fill="{INK}">Host portion (10 bits)</text>')
+for octet,(number,value,mask) in enumerate([(1,10,255),(2,0,255),(3,1,252),(4,254,0)]):
+ x0=starts[octet]
+ a.append(f'<text x="{x0+8*cw/2}" y="154" font-size="14" font-weight="700" fill="{INK}" text-anchor="middle" font-family="Inter,Arial">Octet {number} = {value}</text>')
+ bits=f'{value:08b}';mbits=f'{mask:08b}'
+ for j,b in enumerate(bits):
+  idx=octet*8+j;xx=x0+j*cw;clr=net if idx<22 else host
+  a.append(f'<rect x="{xx:.1f}" y="169" width="{cw-gap:.1f}" height="42" rx="5" fill="{clr}"/>')
+  a.append(f'<text x="{xx+(cw-gap)/2:.1f}" y="197" text-anchor="middle" font-size="18" font-weight="700" fill="white" font-family="monospace">{b}</text>')
+  a.append(f'<text x="{xx+(cw-gap)/2:.1f}" y="240" text-anchor="middle" font-size="15" fill="{MUTED}" font-family="monospace">{mbits[j]}</text>')
+ a.append(f'<text x="{x0+8*cw/2}" y="268" text-anchor="middle" font-size="13" fill="{MUTED}" font-family="Inter,Arial">{mask}</text>')
+a.append(f'<text x="52" y="239" fill="{MUTED}" font-size="11" font-family="Inter,Arial">MASK</text>')
+a.append(f'<text x="52" y="269" fill="{MUTED}" font-size="11" font-family="Inter,Arial">DEC</text>')
+xsplit=starts[2]+6*cw-1
+# Mark the /22 boundary after six bits of octet 3.
+a.append(f'<line x1="{xsplit:.1f}" y1="158" x2="{xsplit:.1f}" y2="218" stroke="{NAVY}" stroke-width="2.5" stroke-dasharray="3 3"/>')
+a.append(f'<text x="{xsplit:.1f}" y="139" text-anchor="middle" fill="{NAVY}" font-size="13" font-weight="700" font-family="Inter,Arial">/22 boundary</text>')
+a.append(f'<text x="60" y="307" fill="{NAVY}" font-size="18" font-weight="700" font-family="Inter,Arial">Only the last 2 bits of octet 3 can change</text>')
+a.append(f'<text x="60" y="333" fill="{MUTED}" font-size="14" font-family="Inter,Arial">Third octet = 000000xx (binary) = 0, 1, 2, or 3 (decimal). Final octet = 00000000 through 11111111.</text>')
 for i in range(4):
- x=54+i*235; active=i==1
- a.append(f'<rect x="{x}" y="130" width="217" height="135" rx="13" fill="{("#e3f5f2" if active else "#edf2f8")}" stroke="{(TEAL if active else LINE)}" stroke-width="{(3 if active else 1)}"/>')
- a.append(f'<text x="{x+17}" y="170" fill="{INK}" font-family="Inter,Arial" font-size="22" font-weight="700">10.0.{i}.x</text><text x="{x+17}" y="200" fill="{MUTED}" font-family="Inter,Arial" font-size="14">256 addresses</text>')
- if active:a.append(f'<text x="{x+17}" y="238" fill="{TEAL}" font-family="Inter,Arial" font-size="14" font-weight="700">Laptop: .254</text>')
-a.append(f'<text x="500" y="296" text-anchor="middle" fill="{MUTED}" font-size="14" font-family="Inter,Arial">Full /22 range: 10.0.0.0 - 10.0.3.255 | 1,024 total addresses</text>')
+ x=60+i*254
+ active=i==1
+ fill='#e5f5f1' if active else '#f1f5fa';stroke=TEAL if active else LINE
+ a.append(f'<rect x="{x}" y="363" width="237" height="112" rx="12" fill="{fill}" stroke="{stroke}" stroke-width="{2 if active else 1}"/>')
+ a.append(f'<text x="{x+15}" y="390" fill="{INK}" font-size="14" font-family="monospace">000000{i:02b}</text>')
+ a.append(f'<text x="{x+15}" y="421" fill="{NAVY}" font-size="24" font-weight="700" font-family="Inter,Arial">10.0.{i}.x</text>')
+ a.append(f'<text x="{x+15}" y="448" fill="{TEAL if active else MUTED}" font-size="13" font-family="Inter,Arial">{("Laptop: 10.0.1.254" if active else "256 addresses")}</text>')
+a.append(f'<text x="550" y="519" text-anchor="middle" fill="{MUTED}" font-size="14" font-family="Inter,Arial">10 host bits = 2^10 = 1,024 total addresses | Network 10.0.0.0 | Broadcast 10.0.3.255</text>')
 save('02-subnet.svg',a)
 a=canvas('Troubleshooting | Discover, verify, connect','A successful TCP connection is evidence of an open port, not proof that MQTT authorization will succeed.',1000,360)
 steps=[('1. Inspect','ip -4 addr, ip route'),('2. Scan','nmap TCP 1883'),('3. Verify','mosquitto_sub'),('4. Connect','MQTT Explorer')]
