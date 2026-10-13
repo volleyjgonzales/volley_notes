@@ -489,97 +489,138 @@ def topological_ordering():
 # 54 — a DAG is a partial order: robots still move in parallel
 # ======================================================================================
 
-@figure("54_partial_order_parallel", "A DAG does not mean one robot at a time", DOC1)
+@figure("54_partial_order_parallel", "From DAG to sorted list to parallel execution", DOC1)
 def partial_order_parallel():
-    d = Doc("54_partial_order_parallel", "A DAG does not mean one robot at a time",
-            "Left: an action DAG for two AGVs and a bay. Right: one execution of it in time. Only the edges force "
-            "waiting; everything else runs concurrently.")
+    d = Doc("54_partial_order_parallel", "From one DAG to a sorted list to parallel execution",
+            "The input is one action DAG. Topological sorting turns it into one list. The response keeps the list "
+            "and each node's parents, and execution starts every node whose parents are done.")
     A, B, BAY = T.green, T.sky, BAYC
-    lanes = [("AGV A", A, ["A -> P17", "lift T17", "T17 -> B21", "lower"]),
-             ("AGV B", B, ["B -> P19", "lift T19", "T19 -> P24", "lower"]),
-             ("bay B21", BAY, ["TO_RETRIEVE", "PROCESS_RETRIEVE"])]
-    bw, bh, gx, gy = 112, 40, 26, 78
-    x0 = 74
-    box = {}
-    d.text(0, -16, "Action DAG (what Dispatch receives: ActionNode[] with parents)", size=13, weight=600, fill=T.fg)
-    for r, (name, col, acts) in enumerate(lanes):
-        y = 10 + r * gy
-        d.text(0, y + bh / 2, name, size=11.5, family="mono", weight=600, fill=col)
-        for i, a in enumerate(acts):
-            x = x0 + (i if r < 2 else (0 if i == 0 else 3)) * (bw + gx)
-            d.rect(x, y, bw, bh, rx=7, fill=T.card, stroke=col, sw=1.4)
-            d.text(x + bw / 2, y + bh / 2, a, size=10.5, family="mono", fill=T.fg, anchor="middle")
-            box[(r, i)] = BBox(x, y, x + bw, y + bh)
-            if i and r < 2:
-                p = box[(r, i - 1)]
-                connect(d, [(p.x1, p.cy), (x, y + bh / 2)], kind="flow", color=col, size=7, sw=1.4)
-    # bay -> A's carry into the bay; A's lower -> PROCESS_RETRIEVE
-    b0, b1 = box[(2, 0)], box[(2, 1)]
-    a2, a3 = box[(0, 2)], box[(0, 3)]
-    connect(d, [(b0.x1, b0.cy), (a2.cx - 20, b0.cy), (a2.cx - 20, a2.y1)], kind="flow", color=BAY, size=7, sw=1.4,
-            dash="4 3")
-    connect(d, [(a3.cx, a3.y1), (a3.cx, b1.y0)], kind="flow", color=BAY, size=7, sw=1.4, dash="4 3")
-    # one cross-AGV occupancy edge: B may carry T19 only after A has left the shared corridor
-    pb = box[(1, 2)]
-    connect(d, [(a2.cx + 20, a2.y1), (a2.cx + 20, pb.y0)], kind="flow", color=T.red, size=7, sw=1.6)
-    label_pill(d, a2.cx + 26, (a2.y1 + pb.y0) / 2, "occupancy", color=T.red, size=10, anchor="start")
-    dag_r = max(b.x1 for b in box.values())
-    dag_b = max(b.y1 for b in box.values())
+    # action ids, labels, lane
+    acts = {"A1": ("A -> P17", 0), "A2": ("lift T17", 0), "A3": ("T17 -> B21", 0), "A4": ("lower", 0),
+            "B1": ("B -> P19", 1), "B2": ("lift T19", 1), "B3": ("T19 -> P24", 1), "B4": ("lower", 1),
+            "Y1": ("TO_RETRIEVE", 2), "Y2": ("PROCESS_RETR.", 2)}
+    lane_col = [A, B, BAY]
+    lane_name = ["AGV A", "AGV B", "bay B21"]
+    edges = [("A1", "A2", "c"), ("A2", "A3", "c"), ("A3", "A4", "c"), ("B1", "B2", "c"), ("B2", "B3", "c"),
+             ("B3", "B4", "c"), ("Y1", "Y2", "c"), ("Y1", "A3", "x"), ("A3", "B3", "o"), ("A4", "Y2", "x")]
+    ecol = {"c": T.tint(T.fg2, 0.75, T.bg), "x": BAY, "o": T.red}
 
-    # ---- timeline ----
-    ty = dag_b + 70
-    d.text(0, ty - 30, "One execution in time (durations illustrative)", size=13, weight=600, fill=T.fg)
-    tx0, sc = x0, 8.6   # px per second
-    sched = {  # lane: [(label, start, dur)]
-        0: [("A -> P17", 0, 14), ("lift", 14, 4), ("T17 -> B21", 18, 22), ("lower", 40, 4)],
-        1: [("B -> P19", 0, 10), ("lift", 10, 4), ("wait", 14, 26), ("T19 -> P24", 40, 12), ("lower", 52, 4)],
-        2: [("TO_RETRIEVE", 0, 15), ("PROCESS_RETRIEVE", 44, 20)],
-    }
+    # ---------------- 1. input DAG ----------------
+    d.text(0, -16, "1 · Input: one action DAG (the lanes are just a drawing aid; red and violet edges connect them)",
+           size=13, weight=600, fill=T.fg)
+    bw, bh, gx, gy, x0 = 112, 40, 30, 70, 80
+    col_of = {"A1": 0, "A2": 1, "A3": 2, "A4": 3, "B1": 0, "B2": 1, "B3": 2, "B4": 3, "Y1": 0, "Y2": 3}
+    box = {}
+    for k, (lab, lane) in acts.items():
+        x, y = x0 + col_of[k] * (bw + gx), 10 + lane * gy
+        c = lane_col[lane]
+        d.rect(x, y, bw, bh, rx=7, fill=T.card, stroke=c, sw=1.4)
+        d.text(x + 8, y + 12, k, size=9.5, family="mono", weight=700, fill=c)
+        d.text(x + bw / 2 + 8, y + 26, lab, size=10.5, family="mono", fill=T.fg, anchor="middle")
+        box[k] = BBox(x, y, x + bw, y + bh)
+    for i, n in enumerate(lane_name):
+        d.text(0, 10 + i * gy + bh / 2, n, size=11, family="mono", weight=600, fill=lane_col[i])
+    for u, v, kind in edges:
+        a, b = box[u], box[v]
+        col = ecol[kind]
+        if a.cy == b.cy and kind != "x" and not (u == "Y1" and v == "Y2"):
+            connect(d, [(a.x1, a.cy), (b.x0, b.cy)], kind="flow", color=col, size=7, sw=1.4)
+        elif u == "Y1" and v == "Y2":
+            connect(d, [(a.x1, a.cy), (b.x0, b.cy)], kind="flow", color=col, size=7, sw=1.2, dash="2 3")
+        elif u == "Y1":
+            connect(d, [(a.x1, a.cy - 8), (b.cx - 24, a.cy - 8), (b.cx - 24, b.y1)], kind="flow", color=col,
+                    size=7, sw=1.5, dash="4 3")
+        elif u == "A4":
+            connect(d, [(a.cx, a.y1), (a.cx, b.y0)], kind="flow", color=col, size=7, sw=1.5, dash="4 3")
+        else:   # A3 -> B3 occupancy
+            connect(d, [(a.cx + 24, a.y1), (a.cx + 24, b.y0)], kind="flow", color=col, size=7, sw=1.7)
+            label_pill(d, a.cx + 30, (a.y1 + b.y0) / 2, "occupancy", color=col, size=9.5, anchor="start")
+    rx = x0 + 4 * (bw + gx) + 10
+    note(d, rx, -4, W - rx,
+         "It is one graph: Y1 -> A3, A3 -> B3 and A4 -> Y2 link the three lanes. A graph with no links at all "
+         "would simply be a DAG in which nothing waits for anything.", title="Not three graphs", accent=T.violet)
+    y1 = 10 + 3 * gy + 30
+
+    # ---------------- 2. sorted list + 3. parents ----------------
+    order = ["Y1", "A1", "B1", "A2", "B2", "A3", "B3", "A4", "B4", "Y2"]
+    pos = {k: i for i, k in enumerate(order)}
+    d.text(0, y1, "2 · events.GetTopologicalOrdering(): one flat list, every edge points right", size=13,
+           weight=600, fill=T.fg)
+    d.text(0, y1 + 18, "That is all a topological sort returns: positions 0..9. No times, no 'parallel' marks.",
+           size=11, fill=T.muted)
+    cw, cx0 = 104, 18
+    ly = y1 + 150
+    cx = {}
+    for k in order:
+        i = pos[k]
+        x = cx0 + i * cw
+        c = lane_col[acts[k][1]]
+        d.rect(x, ly, 88, 34, rx=6, fill=T.card, stroke=c, sw=1.5)
+        d.text(x + 44, ly + 17, k, size=12.5, family="mono", weight=700, fill=c, anchor="middle")
+        d.text(x + 44, ly + 48, f"[{i}]", size=10.5, family="mono", fill=T.muted, anchor="middle")
+        cx[k] = x + 44
+    for u, v, kind in edges:
+        xa, xb = cx[u], cx[v]
+        h = 10 + (xb - xa) * 0.11
+        yb = ly - 2
+        col = ecol[kind]
+        d.path(f"M{xa:.1f} {yb} C{xa:.1f} {yb - h:.1f} {xb:.1f} {yb - h:.1f} {xb:.1f} {yb}", stroke=col,
+               sw=1.4, layer="edges", bbox=BBox(xa, yb - h, xb, yb))
+        d.arrowhead((xb, yb), (xb - 2, yb - 6), kind="filled", color=col, size=7)
+    # parents row
+    py = ly + 86
+    d.text(0, py - 10, "3 · Written to the response: Schedule.nodes[i] with its parents (indices into the same list)",
+           size=13, weight=600, fill=T.fg)
+    parents = {k: sorted(pos[u] for u, v, _ in edges if v == k) for k in order}
+    for k in order:
+        x = cx0 + pos[k] * cw
+        txt = "[" + ", ".join(map(str, parents[k])) + "]"
+        d.rect(x, py + 8, 88, 30, rx=6, fill=T.bg_deep, stroke=T.border_soft, sw=1)
+        d.text(x + 44, py + 23, "parents " + txt, size=9.5, family="mono",
+               fill=T.fg if parents[k] else T.green, anchor="middle")
+    d.text(0, py + 56, "Nodes with no parents (Y1, A1, B1) can start immediately. Every parent index is smaller than "
+                       "the node's own index, because the list is topologically sorted. The list order and the parents "
+                       "together are the 'sorted graph'.", size=11, fill=T.fg2)
+    y3 = py + 94
+
+    # ---------------- 4. execution ----------------
+    d.text(0, y3, "4 · Execution: a node starts once all its parents are done (durations from motion planning, "
+                  "values illustrative)", size=13, weight=600, fill=T.fg)
+    ty = y3 + 34
+    tx0, sc = x0, 12.4
+    sched = {0: [("A1", 0, 14), ("A2", 14, 4), ("A3", 18, 22), ("A4", 40, 4)],
+             1: [("B1", 0, 10), ("B2", 10, 4), ("wait", 14, 26), ("B3", 40, 12), ("B4", 52, 4)],
+             2: [("Y1", 0, 15), ("Y2", 44, 20)]}
     T_END = 66
     for t in range(0, T_END + 1, 10):
         x = tx0 + t * sc
-        d.line(x, ty - 6, x, ty + 3 * 46, stroke=T.grid, sw=1, layer="bg")
-        d.text(x, ty + 3 * 46 + 12, f"{t} s", size=10, family="mono", fill=T.muted, anchor="middle")
-    for r, (name, col, _) in enumerate(lanes):
-        y = ty + r * 46
-        d.text(0, y + 15, name, size=11.5, family="mono", weight=600, fill=col)
+        d.line(x, ty - 6, x, ty + 3 * 42, stroke=T.grid, sw=1, layer="bg")
+        d.text(x, ty + 3 * 42 + 10, f"{t} s", size=10, family="mono", fill=T.muted, anchor="middle")
+    for r in range(3):
+        y = ty + r * 42
+        d.text(0, y + 14, lane_name[r], size=11, family="mono", weight=600, fill=lane_col[r])
         for lab, s0, du in sched[r]:
-            x = tx0 + s0 * sc
-            w = du * sc
+            x, w = tx0 + s0 * sc, du * sc
             if lab == "wait":
-                d.rect(x, y, w, 30, rx=5, fill="none", stroke=T.faint, sw=1, dash="3 3")
-                d.text(x + w / 2, y + 15, "waits for A (red edge)", size=10, fill=T.muted, anchor="middle")
+                d.rect(x, y, w, 28, rx=5, fill="none", stroke=T.faint, sw=1, dash="3 3")
+                d.text(x + w / 2, y + 14, "B3 waits for parent A3 (occupancy)", size=10, fill=T.muted, anchor="middle")
                 continue
-            d.rect(x, y, w, 30, rx=5, fill=T.tint(col, 0.25, T.bg), stroke=col, sw=1.2)
-            if text_width(lab, 10, "mono") < w - 6:
-                d.text(x + w / 2, y + 15, lab, size=10, family="mono", fill=T.fg, anchor="middle")
-    # highlight concurrency band
-    d.rect(tx0, ty - 10, 14 * sc, 3 * 46 - 6, rx=6, fill="none", stroke=T.amber, sw=1.4, dash="5 4", layer="over")
-    label_pill(d, tx0 + 7 * sc, ty - 12, "A, B and the bay all busy at once", color=T.amber, size=10, bg=T.bg)
-    tl_b = ty + 3 * 46 + 26
-
-    # ---- right column: what the topological order is for ----
-    rx = max(dag_r, tx0 + T_END * sc) + 40
-    rw = W - rx
-    n1 = note(d, rx, -10, rw,
-              "The DAG is a partial order. An edge u -> v only says v may not start before u ends. Two actions with "
-              "no path between them may run at the same time, and with two AGVs they usually do.",
-              title="Edges are the only waits", accent=T.green)
-    n2 = note(d, rx, n1.y1 + 16, rw,
-              "A topological order (e.g. bay, A1, B1, A2, B2, ...) is one way to list the same actions so every edge "
-              "points forward. The scheduler uses it to replay events on a DiscreteGarageState and to build the "
-              "response array. It is a bookkeeping order, not the order robots move in.",
-              title="What the list is for", accent=T.sky)
-    n3 = note(d, rx, n2.y1 + 16, rw,
-              "Every edge removes some parallelism. Per-AGV chains are physical (one AGV, one action at a time). "
-              "Others, such as rule B inside one job or REBALANCE serialising bays, are choices that can cost "
-              "throughput.",
-              title="Where it does cost you", accent=T.amber)
-    frame(d, title="A DAG does not mean one robot at a time",
-          subtitle="The response is ActionNode[] where each node lists its parents. Motion planning produces timed "
-                   "trajectories in which several AGVs move at once (see the ContinuousStateToSchedule test, where "
-                   "AGVs 1 and 2 both start at t = 0). Waiting happens only along edges.",
+            d.rect(x, y, w, 28, rx=5, fill=T.tint(lane_col[r], 0.25, T.bg), stroke=lane_col[r], sw=1.2)
+            d.text(x + w / 2, y + 14, lab, size=10.5, family="mono", weight=700, fill=T.fg, anchor="middle")
+    d.rect(tx0 - 4, ty - 8, 15 * sc + 8, 3 * 42 + 2, rx=6, fill="none", stroke=T.amber, sw=1.4, dash="5 4",
+           layer="over")
+    label_pill(d, tx0 + 15 * sc + 10, ty - 14, "t = 0: Y1, A1 and B1 have no parents, so all three start together",
+               color=T.amber, size=10, bg=T.bg, anchor="start")
+    frame(d, title="From one DAG to a sorted list to parallel execution",
+          subtitle="Topological sorting does not create parallelism and does not remove it. It only lists the nodes "
+                   "so that every edge points forward. Parallelism comes from the DAG itself: nodes with no path "
+                   "between them may run at the same time, and the parents field carries that into the response.",
           badge_key="illustrative",
           legend=[("box", A, "AGV A actions"), ("box", B, "AGV B actions"), ("box", BAY, "bay actions"),
-                  ("arrow", T.red, "cross-AGV occupancy edge"), ("dasharrow", BAY, "bay dependency")])
+                  ("arrow", T.tint(T.fg2, 0.75, T.bg), "same-entity chain"), ("dasharrow", BAY, "bay dependency"),
+                  ("arrow", T.red, "cross-AGV occupancy edge")],
+          footnote="The scheduler builds Schedule.nodes this way in BuildScheduledActionsArray: it walks the action DAG "
+                   "in topological order, gives each node its position, and fills parents from the node's in-edges "
+                   "plus the previous action of the same AGV, bay or VRC. How Dispatch executes the schedule is "
+                   "outside this package.")
     return d

@@ -520,6 +520,17 @@ On the way out, each job becomes a `ScheduledJobDataMsg`: the original job plus 
 
 ### 12.2 The loop in `Plan()`
 
+#### What the code does, in order
+
+`Plan()` turns one `PlanRequestMsg` into one `PlanResponseMsg`. Job expansion is the loop in the middle of it. Around the loop, `Plan()` does this:
+
+1. **Build the starting point.** `ValidateBaseState()` turns `request_data.base_state` into a `DiscreteGarageState`. Entities used by actions that are already executing (`request_data.base_schedule`) are marked disabled. A fresh `ScheduleContext` is created: `plan_ctx`, with an empty event DAG and an empty `scheduled_jobs` list.
+2. **Expand every pending job** (this section). Each job either adds its events to `plan_ctx->events` and is appended to `plan_ctx->scheduled_jobs`, or is reported as failed in `result.scheduled_jobs`.
+3. **Plan all successful jobs together**: tray assignment, AGV assignment, `Reduce()`, sanity check, motion planning (sections 14 to 17). From here on the jobs are no longer separate: one DAG holds all their events, and the later stages see and optimise all of them at once.
+4. **Write the response.** Every motion becomes an `ActionNode` labelled with its job's `guid`. Each successful job gets `state = STATE_EXECUTING` and `node_indices` (the positions of its actions), and is appended to `result.scheduled_jobs` after the failed ones.
+
+The loop itself:
+
 ```cpp
 // src/scheduler.cpp — inside PlanResponseMsg Scheduler::Plan(const PlanRequestMsg& request_data,
 //                                                            const rclcpp::Time& now) const
@@ -548,19 +559,50 @@ for(const SchedulerJobMsg& job : request_data.pending_jobs) {        // in reque
 }
 ```
 
-Read it slowly, because three things here explain most of the rest:
+#### How `job_index` works
 
-1. **`job_index` is `plan_ctx->scheduled_jobs.size()` at the time of the call.** Every event a job creates stores this number (`event->GetJobIndex()`). When the response is built, `ctx->scheduled_jobs[event->GetJobIndex()].job.guid` tells which job an action belongs to.
-2. **Only successful jobs consume an index.** `PushBackScheduledJob()` runs only after success. If job 1 fails, job 2 receives index 1.
-3. **A failure does not stop the loop.** The failed job goes straight into `result.scheduled_jobs` and the next job is planned as if the failed one had never been requested. (Only `TYPE_INSERT` does something extra on failure: `Plan()` calls `clean_garage_request_fn_()` to ask Dispatch for a clean-up.)
+Every event needs to remember which job it belongs to, so the response can say "this action is part of job X". The code does not store the job's `guid` in the event; it stores a small integer, `job_index`, and looks the job up at the end.
+
+- **What the number is.** `job_index` is the job's position in `plan_ctx->scheduled_jobs`, the list of jobs that have **succeeded so far**. It is not the loop counter (the job's position in `request_data.pending_jobs`).
+- **How it is chosen.** Just before calling the job method, `Plan()` passes `plan_ctx->scheduled_jobs.size()`. If the method succeeds, `PushBackScheduledJob(job)` appends the job at exactly that position, so `scheduled_jobs[job_index]` is now this job. If it fails, nothing is appended and the next job is offered the same number.
+- **How it is used.** When the response is built, `ToActionNode(motion, ctx->scheduled_jobs[event->GetJobIndex()].job.guid, event)` turns the index back into the job's `guid`. Rule B (12.5) also compares indices to decide which events belong to the same job.
+
+A worked example, the same one as in Figure 14 below:
+
+| Loop counter `i` | Job in the request | `scheduled_jobs.size()` before the call = `job_index` | Result | `scheduled_jobs` afterwards |
+|---|---|---|---|---|
+| 0 | RETRIEVE car on T17 | 0 | success, 4 events tagged 0 | `[RETRIEVE]` |
+| 1 | INSERT bay B7 | 1 | fails, no events added | `[RETRIEVE]` (unchanged) |
+| 2 | REPARK_TRAY T19 → P24 | 1 | success, 1 event tagged 1 | `[RETRIEVE, REPARK_TRAY]` |
+
+If the code used `i` instead, the REPARK's event would carry 2, and `scheduled_jobs[2]` would not exist.
 
 ![The expansion loop](figures/36_expansion_loop.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#36_expansion_loop) · [standalone SVG](figures/36_expansion_loop.svg)</sub>
 
-*Figure 14 — Three pending jobs through the loop. The INSERT fails and is reported at once; the REPARK that follows reuses index 1. After the loop, successful jobs live in `plan_ctx->scheduled_jobs` and their events in `plan_ctx->events`.*
+*Figure 14 — The loop, one row per iteration: the code that runs, then `plan_ctx->scheduled_jobs`, `plan_ctx->events` and `result.scheduled_jobs` after it. The bottom row follows one event's `job_index` back to its job's `guid` when the response is built.*
 
-If every job fails, `plan_ctx->scheduled_jobs` is empty and `Plan()` returns right after the loop with "No jobs succeeded to plan". Otherwise the DAG goes on to tray assignment (section 14).
+If every job fails, `plan_ctx->scheduled_jobs` is empty and `Plan()` returns right after the loop with "No jobs succeeded to plan".
+
+#### Why it is built this way
+
+The code has no design document, so this is a reading of the structure, with the trade-offs it implies.
+
+- **`Plan()` is a pure function of the request.** Nothing survives between calls except the fixed layout, graph and collision table. Dispatch owns the job queue and the live garage state and sends both every time. That keeps the scheduler simple to test (build a request, call `Plan()`, inspect the response) and lets Dispatch replan whenever something changes.
+- **Jobs are expanded one at a time, in request order, each seeing the garage that earlier jobs leave behind** (12.4). That is a greedy approach: easy to reason about, and later jobs automatically build on earlier ones (a second move of the same tray starts where the first one ends). The cost is that request order matters and nothing tries another order: an early job can make a later one fail, and the later one is simply reported as failed.
+- **Failure is per job during expansion.** One bad job does not sink the others, so Dispatch still gets a plan for everything that was possible. `retain_job` lets RETRIEVE say "try me again later" when no bay is free.
+- **After expansion, everything is one problem.** All successful jobs share one DAG, so tray assignment, AGV assignment and motion planning can share AGVs and resolve conflicts across jobs. The flip side is in section 9: if any later stage fails, every pending job is failed.
+- **A small integer instead of a pointer or `guid`.** Events are `planner_core` objects that know nothing about ROS messages. A `size_t` is the cheapest way to tag them and is enough for rule B's "same job?" test.
+
+Known issues with this design (details in 12.18):
+
+- **No rollback.** A job method that fails after adding events leaves them in the DAG. They keep the failed job's index, which the next successful job reuses, so they are executed as part of that job (or, if no later job succeeds, `scheduled_jobs[index]` reads past the end). `FailJob()` carries a TODO to strip them.
+- **Index reuse makes logs confusing.** "Job index 1" means different requests at different moments of one `Plan()` call.
+- **Order dependence without a retry.** The plan depends on the order Dispatch lists the jobs, and a failed job is not retried after the others are placed.
+- **Duplicate failures.** When a later stage fails, `Plan()` fails every job in `pending_jobs`, including jobs already reported failed by the loop.
+
+Possible directions (ideas, not plans): tag events with the job's `guid` instead of a position; take a snapshot of `events`, `last_entity_event` and `first_tray_event` before each job and restore it on failure; or plan each job into a separate small DAG and merge it only on success.
 
 ### 12.3 The shape of every job method
 
@@ -1195,13 +1237,20 @@ Why a DAG fits better here (opinion): the hard part of this garage is not two ro
 
 No. A DAG is a **partial order**. An edge `u -> v` only says that `v` may not start before `u` ends. Two actions with no path between them can run at the same time, and with several AGVs they usually do.
 
-![A DAG does not mean one robot at a time](figures/54_partial_order_parallel.svg)
+It helps to separate three things that are easy to blur: the **DAG** (the constraints), the **topological order** (one list that respects them) and the **execution** (what happens in time). The figure follows one small example through all three.
+
+![From one DAG to a sorted list to parallel execution](figures/54_partial_order_parallel.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#54_partial_order_parallel) · [standalone SVG](figures/54_partial_order_parallel.svg)</sub>
 
-*Figure 42 — The same action DAG drawn as a graph (top) and as one execution in time (bottom). AGV A, AGV B and the bay start together; AGV B waits only where the red occupancy edge says so.*
+*Figure 42 — (1) The input is one action DAG; its three lanes are linked by edges. (2) A topological sort lists the same ten actions so that every edge points right; it adds no information about time. (3) The response stores that list as `Schedule.nodes`, and each node keeps the indices of its parents. (4) In execution, every node whose parents are done can start, so Y1, A1 and B1 start together, and B3 waits only for its parent A3.*
 
-A topological order is a **bookkeeping order**, not an execution order. The scheduler uses it to replay events on a `DiscreteGarageState` (to know where everything will be) and to write the response array, where each `ActionNode` carries its `parents`. The code shows parallel motion explicitly: in the `ContinuousStateToSchedule` test, AGV 1 and AGV 2 both have motions starting at `t = 0`.
+Read it as a pipeline:
+
+1. **Input: one DAG**, not several. The lanes are only a way of drawing it; the bay edges and the occupancy edge connect them. (Even a DAG with no edges between lanes would be fine: it would simply mean nothing waits for anything.)
+2. **The topological sort produces a list**, `std::optional<VertexVec>`. It neither creates nor removes parallelism; it only guarantees that every node comes after its parents. The scheduler uses this list to replay events on a `DiscreteGarageState` and to number the actions.
+3. **The response keeps both the list and the edges.** `BuildScheduledActionsArray` walks the action DAG in topological order, gives each action its position in `Schedule.nodes`, and fills `parents` from its in-edges plus the previous action of the same AGV, bay or VRC. So the "sorted graph" is exactly this: a sorted array in which every node points back to its parents, always at smaller indices.
+4. **Execution is driven by `parents`, not by array order.** A node can start as soon as all its parents are done; nodes without a path between them run at the same time. The times themselves come from motion planning: in the `ContinuousStateToSchedule` test, AGV 1 and AGV 2 both have motions starting at `t = 0`. How Dispatch's executor consumes `parents` is outside this package.
 
 Parallelism is still lost wherever an edge exists. Some edges are physical (one AGV does one thing at a time; a tray is in one place). Others are choices: rule B orders every step of a job even when two steps could overlap, and REBALANCE_GARAGE runs its bays one after another because they share a job index (section 12.18). Those are fair targets for improvement.
 
