@@ -423,3 +423,81 @@ def card(doc: Doc, x, y, w, h, *, title: str, accent: str, lines: Sequence[str] 
             doc.text(x + 18, yy + 10, ln, size=line_size, fill=T.fg2)
         yy += line_size * 1.65
     return Box(BBox(x, y, x + w, y + h), title)
+
+
+# --------------------------------------------------------------------------------------
+# Event chips (shared by the code-walkthrough figures)
+# --------------------------------------------------------------------------------------
+
+EVENT_COLOR = {
+    "TrayMove": T.amber, "AgvMove": T.green, "BayTransition": T.violet, "VecsTransition": T.pink,
+    "ActionNode": T.sky, "recipe": T.fg2,
+}
+
+
+def event_box(doc: Doc, x, y, kind: str, text: str, *, w: float | None = None, n=None, style="solid",
+              h=50, size=12, color: str | None = None, sub: str | None = None) -> BBox:
+    """Rounded event card: kind label (coloured) above a mono text line.
+    style: solid | optional (dashed border) | faded (applied / past) | new (glow ring)."""
+    col = color or EVENT_COLOR.get(kind.split(" ")[0], T.fg2)
+    tw = max(text_width(text, size, "mono"), text_width(kind, 10.5, "mono", 600) + (16 if n is not None else 0))
+    if sub:
+        tw = max(tw, text_width(sub, 10.5, "sans"))
+    w = w or tw + 24
+    if sub:
+        h = max(h, 64)
+    if style == "new":
+        doc.rect(x - 4, y - 4, w + 8, h + 8, rx=11, fill="none", stroke=T.tint(col, 0.5, T.bg), sw=1.2,
+                 dash="2 3")
+    op = 0.45 if style == "faded" else None
+    doc.rect(x, y, w, h, rx=8, fill=T.card if style != "faded" else T.bg, stroke=col, sw=1.4,
+             dash="5 4" if style == "optional" else None, opacity=op)
+    kx = x + 12 + (14 if n is not None else 0)
+    doc.text(kx, y + 15, kind, size=10.5, family="mono", weight=600, fill=col, opacity=op)
+    doc.text(x + 12, y + 34, text, size=size, family="mono", fill=T.fg if style != "faded" else T.muted,
+             opacity=op)
+    if sub:
+        doc.text(x + 12, y + 52, sub, size=10.5, fill=T.muted, opacity=op)
+    if n is not None:
+        num_badge(doc, x + 2, y + 2, n, col, r=10)
+    return BBox(x, y, x + w, y + h)
+
+
+def flow(doc: Doc, a: BBox, b: BBox, *, color=T.muted, label=None, dash=None, sw=1.5, side="h", label_at=None):
+    """Arrow from box a to box b. side='h' (right->left edges) or 'v' (bottom->top)."""
+    if side == "h":
+        if abs(a.cy - b.cy) < 2:
+            pts = [(a.x1, a.cy), (b.x0, b.cy)]
+        else:
+            mx = (a.x1 + b.x0) / 2
+            pts = [(a.x1, a.cy), (mx, a.cy), (mx, b.cy), (b.x0, b.cy)]
+    else:
+        if abs(a.cx - b.cx) < 2:
+            pts = [(a.cx, a.y1), (b.cx, b.y0)]
+        else:
+            my = (a.y1 + b.y0) / 2
+            pts = [(a.cx, a.y1), (a.cx, my), (b.cx, my), (b.cx, b.y0)]
+    connect(doc, pts, kind="flow", color=color, size=8, sw=sw, dash=dash, label=label, label_at=label_at)
+
+
+def code_panel(doc: Doc, x, y, w, lines, *, title: str | None = None, size=12, comment_color=T.faint) -> BBox:
+    """Monospace code block. Lines starting with // are comments; '«...»' segments are highlighted."""
+    pad = 14
+    lh = size * 1.5
+    th = 24 if title else 0
+    h = pad * 2 + th + len(lines) * lh - (lh - size)
+    doc.rect(x, y, w, h, rx=10, fill="#0B1222", stroke=T.border_soft, sw=1)
+    if title:
+        doc.text(x + pad, y + pad + 6, title, size=11, family="mono", weight=600, fill=T.muted)
+    yy = y + pad + th + size / 2
+    for ln in lines:
+        stripped = ln.lstrip()
+        if stripped.startswith("//"):
+            doc.text(x + pad, yy, ln, size=size, family="mono", fill=comment_color)
+        elif "//" in ln:
+            i = ln.index("//")
+            doc.rich(x + pad, yy, [(ln[:i], "mono", 400, T.fg), (ln[i:], "mono", 400, comment_color)], size=size)
+        else:
+            doc.text(x + pad, yy, ln, size=size, family="mono", fill=T.fg)
+        yy += lh
+    return BBox(x, y, x + w, y + h)

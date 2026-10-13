@@ -97,7 +97,7 @@ def uml_core():
         kids.append(uml_class(d, x, y4, s, accent=EV, compact=True, w=w))
         x += w + sgap
     gen_tree(d, ev, kids, EV, bus_y=y4 - 30)
-    d.text(W, y4 - 44, "see Figure 6 for members", size=S.small, fill=T.muted, anchor="end")
+    d.text(W, y4 - 44, "members: see the ScheduleEvent hierarchy figure", size=S.small, fill=T.muted, anchor="end")
 
     # relations
     my = (sched.y1 + ctx.y0) / 2

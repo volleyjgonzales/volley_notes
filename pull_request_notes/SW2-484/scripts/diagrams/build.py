@@ -16,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from registry import FIGURES  # noqa: E402
-import fig_flow, fig_uml, fig_facility, fig_misc  # noqa: E402,F401  (register figures)
+import fig_flow, fig_uml, fig_facility, fig_misc, fig_code, fig_code2, fig_code3, fig_code4  # noqa: E402,F401
 import viewer  # noqa: E402
 
 ROOT = HERE.parent.parent

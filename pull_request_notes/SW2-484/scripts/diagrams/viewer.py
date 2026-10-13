@@ -73,7 +73,7 @@ const FIGS = __FIGS__;
 const nav=document.getElementById('nav'), stage=document.getElementById('stage');
 let cur=-1, svg=null, vb0=null, vb=null;
 const groups={};
-const DOCS={'01-software-background.md':'01 · Software background','02-issue-and-proposal.md':'02 · Issue and proposal'};
+const DOCS={'01-software-background.md':'01 · Software background','02-issue-and-proposal.md':'02 · Issue and proposal','03-verification-plan.md':'03 · Verification plan'};
 FIGS.forEach((f,i)=>{(groups[f.doc]=groups[f.doc]||[]).push(i)});
 for(const [doc,idx] of Object.entries(groups)){
   const h=document.createElement('h2'); h.textContent=DOCS[doc]||doc; nav.appendChild(h);
@@ -125,12 +125,19 @@ const start=FIGS.findIndex(f=>'#'+f.name===location.hash); show(start>=0?start:0
 
 # Reading order = figure numbering in the Markdown documents.
 ORDER = [
-    ("01_pipeline", "Fig 1"), ("15_facility_topology", "Fig 2"), ("16_discrete_garage_state_bridge", "Fig 3"),
-    ("13_uml_ros_messages", "Fig 4"), ("11_uml_existing_core", "Fig 5"), ("12_uml_event_hierarchy", "Fig 6"),
-    ("04_dependencies", "Fig 7"), ("15_facility_scenario", "Fig 8"), ("15_agv_approach_and_pickup", "Fig 9"),
-    ("15_blocking_tray_move", "Fig 10"), ("14_vrc_floors", "Fig 11"),
-    ("02_target_architecture", "Fig 2"), ("03_garage_xy", "Fig 3"), ("08_uml_solver", "Fig 8"),
-    ("09_sequence_tray", "Fig 9"),
+    # generated from the image order in 01/02/03 *.md
+    ("01_pipeline", "Fig 1"), ("20_system_context", "Fig 2"), ("15_facility_topology", "Fig 3"),
+    ("16_discrete_garage_state_bridge", "Fig 4"), ("13_uml_ros_messages", "Fig 5"), ("11_uml_existing_core", "Fig 6"),
+    ("21_runtime_objects", "Fig 7"), ("22_plan_control_flow", "Fig 8"), ("12_uml_event_hierarchy", "Fig 9"),
+    ("04_dependencies", "Fig 10"), ("24_job_recipes", "Fig 11"), ("23_working_state_replay", "Fig 12"),
+    ("25_dependency_rules", "Fig 13"), ("26_retrieve_walkthrough", "Fig 14"), ("15_facility_scenario", "Fig 15"),
+    ("27_tray_assignment_flow", "Fig 16"), ("15_blocking_tray_move", "Fig 17"), ("28_freeing_moves", "Fig 18"),
+    ("29_agv_matching", "Fig 19"), ("15_agv_approach_and_pickup", "Fig 20"), ("30_agv_event_expansion", "Fig 21"),
+    ("31_agv_path_repair", "Fig 22"), ("32_motions_to_actions", "Fig 23"), ("33_bay_logic", "Fig 24"),
+    ("14_vrc_floors", "Fig 25"),
+    ("34_coupling_matrix", "Fig 1"), ("02_target_architecture", "Fig 2"), ("03_garage_xy", "Fig 3"),
+    ("08_uml_solver", "Fig 4"), ("09_sequence_tray", "Fig 5"),
+    ("35_test_entry_points", "Fig 1"),
 ]
 
 

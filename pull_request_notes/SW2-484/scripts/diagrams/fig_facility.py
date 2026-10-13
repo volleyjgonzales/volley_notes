@@ -74,7 +74,7 @@ def facility_scenario():
     m.agv(10, "AGV A", heading=90, label_side="above")
     frame(d, title="Pecos overview with a hypothetical scene",
           subtitle="Node positions and edges are real; the AGV, trays and payloads are teaching stand-ins, not "
-                   "occupancy supplied by the YAML. The same scene is reused in Figures 9 and 10.",
+                   "occupancy supplied by the YAML. The same scene is reused by the approach and blocking-tray figures.",
           badge_key="yaml+hyp",
           legend=[("box", T.amber, "tray (hypothetical)"), ("box", T.pink, "payload / vehicle"),
                   ("box", T.green, "AGV (hypothetical)")] + MAP_LEGEND[:4], legend_title="Scene")
