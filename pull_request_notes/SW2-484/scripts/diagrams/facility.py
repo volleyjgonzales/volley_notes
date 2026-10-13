@@ -182,7 +182,7 @@ class Map:
     def bays(self, *, labels=True):
         d = self.d
         for n in NODES.values():
-            if n.type != "Bay" or not self.visible(n, 3):
+            if n.type != "Bay" or not self.visible(n, 1.6):
                 continue
             x, y = self.P(n.id)
             w, h = STALL_L * self.s - 3, (STALL_W + 0.9) * self.s

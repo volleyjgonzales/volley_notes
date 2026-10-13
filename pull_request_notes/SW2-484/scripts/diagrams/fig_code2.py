@@ -38,9 +38,9 @@ def working_state():
     cp = code_panel(d, 0, 0, W, [
         "// Inside Scheduler::PlanRetrieveJob(ScheduleContextSPtr ctx, const GuidMsg& payload_id, size_t job_index) const",
         "// `this` is the Scheduler (const); ctx is the per-call ScheduleContext created in Plan().",
-        "volley::DiscreteGarageState working_state = ctx->initial_state;   // (1) copy the request's snapshot",
-        "auto [success, message] = ctx->events.Apply(working_state);          // (2) replay every event planned so far",
-        "auto payload_opt = working_state.GetPayload(payload_id);              // (3) read the garage as it WILL be",
+        "volley::DiscreteGarageState working_state = ctx->initial_state;  // (1) copy the request's snapshot",
+        "auto [success, message] = ctx->events.Apply(working_state);      // (2) replay every event planned so far",
+        "auto payload_opt = working_state.GetPayload(payload_id);         // (3) read the garage as it WILL be",
     ], title="the pattern at the top of every Plan<Type>Job", size=11.5)
     s = 21
     mw = (QA_X[1] - QA_X[0]) * s

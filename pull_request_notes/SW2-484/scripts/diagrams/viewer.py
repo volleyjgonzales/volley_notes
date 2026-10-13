@@ -124,21 +124,20 @@ const start=FIGS.findIndex(f=>'#'+f.name===location.hash); show(start>=0?start:0
 """
 
 # Reading order = figure numbering in the Markdown documents.
-ORDER = [
-    # generated from the image order in 01/02/03 *.md
-    ("01_pipeline", "Fig 1"), ("20_system_context", "Fig 2"), ("15_facility_topology", "Fig 3"),
-    ("16_discrete_garage_state_bridge", "Fig 4"), ("13_uml_ros_messages", "Fig 5"), ("11_uml_existing_core", "Fig 6"),
-    ("21_runtime_objects", "Fig 7"), ("22_plan_control_flow", "Fig 8"), ("12_uml_event_hierarchy", "Fig 9"),
-    ("04_dependencies", "Fig 10"), ("24_job_recipes", "Fig 11"), ("23_working_state_replay", "Fig 12"),
-    ("25_dependency_rules", "Fig 13"), ("26_retrieve_walkthrough", "Fig 14"), ("15_facility_scenario", "Fig 15"),
-    ("27_tray_assignment_flow", "Fig 16"), ("15_blocking_tray_move", "Fig 17"), ("28_freeing_moves", "Fig 18"),
-    ("29_agv_matching", "Fig 19"), ("15_agv_approach_and_pickup", "Fig 20"), ("30_agv_event_expansion", "Fig 21"),
-    ("31_agv_path_repair", "Fig 22"), ("32_motions_to_actions", "Fig 23"), ("33_bay_logic", "Fig 24"),
-    ("14_vrc_floors", "Fig 25"),
-    ("34_coupling_matrix", "Fig 1"), ("02_target_architecture", "Fig 2"), ("03_garage_xy", "Fig 3"),
-    ("08_uml_solver", "Fig 4"), ("09_sequence_tray", "Fig 5"),
-    ("35_test_entry_points", "Fig 1"),
-]
+def _doc_order():
+    """Figure order and per-document numbers, read from the image order in the Markdown files."""
+    root = Path(__file__).resolve().parents[2]
+    order = []
+    for md in ("01-software-background.md", "02-issue-and-proposal.md", "03-verification-plan.md"):
+        seen = []
+        for n in re.findall(r"!\[[^\]]*\]\(figures/([^)]+)\.svg\)", (root / md).read_text(encoding="utf-8")):
+            if n not in seen:
+                seen.append(n)
+        order += [(n, f"Fig {i}") for i, n in enumerate(seen, 1)]
+    return order
+
+
+ORDER = _doc_order()
 
 
 def build(out: Path, figures):

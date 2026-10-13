@@ -283,9 +283,9 @@ def plan_flow():
 # 24 — job type -> event recipe
 # --------------------------------------------------------------------------------------
 
-@figure("24_job_recipes", "Job types and the events they create", DOC1)
+@figure("24_job_recipes", "Cheat sheet: events per job type", DOC1)
 def job_recipes():
-    d = Doc("24_job_recipes", "What each job type adds to the event DAG",
+    d = Doc("24_job_recipes", "Cheat sheet: what each job type adds to the event DAG",
             "For each SchedulerJob type, the ScheduleEvents its Plan<Type>Job method creates, in order. Dashed "
             "events are conditional.")
     T_ = TRAY
@@ -360,9 +360,10 @@ def job_recipes():
             prev = bb
             x = bb.x1 + 22
         d.text(lw, y + 66, note_, size=11, fill=T.muted)
-    frame(d, title="What each job type adds to the event DAG",
-          subtitle="Plan() dispatches on SchedulerJob.type. Each Plan<Type>Job appends ScheduleEvents to ctx->events. "
-                   "A \"?\" means the tray or destination is left empty for DoTrayAssignments() to fill.",
+    frame(d, title="Cheat sheet: what each job type adds to the event DAG",
+          subtitle="One row per job type (rows are independent, not one scenario). Read a row left to right: the "
+                   "events that Plan<Type>Job appends, in creation order. A \"?\" is left empty for "
+                   "DoTrayAssignments() to fill. Section 12 shows each row in a 2D garage example.",
           badge_key="as-built",
           legend=[("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),
                   ("box", VECS, "VecsTransition"), ("dashbox", T.fg2, "only when needed"),

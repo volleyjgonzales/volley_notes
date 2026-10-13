@@ -396,7 +396,7 @@ def chip(doc: Doc, x, y, s, color, *, size=S.small, anchor="start", family="mono
 
 def num_badge(doc: Doc, cx, cy, n, color, *, r=11, layer="top"):
     doc.circle(cx, cy, r, fill=color, layer=layer)
-    doc.text(cx, cy + 0.5, str(n), size=12, family="mono", weight=700, fill=T.bg, anchor="middle", layer=layer)
+    doc.text(cx, cy + 0.5, str(n), size=12 if len(str(n)) < 2 else 10, family="mono", weight=700, fill=T.bg, anchor="middle", layer=layer)
 
 
 def card(doc: Doc, x, y, w, h, *, title: str, accent: str, lines: Sequence[str] = (), sub: str | None = None,

@@ -4,7 +4,7 @@ A study pack for an engineer joining the scheduler team. It explains how the `sc
 
 | Read | For | Time |
 |---|---|---|
-| [01 — Software background](01-software-background.md) | How the software works: node and interfaces, garage model, `Plan()` step by step, events and the DAG, job expansion, tray and AGV assignment, motion planning, bays. 25 figures, annotated code snippets, a checkpoint quiz | 3–4 h in three passes |
+| [01 — Software background](01-software-background.md) | How the software works: node and interfaces, garage model, `Plan()` step by step, events and the DAG, job expansion (with a 2D garage example for every job type), tray and AGV assignment, motion planning, bays. 38 figures, annotated code snippets, checkpoint questions | 4–5 h in three passes |
 | [02 — Issue and proposed design](02-issue-and-proposal.md) | What the two assignment algorithms are coupled to today (generated matrix), the proposed solver interfaces, staged plan and risks | 45 min |
 | [03 — Verification and benchmarks](03-verification-plan.md) | What the 72 existing tests cover, gaps, the parity comparison and benchmark method | 30 min |
 
@@ -22,7 +22,7 @@ Math uses Markdown LaTeX compatible with typical VS Code math previews: `$...$` 
 
 ## Sources
 
-- `sources/repomix-scheduler.xml` — the `scheduler` package snapshot: `include/scheduler/{scheduler,scheduler_ros,scheduler_msgs,utils}.hpp`, `src/{scheduler,scheduler_ros,scheduler_component,utils}.cpp`, `test/*.cpp`, `test/garage_states/double_retrieve_garage_state.yaml`, `CMakeLists.txt`, `package.xml`. Figures 34 and 35 are computed from it, so replacing it and rebuilding refreshes them.
+- `sources/repomix-scheduler.xml` — the `scheduler` package snapshot: `include/scheduler/{scheduler,scheduler_ros,scheduler_msgs,utils}.hpp`, `src/{scheduler,scheduler_ros,scheduler_component,utils}.cpp`, `test/*.cpp`, `test/garage_states/double_retrieve_garage_state.yaml`, `CMakeLists.txt`, `package.xml`. Figures 34, 35 and 37 are computed from it, so replacing it and rebuilding refreshes them.
 - `sources/5675_pecos_combined.yaml` — the layout used by the map figures (28 nodes, 37 edges).
 
 ## Figures
@@ -52,8 +52,9 @@ python3 scripts/diagrams/build.py 13 15_   # only figures whose file name starts
 | `fig_code2.py` | 23 working-state replay, 25 dependency rules, 26 retrieve walkthrough |
 | `fig_code3.py` | 27 tray assignment flow, 28 freeing moves, 29 AGV matching, 30 AGV event expansion, 31 AGV path repair |
 | `fig_code4.py` | 32 motions to actions, 33 bay logic, 34 coupling matrix and 35 test map (both parsed from the snapshot) |
+| `fig_jobs.py` | 36 expansion loop, 37 job building blocks (parsed from the snapshot), 40–50 one 2D scenario per job type |
 | `svgkit.py`, `components.py`, `facility.py`, `theme.py` | SVG engine, shared components (UML boxes, event boxes, code panels, legends), YAML map renderer, colour tokens |
-| `registry.py`, `build.py`, `viewer.py` | Figure registry, build entry point, offline pan/zoom gallery (figure order follows the documents) |
+| `registry.py`, `build.py`, `viewer.py` | Figure registry, build entry point, offline pan/zoom gallery (figure order and numbers are read from the documents) |
 
 All modules are in `scripts/diagrams/`. File-name numbers are stable IDs, not the figure numbers in the documents; each document numbers its own figures in reading order.
 
