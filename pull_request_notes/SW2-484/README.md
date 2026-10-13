@@ -4,7 +4,7 @@ A study pack for an engineer joining the scheduler team. It explains how the `sc
 
 | Read | For | Time |
 |---|---|---|
-| [01 — Software background](01-software-background.md) | How the software works: node and interfaces, garage model, `Plan()` step by step, events and the DAG, job expansion (with a 2D garage example for every job type), tray and AGV assignment, motion planning, bays. 41 figures, annotated code snippets, checkpoint questions | 4–5 h in three passes |
+| [01 — Software background](01-software-background.md) | How the software works: node and interfaces, garage model, `Plan()` step by step, events and the DAG, job expansion (with a 2D garage example for every job type), tray and AGV assignment, motion planning, bays. 42 figures, annotated code snippets, a design FAQ (DAGs vs Open-RMF, parallelism, why the logic is shaped this way), checkpoint questions | 4–5 h in three passes |
 | [02 — Issue and proposed design](02-issue-and-proposal.md) | What the two assignment algorithms are coupled to today (generated matrix), the proposed solver interfaces, staged plan and risks | 45 min |
 | [03 — Verification and benchmarks](03-verification-plan.md) | What the 72 existing tests cover, gaps, the parity comparison and benchmark method | 30 min |
 
@@ -53,7 +53,7 @@ python3 scripts/diagrams/build.py 13 15_   # only figures whose file name starts
 | `fig_code3.py` | 27 tray assignment flow, 28 freeing moves, 29 AGV matching, 30 AGV event expansion, 31 AGV path repair |
 | `fig_code4.py` | 32 motions to actions, 33 bay logic, 34 coupling matrix and 35 test map (both parsed from the snapshot) |
 | `fig_jobs.py` | 36 expansion loop, 37 job building blocks (parsed from the snapshot), 40–50 one 2D scenario per job type |
-| `fig_concepts.py` | 51 Layout vs GarageGraph, 52 CollisionTable, 53 topological ordering |
+| `fig_concepts.py` | 51 Layout vs GarageGraph, 52 CollisionTable, 53 topological ordering, 54 partial order and parallel execution |
 | `svgkit.py`, `components.py`, `facility.py`, `theme.py` | SVG engine, shared components (UML boxes, event boxes, code panels, legends), YAML map renderer, colour tokens |
 | `registry.py`, `build.py`, `viewer.py` | Figure registry, build entry point, offline pan/zoom gallery (figure order and numbers are read from the documents) |
 

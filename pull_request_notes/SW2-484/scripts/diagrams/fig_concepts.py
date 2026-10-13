@@ -483,3 +483,103 @@ def topological_ordering():
           legend=[("box", TRAY, "TrayMove"), ("box", BAYC, "BayTransition"), ("arrow", T.fg2, "dependency edge"),
                   ("arrow", T.red, "edge pointing backwards / closing a cycle")])
     return d
+
+
+# ======================================================================================
+# 54 — a DAG is a partial order: robots still move in parallel
+# ======================================================================================
+
+@figure("54_partial_order_parallel", "A DAG does not mean one robot at a time", DOC1)
+def partial_order_parallel():
+    d = Doc("54_partial_order_parallel", "A DAG does not mean one robot at a time",
+            "Left: an action DAG for two AGVs and a bay. Right: one execution of it in time. Only the edges force "
+            "waiting; everything else runs concurrently.")
+    A, B, BAY = T.green, T.sky, BAYC
+    lanes = [("AGV A", A, ["A -> P17", "lift T17", "T17 -> B21", "lower"]),
+             ("AGV B", B, ["B -> P19", "lift T19", "T19 -> P24", "lower"]),
+             ("bay B21", BAY, ["TO_RETRIEVE", "PROCESS_RETRIEVE"])]
+    bw, bh, gx, gy = 112, 40, 26, 78
+    x0 = 74
+    box = {}
+    d.text(0, -16, "Action DAG (what Dispatch receives: ActionNode[] with parents)", size=13, weight=600, fill=T.fg)
+    for r, (name, col, acts) in enumerate(lanes):
+        y = 10 + r * gy
+        d.text(0, y + bh / 2, name, size=11.5, family="mono", weight=600, fill=col)
+        for i, a in enumerate(acts):
+            x = x0 + (i if r < 2 else (0 if i == 0 else 3)) * (bw + gx)
+            d.rect(x, y, bw, bh, rx=7, fill=T.card, stroke=col, sw=1.4)
+            d.text(x + bw / 2, y + bh / 2, a, size=10.5, family="mono", fill=T.fg, anchor="middle")
+            box[(r, i)] = BBox(x, y, x + bw, y + bh)
+            if i and r < 2:
+                p = box[(r, i - 1)]
+                connect(d, [(p.x1, p.cy), (x, y + bh / 2)], kind="flow", color=col, size=7, sw=1.4)
+    # bay -> A's carry into the bay; A's lower -> PROCESS_RETRIEVE
+    b0, b1 = box[(2, 0)], box[(2, 1)]
+    a2, a3 = box[(0, 2)], box[(0, 3)]
+    connect(d, [(b0.x1, b0.cy), (a2.cx - 20, b0.cy), (a2.cx - 20, a2.y1)], kind="flow", color=BAY, size=7, sw=1.4,
+            dash="4 3")
+    connect(d, [(a3.cx, a3.y1), (a3.cx, b1.y0)], kind="flow", color=BAY, size=7, sw=1.4, dash="4 3")
+    # one cross-AGV occupancy edge: B may carry T19 only after A has left the shared corridor
+    pb = box[(1, 2)]
+    connect(d, [(a2.cx + 20, a2.y1), (a2.cx + 20, pb.y0)], kind="flow", color=T.red, size=7, sw=1.6)
+    label_pill(d, a2.cx + 26, (a2.y1 + pb.y0) / 2, "occupancy", color=T.red, size=10, anchor="start")
+    dag_r = max(b.x1 for b in box.values())
+    dag_b = max(b.y1 for b in box.values())
+
+    # ---- timeline ----
+    ty = dag_b + 70
+    d.text(0, ty - 30, "One execution in time (durations illustrative)", size=13, weight=600, fill=T.fg)
+    tx0, sc = x0, 8.6   # px per second
+    sched = {  # lane: [(label, start, dur)]
+        0: [("A -> P17", 0, 14), ("lift", 14, 4), ("T17 -> B21", 18, 22), ("lower", 40, 4)],
+        1: [("B -> P19", 0, 10), ("lift", 10, 4), ("wait", 14, 26), ("T19 -> P24", 40, 12), ("lower", 52, 4)],
+        2: [("TO_RETRIEVE", 0, 15), ("PROCESS_RETRIEVE", 44, 20)],
+    }
+    T_END = 66
+    for t in range(0, T_END + 1, 10):
+        x = tx0 + t * sc
+        d.line(x, ty - 6, x, ty + 3 * 46, stroke=T.grid, sw=1, layer="bg")
+        d.text(x, ty + 3 * 46 + 12, f"{t} s", size=10, family="mono", fill=T.muted, anchor="middle")
+    for r, (name, col, _) in enumerate(lanes):
+        y = ty + r * 46
+        d.text(0, y + 15, name, size=11.5, family="mono", weight=600, fill=col)
+        for lab, s0, du in sched[r]:
+            x = tx0 + s0 * sc
+            w = du * sc
+            if lab == "wait":
+                d.rect(x, y, w, 30, rx=5, fill="none", stroke=T.faint, sw=1, dash="3 3")
+                d.text(x + w / 2, y + 15, "waits for A (red edge)", size=10, fill=T.muted, anchor="middle")
+                continue
+            d.rect(x, y, w, 30, rx=5, fill=T.tint(col, 0.25, T.bg), stroke=col, sw=1.2)
+            if text_width(lab, 10, "mono") < w - 6:
+                d.text(x + w / 2, y + 15, lab, size=10, family="mono", fill=T.fg, anchor="middle")
+    # highlight concurrency band
+    d.rect(tx0, ty - 10, 14 * sc, 3 * 46 - 6, rx=6, fill="none", stroke=T.amber, sw=1.4, dash="5 4", layer="over")
+    label_pill(d, tx0 + 7 * sc, ty - 12, "A, B and the bay all busy at once", color=T.amber, size=10, bg=T.bg)
+    tl_b = ty + 3 * 46 + 26
+
+    # ---- right column: what the topological order is for ----
+    rx = max(dag_r, tx0 + T_END * sc) + 40
+    rw = W - rx
+    n1 = note(d, rx, -10, rw,
+              "The DAG is a partial order. An edge u -> v only says v may not start before u ends. Two actions with "
+              "no path between them may run at the same time, and with two AGVs they usually do.",
+              title="Edges are the only waits", accent=T.green)
+    n2 = note(d, rx, n1.y1 + 16, rw,
+              "A topological order (e.g. bay, A1, B1, A2, B2, ...) is one way to list the same actions so every edge "
+              "points forward. The scheduler uses it to replay events on a DiscreteGarageState and to build the "
+              "response array. It is a bookkeeping order, not the order robots move in.",
+              title="What the list is for", accent=T.sky)
+    n3 = note(d, rx, n2.y1 + 16, rw,
+              "Every edge removes some parallelism. Per-AGV chains are physical (one AGV, one action at a time). "
+              "Others, such as rule B inside one job or REBALANCE serialising bays, are choices that can cost "
+              "throughput.",
+              title="Where it does cost you", accent=T.amber)
+    frame(d, title="A DAG does not mean one robot at a time",
+          subtitle="The response is ActionNode[] where each node lists its parents. Motion planning produces timed "
+                   "trajectories in which several AGVs move at once (see the ContinuousStateToSchedule test, where "
+                   "AGVs 1 and 2 both start at t = 0). Waiting happens only along edges.",
+          badge_key="illustrative",
+          legend=[("box", A, "AGV A actions"), ("box", B, "AGV B actions"), ("box", BAY, "bay actions"),
+                  ("arrow", T.red, "cross-AGV occupancy edge"), ("dasharrow", BAY, "bay dependency")])
+    return d

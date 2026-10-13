@@ -167,7 +167,8 @@ def dependency_rules():
          "later, through the occupancy edges added by tray and AGV assignment.", title="Jobs stay independent")
     frame(d, title="Where the edges come from during job expansion",
           subtitle="Each Plan<Type>Job adds an event, then calls one or both ScheduleContext helpers. Rule C lives in "
-                   "PlanReparkTrayJob. The result is a partial order, not a sequence.",
+                   "PlanReparkTrayJob. The letters A, B, C are this guide's names, not the code's. The result is a "
+                   "partial order, not a sequence.",
           badge_key="as-built",
           legend=[("arrow", ENT, "rule A: same entity (bay)"), ("arrow", TRAY, "rule A: same entity (tray)"),
                   ("dasharrow", LEAF, "rule B: leaf of the same job"), ("dasharrow", BAYR, "rule C: into a bay")])

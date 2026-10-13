@@ -16,7 +16,7 @@ Read it in three passes. Each pass is useful on its own.
 | 2 · Data and objects (1 h) | Sections 6–11 | Name the main types, who owns them, and follow one `Plan()` call from request to response |
 | 3 · Algorithms (3 h, with the code open) | Sections 12–18 | Explain job expansion, tray assignment, AGV assignment, motion planning and bay rebalancing. Section 12 is long: read 12.1–12.6 first, then the job types you will work on |
 
-Then work through the checkpoint questions in section 22, run one test from section 20 under a debugger, and keep section 21 (C++ idioms) open as a reference.
+Then work through the checkpoint questions in section 23, read the design FAQ in section 22, run one test from section 20 under a debugger, and keep section 21 (C++ idioms) open as a reference.
 
 ### How to read the code snippets
 
@@ -630,7 +630,7 @@ Three details matter in practice:
 
 *Figure 16 — The three edge rules used during job expansion. Rule A (`UpdateLastEntityEvent`) chains events that touch the same AGV, tray, bay or VECS, even across jobs. Rule B (`UpdateLeafDependencies`) makes a new event wait for the current leaf events of the **same** job. Rule C (in `PlanReparkTrayJob`) makes a tray move into a bay or VECS wait for that resource's last event.*
 
-Precisely:
+Precisely (the letters A, B and C are this guide's shorthand; the code uses the function names, see the FAQ in section 22):
 
 - **Rule A — same entity.** `ctx->last_entity_event` is a map from `GarageEntityIdMsg` (which AGV, tray, bay or VECS) to the last event that touched it. `UpdateLastEntityEvent(id, e)` adds the edge `last[id] -> e` if there is one, then sets `last[id] = e`. This is the only rule that links **different jobs**: if job 0 and job 1 both move tray T19, job 1's move waits for job 0's.
 - **Rule B — earlier leaves of the same job.** A *leaf* is an event with no outgoing edge anywhere in the DAG. `UpdateLeafDependencies(e, job_index)` adds `leaf -> e` for every leaf whose `GetJobIndex() == job_index`. Within one job this makes each new event wait for "everything the job has done so far that nothing else waits for". It never links different jobs.
@@ -1159,7 +1159,86 @@ A good first exercise: run `SchedulerJobs.RetrieveJob` under a debugger, break i
 | Templates | Generic code | `DagBase<T>`, `GarageOccupancyChecker<T>` | Also used with `T = ActionNodeMsg` and `T = uint16_t` |
 | ROS IDL aliases | Generated structs | `PlanRequestMsg`, `GaragePoseMsg` | Field names are a wire contract |
 
-## 22. Known limitations and reading checkpoint
+## 22. FAQ: design questions
+
+Questions new engineers ask once they have read sections 9 to 17. The answers separate what the code does (with evidence) from opinion (marked as such).
+
+### Is "events plus a DAG" a common way to model this problem?
+
+Yes. Two established ideas are combined here:
+
+1. **Precedence-constrained scheduling.** Activities with "finish before start" constraints form a DAG. This is the standard model in project scheduling (critical-path networks) and shop scheduling. The event DAG built in job expansion is exactly this: "the bay must open before the tray goes in".
+2. **Action dependency graphs for multi-robot execution.** Hönig et al. ([RA-L 2019](https://act.usc.edu/publications/Hoenig_RAL2019.pdf)) turn a time-stamped multi-robot plan into a DAG of actions. One kind of edge chains the actions of one robot; the other kind orders actions of different robots that use the same location. Robots then run at their own speed and wait only on edges, which makes execution robust to delays. Later work describes it as "a directed acyclic graph representing the temporal dependencies between actions" ([Streamlining the ADG framework, 2024](https://arxiv.org/html/2412.01277v1)). The scheduler's response is close to this: `ActionNode[]` where each node lists its `parents`, chained per entity and ordered by occupancy (section 17).
+
+What is more specific to this code base is that the DAG exists **before** any motion is planned and is handed to the motion planner as input (`volley::Chugg motion_planner(gg_, table_, ctx->events, ...)` in `PlanMotions`). The DAG first carries task logic (which tray must move before which) and only at the end becomes an execution policy.
+
+### Open-RMF's `rmf_traffic` has no DAG; it is a database updated by events. Why is this different?
+
+The two systems solve different problems.
+
+| | Open-RMF `rmf_traffic` | This scheduler |
+|---|---|---|
+| Who plans robot paths | Each fleet or participant plans its own robots | One central planner plans every AGV |
+| Shared object | A traffic **schedule database** of timed itineraries. Participants write through `schedule::Writer`: `set`, `extend`, `delay`, `reached`, `clear` ([API](https://openrmf.readthedocs.io/projects/rmf-traffic/en/latest/api/classrmf__traffic_1_1schedule_1_1Writer.html)) | A `PlanRequest` holding the current garage state and in-flight actions, answered with a full schedule |
+| Conflicts | Detected between itineraries and resolved by negotiation (for example `rmf_traffic::agv::CentralizedNegotiation`, [API](https://openrmf.readthedocs.io/projects/rmf-traffic/en/latest/api/classrmf__traffic_1_1agv_1_1CentralizedNegotiation.html)) | Avoided at planning time: precedence edges plus collision-aware motion planning (CHUGG) |
+| Coupling between tasks | Mostly spatial: robots share corridors | Strong and logical: moving one car can require moving several other trays first, an AGV must lift a tray, bays have modes |
+| Built for | Many heterogeneous fleets from different vendors in one building | One tightly coupled automated garage |
+
+Two nuances:
+
+- **Open-RMF is not entirely free of dependencies.** Its routes can declare them: `DependsOnCheckpoint` is a map where "the checkpoint in the value waits for the checkpoint in the key" ([API](https://openrmf.readthedocs.io/projects/rmf-traffic/en/latest/api/typedef_Route_8hpp_1a9125a240740855280a6356bbf1591153.html)). That is a precedence edge between plans.
+- **This scheduler is event-driven too, just one level up.** `Scheduler::Plan()` keeps no state between calls: everything lives in a fresh `ScheduleContext`. The live state and the job queue are held by Dispatch, which sends `base_state` (the garage now) and `base_schedule` (actions already executing; `Plan()` marks their AGVs, nodes, bays and VECS disabled) with every request. "A robot went down" or "a new car arrived" therefore means a new `PlanRequest`, not an edit to an old DAG. Dispatch is not in the snapshot, so when exactly it replans cannot be shown here.
+
+Why a DAG fits better here (opinion): the hard part of this garage is not two robots meeting in a corridor but chains like "to retrieve T17, first move T15 out of its way, which needs a free spot, which needs the bay to switch mode". Those are precedence constraints, and a DAG states them directly. A traffic database would still need something like it to express "this tray move must finish before that one starts".
+
+### Does a DAG and its topological order force one command at a time?
+
+No. A DAG is a **partial order**. An edge `u -> v` only says that `v` may not start before `u` ends. Two actions with no path between them can run at the same time, and with several AGVs they usually do.
+
+![A DAG does not mean one robot at a time](figures/54_partial_order_parallel.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#54_partial_order_parallel) · [standalone SVG](figures/54_partial_order_parallel.svg)</sub>
+
+*Figure 42 — The same action DAG drawn as a graph (top) and as one execution in time (bottom). AGV A, AGV B and the bay start together; AGV B waits only where the red occupancy edge says so.*
+
+A topological order is a **bookkeeping order**, not an execution order. The scheduler uses it to replay events on a `DiscreteGarageState` (to know where everything will be) and to write the response array, where each `ActionNode` carries its `parents`. The code shows parallel motion explicitly: in the `ContinuousStateToSchedule` test, AGV 1 and AGV 2 both have motions starting at `t = 0`.
+
+Parallelism is still lost wherever an edge exists. Some edges are physical (one AGV does one thing at a time; a tray is in one place). Others are choices: rule B orders every step of a job even when two steps could overlap, and REBALANCE_GARAGE runs its bays one after another because they share a job index (section 12.18). Those are fair targets for improvement.
+
+### The logic feels convoluted. Is it?
+
+Partly. It helps to separate what the problem forces from what the code adds.
+
+**What the problem forces.** Trays block each other, an AGV must fetch a tray before carrying it, bays and VECS have modes, and every job's plan depends on where earlier jobs leave things. Some precedence structure is unavoidable. Separating *what must happen in which order* (the event DAG) from *how and when robots move* (CHUGG) is a sound and common split.
+
+**What the code adds** (evidence from `scheduler.cpp`):
+
+- **One mutable DAG, edited by three passes.** Job expansion leaves blanks (`T21 -> ?`), tray assignment fills them and adds blocker moves, AGV assignment adds approach, lift and lower events. To know what an event looks like you need to know which pass you are in.
+- **Edges come from many places.** `AddDependency` appears 28 times in `scheduler.cpp`, spread over ten `Scheduler` methods (`DoTrayAssignments` 7, `AssignDestForUntargetedMove` 5, `MoveAgvToTrayPose` 3, `PlanReparkTrayJob` 2, `DoAgvAssignments` 2, `AddDepsAfterAmiga` 2, and one each in `AppendAgvLiftEvent`, `AddNodeArrivalDeps`, `GetEventDag` and `TryClearBlockedAgvMove`), plus the two `ScheduleContext` helpers. An edge does not record why it was added, and `Reduce()` later removes the redundant ones, so the final DAG does not show where its edges came from.
+- **Repeated replay.** Almost every step copies `initial_state` and replays the whole DAG to know the current state.
+- **Implicit conventions.** `job_index` is a position in a list that only successful jobs enter; failed jobs can leave events behind (section 12.18).
+
+**What would make it easier to follow** (suggestions, not plans): record a reason or kind on every edge; keep each kind of constraint in one function; check invariants after each pass (acyclic, every `TrayMove` complete, no leftover events); give each pass a narrow input and output. That last point is what the solver interfaces in [02](02-issue-and-proposal.md) start to do. Until then, the `debug/printdags` service (section 20), which logs the DAG after each pass, is the best way to see what the code built.
+
+### Does the code really call them rule A, rule B and rule C?
+
+No. The letters are this guide's shorthand, chosen to keep the figures readable. Search the code for these names instead:
+
+| Guide | In the code | Code comment |
+|---|---|---|
+| Rule A | `ScheduleContext::UpdateLastEntityEvent(entity_id, new_event)` in `scheduler.hpp`, using the map `last_entity_event` | "Add a dependency on the entity's last event, if it had one" |
+| Rule B | `ScheduleContext::UpdateLeafDependencies(child, job_index)` in `scheduler.hpp` | "Adding a new child event to the leafs in the DAG. Each leaf becomes a parent to the new child event." |
+| Rule C | Two inline blocks at the end of `Scheduler::PlanReparkTrayJob` | "If reparking into a bay, ensure that we depend already on the last completed event for that bay -- could either be a PROCESS_RETRIEVE or TRANSITION_TO_RETRIEVE" (and the same for a VECS) |
+
+**Why each one is needed**, by what would go wrong without it:
+
+- **Without rule A**, two jobs that touch the same tray, AGV, bay or VECS would be unordered. If job 0 moves T19 from P19 to P24 and job 1 moves it from P24 to P23, nothing would stop the replay, or the robots, from doing job 1's move first, starting from a place the tray is not at yet.
+- **Without rule B**, the steps inside one job would be unordered: the car's tray could be planned into B21 before the bay switches to retrieve mode, or `PROCESS_RETRIEVE` could run before the tray arrives.
+- **Without rule C**, a tray could enter a bay before an *earlier job's* bay event finished. Rule B does not help across jobs, and rule A does not either, because a `TrayMove` is chained to its tray, not to the bay it enters. For example, a READY_FOR_INSERT job bringing an empty tray into B21 must wait for the previous job's `PROCESS_RETRIEVE` on B21; only rule C adds that edge.
+
+The three rules are not the whole story. They only order what the job methods know about. Geometric conflicts (a tray in the way, two AGVs on one node) are turned into edges later by tray and AGV assignment (sections 14 and 15).
+
+## 23. Known limitations and reading checkpoint
 
 Limits of this guide: `GarageGraph`, `CollisionTable`, `GarageOccupancyChecker`, the search environments, `BottleneckAssignment`, CHUGG, `DiscreteGarageState` and the event classes live in other packages and were not in the snapshot. Dispatch, AGV firmware and the Pecos garage's real occupancy were not supplied. Do not infer those details from a schematic figure.
 
