@@ -218,8 +218,8 @@ def uml_solver():
     gap = 110
     sched = uml_class(d, 0, 0, "Scheduler", accent=EX, stereo="existing · abridged", size=M,
                       attrs=["- services_: GarageServices", "- tray_solver_:", "    unique_ptr<tray_assignment::Solver>"],
-                      methods=["+ Plan(request): PlanResponse", "- ApplyTrayAssignment(ctx&, result)",
-                               "    : stdx::Result"])
+                      methods=["+ Plan(request): PlanResponse", "  // Solve(), then tray_assignment::",
+                               "  // ApplyTrayAssignment(*ctx, result)"])
     req = uml_class(d, sched.x1 + gap, 0, "Input", accent=NEW, stereo="struct · proposed · read-only", size=M,
                     attrs=["+ initial_state: const DiscreteGarageState&", "+ events: const ScheduleEventDag&"])
     res = uml_class(d, req.x1 + 60, 0, "Result", accent=NEW, stereo="struct · proposed · returned", size=M,
@@ -255,7 +255,7 @@ def uml_solver():
             label="«return»", label_at=(res.cx, (res.y1 + iface.y0 + 84) / 2))
     top = min(sched.y0, req.y0, res.y0) - 40
     connect(d, [(sched.cx + 60, sched.y0), (sched.cx + 60, top), (res.cx + 60, top), (res.cx + 60, res.y0)],
-            kind="dep", color=EX, label="«apply»  the only write to ctx", label_at=((sched.cx + res.cx) / 2 + 60, top))
+            kind="dep", color=EX, label="«apply» via ApplyTrayAssignment: the only write to ctx", label_at=((sched.cx + res.cx) / 2 + 60, top))
     bus = dy - 40
     d.arrowhead((iface.cx, iface.y1), (iface.cx, iface.y1 + 30), kind="triangle", color=NEW, size=11, sw=1.5)
     d.line(iface.cx, iface.y1 + 13, iface.cx, bus, stroke=NEW, sw=1.5, dash="6 4", layer="edges")

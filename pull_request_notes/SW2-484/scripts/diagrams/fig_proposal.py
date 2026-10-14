@@ -1,121 +1,350 @@
-"""Doc 02 proposal figures: where each function of the tray-assignment call tree goes."""
+"""Doc 02 proposal figures for tray_assignment: data flow (today vs proposed), the call tree before
+(UML of the Scheduler members) and after (UML of the proposed module, Pass nested in DefaultSolver)."""
 from __future__ import annotations
 
-from components import chip, connect, frame, label_pill
+import math
+
+from components import card, chip, class_size, connect, frame, label_pill, note, uml_class
 from registry import figure
 from svgkit import BBox, Doc, text_width
 from theme import T, S
 
 DOC2 = "02-issue-and-proposal.md"
-W = 1120
-ROW = 24
+CTX, SOLVE, PASS, PURE, WRITE, ARG = T.sky, T.amber, T.violet, T.green, T.red, T.amber
+M = 12
 
 
-def _item(d: Doc, x, y, new: str, old: str | None, *, col=T.fg, size=12.5):
-    runs = [(new, "mono", 600, col)]
-    if old:
-        runs.append(("   // " + old, "mono", 400, T.faint))
-    d.rich(x, y, runs, size=size)
-
-
-def _band(d: Doc, y, h, color, title, sub):
-    d.rect(0, y, W, h, rx=12, fill=T.tint(color, 0.06, T.bg), stroke=T.tint(color, 0.7, T.bg), sw=1.4,
+def _lane(d: Doc, x, y, w, h, title, color):
+    d.rect(x, y, w, h, rx=12, fill=T.tint(color, 0.05, T.bg), stroke=T.tint(color, 0.55, T.bg), sw=1.3,
            layer="under")
-    c = chip(d, 18, y + 22, title, color, size=12)
-    d.text(c.x1 + 12, y + 22, sub, size=S.small + 0.5, fill=T.muted)
-    return y + 46
+    chip(d, x + 16, y + 20, title, color, size=12)
 
 
-def _file_card(d: Doc, x, y, w, name, items, color):
-    n = sum(2 if old else 1 for _, old in items)
-    h = 40 + n * 20 + 8
-    d.rect(x, y, w, h, rx=9, fill=T.card, stroke=T.tint(color, 0.55, T.bg), sw=1.2)
-    d.text(x + 14, y + 18, name, size=11.5, family="mono", weight=600, fill=color)
-    yy = y + 42
-    for new, old in items:
-        d.text(x + 14, yy, new, size=12, family="mono", weight=600, fill=T.fg)
-        yy += 20
-        if old:
-            d.text(x + 30, yy - 2, "// " + old, size=11.5, family="mono", fill=T.faint)
-            yy += 20
-    return BBox(x, y, x + w, y + h)
+# --------------------------------------------------------------------------------------
+# 58 — data flow: how ScheduleContext is read and written, today vs proposed
+# --------------------------------------------------------------------------------------
 
+@figure("58_tray_dataflow", "Tray assignment data flow, today vs proposed", DOC2)
+def tray_dataflow():
+    d = Doc("58_tray_dataflow", "How tray assignment reads and writes ScheduleContext",
+            "Today DoTrayAssignments writes ctx throughout its loop. Proposed: Solve reads an Input, returns a "
+            "Result, and ApplyTrayAssignment writes ctx once.")
+    W = 1440
+    ctx_lines = ["initial_state", "events  (the DAG)", "first_tray_event"]
 
-@figure("57_tray_tree_placement", "Where the tray call tree goes", DOC2)
-def tray_tree_placement():
-    d = Doc("57_tray_tree_placement", "Where each function of the tray call tree goes",
-            "Four layers: Scheduler keeps orchestration and the single write to ctx; DefaultSolver runs the loop; "
-            "a private Pass holds the only mutable state; everything else becomes a pure free function.")
-    SCH, CLS, PASS, PURE = T.sky, T.amber, T.violet, T.green
+    # ---- lane 1: today ----
+    y0 = 0
+    _lane(d, 0, y0, W, 210, "today", T.muted)
+    c1 = card(d, 24, y0 + 48, 230, 140, title="ScheduleContext", accent=CTX, lines=ctx_lines,
+              sub="plan_ctx, owned by Plan()")
+    s1 = card(d, 580, y0 + 48, 340, 140, title="DoTrayAssignments(ctx)", accent=SOLVE, sub="Scheduler member",
+              lines=["~560-line loop + 9 helpers", "returns BoolStringPair"], mono_lines=False)
+    connect(d, [(c1.x1, c1.y0 + 50), (s1.x0, c1.y0 + 50)], kind="flow", color=CTX,
+            label="ScheduleContextSPtr (shared, mutable)", label_at=((c1.x1 + s1.x0) / 2, c1.y0 + 34))
+    connect(d, [(s1.x0, c1.y0 + 104), (c1.x1, c1.y0 + 104)], kind="flow", color=WRITE,
+            label="writes during the loop", label_at=((c1.x1 + s1.x0) / 2, c1.y0 + 88))
+    note(d, s1.x1 + 30, y0 + 48, W - s1.x1 - 54,
+         "AddEvent, AddDependency, SetTrayId / SetDest on events, first_tray_event[...] happen inside the loop "
+         "and inside AssignDestForUntargetedMove. A failure halfway leaves ctx half-edited.",
+         title="Writes are spread out", accent=WRITE)
 
-    # band 1: Scheduler
-    y = _band(d, 0, 132, SCH, "stays in Scheduler", "scheduler.cpp; owns gg_, table_, cost_model_, layout_ and services_")
-    _item(d, 24, y + 4, "Plan()", "Solve(), then ApplyTrayAssignment()")
-    _item(d, 24, y + 4 + ROW, "ApplyTrayAssignment(ctx&, result) -> stdx::Result", "new: replays Result, cycle check")
-    _item(d, 24, y + 4 + 2 * ROW, "Plan<Type>Job() (12 job methods)", "call the shared pure helpers below")
-    b1 = BBox(0, 0, W, 132)
-
-    # band 2: DefaultSolver
-    y2 = b1.y1 + 46
-    y = _band(d, y2, 84, CLS, "tray_assignment::DefaultSolver", "class; holds const GarageServices&; no other state")
-    _item(d, 24, y + 4, "Solve(const Input&) const -> stdx::Expected<Result>",
-          "was DoTrayAssignments(ctx); only the loop remains")
-    b2 = BBox(0, y2, W, y2 + 84)
-
-    # band 3: Pass
-    y3 = b2.y1 + 46
-    y = _band(d, y3, 156, PASS, "Pass (private)",
-              "created inside Solve, destroyed on return: working_state, freeing_moves, last_tray_event, result_")
-    _item(d, 24, y + 4, "RecordTransition(event) -> stdx::Result", "was ApplyTransitionToFreeingMoves")
-    _item(d, 24, y + 4 + ROW, "EmitMoveChain(moves, root)",
-          "was duplicated in DoTrayAssignments and AssignDest...")
-    _item(d, 24, y + 4 + 2 * ROW, "CommitRootMove(event, resolved) -> stdx::Result",
-          "was the tail of both")
-    _item(d, 24, y + 4 + 3 * ROW, "Fill(event, tray_id, dest)", "was move->SetTrayId / SetDest on the input")
-    b3 = BBox(0, y3, W, y3 + 156)
-
-    # band 4: pure functions, four file cards in a 2 x 2 grid
-    y4 = b3.y1 + 46
-    top = y4 + 46
-    cw = (W - 24 * 2 - 20) / 2
-    c1 = _file_card(d, 24, top, cw, "tray_assignment/empty_tray.cpp  (public)", [
-        ("ChooseEmptyTray(svc, state, dest)", "was AssignTrayIdForEmptyMove"),
-        ("TrayChoice{tray_id, dest}  (the returned value)", None)], PURE)
-    c2 = _file_card(d, 24 + cw + 20, top, cw, "common/headings.cpp  (public, shared)", [
-        ("PreferredHeading(svc, dest, payload)", "was UsePreferredHeading"),
-        ("RetrievalHeading(svc, dest, payload)", "was UseRetrievalHeading"),
-        ("EvChargeHeading(layout, node_id)", "was UseEvChargeHeading")], PURE)
-    top2 = max(c1.y1, c2.y1) + 18
-    c3 = _file_card(d, 24, top2, cw, "tray_assignment/blocking_trays.cpp  (public)", [
-        ("ResolveBlockingTrays(svc, request)", "was a member, same name"),
-        ("ChooseParkingSpot(svc, state, tray, job)", "was 1st half of AssignDestForUntargetedMove"),
-        ("detail::FindOpenSpace(svc, query)", "was FindOpenSpaceForRootTray"),
-        ("detail::TryResolveBlocker(svc, ...)", "was TryFindBlockingTrayResolution")], PURE)
-    c4 = _file_card(d, 24 + cw + 20, top2, cw, "tray_assignment/critical_path.cpp  (private)", [
-        ("CheckDestinationUsable(svc, state, dest)", "was inline in the main loop"),
-        ("FindCriticalPath(svc, state, tray, dest)", "was inline in the main loop"),
-        ("TryAdvanceRoot(svc, state, path, at)", "was fallback 1, inline"),
-        ("BlockersOnPath(svc, state, tray, path)", "was the re-scan, inline")], PURE)
-    h4 = max(c3.y1, c4.y1) + 18 - y4
-    _band(d, y4, h4, PURE, "pure free functions",
-          "namespace tray_assignment; output depends only on the arguments; inputs passed by const& or value")
-    b4 = BBox(0, y4, W, y4 + h4)
-
-    # calls between layers (left margin)
-    for a, b, lab in ((b1, b2, "Solve(input)"), (b2, b3, "owns one Pass per call"), (b3, b4, "calls")):
-        connect(d, [(80, a.y1), (80, b.y0)], kind="flow", color=T.fg2, label=lab, label_at=(80, (a.y1 + b.y0) / 2),
-                label_anchor="start")
-    # shared helpers: Scheduler job methods -> pure functions (right margin)
-    xr = W - 60
-    connect(d, [(xr, b1.y1), (xr, b4.y0)], kind="flow", color=SCH, dash="6 4",
-            label="job methods call these directly", label_at=(xr, (b2.y1 + b3.y0) / 2), label_anchor="end")
-    frame(d, title="Where each function of the tray call tree goes",
-          subtitle="Today every function here is a Scheduler member (grey comments). After the refactor, mutation is "
-                   "confined to the top layer (writes ctx) and to Pass (private to one Solve call).",
+    # ---- lane 2: proposed ----
+    y1 = 250
+    H2 = 330
+    _lane(d, 0, y1, W, H2, "proposed", SOLVE)
+    c2 = card(d, 24, y1 + 52, 230, 140, title="ScheduleContext", accent=CTX, lines=ctx_lines,
+              sub="plan_ctx, owned by Plan()")
+    # Solve box with nested Pass
+    sx, sy, sw_, sh = 440, y1 + 52, 330, 232
+    d.rect(sx, sy, sw_, sh, rx=10, fill=T.card, stroke=SOLVE, sw=1.5)
+    d.text(sx + 16, sy + 20, "DefaultSolver::Solve(input) const", size=13, family="mono", weight=600, fill=SOLVE)
+    d.text(sx + 16, sy + 40, "reads only; never writes ctx", size=S.small, fill=T.muted)
+    px, py = sx + 16, sy + 56
+    d.rect(px, py, sw_ - 32, 98, rx=8, fill=T.tint(PASS, 0.10, T.bg), stroke=PASS, sw=1.3)
+    d.text(px + 12, py + 16, "Pass  (private, one per call)", size=12, family="mono", weight=600, fill=PASS)
+    for i, ln in enumerate(["working_state_", "freeing_moves_, last_tray_event_", "result_  (built up here)"]):
+        d.text(px + 12, py + 38 + i * 19, ln, size=11.5, family="mono", fill=T.fg2)
+    d.text(sx + 16, py + 116, "calls pure functions:", size=S.small, fill=T.muted)
+    cx = sx + 16
+    for i, nm in enumerate(["ChooseEmptyTray", "ResolveBlockingTrays", "FindCriticalPath", "..."]):
+        if i == 2:
+            cx = sx + 16
+        b = chip(d, cx, py + 140 + (i // 2) * 26, nm, PURE, size=11)
+        cx = b.x1 + 8
+    s2 = BBox(sx, sy, sx + sw_, sy + sh)
+    r2 = card(d, 930, y1 + 52, 190, 140, title="Result", accent=SOLVE,
+              lines=["fills", "edits  (ordered)", "first_tray_event"], sub="returned by value")
+    a2 = card(d, 1170, y1 + 52, 246, 140, title="ApplyTrayAssignment(ctx, result)", accent=WRITE,
+              lines=["replay edits", "set fills", "cycle check"], mono_lines=False)
+    # arrows
+    connect(d, [(c2.x1, c2.y0 + 50), (s2.x0, c2.y0 + 50)], kind="flow", color=CTX, label="Input{const&, const&}",
+            label_at=((c2.x1 + s2.x0) / 2, c2.y0 + 34))
+    connect(d, [(s2.x1, r2.y0 + 50), (r2.x0, r2.y0 + 50)], kind="flow", color=SOLVE, label="Expected<Result>",
+            label_at=((s2.x1 + r2.x0) / 2, r2.y0 + 34))
+    connect(d, [(r2.x1, r2.y0 + 50), (a2.x0, r2.y0 + 50)], kind="flow", color=SOLVE)
+    yb = y1 + H2 - 26
+    connect(d, [(a2.cx, a2.y1), (a2.cx, yb), (c2.cx, yb), (c2.cx, c2.y1)], kind="flow", color=WRITE,
+            label="the only write to ctx", label_at=((a2.cx + s2.x1) / 2 + 40, yb))
+    connect(d, [(r2.cx, r2.y1), (r2.cx, r2.y1 + 44)], kind="flow", color=T.muted, dash="5 4")
+    d.text(r2.cx + 8, r2.y1 + 30, "on error: Plan fails", size=S.small, fill=T.muted)
+    d.text(r2.cx + 8, r2.y1 + 46, "every job, ctx untouched", size=S.small, fill=T.muted)
+    for n, (x, y) in enumerate([((c2.x1 + s2.x0) / 2, c2.y0 + 64), ((s2.x1 + r2.x0) / 2, r2.y0 + 64),
+                                 ((r2.x1 + a2.x0) / 2, r2.y0 + 64)], 1):
+        d.circle(x, y + 4, 10, fill=T.fg2, layer="top")
+        d.text(x, y + 4.5, str(n), size=11, family="mono", weight=700, fill=T.bg, anchor="middle", layer="top")
+    frame(d, title="How tray assignment reads and writes ScheduleContext",
+          subtitle="Same work, different place for the writes. (1) Plan builds a read-only Input from plan_ctx. "
+                   "(2) Solve returns everything it decided as a Result. (3) ApplyTrayAssignment writes it into "
+                   "plan_ctx in one step.",
           badge_key="proposed",
-          legend=[("box", SCH, "Scheduler: orchestration, writes ctx"), ("box", CLS, "solver class"),
-                  ("box", PASS, "pass-local mutable state"), ("box", PURE, "pure free function"),
-                  ("arrow", T.fg2, "calls")],
-          footnote="Grey // comments name the scheduler.cpp function or code block each one replaces. 'svc' is a "
-                   "const GarageServices& (graph, collision table, cost model, layout, logger).")
+          legend=[("box", CTX, "ScheduleContext (owned by Plan)"), ("box", SOLVE, "solver / its return value"),
+                  ("box", PASS, "private mutable state"), ("box", PURE, "pure function"),
+                  ("arrow", WRITE, "writes ctx")])
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 59 — before: the tray call tree as Scheduler members, with what each one writes
+# --------------------------------------------------------------------------------------
+
+BEFORE = [
+    # (signature, [(write, color)], note, indent)
+    ("DoTrayAssignments(ScheduleContextSPtr ctx) const : BoolStringPair",
+     [("ctx->events", WRITE), ("ctx->first_tray_event", WRITE), ("TrayMove fields", WRITE)],
+     "the per-event loop; these blocks are written inline:", 0),
+    ("destination check", [], "", 1),
+    ("critical-path search", [], "", 1),
+    ("fallback 1: advance the root tray", [("working_state", ARG), ("critical_path", ARG)], "", 1),
+    ("blocker re-scan", [("blocking_trays", ARG)], "", 1),
+    ("emit blocker moves  (2nd copy in AssignDest...)", [("ctx->events", WRITE), ("first_tray_event", WRITE)], "", 1),
+    ("root-move tail", [("ctx->events", WRITE), ("working_state", ARG)], "", 1),
+    ("ApplyTransitionToFreeingMoves(event, DiscreteGarageState& ws, GarageOccupancyChecker& freeing)",
+     [("working_state", ARG), ("freeing_moves", ARG)], "", 0),
+    ("AssignTrayIdForEmptyMove(TrayMove& move, const DiscreteGarageState& ws) : BoolStringPair",
+     [("TrayMove tray id, dest", WRITE)], "also called by PlanReadyForInsertJob", 0),
+    ("AssignDestForUntargetedMove(TrayMove* move, ScheduleContextSPtr ctx, const ScheduleEventSPtr& event,",
+     [], "", 0),
+    ("    DiscreteGarageState& ws, GarageOccupancyChecker& freeing, map& last_tray_event) : BoolStringPair",
+     [("ctx->events", WRITE), ("first_tray_event", WRITE), ("TrayMove dest", WRITE), ("working_state", ARG),
+      ("freeing_moves", ARG), ("last_tray_event", ARG)], "", 0),
+    ("ResolveBlockingTrays(tray_id, job_index, const DiscreteGarageState& base_state, immobile, illegal, ...)",
+     [("nothing (copies base_state)", PURE)], "also called by PlanChargePayloadJob", 0),
+    ("FindOpenSpaceForRootTray(...) const : optional<OpenSpaceSearchResult>", [("nothing", PURE)], "", 0),
+    ("TryFindBlockingTrayResolution(...) const : optional<BlockingTrayResolution>", [("nothing", PURE)], "", 0),
+    ("UsePreferredHeading(GaragePoseMsg& dest, payload, tray) const : void", [("dest", ARG)],
+     "also PlanAgvMoveJob, PlanReparkTrayJob", 0),
+    ("UseRetrievalHeading(GaragePoseMsg& dest, payload) const : void", [("dest", ARG)], "", 0),
+    ("UseEvChargeHeading(GaragePoseMsg& dest) const : bool", [("dest", ARG)], "also PlanChargePayloadJob", 0),
+]
+
+
+@figure("59_tray_tree_before", "Tray call tree today (UML)", DOC2)
+def tray_tree_before():
+    d = Doc("59_tray_tree_before", "Tray call tree today",
+            "All functions are Scheduler members; chips show what each one writes: ScheduleContext (red), "
+            "an argument passed by reference (amber) or nothing (green).")
+    W = 1180
+    # ScheduleContext + TrayMove on top
+    ctx = uml_class(d, 0, 0, "ScheduleContext", accent=CTX, stereo="struct · existing", size=M,
+                    attrs=["+ initial_state: DiscreteGarageState", "+ events: ScheduleEventDag",
+                           "+ first_tray_event: unordered_map<uint16_t, ScheduleEventSPtr>"])
+    tm = uml_class(d, ctx.x1 + 60, 0, "TrayMove", accent=CTX, stereo="planner_core · event in ctx->events", size=M,
+                   methods=["+ SetTrayId(uint16_t)", "+ SetDest(GaragePoseMsg)"])
+    # Scheduler box
+    y0 = max(ctx.y1, tm.y1) + 90
+    head = 46
+    rows = []
+    y = y0 + head + 14
+    for sig, writes, nt, ind in BEFORE:
+        rows.append((y, sig, writes, nt, ind))
+        y += 24 if not writes and not nt else 48
+    h = y - y0 + 6
+    d.rect(0, y0, W, h, rx=8, fill=T.card, stroke=CTX, sw=1.5)
+    d.path(f"M0 {y0 + head} L0 {y0 + 8} Q0 {y0} 8 {y0} L{W - 8} {y0} Q{W} {y0} {W} {y0 + 8} L{W} {y0 + head} Z",
+           fill=T.tint(CTX, 0.16))
+    d.text(W / 2, y0 + 14, "«existing · tray call tree only, abridged»", size=S.tiny, fill=T.muted, anchor="middle")
+    d.text(W / 2, y0 + 32, "Scheduler", size=S.h, family="mono", weight=700, fill=CTX, anchor="middle")
+    for yy, sig, writes, nt, ind in rows:
+        x = 16 + ind * 28
+        if ind:
+            d.text(x - 14, yy, "•", size=12, fill=T.faint)
+        d.text(x, yy, sig, size=12, family="mono", weight=600 if not ind else 400,
+               fill=T.fg if not ind else T.fg2)
+        if writes or nt:
+            cx = x + 16
+            if writes:
+                d.text(cx, yy + 24, "writes", size=S.small, fill=T.muted)
+                cx += 46
+            for wtxt, col in writes:
+                b = chip(d, cx, yy + 24, wtxt, col, size=10.5)
+                cx = b.x1 + 6
+            if nt:
+                d.text(cx + 10, yy + 24, nt, size=S.small, fill=T.sky, style="italic")
+    sched = BBox(0, y0, W, y0 + h)
+    connect(d, [(ctx.cx, sched.y0), (ctx.cx, ctx.y1)], kind="dep", color=WRITE, label="«writes»  (red chips)",
+            label_at=(ctx.cx, (ctx.y1 + sched.y0) / 2))
+    connect(d, [(tm.cx, sched.y0), (tm.cx, tm.y1)], kind="dep", color=WRITE, label="«writes»  (red chips)",
+            label_at=(tm.cx, (tm.y1 + sched.y0) / 2))
+    note(d, tm.x1 + 40, 0, W - tm.x1 - 40,
+         "Nothing in the signatures separates the 3 green helpers from the rest: all are members, all can reach "
+         "every Scheduler field, and 4 of them are also called by job planning.", title="What the shape hides")
+    frame(d, title="Tray call tree today",
+          subtitle="Every function is a Scheduler member. Chips list what each one writes. Red: something in "
+                   "ScheduleContext (the DAG, the hand-off map, or an event's fields). Amber: an argument passed by "
+                   "reference. Green: nothing.",
+          badge_key="as-built",
+          legend=[("box", WRITE, "writes ScheduleContext"), ("box", ARG, "writes an argument / local"),
+                  ("box", PURE, "writes nothing"), ("dep", WRITE, "«writes»")],
+          footnote="Signatures abridged. Line numbers and full parameter lists: doc 01, sections 14 and 22.")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 60 — after: proposed tray_assignment module (Pass nested inside DefaultSolver)
+# --------------------------------------------------------------------------------------
+
+def _nested_class(d: Doc, x, y, outer: dict, inner: dict, *, pad=16):
+    """UML class box with a nested classifier drawn inside its lower compartment."""
+    iw, ih = class_size(inner["name"], stereo=inner.get("stereo"), attrs=inner.get("attrs", ()),
+                        methods=inner.get("methods", ()), size=M)
+    lh = M * 1.55
+    blank = math.ceil((ih + pad + 22) / lh)
+    ow, _ = class_size(outer["name"], stereo=outer.get("stereo"), attrs=outer.get("attrs", ()),
+                       methods=list(outer.get("methods", ())), size=M)
+    w = max(ow, iw + 2 * pad)
+    o = uml_class(d, x, y, outer["name"], accent=outer["accent"], stereo=outer.get("stereo"),
+                  attrs=outer.get("attrs", ()), methods=list(outer.get("methods", ())) + [""] * blank, w=w, size=M)
+    iy = o.y1 - 10 - ih - pad + 4
+    d.text(o.x0 + pad, iy - 12, "nested:", size=S.tiny, fill=T.muted)
+    i = uml_class(d, o.x0 + pad, iy, inner["name"], accent=inner["accent"], stereo=inner.get("stereo"),
+                  attrs=inner.get("attrs", ()), methods=inner.get("methods", ()), w=w - 2 * pad, size=M)
+    return o, i
+
+
+def _package(d: Doc, x, y, w, h, name, color, sub=""):
+    d.rect(x, y, w, h, rx=10, fill=T.tint(color, 0.04, T.bg), stroke=T.tint(color, 0.6, T.bg), sw=1.3,
+           layer="under")
+    tw = text_width(name, 12.5, "mono", 700) + 28
+    d.rect(x, y, tw, 26, rx=10, fill=T.tint(color, 0.22, T.bg), layer="under")
+    d.text(x + 14, y + 13, name, size=12.5, family="mono", weight=700, fill=color)
+    if sub:
+        d.text(x + tw + 12, y + 13, sub, size=S.small, fill=T.muted)
+
+
+@figure("60_tray_tree_after", "Tray call tree after (UML)", DOC2)
+def tray_tree_after():
+    d = Doc("60_tray_tree_after", "Proposed tray_assignment module",
+            "UML of the proposed module: Solver interface, DefaultSolver with Pass nested inside, Input and Result, "
+            "pure free functions grouped by header, and ApplyTrayAssignment as the only writer of ScheduleContext.")
+    GAP = 40
+    # ---- outside the module: Scheduler and ScheduleContext ----
+    sched = uml_class(d, 0, 0, "Scheduler", accent=CTX, stereo="existing · abridged", size=M,
+                      attrs=["- services_: common::GarageServices", "- tray_solver_: unique_ptr<tray_assignment::Solver>"],
+                      methods=["+ Plan(request): PlanResponse", "  // Solve(), then ApplyTrayAssignment()",
+                               "- Plan<Type>Job(...)  (12 job methods)"])
+    ctx = uml_class(d, sched.x1 + 60, 0, "ScheduleContext", accent=CTX, stereo="struct · existing", size=M,
+                    attrs=["+ initial_state: DiscreteGarageState", "+ events: ScheduleEventDag",
+                           "+ first_tray_event: unordered_map<uint16_t, ScheduleEventSPtr>"])
+    top = max(sched.y1, ctx.y1) + 80
+
+    # ---- package tray_assignment ----
+    px0 = 0
+    y = top + 44
+    iface = uml_class(d, 24, y, "Solver", accent=SOLVE, stereo="interface · solver.hpp", abstract=True, size=M,
+                      methods=["+ Solve(input: const Input&) const", "    : stdx::Expected<Result> = 0"])
+    inp = uml_class(d, iface.x1 + GAP, y, "Input", accent=SOLVE, stereo="struct · solver.hpp", size=M,
+                    attrs=["+ initial_state: const DiscreteGarageState&", "+ events: const ScheduleEventDag&"])
+    res = uml_class(d, inp.x1 + GAP, y, "Result", accent=SOLVE, stereo="struct · solver.hpp", size=M,
+                    attrs=["+ fills: vector<TrayFill>", "+ edits: vector<DagEdit>  // ordered",
+                           "+ first_tray_event: unordered_map<...>"])
+    y2 = max(iface.y1, inp.y1, res.y1) + 60
+    dflt, pas = _nested_class(
+        d, 24, y2,
+        dict(name="DefaultSolver", accent=SOLVE, stereo="class · default_solver.hpp",
+             attrs=["- services_: const GarageServices&"],
+             methods=["+ Solve(input) const : stdx::Expected<Result>", "  // was DoTrayAssignments(ctx)"]),
+        dict(name="Pass", accent=PASS, stereo="private nested class · src/tray_assignment/pass.hpp",
+             attrs=["- working_state_: DiscreteGarageState  // copy", "- freeing_moves_: GarageOccupancyChecker<...>",
+                    "- last_tray_event_: unordered_map<...>", "- result_: Result  // returned by Solve"],
+             methods=["+ RecordTransition(event): stdx::Result", "  // was ApplyTransitionToFreeingMoves",
+                      "+ Fill(event, tray_id, dest)", "  // was SetTrayId / SetDest on the input",
+                      "+ EmitMoveChain(moves, ...)", "  // was the 2 copies of the emission block",
+                      "+ CommitRootMove(event, resolved): stdx::Result", "  // was the root-move tail",
+                      "+ TakeResult() &&: Result"]))
+    app = uml_class(d, dflt.x1 + GAP, y2, "apply.hpp", accent=WRITE, stereo="free function", size=M,
+                    methods=["+ ApplyTrayAssignment(ScheduleContext& ctx,", "    const Result& r): stdx::Result",
+                             "  // new: the only function that", "  // takes a mutable context"])
+    fx = dflt.x1 + GAP
+    fy = app.y1 + 30
+    et = uml_class(d, fx, fy, "empty_tray.hpp", accent=PURE, stereo="public · pure", size=M,
+                   methods=["+ ChooseEmptyTray(svc, state, dest)", "    : stdx::Expected<TrayChoice>",
+                            "  // was AssignTrayIdForEmptyMove"])
+    bt = uml_class(d, fx, et.y1 + 20, "blocking_trays.hpp", accent=PURE, stereo="public · pure", size=M,
+                   methods=["+ ResolveBlockingTrays(svc, request)", "    : stdx::Expected<BlockingResolution>",
+                            "+ ChooseParkingSpot(svc, state, tray, job)", "    : stdx::Expected<ParkingPlan>",
+                            "  // was 1st half of AssignDestForUntargetedMove",
+                            "- detail::FindOpenSpace(...)  // was FindOpenSpaceForRootTray",
+                            "- detail::TryResolveBlocker(...)", "  // was TryFindBlockingTrayResolution"])
+    cp = uml_class(d, fx, bt.y1 + 20, "critical_path.hpp", accent=PURE, stereo="private (src/) · pure", size=M,
+                   methods=["+ CheckDestinationUsable(...): stdx::Result", "+ FindCriticalPath(...)",
+                            "    : stdx::Expected<CriticalPath>", "+ TryAdvanceRoot(...): optional<PlannedTrayMove>",
+                            "+ BlockersOnPath(...): vector<uint16_t>", "  // all four were inline in the main loop"])
+    right = max(res.x1, app.x1, et.x1, bt.x1, cp.x1) + 24
+    bottom = max(dflt.y1, cp.y1) + 24
+    _package(d, px0, top, right - px0, bottom - top, "scheduler/tray_assignment", SOLVE,
+             "namespace volley::tray_assignment")
+
+    # ---- package common ----
+    cy0 = bottom + 50
+    gs = uml_class(d, 24, cy0 + 44, "GarageServices", accent=T.teal, stereo="struct · garage_services.hpp", size=M,
+                   attrs=["+ graph: const GarageGraph&", "+ collisions: const CollisionTable&",
+                          "+ costs: const MotionCostModel&", "+ layout: const Layout&", "+ logger: rclcpp::Logger"])
+    hd = uml_class(d, gs.x1 + GAP, cy0 + 44, "headings.hpp", accent=PURE, stereo="public · pure · shared", size=M,
+                   methods=["+ PreferredHeading(svc, dest, payload): GaragePoseMsg", "  // was UsePreferredHeading",
+                            "+ RetrievalHeading(svc, dest, payload): GaragePoseMsg", "  // was UseRetrievalHeading",
+                            "+ EvChargeHeading(layout, node): optional<int16_t>", "  // was UseEvChargeHeading"])
+    cbottom = max(gs.y1, hd.y1) + 24
+    _package(d, 0, cy0, right, cbottom - cy0, "scheduler/common", T.teal, "namespace volley::common")
+
+    # ---- relations ----
+    ax = min(iface.x1 - 30, sched.x1 - 120)
+    connect(d, [(ax, sched.y1), (ax, iface.y0)], kind="assoc", color=CTX, mult_end="1",
+            label="tray_solver_", label_at=(ax, (sched.y1 + top) / 2))
+    gx = (inp.x1 + res.x0) / 2
+    connect(d, [(sched.x1 - 40, sched.y1), (sched.x1 - 40, top - 30), (gx, top - 30), (gx, app.y0)],
+            kind="dep", color=CTX, label="«call»  after Solve", label_at=((sched.x1 + gx) / 2, top - 30))
+    connect(d, [(app.x1, app.cy), (right + 40, app.cy), (right + 40, ctx.y1 + 40), (ctx.x1 - 60, ctx.y1 + 40),
+                (ctx.x1 - 60, ctx.y1)], kind="dep", color=WRITE, label="«writes»",
+            label_at=(right + 40, (app.cy + ctx.y1 + 40) / 2))
+    # realization DefaultSolver -> Solver
+    d.arrowhead((iface.cx, iface.y1), (iface.cx, iface.y1 + 30), kind="triangle", color=SOLVE, size=11, sw=1.5)
+    d.line(iface.cx, iface.y1 + 13, iface.cx, dflt.y0, stroke=SOLVE, sw=1.5, dash="6 4", layer="edges")
+    label_pill(d, iface.cx, (iface.y1 + dflt.y0) / 2 + 4, "realizes", color=SOLVE)
+    connect(d, [(iface.x1, iface.y0 + 54), (inp.x0, iface.y0 + 54)], kind="dep", color=SOLVE, label="«read»",
+            label_at=((iface.x1 + inp.x0) / 2, iface.y0 + 40))
+    connect(d, [(inp.x1, inp.y0 + 54), (res.x0, inp.y0 + 54)], kind="dep", color=SOLVE, label="«return»",
+            label_at=((inp.x1 + res.x0) / 2, inp.y0 + 40))
+    # DefaultSolver calls the pure functions (bus on the left of the header boxes)
+    bx = fx - GAP / 2
+    d.line(dflt.x1, dflt.y0 + 90, bx, dflt.y0 + 90, stroke=PURE, sw=1.4, dash="6 4", layer="edges")
+    d.line(bx, dflt.y0 + 90, bx, cp.cy, stroke=PURE, sw=1.4, dash="6 4", layer="edges")
+    for b in (et, bt, cp):
+        connect(d, [(bx, b.cy), (b.x0, b.cy)], kind="dep", color=PURE)
+    label_pill(d, bx, (dflt.y0 + 90 + et.cy) / 2, "«call»", color=PURE)
+    connect(d, [(dflt.cx, dflt.y1), (dflt.cx, cy0 - 24), (hd.cx, cy0 - 24), (hd.cx, hd.y0)], kind="dep",
+            color=PURE, label="«call»", label_at=((dflt.cx + hd.cx) / 2, cy0 - 24))
+    # job planning also calls the public pure functions
+    note(d, ctx.x1 + 40, 0, 320,
+         "Scheduler's job methods call ChooseEmptyTray, ResolveBlockingTrays and the heading functions directly "
+         "with services_. No back-pointer to Scheduler.", title="Shared with job planning")
+    frame(d, title="Proposed tray_assignment module",
+          subtitle="Pass is a private nested class of DefaultSolver: it is created inside Solve and holds the only "
+                   "state that changes during a solve. ApplyTrayAssignment is the only function that writes "
+                   "ScheduleContext. Everything green is a pure function.",
+          badge_key="proposed",
+          legend=[("box", CTX, "existing"), ("box", SOLVE, "solver types"), ("box", PASS, "private mutable state"),
+                  ("box", PURE, "pure functions"), ("box", WRITE, "writes ScheduleContext"),
+                  ("real", SOLVE, "realizes"), ("dep", T.fg2, "dependency")],
+          footnote="// was ... names the Scheduler member or inline block (previous figure) that each item replaces. "
+                   "'svc' is a const GarageServices&.")
     return d

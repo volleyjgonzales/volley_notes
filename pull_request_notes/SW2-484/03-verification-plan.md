@@ -157,7 +157,7 @@ EXPECT_EQ(ref.first_tray_event, cand.first_tray_event);
 EXPECT_EQ(ref.final_state, cand.final_state);
 ```
 
-Note the comment on cloning: because the DAG holds `shared_ptr`s (doc 02, section 6.4), the two contexts must be built independently from the same inputs. `Solve` itself changes nothing, but `ApplyTrayAssignment` and the old `DoTrayAssignments` both set fields on the event objects. A second, cheaper check needs no clone: call `Solve` twice on the same `Input` and assert the two `Result`s are equal and the input events are unchanged (doc 02, invariant 9).
+Note the comment on cloning: because the DAG holds `shared_ptr`s (doc 02, section 6.5), the two contexts must be built independently from the same inputs. `Solve` itself changes nothing, but `ApplyTrayAssignment` and the old `DoTrayAssignments` both set fields on the event objects. A second, cheaper check needs no clone: call `Solve` twice on the same `Input` and assert the two `Result`s are equal and the input events are unchanged (doc 02, invariant 9).
 
 ## 5. Benchmark method
 

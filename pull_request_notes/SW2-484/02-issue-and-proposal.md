@@ -10,8 +10,8 @@ This document explains *what* the refactor changes and *why*, using the code in 
 | `ctx->initial_state` | `volley::DiscreteGarageState` | Snapshot of the garage at request time; never mutated after `Plan()` builds it |
 | `working_state` | `volley::DiscreteGarageState` (local copy) | `initial_state` with already-planned events applied, used to answer "where is everything *now*?" |
 | `gg_`, `table_`, `cost_model_`, `layout_`, `logger_` | `GarageGraph`, `CollisionTable`, `cost::MotionCostModel`, `LayoutSPtr`, `rclcpp::Logger` | `Scheduler` data members built once in the constructor |
-| `stdx::Expected<T>`, `stdx::Result` | `tl::expected<T, std::string>`, `tl::expected<void, std::string>` (from the `stdx` package) | A value or an error message; `Result` is success or an error. Proposed replacement for `BoolStringPair` (section 6.3) |
-| `svc` | `const common::GarageServices&` (**proposed**) | Bundle of const references to `gg_`, `table_`, `cost_model_`, `*layout_` plus the logger, passed to every pure helper (section 6.5) |
+| `stdx::Expected<T>`, `stdx::Result` | `tl::expected<T, std::string>`, `tl::expected<void, std::string>` (from the `stdx` package) | A value or an error message; `Result` is success or an error. Proposed replacement for `BoolStringPair` (section 6.4) |
+| `svc` | `const common::GarageServices&` (**proposed**) | Bundle of const references to `gg_`, `table_`, `cost_model_`, `*layout_` plus the logger, passed to every pure helper (section 6.1) |
 
 ## Contents
 
@@ -119,9 +119,9 @@ What the matrix tells you:
 |---|---|---|
 | Validate request, build `ScheduleContext` | `Plan` | Stays in `Scheduler` |
 | Expand jobs into events | `Plan<Type>Job` (12 methods) | Stays in `Scheduler` |
-| Choose tray and destination for each `TrayMove` | `DoTrayAssignments` → `AssignTrayIdForEmptyMove`, `AssignDestForUntargetedMove` | `tray_assignment::DefaultSolver` (the loop) + pure `ChooseEmptyTray`, `ChooseParkingSpot` (section 6.2) |
+| Choose tray and destination for each `TrayMove` | `DoTrayAssignments` → `AssignTrayIdForEmptyMove`, `AssignDestForUntargetedMove` | `tray_assignment::DefaultSolver` (the loop) + pure `ChooseEmptyTray`, `ChooseParkingSpot` (section 6.3) |
 | Move blocking trays out of the way | `ResolveBlockingTrays` → `FindOpenSpaceForRootTray`, `TryFindBlockingTrayResolution` | Pure free function `tray_assignment::ResolveBlockingTrays(svc, request)`, public so job planning can call it too |
-| Write the tray results into `ctx` | (done inside `DoTrayAssignments`) | `Scheduler::ApplyTrayAssignment(ctx, result)`, the only writer (section 6.4) |
+| Write the tray results into `ctx` | (done inside `DoTrayAssignments`) | `tray_assignment::ApplyTrayAssignment(ctx, result)`, called by `Plan()` right after `Solve`; the only writer (sections 6.1, 6.5) |
 | Choose parking headings | `UsePreferredHeading`, `UseRetrievalHeading`, `UseEvChargeHeading` | Pure functions in `common/headings` |
 | Match AGVs to tray moves | `DoAgvAssignments` + cost helpers + `BottleneckAssignment` | `agv_assignment::DefaultSolver` |
 | Add approach, lift and lower events | `MoveAgvToTrayPose`, `AppendAgvLiftEvent`, `AddNodeArrivalDeps` | Default AGV solver |
@@ -129,7 +129,7 @@ What the matrix tells you:
 | DAG primitives | `planner_core::ScheduleEventDag` | Unchanged |
 | Sanity check, motion planning, response | `SanityCheckEvents`, `PlanMotions`, `ResponseFromTrajectories` | Unchanged |
 
-**Decision needed:** where the solver *interfaces* live. Section 6.1 proposes starting with module folders (`tray_assignment/`, `agv_assignment/`, `common/`) inside the scheduler package, each its own CMake target, which can later move to a package with a `git mv`. Options are `planner_core`, a small solver-interface package, or a new scheduler-core package. A default implementation needs `motion_planner` and `cost_functions`, so putting it in a low-level package can create dependency cycles. Check against `package.xml` and the exported CMake targets before choosing.
+**Decision needed:** where the solver *interfaces* live. Section 6.2 proposes starting inside the scheduler package: subfolders `common/`, `tray_assignment/` and `agv_assignment/` under `include/scheduler/`, `src/` and `test/`, still built by the one `CMakeLists.txt`. Moving a module to its own package later is a matter of moving those three subfolders. Options are `planner_core`, a small solver-interface package, or a new scheduler-core package. A default implementation needs `motion_planner` and `cost_functions`, so putting it in a low-level package can create dependency cycles. Check against `package.xml` and the exported CMake targets before choosing.
 
 ## 5. Target architecture
 
@@ -137,83 +137,286 @@ What the matrix tells you:
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#02_target_architecture) · [standalone SVG](figures/02_target_architecture.svg)</sub>
 
-**Figure 2 — Proposed architecture.** Solver contracts separate policy from orchestration. Both default solvers get graph, collision, cost and layout services through one `const GarageServices&`. The tray solver only reads the event DAG and returns its edits, which `Scheduler` applies; the AGV solver edits the DAG in place for the first pass (section 6.6). This is a proposal, not existing code.
+**Figure 2 — Proposed architecture.** Solver contracts separate policy from orchestration. Both default solvers get graph, collision, cost and layout services through one `const GarageServices&`. The tray solver only reads the event DAG and returns its edits, which `Scheduler` applies; the AGV solver edits the DAG in place for the first pass (section 6.7). This is a proposal, not existing code.
 
 ## 6. Proposed layout and API for tray assignment
 
-This section answers four questions in order: where the code lives (6.1), which of today's functions become class members and which become pure functions (6.2), how errors are reported (6.3), and how the solver returns its work instead of editing the caller's context (6.4). 6.5 puts it together as a header sketch, and 6.6 says how much of this applies to AGV assignment. Everything here is **proposed**; names are suggestions for review.
+This section first introduces the new types and shows how they work with `ScheduleContext` (6.1), then where the files go (6.2), then which of today's functions turn into what (6.3). After that come errors (6.4), the reasoning behind returning a result (6.5), the remaining signatures and the `Plan()` call site (6.6), and how much of this applies to AGV assignment (6.7). Everything here is **proposed**; names are suggestions for review.
 
-### 6.1 Source tree: one module folder per solver
+### 6.1 The new pieces and how they fit together
 
-Today the scheduler package is flat: `include/scheduler/{scheduler,scheduler_ros,scheduler_msgs,utils}.hpp`, `src/` with the matching `.cpp` files, and `test/`. Tray and AGV assignment are about 2,000 lines inside `src/scheduler.cpp`. The proposal is one folder per solver, each laid out like the existing `src/core/stdx` package (its own `CMakeLists.txt`, `include/`, `src/`, `test/`):
+Today `DoTrayAssignments(ctx)` does two jobs at once: it **decides** (which tray, which destination, which blockers move where) and it **writes** those decisions into `ctx` as it goes. The proposal separates the two:
 
-```text
-scheduler/                                   # the existing ROS package (package.xml, CMakeLists.txt)
-├── CMakeLists.txt                           # add_subdirectory(common tray_assignment agv_assignment)
-├── package.xml                              # already has <depend>stdx</depend>
-├── include/scheduler/                       # unchanged: scheduler.hpp, scheduler_ros.hpp, scheduler_msgs.hpp, utils.hpp
-├── src/                                     # unchanged files; scheduler.cpp shrinks to Plan() + job expansion
-├── test/                                    # existing tests; the 4 + 9 direct-call tests move to the folders below
-├── common/                                  # target scheduler_common
-│   ├── include/scheduler/common/
-│   │   ├── garage_services.hpp              # GarageServices: const refs to graph, collision table, cost model, layout + logger
-│   │   └── headings.hpp                     # PreferredHeading, RetrievalHeading, EvChargeHeading (pure)
-│   └── src/headings.cpp
-├── tray_assignment/                         # target scheduler_tray_assignment
-│   ├── CMakeLists.txt
-│   ├── include/scheduler/tray_assignment/   # PUBLIC: what Scheduler and job planning may include
-│   │   ├── solver.hpp                       # Solver interface, Input, Result, TrayFill, DagEdit
-│   │   ├── default_solver.hpp               # DefaultSolver
-│   │   ├── apply.hpp                        # ApplyTrayAssignment(ScheduleContext&, const Result&)
-│   │   ├── empty_tray.hpp                   # ChooseEmptyTray            (also used by PlanReadyForInsertJob)
-│   │   └── blocking_trays.hpp               # ResolveBlockingTrays, ChooseParkingSpot (also used by job planning)
-│   ├── src/                                 # PRIVATE: not installed, not on anyone else's include path
-│   │   ├── default_solver.cpp               # Solve(): the per-event loop
-│   │   ├── pass.hpp / pass.cpp              # Pass: working_state, freeing_moves, last_tray_event, result builder
-│   │   ├── critical_path.hpp / .cpp         # CheckDestinationUsable, FindCriticalPath, TryAdvanceRoot, BlockersOnPath
-│   │   ├── empty_tray.cpp
-│   │   ├── blocking_trays.cpp               # + detail::FindOpenSpace, detail::TryResolveBlocker
-│   │   └── apply.cpp
-│   └── test/                                # empty_tray_test, blocking_trays_test, critical_path_test, default_solver_test, apply_test
-└── agv_assignment/                          # target scheduler_agv_assignment, same shape
-    ├── include/scheduler/agv_assignment/    # solver.hpp, default_solver.hpp, travel_cost.hpp (GetJustMovingCost, shared)
-    ├── src/
-    └── test/
+- **Deciding** happens in `tray_assignment::DefaultSolver::Solve`. It receives read-only references to the parts of `ctx` it needs and returns its decisions as a value, a `Result`. It never writes `ctx`.
+- **Writing** happens in one free function, `tray_assignment::ApplyTrayAssignment(ScheduleContext&, const Result&)`, which `Plan()` calls right after `Solve` succeeds.
+
+So yes: `ctx` is still changed. It has to be, because AGV assignment and motion planning read the blocker moves, filled-in fields and `first_tray_event` from it. What changes is *where*: one function, called once, after all the decisions are made, instead of writes spread through a 560-line loop and its helpers.
+
+![Tray assignment data flow, today vs proposed](figures/58_tray_dataflow.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#58_tray_dataflow) · [standalone SVG](figures/58_tray_dataflow.svg)</sub>
+
+**Figure 3 — How tray assignment reads and writes `ScheduleContext`.** Top: today `DoTrayAssignments` gets a shared, mutable pointer to the context and writes into it throughout the loop, so a failure halfway leaves it half-edited. Bottom: (1) `Plan` passes `Solve` two `const` references; (2) `Solve` keeps its working data in a private `Pass`, calls pure functions to decide, and returns a `Result`; (3) `ApplyTrayAssignment` writes the `Result` into the context. If `Solve` fails, step 3 never runs and the context is unchanged.
+
+The pieces, all in namespace `volley::tray_assignment` unless marked `common`:
+
+| Piece | What it is | Declared in | Lives for | Reads | Writes |
+|---|---|---|---|---|---|
+| `common::GarageServices` | Struct of `const` references to the graph, collision table, cost model and layout, plus the logger | `include/scheduler/common/garage_services.hpp` | As long as the `Scheduler` (member `services_`) | — | nothing |
+| `Input` | Struct of two `const` references into `plan_ctx` | `include/scheduler/tray_assignment/solver.hpp` | One `Solve` call (a temporary built in `Plan`) | `initial_state`, `events` | nothing |
+| `Result` | Plain value: `fills`, ordered `edits`, `first_tray_event` | `solver.hpp` | From `Solve`'s return until `ApplyTrayAssignment` | — | — (it is data) |
+| `TrayFill`, `AddEvent`, `AddDependency`, `DagEdit` | The element types inside `Result` | `solver.hpp` | Inside `Result` | — | — |
+| `Solver` | Interface with one method, `Solve(const Input&) const` | `solver.hpp` | Owned by `Scheduler` (`tray_solver_`) | — | — |
+| `DefaultSolver` | Today's algorithm behind the interface; holds only `const GarageServices&` | `default_solver.hpp`, `src/tray_assignment/default_solver.cpp` | Owned by `Scheduler` | `Input`, services | nothing outside itself |
+| `DefaultSolver::Pass` | **Private nested class**: the loop's working data | declared in `default_solver.hpp`, defined in `src/tray_assignment/pass.hpp` | One `Solve` call (a local variable) | `Input`, services | only its own members |
+| Pure functions | `ChooseEmptyTray`, `ResolveBlockingTrays`, `ChooseParkingSpot`, `FindCriticalPath`, the heading functions, ... | `empty_tray.hpp`, `blocking_trays.hpp`, `src/tray_assignment/critical_path.hpp`, `common/headings.hpp` | — | their arguments | nothing |
+| `ApplyTrayAssignment` | Free function, the only one that takes a mutable `ScheduleContext&` | `apply.hpp`, `src/tray_assignment/apply.cpp` | — | `Result` | `ctx.events`, event fields, `ctx.first_tray_event` |
+
+What happens in `Plan()`, step by step:
+
+1. **Build the input.** `Input{plan_ctx->initial_state, plan_ctx->events}`: two `const` references, no copies.
+2. **Solve.** `DefaultSolver::Solve` creates a `Pass` on its stack. The `Pass` copies `initial_state` into `working_state_` and starts with an empty occupancy record, per-tray chain and `result_`. For each event in topological order, `Solve` asks pure functions for decisions (which empty tray, which parking spot, the critical path, where each blocker goes) and tells the `Pass` to record them: `Fill` adds a `TrayFill`, `EmitMoveChain` appends `AddEvent` / `AddDependency` entries in today's order, and `CommitRootMove` records the root move's edges. Each recorded move is also applied to `working_state_`, so later decisions see the garage as it will be. At the end, `Solve` returns the `Pass`'s `Result`. On any error it returns `stdx::Unexpected(message)`; the `Pass` is destroyed, and nothing outside `Solve` was touched.
+3. **Apply.** `ApplyTrayAssignment(*plan_ctx, result)` replays `edits` into `plan_ctx->events`, sets the filled fields on the existing `TrayMove`s, copies `first_tray_event`, and runs the same cycle check `DoTrayAssignments` ends with today.
+4. **Continue.** AGV assignment runs on `plan_ctx` exactly as today.
+
+The types, in one place:
+
+```cpp
+// PROPOSED — include/scheduler/common/garage_services.hpp
+namespace volley::common {
+struct GarageServices {                   // read-only services every search needs; built once by Scheduler
+  const GarageGraph& graph;               // Scheduler::gg_
+  const CollisionTable& collisions;       // Scheduler::table_
+  const cost::MotionCostModel& costs;     // Scheduler::cost_model_
+  const Layout& layout;                   // *Scheduler::layout_
+  rclcpp::Logger logger;                  // copy of Scheduler::logger_
+};
+}  // namespace volley::common
 ```
 
-Why this shape:
+```cpp
+// PROPOSED — include/scheduler/tray_assignment/solver.hpp
+namespace volley::tray_assignment {
 
-- **The folder is the boundary, and CMake enforces it.** Each folder is its own library target with its own include directory. `tray_assignment/src/*.hpp` are on no other target's include path, so `Scheduler` *cannot* reach `Pass` or `critical_path.hpp`, and the public headers are the whole API. Dependency rules: `tray_assignment` and `agv_assignment` depend on `common`, `planner_core`, `motion_planner`, `cost_functions` and `stdx`, never on `scheduler.hpp`; `agv_assignment` does not include `tray_assignment` (the hand-off, `first_tray_event`, is a plain map in its `Input`). A CI grep for `#include "scheduler/scheduler.hpp"` under the two folders catches the one mistake CMake cannot.
-- **It can become a package later with a `git mv`.** If review decides the solvers belong in their own ROS package (the open decision in section 4), each folder already has the layout of one.
-- **`tray_assignment` rather than `tray_movement`.** Job expansion also plans tray *movement* (it creates the `TrayMove`s); this module only *assigns* what expansion left open (tray ids, destinations, blockers). `tray_assignment` matches the stage name in doc 01 (`DoTrayAssignments`) and pairs with `agv_assignment`.
-- **Namespaces follow folders:** `volley::tray_assignment::Solver`, `volley::agv_assignment::Solver`, `volley::common::GarageServices`. Short names inside, unambiguous outside.
+struct Input {                                     // everything Solve may read; nothing it may write
+  const DiscreteGarageState& initial_state;        // plan_ctx->initial_state
+  const ScheduleEventDag& events;                  // plan_ctx->events, after job expansion
+};
 
-### 6.2 Where each function of the tray call tree goes
+// A blank filled on an EXISTING TrayMove of the input DAG. ApplyTrayAssignment calls SetTrayId / SetDest.
+struct TrayFill {
+  ScheduleEventSPtr event;   // the TrayMove, as the input DAG holds it (same shared_ptr)
+  uint16_t tray_id;          // unchanged if it was already set
+  GaragePoseMsg dest;        // unchanged if it was already set; heading may be adjusted
+};
 
-No, not everything moves into the new class. The call tree splits into four groups, by one question: **what does the function change?**
+// One structural edit, recorded in the order today's code makes it.
+struct AddEvent      { ScheduleEventSPtr event; };                       // a NEW TrayMove (blocker, advance)
+struct AddDependency { ScheduleEventSPtr from; ScheduleEventSPtr to; };  // from must finish before to
+using DagEdit = std::variant<AddEvent, AddDependency>;
 
-![Where the tray call tree goes](figures/57_tray_tree_placement.svg)
+struct Result {
+  std::vector<TrayFill> fills;                                       // one per TrayMove that had a blank
+  std::vector<DagEdit> edits;                                        // replay front to back
+  std::unordered_map<uint16_t, ScheduleEventSPtr> first_tray_event;  // hand-off to AGV assignment
+};
 
-<sub>Pan / zoom: [interactive viewer](figures/viewer.html#57_tray_tree_placement) · [standalone SVG](figures/57_tray_tree_placement.svg)</sub>
+class Solver {
+ public:
+  virtual ~Solver() = default;
+  [[nodiscard]] virtual stdx::Expected<Result> Solve(const Input& input) const = 0;
+};
 
-**Figure 3 — Where each function of the tray call tree goes.** Today all of them are `Scheduler` members, and most edit `ctx`, the `TrayMove` they are given, or both. After the refactor only two places change anything: `Scheduler::ApplyTrayAssignment` (writes `ctx`, once) and `Pass` (private, lives for one `Solve` call). The solver class is thin, and most of the logic becomes pure free functions that job planning can call too.
+}  // namespace volley::tray_assignment
+```
 
-| Today (all `Scheduler` members) | What it changes today | After | New form | File |
-|---|---|---|---|---|
-| `DoTrayAssignments(ctx)` | `ctx->events`, `ctx->first_tray_event`, fields of existing `TrayMove`s | **solver class** | `DefaultSolver::Solve(const Input&) const -> stdx::Expected<Result>`: creates a `Pass`, runs the per-event loop, returns the pass's result | `default_solver.cpp` |
-| `ApplyTransitionToFreeingMoves(event, ws&, freeing&)` | `working_state`, `freeing_moves` | **pass-local** | `Pass::RecordTransition(const ScheduleEventSPtr&) -> stdx::Result` | `pass.cpp` |
-| `AssignTrayIdForEmptyMove(TrayMove&, const ws&)` | the `TrayMove` (tray id, maybe heading) | **pure** | `ChooseEmptyTray(svc, const DiscreteGarageState&, const GaragePoseMsg& dest) -> stdx::Expected<TrayChoice>`; the caller decides what to do with the choice | `empty_tray.cpp` (public: `PlanReadyForInsertJob` uses it) |
-| `AssignDestForUntargetedMove(move*, ctx, event, ws&, freeing&, last&)` | the move, `ctx->events`, `ctx->first_tray_event`, `working_state`, `freeing_moves`, `last_tray_event` | **split** | pure `ChooseParkingSpot(svc, state, tray_id, job_index) -> stdx::Expected<ParkingPlan>` (search + heading policy), then `Pass::EmitMoveChain` and `Pass::CommitRootMove` | `blocking_trays.cpp`, `pass.cpp` |
-| `ResolveBlockingTrays(tray, job, base_state, immobile, illegal, enforce, stash)` | nothing (copies `base_state`) | **pure** (already is) | `ResolveBlockingTrays(svc, const ResolveRequest&) -> stdx::Expected<BlockingResolution>` | `blocking_trays.cpp` (public: `PlanChargePayloadJob`) |
-| `FindOpenSpaceForRootTray(...)` | nothing | **pure, internal** | `detail::FindOpenSpace(svc, const OpenSpaceQuery&) -> std::optional<OpenSpaceSearchResult>` | `blocking_trays.cpp` |
-| `TryFindBlockingTrayResolution(...)` | nothing | **pure, internal** | `detail::TryResolveBlocker(svc, ...) -> std::optional<BlockingTrayResolution>` (mutually recursive with `ResolveBlockingTrays`, so same file) | `blocking_trays.cpp` |
-| `UsePreferredHeading(pose&, payload, tray)`, `UseRetrievalHeading(pose&, payload)`, `UseEvChargeHeading(pose&) -> bool` | the pose passed by reference | **pure, shared** | `PreferredHeading(svc, GaragePoseMsg dest, payload) -> GaragePoseMsg`, `RetrievalHeading(...)`, `EvChargeHeading(const Layout&, node_id) -> std::optional<int16_t>` | `common/headings.cpp` (job planning uses them too) |
-| destination check, inline in the main loop (`:2622`–`:2648`) | nothing | **pure, private** | `CheckDestinationUsable(svc, state, dest) -> stdx::Result` | `critical_path.cpp` |
-| critical-path search, inline (`:2656`–`:2710`) | nothing | **pure, private** | `FindCriticalPath(svc, state, tray_id, dest) -> stdx::Expected<CriticalPath>` (`path`, `VertexCollisionIdMap`, ordered `blocking_trays`) | `critical_path.cpp` |
-| fallback 1 “advance the root tray”, inline (`:2796`) | `working_state`, `critical_path` | **pure, private** | `TryAdvanceRoot(svc, state, path, position) -> std::optional<PlannedTrayMove>`; the pass applies it | `critical_path.cpp` |
-| blocker re-scan, inline (`:2992`) | `blocking_trays` (local) | **pure, private** | `BlockersOnPath(svc, state, root_tray, path_from_here) -> std::vector<uint16_t>` | `critical_path.cpp` |
-| event emission, written **twice** (`:2928`–`:2990` and inside `AssignDestForUntargetedMove`) | `ctx->events`, `first_tray_event`, `freeing_moves`, `last_tray_event`, `working_state` | **pass-local** | `Pass::EmitMoveChain(std::span<const PlannedTrayMove>, ...)`, written once | `pass.cpp` |
-| root-move tail (freeing edges, `Apply`, chain) | same | **pass-local** | `Pass::CommitRootMove(const ScheduleEventSPtr&, const TrayMove& resolved) -> stdx::Result` | `pass.cpp` |
+```cpp
+// PROPOSED — include/scheduler/tray_assignment/default_solver.hpp
+namespace volley::tray_assignment {
+class DefaultSolver final : public Solver {
+ public:
+  explicit DefaultSolver(const common::GarageServices& services);   // services must outlive the solver
+  [[nodiscard]] stdx::Expected<Result> Solve(const Input& input) const override;
+ private:
+  class Pass;                                // defined in src/tray_assignment/pass.hpp; no one else can name it
+  const common::GarageServices& services_;
+};
+}  // namespace volley::tray_assignment
+```
+
+```cpp
+// PROPOSED — src/tray_assignment/pass.hpp (private header: not under include/, not installed)
+class DefaultSolver::Pass {
+ public:
+  Pass(const common::GarageServices& svc, const DiscreteGarageState& initial_state);  // copies the state
+  stdx::Result RecordTransition(const ScheduleEventSPtr& event);   // was ApplyTransitionToFreeingMoves
+  void Fill(const ScheduleEventSPtr& event, uint16_t tray_id, const GaragePoseMsg& dest);  // → result_.fills
+  void EmitMoveChain(std::span<const PlannedTrayMove> moves, const EmitOptions& options);  // → result_.edits
+  stdx::Result CommitRootMove(const ScheduleEventSPtr& event, const TrayMove& resolved,
+                              const CommitOptions& options);      // root move: edges, apply, chain
+  const DiscreteGarageState& State() const { return working_state_; }  // what the pure functions read
+  Result TakeResult() && { return std::move(result_); }
+ private:
+  const common::GarageServices& svc_;
+  DiscreteGarageState working_state_;                                // initial_state + every move so far
+  GarageOccupancyChecker<ScheduleEventSPtr> freeing_moves_;          // who used each pose → new edges
+  std::unordered_map<uint16_t, ScheduleEventSPtr> last_tray_event_;  // per-tray chain
+  Result result_;                                                    // what Solve returns
+};
+```
+
+```cpp
+// PROPOSED — src/tray_assignment/default_solver.cpp (shape only)
+stdx::Expected<Result> DefaultSolver::Solve(const Input& input) const {
+  auto order = input.events.GetTopologicalOrdering();              // the only read of the DAG's structure
+  if(!order) return stdx::Unexpected("Failed to get total ordering");
+  Pass pass(services_, input.initial_state);
+  for(auto vertex : *order) {
+    ScheduleEventSPtr event = input.events.GetEventFromVertex(vertex).value();
+    if(event->GetType() != ScheduleEventType::TRAY_MOVE) {
+      if(auto r = pass.RecordTransition(event); !r) return stdx::Unexpected(r.error());
+      continue;
+    }
+    // Work on a resolved COPY of the TrayMove; *event itself is never modified (6.5).
+    // Blank tray id   -> ChooseEmptyTray(services_, pass.State(), dest), then pass.Fill(...)
+    // Blank dest      -> ChooseParkingSpot(...), pass.Fill(...), pass.EmitMoveChain(...), pass.CommitRootMove(...)
+    // Both set        -> CheckDestinationUsable, FindCriticalPath, blocker loop with ResolveBlockingTrays,
+    //                    TryAdvanceRoot and BlockersOnPath; pass.EmitMoveChain(...); pass.CommitRootMove(...)
+  }
+  return std::move(pass).TakeResult();
+}
+```
+
+```cpp
+// PROPOSED — include/scheduler/tray_assignment/apply.hpp
+namespace volley::tray_assignment {
+// The only function in the module that takes a mutable context. Implementation in 6.5.
+[[nodiscard]] stdx::Result ApplyTrayAssignment(ScheduleContext& ctx, const Result& result);
+}  // namespace volley::tray_assignment
+```
+
+`EmitOptions` and `CommitOptions` carry the small differences between today's two copies of the emission code (6.3) so that parity holds; they can disappear once those differences are settled.
+
+### 6.2 Source tree
+
+The package root stays `scheduler/` with **one** `CMakeLists.txt`. The new code goes into subfolders of the existing `include/scheduler/` and `src/` (and `test/`), one per module:
+
+```text
+scheduler/                                       # ROS package root (name unchanged)
+├── CMakeLists.txt                               # the only CMakeLists.txt; lists the new .cpp files
+├── package.xml                                  # already depends on stdx
+├── include/
+│   └── scheduler/
+│       ├── scheduler.hpp                        # existing: Plan(), job expansion; owns services_, tray_solver_
+│       ├── scheduler_ros.hpp                    # existing
+│       ├── scheduler_msgs.hpp                   # existing
+│       ├── utils.hpp                            # existing
+│       ├── common/
+│       │   ├── garage_services.hpp              # GarageServices
+│       │   ├── headings.hpp                     # PreferredHeading, RetrievalHeading, EvChargeHeading
+│       │   └── overloaded.hpp                   # Overloaded helper for std::visit
+│       ├── tray_assignment/
+│       │   ├── solver.hpp                       # Solver, Input, Result, TrayFill, DagEdit
+│       │   ├── default_solver.hpp               # DefaultSolver (declares the private nested Pass)
+│       │   ├── apply.hpp                        # ApplyTrayAssignment
+│       │   ├── empty_tray.hpp                   # ChooseEmptyTray, TrayChoice
+│       │   └── blocking_trays.hpp               # ResolveBlockingTrays, ChooseParkingSpot, PlannedTrayMove, ...
+│       └── agv_assignment/
+│           ├── solver.hpp
+│           ├── default_solver.hpp
+│           └── travel_cost.hpp                  # GetJustMovingCost (shared with PlanAgvChargeJob)
+├── src/
+│   ├── scheduler.cpp                            # existing; shrinks to Plan() + job expansion
+│   ├── scheduler_component.cpp                  # existing
+│   ├── scheduler_ros.cpp                        # existing
+│   ├── utils.cpp                                # existing
+│   ├── common/
+│   │   └── headings.cpp
+│   ├── tray_assignment/
+│   │   ├── default_solver.cpp                   # Solve(): the per-event loop
+│   │   ├── pass.hpp                             # PRIVATE header: DefaultSolver::Pass
+│   │   ├── pass.cpp
+│   │   ├── critical_path.hpp                    # PRIVATE header: CheckDestinationUsable, FindCriticalPath, ...
+│   │   ├── critical_path.cpp
+│   │   ├── empty_tray.cpp
+│   │   ├── blocking_trays.cpp                   # + detail::FindOpenSpace, detail::TryResolveBlocker
+│   │   └── apply.cpp
+│   └── agv_assignment/
+│       ├── default_solver.cpp
+│       └── travel_cost.cpp
+└── test/
+    ├── scheduler_tests.cpp                      # existing (and the other existing test files)
+    ├── tray_assignment/                         # empty_tray, blocking_trays, critical_path, default_solver, apply
+    └── agv_assignment/
+```
+
+The single `CMakeLists.txt` only grows its source lists. Today it builds one shared library with `volley_add_library(${PROJECT_NAME} SHARED src/scheduler.cpp src/utils.cpp)` and four `volley_add_gtest` targets:
+
+```cmake
+# PROPOSED — CMakeLists.txt (excerpt; the rest of the file is unchanged)
+volley_add_library(
+  ${PROJECT_NAME}
+  SHARED
+  src/scheduler.cpp
+  src/utils.cpp
+  src/common/headings.cpp
+  src/tray_assignment/default_solver.cpp
+  src/tray_assignment/pass.cpp
+  src/tray_assignment/critical_path.cpp
+  src/tray_assignment/empty_tray.cpp
+  src/tray_assignment/blocking_trays.cpp
+  src/tray_assignment/apply.cpp
+  src/agv_assignment/default_solver.cpp
+  src/agv_assignment/travel_cost.cpp
+)
+
+if(BUILD_TESTING)
+  volley_add_gtest(
+    tray_assignment_tests
+    test/tray_assignment/empty_tray_test.cpp
+    test/tray_assignment/blocking_trays_test.cpp
+    test/tray_assignment/critical_path_test.cpp
+    test/tray_assignment/default_solver_test.cpp
+    test/tray_assignment/apply_test.cpp
+    LINK_LIBRARIES
+      yaml-cpp
+      ${PROJECT_NAME}
+  )
+endif()
+```
+
+How the boundaries hold with one library target:
+
+- **Public vs private headers.** Headers under `include/scheduler/<module>/` are the module's API; code includes them as `#include "scheduler/tray_assignment/solver.hpp"`. Headers next to the `.cpp` files in `src/<module>/` are private. They are not under `include/`, so they are not installed and not on anyone's include path, and only files in the same folder include them (`#include "pass.hpp"`). Check that `volley_add_library` exports only `include/` (it is defined in `volley_cmake`, not in this snapshot).
+- **`Pass` cannot be used from outside even by accident.** It is a private nested class of `DefaultSolver`, so code outside `DefaultSolver` cannot name it, whatever it includes.
+- **Dependency direction is a rule, checked in CI.** With one target, CMake cannot stop `src/tray_assignment/*.cpp` from including `scheduler/scheduler.hpp`. The rules: `tray_assignment/` and `agv_assignment/` never include `scheduler.hpp`; `agv_assignment/` does not include `tray_assignment/` (the hand-off, `first_tray_event`, is a plain map in its `Input`); `common/` includes neither. A one-line grep in CI enforces this. If the team later wants the linker to enforce it, the same `CMakeLists.txt` can declare one library per module without moving any file.
+
+Names: **`tray_assignment` rather than `tray_movement`**, because job expansion also plans tray movement (it creates the `TrayMove`s); this module only fills in what expansion left open (tray ids, destinations, blockers). It matches the stage name in doc 01 (`DoTrayAssignments`) and pairs with `agv_assignment`. Namespaces follow the folders: `volley::tray_assignment`, `volley::agv_assignment`, `volley::common`.
+
+### 6.3 Before and after: the tray call tree
+
+Not everything moves into the new class. The two figures below show the same call tree before and after; the question that sorts every function is **what does it write?**
+
+![Tray call tree today](figures/59_tray_tree_before.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#59_tray_tree_before) · [standalone SVG](figures/59_tray_tree_before.svg)</sub>
+
+**Figure 4 — Tray call tree today.** Every function is a `Scheduler` member, and the main loop's six blocks are written inline in `DoTrayAssignments`. The chips show what each one writes: red for something in `ScheduleContext` (the DAG, the hand-off map, or a field of an event in the DAG), amber for an argument passed by reference, green for nothing. Three functions already write nothing, but their signatures do not say so, and four functions are also called by job planning.
+
+![Proposed tray_assignment module](figures/60_tray_tree_after.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#60_tray_tree_after) · [standalone SVG](figures/60_tray_tree_after.svg)</sub>
+
+**Figure 5 — The same call tree after the refactor (UML).** `Pass` is drawn **inside** `DefaultSolver` because it is a private nested class: it exists only during one `Solve` call and holds the only state that changes while solving. Everything green is a pure function, grouped by the header that declares it; `// was ...` names the member or inline block it replaces. `ApplyTrayAssignment` (red) is the only function that takes a mutable `ScheduleContext`, and `Scheduler::Plan` calls it right after `Solve`. Job methods call the public pure functions directly with `services_`.
+
+In short, today's functions fall into four groups:
+
+| Group | Functions | Why there |
+|---|---|---|
+| **Solver class** | `DefaultSolver::Solve` (was `DoTrayAssignments`, minus everything below) | The interface method; runs the per-event loop |
+| **Private, mutable, one per call** | `Pass::RecordTransition`, `Fill`, `EmitMoveChain`, `CommitRootMove` (were `ApplyTransitionToFreeingMoves`, the setters, the two copies of the emission block, the root-move tail) | They update the loop's working data, which only `Solve` can see |
+| **Pure** | `ChooseEmptyTray`, `ResolveBlockingTrays`, `ChooseParkingSpot`, `detail::FindOpenSpace`, `detail::TryResolveBlocker`, `CheckDestinationUsable`, `FindCriticalPath`, `TryAdvanceRoot`, `BlockersOnPath`, `PreferredHeading`, `RetrievalHeading`, `EvChargeHeading` | They only compute an answer from their arguments |
+| **Writes the context** | `ApplyTrayAssignment` (new) | Replaces every write that used to happen inside the loop |
 
 **What “pure” means here.** The function's result depends only on its arguments, and it writes nothing reachable from them: no member state, no `ctx`, no event objects. Inputs come in by `const&` or by value, and the answer comes back as the return value. The read-only services (`GarageGraph`, `CollisionTable`, `MotionCostModel`, `Layout`) are passed as one `const GarageServices&` (`svc`), because they never change after the `Scheduler` constructor. Logging is the one allowed side effect: it does not change what any later call computes.
 
@@ -231,7 +434,7 @@ Why make them pure:
 
 **What stays mutable, and why that is fine.** The loop needs a garage state that changes after every move, an occupancy record and a per-tray “last move” map. Those live in `Pass`, an object created inside `Solve` and destroyed when it returns. Nothing outside can see it. Seen from the caller, `Solve` is still a pure function: same `Input`, same `Result`. This is the usual pattern of “local mutation, pure interface”: rewriting the loop to thread an immutable state through every step would add copying and noise without making the code any safer.
 
-### 6.3 Errors: `stdx::Expected` instead of `BoolStringPair`
+### 6.4 Errors: `stdx::Expected` instead of `BoolStringPair`
 
 `BoolStringPair` (`std::pair<bool, std::string>`) and `stdx::Expected` say the same thing (“it worked, or here is why not”), but `Expected` says it in the type: a caller cannot read a value without checking, and there is no meaningless message on success or meaningless value on failure. The project already has `volley::stdx` (`src/core/stdx/include/stdx/expected.hpp`), aliases over `tl::expected`, and **the scheduler package already uses it**: `package.xml` depends on `stdx`, `EnsureAgvMovePathsClear` returns `stdx::Result`, `RunAgvPathRepairPass` returns `stdx::Expected<bool>`, and `utils.cpp`'s `InsertVrcActionsIntoDag` returns `stdx::Result`. So this is finishing a migration that has started, not adding a dependency:
 
@@ -251,44 +454,21 @@ Why make them pure:
 
 Three rules keep this consistent:
 
-1. **`stdx::Expected` / `stdx::Result` at every function that can fail for a reason someone should read.** That is every public function in 6.2 and every `Pass` method.
+1. **`stdx::Expected` / `stdx::Result` at every function that can fail for a reason someone should read.** That is every public function in 6.3 and every `Pass` method.
 2. **`std::optional` stays for “searched, found nothing”** inside a module, where the caller handles the empty case itself and has no message to pass on: `detail::FindOpenSpace`, `detail::TryResolveBlocker`, `TryAdvanceRoot`. Converting these to `Expected` would invent error strings nobody reads. `ResolveBlockingTrays` is the boundary: today its failures are only logged (`WARNS` / `ERRORS`); as `Expected`, the reason travels to the caller, which still treats it as “try the next fallback”.
 3. **Keep `E = std::string` for the parity pass.** Error text reaches clients through `FailJob(job, message)` and may be matched by tests. A typed error (`struct Error { Code code; std::string message; }`, which `Expected<T, E>` already allows) is a good follow-up once the benchmarks exist.
 
-Two practical notes. `std::format` has no formatter for `GaragePoseMsg`; either pass `std::to_string(pose)` as above (identical text to today) or add a `std::formatter<GaragePoseMsg>` in `common`. And `tl::expected` has `and_then` / `transform`, which keeps call sites flat (see the `Plan()` snippet in 6.5).
+Two practical notes. `std::format` has no formatter for `GaragePoseMsg`; either pass `std::to_string(pose)` as above (identical text to today) or add a `std::formatter<GaragePoseMsg>` in `common`. And `tl::expected` has `and_then` / `transform`, which keeps call sites flat (see the `Plan()` snippet in 6.6).
 
-### 6.4 Returning a result instead of editing the context
+### 6.5 Why return a result, and how it is applied
 
-Today `DoTrayAssignments(ctx)` edits three things it does not own: the DAG (`ctx->events`), the hand-off map (`ctx->first_tray_event`) and the `TrayMove` objects inside the DAG (`SetTrayId`, `SetDest`). The proposal: `Solve` takes a read-only `Input` and **returns a description of the edits**; `Scheduler` applies it in one place.
+Today `DoTrayAssignments(ctx)` edits three things it does not own: the DAG (`ctx->events`), the hand-off map (`ctx->first_tray_event`) and the `TrayMove` objects inside the DAG (`SetTrayId`, `SetDest`). The proposal: `Solve` takes a read-only `Input` and **returns a description of the edits**; `Plan()` writes them into the context with one call to `ApplyTrayAssignment`.
 
 **Why this is practical for tray assignment.** The tray tree reads the DAG exactly once: `GetTopologicalOrdering()` at the start (plus `GetEventFromVertex` to walk it). After that it only *writes*: `AddEvent`, `AddDependency`, the two setters, and `first_tray_event`. Nothing in the loop reads back an edge it added. So the solver never needs to see its own edits in the DAG, and recording them instead of applying them changes nothing it computes. (The garage *state* the loop does read is `working_state`, which is private to the `Pass` anyway.)
 
 **Why not return a whole new DAG.** `ScheduleEventDag` holds `std::shared_ptr<ScheduleEvent>`. Copying it copies pointers, so a “new DAG” would share event objects with the old one, and the setters would still edit the caller's events. A deep copy needs cloning and an old → new identity map for `first_tray_event` and every later stage. An **edit log** avoids both: it refers to existing events by the same `shared_ptr`, adds new events as new objects, and never touches the caller's.
 
-```cpp
-// PROPOSED — tray_assignment/include/scheduler/tray_assignment/solver.hpp
-namespace volley::tray_assignment {
-
-// A blank field filled on an EXISTING TrayMove of the input DAG. Applied with SetTrayId / SetDest.
-struct TrayFill {
-  ScheduleEventSPtr event;   // the TrayMove, as the input DAG holds it (pointer identity)
-  uint16_t tray_id;          // same as before if it was already set
-  GaragePoseMsg dest;        // same as before if it was already set; heading may be adjusted
-};
-
-// One structural edit, in the order today's code makes it.
-struct AddEvent      { ScheduleEventSPtr event; };                    // a NEW TrayMove (blocker, advance)
-struct AddDependency { ScheduleEventSPtr from; ScheduleEventSPtr to; };  // from must finish before to
-using DagEdit = std::variant<AddEvent, AddDependency>;
-
-struct Result {
-  std::vector<TrayFill> fills;                                       // one per TrayMove that had a blank
-  std::vector<DagEdit> edits;                                        // ordered; replay in this order
-  std::unordered_map<uint16_t, ScheduleEventSPtr> first_tray_event;  // hand-off to AGV assignment
-};
-
-}  // namespace volley::tray_assignment
-```
+The `Result` type and its parts are defined in 6.1. An **edit log** means: `fills` for blanks on existing events, `edits` for new events and edges in the order today's code creates them, and the hand-off map.
 
 **Parity depends on the order.** The DAG's vertex indices follow `AddEvent` order, and what later stages compute (topological order among unordered events, `Reduce`) can depend on that order. `edits` is therefore an ordered log, and `ApplyTrayAssignment` replays it front to back with the same `AddEvent` / `AddDependency` calls today's code makes, so the resulting DAG is the same graph built in the same order. `AddDependency`'s return value (false for a duplicate or rejected edge) is only logged today, so replaying the same calls gives the same edge set.
 
@@ -297,7 +477,7 @@ struct Result {
 **Applying it.** One function owns every write to the context:
 
 ```cpp
-// PROPOSED — tray_assignment/src/apply.cpp ; declared in tray_assignment/apply.hpp
+// PROPOSED — src/tray_assignment/apply.cpp ; declared in include/scheduler/tray_assignment/apply.hpp
 stdx::Result ApplyTrayAssignment(ScheduleContext& ctx, const Result& result) {
   for(const auto& edit : result.edits) {                       // structure first, in recorded order
     std::visit(Overloaded{
@@ -318,7 +498,7 @@ stdx::Result ApplyTrayAssignment(ScheduleContext& ctx, const Result& result) {
 }
 ```
 
-(`Overloaded` is the usual two-line helper for `std::visit`; put it in `common`.) Applying fills after the edits gives the same DAG as long as `AddEvent` and `AddDependency` only use pointer identity and never read event fields (they take `shared_ptr`s; confirm in `planner_core`). Today the setters run earlier only because that was the convenient place.
+(`Overloaded` is the usual two-line helper for `std::visit`, in `include/scheduler/common/overloaded.hpp`.) Applying fills after the edits gives the same DAG as long as `AddEvent` and `AddDependency` only use pointer identity and never read event fields (they take `shared_ptr`s; confirm in `planner_core`). Today the setters run earlier only because that was the convenient place.
 
 **What this buys:**
 
@@ -329,55 +509,12 @@ stdx::Result ApplyTrayAssignment(ScheduleContext& ctx, const Result& result) {
 
 **Limits to be honest about.** `const ScheduleEventDag&` stops structural edits, but `GetEventFromVertex` still hands out `std::shared_ptr<ScheduleEvent>` to non-const events, so the compiler does not stop a solver from calling a setter. The rule is enforced by review and by one test: snapshot every event's fields before `Solve`, compare after. Changing `planner_core` to hand out `shared_ptr<const ScheduleEvent>` would make it a compile error, but that is outside this refactor.
 
-### 6.5 Header sketch and call site
+### 6.6 Free-function signatures and the `Plan()` call site
+
+The types in 6.1 cover the solver itself. These are the public pure functions that both `DefaultSolver` and job planning call:
 
 ```cpp
-// PROPOSED — common/include/scheduler/common/garage_services.hpp
-namespace volley::common {
-// Read-only services every search needs. Built once by Scheduler from its members; never changes.
-struct GarageServices {
-  const GarageGraph& graph;               // Scheduler::gg_
-  const CollisionTable& collisions;       // Scheduler::table_
-  const cost::MotionCostModel& costs;     // Scheduler::cost_model_
-  const Layout& layout;                   // *Scheduler::layout_
-  rclcpp::Logger logger;                  // copy of Scheduler::logger_
-};
-}  // namespace volley::common
-```
-
-```cpp
-// PROPOSED — tray_assignment/include/scheduler/tray_assignment/solver.hpp (continued)
-namespace volley::tray_assignment {
-
-struct Input {                                     // everything Solve may read; nothing it may write
-  const DiscreteGarageState& initial_state;        // plan_ctx->initial_state
-  const ScheduleEventDag& events;                  // plan_ctx->events, after job expansion
-};
-
-class Solver {
- public:
-  virtual ~Solver() = default;
-  [[nodiscard]] virtual stdx::Expected<Result> Solve(const Input& input) const = 0;
-};
-
-}  // namespace volley::tray_assignment
-```
-
-```cpp
-// PROPOSED — tray_assignment/include/scheduler/tray_assignment/default_solver.hpp
-namespace volley::tray_assignment {
-class DefaultSolver final : public Solver {
- public:
-  explicit DefaultSolver(const common::GarageServices& services);   // services must outlive the solver
-  [[nodiscard]] stdx::Expected<Result> Solve(const Input& input) const override;
- private:
-  const common::GarageServices& services_;
-};
-}  // namespace volley::tray_assignment
-```
-
-```cpp
-// PROPOSED — public free functions (empty_tray.hpp, blocking_trays.hpp)
+// PROPOSED — include/scheduler/tray_assignment/empty_tray.hpp and blocking_trays.hpp
 namespace volley::tray_assignment {
 
 struct TrayChoice { uint16_t tray_id; GaragePoseMsg dest; };   // dest heading may follow the tray
@@ -441,7 +578,7 @@ if(!assigned) {
 
 **Lifetime rule.** `GarageServices` and `DefaultSolver` hold references into the `Scheduler`. Declare `services_` after `gg_`, `table_`, `cost_model_` and `layout_`, and `tray_solver_` after `services_`, so they are destroyed first. A test that builds a solver directly must keep the graph, table, cost model and layout alive for the solver's lifetime.
 
-### 6.6 AGV assignment: same layout and error type now, returned result later
+### 6.7 AGV assignment: same layout and error type now, returned result later
 
 The `agv_assignment` folder, `stdx::Expected` and pure helpers apply directly: the cost estimates (`GetJustMovingCost`, shared with `PlanAgvChargeJob`; `GetAgvToTrayAssignmentCost`; `GetAgvOccupiedDuration`), feasibility checks and matching inputs are queries over const services and a state, and `BottleneckAssignment` is already external.
 
@@ -453,7 +590,7 @@ Returning a result is harder there, for reasons visible in the code:
 An edit log could still work, if the solver keeps a private *structural* copy of the DAG (copying pointers is enough for edges), applies every edit to that copy as it goes, and logs it, including a `Reduce` step. The field reads are the real obstacle: they would need either cloned events with an identity map, or a side table (`agv_of[event]`) replacing every `GetAgvId()` read, which touches parity-sensitive code. **Recommendation:** for stage F, use the same layout and `stdx` types, and give the AGV solver an `Input` plus an explicitly mutable `ScheduleEventDag&` (named as such in the signature). Convert it to a returned result after the benchmarks exist and can prove nothing changed.
 
 ```cpp
-// PROPOSED — sketch only; agv_assignment/include/scheduler/agv_assignment/solver.hpp
+// PROPOSED — sketch only; include/scheduler/agv_assignment/solver.hpp
 namespace volley::agv_assignment {
 struct Input {
   const DiscreteGarageState& initial_state;                                 // plan_ctx->initial_state
@@ -462,7 +599,7 @@ struct Input {
 class Solver {
  public:
   virtual ~Solver() = default;
-  // events is edited in place in the first pass (see 6.6); the name says so.
+  // events is edited in place in the first pass (see 6.7); the name says so.
   [[nodiscard]] virtual stdx::Result SolveInPlace(const Input& input, ScheduleEventDag& events) const = 0;
 };
 }  // namespace volley::agv_assignment
@@ -487,7 +624,7 @@ The tray-move example below is illustrative; real graphs and paths depend on the
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#03_garage_xy) · [standalone SVG](figures/03_garage_xy.svg)</sub>
 
-**Figure 4 — Top-down garage setup.** AGV 1 faces +x and carries tray T1 toward the goal. Trays T2 and T3 sit on the route, so two prerequisite tray moves (T2 → S3, T3 → S4) must finish first; they are independent of each other. Coordinates are schematic, not a customer layout.
+**Figure 6 — Top-down garage setup.** AGV 1 faces +x and carries tray T1 toward the goal. Trays T2 and T3 sit on the route, so two prerequisite tray moves (T2 → S3, T3 → S4) must finish first; they are independent of each other. Coordinates are schematic, not a customer layout.
 
 ## 8. Staged plan
 
@@ -498,10 +635,10 @@ A move-only refactor is risky because the helpers in section 3 are shared with j
 | A — baseline | Pin the commit, build, run the 72 active tests; record output DAGs (`debug/printdags`) and `ScheduledJobDataMsg` lists for curated fixtures | Reproducible behaviour captured |
 | B — dependency map | Confirm Figure 1 against the branch; decide where the five shared helpers live | Ownership design written down |
 | C1 — pure helpers in place | Still inside `scheduler.cpp`: turn the heading helpers, `AssignTrayIdForEmptyMove` (→ `ChooseEmptyTray`), `ResolveBlockingTrays` and the inline main-loop blocks into free functions over `GarageServices` returning `stdx::Expected`; job planning calls them too. Merge the two emission blocks | All tests and DAG snapshots identical; new unit tests for each pure function |
-| C2 — tray module | Create `common/` and `tray_assignment/` targets (section 6.1); move the pure functions; add `Solver`, `Input`, `Result`, `Pass`, `DefaultSolver`, `ApplyTrayAssignment` | A test constructs `DefaultSolver` without a `Scheduler`; invariant 9 test passes |
+| C2 — tray module | Create the `common/` and `tray_assignment/` subfolders under `include/scheduler/`, `src/` and `test/` (section 6.2) and add the files to `CMakeLists.txt`; move the pure functions; add `Solver`, `Input`, `Result`, `Pass`, `DefaultSolver`, `ApplyTrayAssignment` | A test constructs `DefaultSolver` without a `Scheduler`; invariant 9 test passes |
 | D — tray migration | `Plan` calls `Solve` + `ApplyTrayAssignment`; keep `DoTrayAssignments` temporarily for side-by-side comparison of the two DAGs | All tests and DAG snapshots identical |
 | E — tray cleanup | Delete `DoTrayAssignments` and the old members; port the 4 direct `DoTrayAssignments` tests and the `ResolveBlockingTrays` test to `tray_assignment/test` | No production call to the old methods |
-| F — AGV module | `agv_assignment/` with the same layout and `stdx` types; pure cost helpers; `SolveInPlace(input, events)` (section 6.6); port the 9 direct tests | Same behaviour and coverage |
+| F — AGV module | `agv_assignment/` with the same layout and `stdx` types; pure cost helpers; `SolveInPlace(input, events)` (section 6.7); port the 9 direct tests | Same behaviour and coverage |
 | G — benchmarks | ≥10 real-site scenarios per solver, timed in a pinned environment | Results stored with metadata, no regressions |
 | H — final cleanup | Remove legacy code; run full system and advanced suites | Definition of Done demonstrable |
 
@@ -511,10 +648,10 @@ A move-only refactor is risky because the helpers in section 3 are shared with j
 
 | Decision | Initial recommendation | Evidence needed |
 |---|---|---|
-| Input/output style | Tray: read-only `Input`, returned `stdx::Expected<Result>` (edit log) applied by `Scheduler` (6.4). AGV: explicit `ScheduleEventDag&` for the first pass (6.6) | `TrayMove` copyable and `Apply` state-only (`planner_core`); replay order gives identical DAG snapshots |
-| Error reporting | `stdx::Expected<T>` / `stdx::Result` with `std::string` errors; `std::optional` only for internal “found nothing” searches (6.3) | Tests that match error text; `std::to_string` vs a `std::formatter<GaragePoseMsg>` |
-| Which functions stay members | Only the solver's `Solve` and the private `Pass`; everything else becomes a pure free function over `GarageServices` (6.2) | Each pure function's unit test passes without a `Scheduler` |
-| Folder layout and names | Module folders `common/`, `tray_assignment/`, `agv_assignment/` inside the scheduler package; namespaces to match (6.1) | CMake target boundaries; CI include check |
+| Input/output style | Tray: read-only `Input`, returned `stdx::Expected<Result>` (edit log) applied by `Scheduler` (6.5). AGV: explicit `ScheduleEventDag&` for the first pass (6.7) | `TrayMove` copyable and `Apply` state-only (`planner_core`); replay order gives identical DAG snapshots |
+| Error reporting | `stdx::Expected<T>` / `stdx::Result` with `std::string` errors; `std::optional` only for internal “found nothing” searches (6.4) | Tests that match error text; `std::to_string` vs a `std::formatter<GaragePoseMsg>` |
+| Which functions stay members | Only the solver's `Solve` and the private `Pass`; everything else becomes a pure free function over `GarageServices` (6.3) | Each pure function's unit test passes without a `Scheduler` |
+| Folder layout and names | Subfolders `common/`, `tray_assignment/`, `agv_assignment/` under `include/scheduler/`, `src/` and `test/`; one `CMakeLists.txt`; private headers in `src/<module>/`; namespaces to match (6.2) | `volley_add_library` exports only `include/`; CI include check for dependency direction |
 | Virtual interface vs templates | Virtual `Solve`, owned by `Scheduler` through `std::unique_ptr` | Existing code style, whether plugins must swap solvers at runtime |
 | Where interfaces live | Small, low-dependency header package | `colcon graph`, `package.xml`, exported CMake targets |
 | Where default solvers live | Scheduler library sub-module first | Avoid new group-level dependency cycles |
@@ -540,13 +677,13 @@ These are behaviours a reviewer may want to change. Changing them during extract
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#08_uml_solver) · [standalone SVG](figures/08_uml_solver.svg)</sub>
 
-**Figure 5 — Proposed class structure.** `Scheduler` owns a `tray_assignment::Solver` and builds the read-only `Input` it passes in. `DefaultSolver` and a test double realize the interface (dashed line, hollow triangle) and return `stdx::Expected<Result>`; `Scheduler` applies the `Result` in one place. `DefaultSolver` delegates to pure free functions that job planning also calls. This is the **Strategy** pattern: `Scheduler` depends on the stable interface, not on the algorithm.
+**Figure 7 — Proposed class structure.** `Scheduler` owns a `tray_assignment::Solver` and builds the read-only `Input` it passes in. `DefaultSolver` and a test double realize the interface (dashed line, hollow triangle) and return `stdx::Expected<Result>`; `Scheduler` applies the `Result` in one place. `DefaultSolver` delegates to pure free functions that job planning also calls. This is the **Strategy** pattern: `Scheduler` depends on the stable interface, not on the algorithm.
 
 ![Solver call sequence](figures/09_sequence_tray.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#09_sequence_tray) · [standalone SVG](figures/09_sequence_tray.svg)</sub>
 
-**Figure 6 — Proposed tray solver interaction.** `Scheduler` calls `Solve`. The solver reads the topological event order once, then records (does not apply) tray fills, blocker moves, edges and `first_tray_event` in a `Result`, and returns `stdx::Expected<Result>`. `Scheduler` replays the result into `ctx->events` with `ApplyTrayAssignment`, which ends with the cycle check, and AGV assignment continues.
+**Figure 8 — Proposed tray solver interaction.** `Scheduler` calls `Solve`. The solver reads the topological event order once, then records (does not apply) tray fills, blocker moves, edges and `first_tray_event` in a `Result`, and returns `stdx::Expected<Result>`. `Scheduler` replays the result into `ctx->events` with `ApplyTrayAssignment`, which ends with the cycle check, and AGV assignment continues.
 
 ### Why the default solver needs graph and collision services
 
