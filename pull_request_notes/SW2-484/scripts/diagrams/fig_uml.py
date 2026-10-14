@@ -209,42 +209,53 @@ def uml_events():
 # 08 — proposed solver UML
 # --------------------------------------------------------------------------------------
 
-@figure("08_uml_solver", "Proposed TrayMoveSolver classes", "02-issue-and-proposal.md")
+@figure("08_uml_solver", "Proposed tray_assignment classes", "02-issue-and-proposal.md")
 def uml_solver():
-    d = Doc("08_uml_solver", "Proposed TrayMoveSolver class structure",
-            "Strategy pattern: Scheduler holds a TrayMoveSolver; DefaultTrayMoveSolver and a test fake realize it; "
-            "solvers receive a TraySolveRequest.")
-    EX, NEW, TEST = T.sky, T.amber, T.teal
-    gap = 120
+    d = Doc("08_uml_solver", "Proposed tray_assignment class structure",
+            "Strategy pattern: Scheduler holds a tray_assignment::Solver; DefaultSolver and a test fake realize it; "
+            "Solve takes a read-only Input and returns stdx::Expected<Result>; Scheduler applies the Result.")
+    EX, NEW, TEST, PURE = T.sky, T.amber, T.teal, T.green
+    gap = 110
     sched = uml_class(d, 0, 0, "Scheduler", accent=EX, stereo="existing · abridged", size=M,
-                      attrs=["- tray_solver_: TrayMoveSolver  (injected)"],
-                      methods=["+ Plan(request): PlanResponse"])
-    req = uml_class(d, sched.x1 + gap, 0, "TraySolveRequest", accent=NEW, stereo="struct · proposed", size=M,
-                    attrs=["+ initial_state: const DiscreteGarageState&", "+ events: ScheduleEventDag&",
-                           "+ first_tray_event:", "    unordered_map<uint16_t, ScheduleEventSPtr>&"])
-    W = req.x1
-    iy = max(sched.y1, req.y1) + 80
-    iface = uml_class(d, sched.x0 + 30, iy, "TrayMoveSolver", accent=NEW, stereo="interface · proposed",
+                      attrs=["- services_: GarageServices", "- tray_solver_:", "    unique_ptr<tray_assignment::Solver>"],
+                      methods=["+ Plan(request): PlanResponse", "- ApplyTrayAssignment(ctx&, result)",
+                               "    : stdx::Result"])
+    req = uml_class(d, sched.x1 + gap, 0, "Input", accent=NEW, stereo="struct · proposed · read-only", size=M,
+                    attrs=["+ initial_state: const DiscreteGarageState&", "+ events: const ScheduleEventDag&"])
+    res = uml_class(d, req.x1 + 60, 0, "Result", accent=NEW, stereo="struct · proposed · returned", size=M,
+                    attrs=["+ fills: vector<TrayFill>", "+ edits: vector<DagEdit>  (ordered)",
+                           "+ first_tray_event:", "    unordered_map<uint16_t, ScheduleEventSPtr>"])
+    iy = max(sched.y1, req.y1, res.y1) + 90
+    iface = uml_class(d, sched.x0 + 30, iy, "Solver", accent=NEW, stereo="interface · tray_assignment",
                       abstract=True, size=M, center_x=False,
-                      methods=["+ Solve(request: TraySolveRequest) const", "    : BoolStringPair = 0",
-                               "+ ~TrayMoveSolver()  virtual"])
-    # shift iface so it is centred between the scheduler and request columns
+                      methods=["+ Solve(input: const Input&) const", "    : stdx::Expected<Result> = 0",
+                               "+ ~Solver()  virtual"])
     dy = iface.y1 + 90
-    dflt = uml_class(d, 0, dy, "DefaultTrayMoveSolver", accent=NEW, stereo="default implementation", size=M,
-                     attrs=["- gg_: const GarageGraph&", "- table_: const CollisionTable&",
-                            "- cost_: motion-cost collaborator", "- log_: logging collaborator"],
-                     methods=["+ Solve(request) const: BoolStringPair", "- ResolveBlockingTrays(…)",
-                              "- AssignTrayIdForEmptyMove(…)"])
-    fake = uml_class(d, dflt.x1 + 70, dy, "FakeTrayMoveSolver", accent=TEST, stereo="test double", size=M,
-                     attrs=["+ canned_result: BoolStringPair"],
-                     methods=["+ Solve(request) const: BoolStringPair"])
+    dflt = uml_class(d, 0, dy, "DefaultSolver", accent=NEW, stereo="default implementation", size=M,
+                     attrs=["- services_: const GarageServices&"],
+                     methods=["+ Solve(input) const", "    : stdx::Expected<Result>",
+                              "  (per-event loop over a private Pass)"])
+    fake = uml_class(d, dflt.x1 + 70, dy, "FakeSolver", accent=TEST, stereo="test double", size=M,
+                     attrs=["+ canned: stdx::Expected<Result>"],
+                     methods=["+ Solve(input) const", "    : stdx::Expected<Result>"])
+    fy = max(dflt.y1, fake.y1) + 80
+    free = uml_class(d, 0, fy, "tray_assignment (free functions)", accent=PURE, stereo="namespace · pure", size=M,
+                     methods=["+ ChooseEmptyTray(svc, state, dest)", "    : stdx::Expected<TrayChoice>",
+                              "+ ResolveBlockingTrays(svc, request)", "    : stdx::Expected<BlockingResolution>",
+                              "+ ChooseParkingSpot(svc, state, tray, job)", "    : stdx::Expected<ParkingPlan>",
+                              "+ FindCriticalPath(svc, state, tray, dest)", "    : stdx::Expected<CriticalPath>"])
     # relations
     connect(d, [(sched.cx, sched.y1), (sched.cx, iface.y0)], kind="assoc", color=EX, mult_end="1",
             label="tray_solver_", label_at=(sched.cx, (sched.y1 + iface.y0) / 2))
     connect(d, [(sched.x1, sched.y0 + 50), (req.x0, sched.y0 + 50)], kind="dep", color=EX,
             label="«create»", label_at=((sched.x1 + req.x0) / 2, sched.y0 + 34))
-    connect(d, [(iface.x1, iface.y0 + 70), (req.cx, iface.y0 + 70), (req.cx, req.y1)], kind="dep", color=NEW,
-            label="«use»", label_at=(req.cx, (req.y1 + iface.y0 + 70) / 2))
+    connect(d, [(iface.x1, iface.y0 + 50), (req.cx, iface.y0 + 50), (req.cx, req.y1)], kind="dep", color=NEW,
+            label="«read»", label_at=(req.cx, (req.y1 + iface.y0 + 50) / 2))
+    connect(d, [(iface.x1, iface.y0 + 84), (res.cx, iface.y0 + 84), (res.cx, res.y1)], kind="dep", color=NEW,
+            label="«return»", label_at=(res.cx, (res.y1 + iface.y0 + 84) / 2))
+    top = min(sched.y0, req.y0, res.y0) - 40
+    connect(d, [(sched.cx + 60, sched.y0), (sched.cx + 60, top), (res.cx + 60, top), (res.cx + 60, res.y0)],
+            kind="dep", color=EX, label="«apply»  the only write to ctx", label_at=((sched.cx + res.cx) / 2 + 60, top))
     bus = dy - 40
     d.arrowhead((iface.cx, iface.y1), (iface.cx, iface.y1 + 30), kind="triangle", color=NEW, size=11, sw=1.5)
     d.line(iface.cx, iface.y1 + 13, iface.cx, bus, stroke=NEW, sw=1.5, dash="6 4", layer="edges")
@@ -252,15 +263,21 @@ def uml_solver():
     for b in (dflt, fake):
         d.line(b.cx, bus, b.cx, b.y0, stroke=NEW, sw=1.5, dash="6 4", layer="edges")
     label_pill(d, (iface.cx + fake.cx) / 2 + 30, bus, "realize", color=NEW)
-    note(d, fake.x0, fake.y1 + 24, max(fake.w, 300),
-         "References outlive the solver: the Scheduler owns GarageGraph, CollisionTable and the cost model.",
-         title="Lifetime rule")
-    frame(d, title="Proposed TrayMoveSolver class structure",
-          subtitle="Strategy pattern: Scheduler calls a stable interface without embedding the algorithm. "
-                   "Reference ownership shown is one possible first-pass design.",
+    connect(d, [(dflt.cx, dflt.y1), (dflt.cx, free.y0)], kind="dep", color=PURE, label="«call»",
+            label_at=(dflt.cx, (dflt.y1 + free.y0) / 2))
+    note(d, free.x1 + 50, free.y0, 330,
+         "Scheduler's job methods (PlanReadyForInsertJob, PlanChargePayloadJob, ...) call the same free "
+         "functions with services_. No back-pointer to Scheduler is needed.", title="Shared with job planning")
+    note(d, free.x1 + 50, free.y0 + 120, 330,
+         "GarageServices holds const references to gg_, table_, cost_model_ and the layout. Scheduler owns "
+         "them and must outlive every solver.", title="Lifetime rule")
+    frame(d, title="Proposed tray_assignment class structure",
+          subtitle="Scheduler calls a stable interface. The solver reads an Input, returns stdx::Expected<Result>, "
+                   "and never edits the caller's context; Scheduler applies the Result in one place.",
           badge_key="proposed",
-          legend=[("box", EX, "existing class"), ("box", NEW, "proposed type"), ("box", TEST, "test double"),
-                  ("assoc", EX, "association"), ("real", NEW, "realization"), ("dep", T.fg2, "dependency")])
+          legend=[("box", EX, "existing class"), ("box", NEW, "proposed type"), ("box", PURE, "pure free functions"),
+                  ("box", TEST, "test double"), ("assoc", EX, "association"), ("real", NEW, "realization"),
+                  ("dep", T.fg2, "dependency")])
     return d
 
 
@@ -271,11 +288,11 @@ def uml_solver():
 @figure("09_sequence_tray", "Tray solver sequence", "02-issue-and-proposal.md")
 def seq_tray():
     d = Doc("09_sequence_tray", "Proposed tray-solver interaction",
-            "Sequence: Scheduler builds TraySolveRequest, calls Solve, the solver reads the topological order, "
-            "inserts blocker moves and dependencies and returns success/diagnostic.")
+            "Sequence: Scheduler builds Input, calls Solve; the solver reads the topological order, records blocker "
+            "moves and dependencies in a Result and returns it; Scheduler applies the Result to the DAG.")
     parts = [("caller", ":SchedulerRos", T.muted), ("sched", ":Scheduler", T.sky),
-             ("solver", "tray_solver_ : TrayMoveSolver", T.amber), ("dag", "ctx->events : ScheduleEventDag", T.violet)]
-    xs = {"caller": 40, "sched": 230, "solver": 520, "dag": 860}
+             ("solver", "tray_solver_ : tray_assignment::Solver", T.amber), ("dag", "ctx->events : ScheduleEventDag", T.violet)]
+    xs = {"caller": 40, "sched": 230, "solver": 560, "dag": 960}
     head_y = 0
     for k, label, col in parts:
         w = text_width(label, 12.5, "mono", 600) + 28
@@ -304,41 +321,43 @@ def seq_tray():
         d.text(x + 44, y_ + h / 2, text, size=12, family="mono", fill=col)
 
     # activations (drawn first, under messages)
-    acts = []
     y = 80
     msg("caller", "sched", "Plan(request)", y_=y, col=T.sky)
     a_sched0 = y
     y += step
     selfmsg("sched", "validate, expand jobs into ctx", y)
     y += step + 6
-    msg("sched", "solver", "Solve(TraySolveRequest{…})", y_=y, col=T.amber)
+    msg("sched", "solver", "Solve(Input{initial_state, events})", y_=y, col=T.amber)
     a_solver0 = y
     y += step
-    msg("solver", "dag", "GetTopologicalOrdering()", y_=y, col=T.violet)
+    msg("solver", "dag", "GetTopologicalOrdering()  const", y_=y, col=T.violet)
     a_dag = [(y, y + 34)]
     y += 34
     msg("dag", "solver", "ordering", ret=True, y_=y)
     y += 40
     loop_y0 = y - 18
-    selfmsg("solver", "fill tray ID / destination", y)
+    selfmsg("solver", "fill tray id / destination (pure helpers)", y)
     y += step + 2
     opt_y0 = y - 14
-    msg("solver", "dag", "AddEvent(blocking TrayMove)", y_=y + 34, col=T.violet)
-    a_dag.append((y + 34, y + 54))
-    y += 64
-    msg("solver", "dag", "AddDependency(…)  blocker first", y_=y + 6, col=T.violet)
-    a_dag.append((y + 6, y + 26))
+    selfmsg("solver", "record AddEvent(blocker move) in result.edits", y + 8)
+    y += 40
+    selfmsg("solver", "record AddDependency(blocker, root)", y + 6)
     y += 28
-    opt_y1 = y + 4
-    y += 30
-    selfmsg("solver", "first_tray_event[tray] = first clearing move", y)
+    opt_y1 = y + 14
+    y += 40
+    selfmsg("solver", "result.first_tray_event[tray] = first move", y)
     y += 40
     loop_y1 = y
     y += 30
-    msg("solver", "sched", "{success, diagnostic}", ret=True, y_=y)
+    msg("solver", "sched", "stdx::Expected<Result>", ret=True, y_=y)
     a_solver1 = y
     y += step
-    selfmsg("sched", "DoAgvAssignments(ctx)  (next stage)", y)
+    msg("sched", "dag", "ApplyTrayAssignment: replay edits, set fills", y_=y, col=T.violet)
+    a_dag.append((y, y + 34))
+    y += 34
+    msg("dag", "sched", "stdx::Result (cycle check)", ret=True, y_=y)
+    y += step
+    selfmsg("sched", "AGV assignment (next stage)", y)
     y += step
     msg("sched", "caller", "PlanResponse", ret=True, y_=y)
     a_sched1 = y
@@ -364,8 +383,8 @@ def seq_tray():
         d.text(fx0 + inset + 8, y0 + 10, tag, size=11.5, family="mono", weight=700, fill=T.fg2)
         d.text(fx0 + inset + tw + 16, y0 + 10, guard, size=11.5, family="mono", fill=T.muted)
     frame(d, title="Proposed tray-solver interaction",
-          subtitle="Scheduler delegates tray assignment through the interface. The solver reads the event order, "
-                   "inserts blocker moves and dependencies into the shared DAG, and returns a diagnostic.",
+          subtitle="The solver only reads the DAG. Blocker moves and edges are recorded in the returned Result; "
+                   "Scheduler replays them into ctx->events in one step, so a failed Solve leaves ctx untouched.",
           badge_key="proposed",
           legend=[("arrow", T.fg2, "synchronous call"), ("dep", T.muted, "return"),
                   ("box", T.amber, "activation (executing)"), ("dashbox", T.faint, "combined fragment (loop / opt)")])

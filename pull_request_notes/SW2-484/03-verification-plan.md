@@ -140,11 +140,14 @@ A parity check could look like this. `Canonicalize` and `CanonicalDag` are **pro
 // reference_ctx, candidate_ctx : ScheduleContextSPtr built from the same YAML state and the same events
 //                                (events cloned, not shared — otherwise both paths mutate the same objects)
 // scheduler                    : volley::Scheduler (old path)
-// tray_solver                  : DefaultTrayMoveSolver (new path, constructed from scheduler's gg_/table_/cost model)
-auto [ref_ok, ref_msg]   = scheduler.DoTrayAssignments(reference_ctx);
-auto [cand_ok, cand_msg] = tray_solver.Solve({candidate_ctx->initial_state, candidate_ctx->events,
-                                              candidate_ctx->first_tray_event});
-ASSERT_EQ(ref_ok, cand_ok) << ref_msg << " vs " << cand_msg;
+// tray_solver                  : tray_assignment::DefaultSolver (new path, built from the scheduler's GarageServices)
+auto [ref_ok, ref_msg] = scheduler.DoTrayAssignments(reference_ctx);           // BoolStringPair (old API)
+stdx::Result cand = tray_solver.Solve({candidate_ctx->initial_state, candidate_ctx->events})  // stdx::Expected<Result>
+                        .and_then([&](const tray_assignment::Result& r) {
+                          return tray_assignment::ApplyTrayAssignment(*candidate_ctx, r);
+                        });
+ASSERT_EQ(ref_ok, cand.has_value()) << ref_msg << " vs " << (cand ? std::string{} : cand.error());
+if(!ref_ok) { EXPECT_EQ(ref_msg, cand.error()); }   // error text reaches clients through FailJob
 
 CanonicalDag ref  = Canonicalize(*reference_ctx);   // sorted events + reduced edge set + first_tray_event
 CanonicalDag cand = Canonicalize(*candidate_ctx);
@@ -154,7 +157,7 @@ EXPECT_EQ(ref.first_tray_event, cand.first_tray_event);
 EXPECT_EQ(ref.final_state, cand.final_state);
 ```
 
-Note the comment on cloning: because the DAG holds `shared_ptr`s (doc 02, section 6), the two contexts must be built independently from the same inputs.
+Note the comment on cloning: because the DAG holds `shared_ptr`s (doc 02, section 6.4), the two contexts must be built independently from the same inputs. `Solve` itself changes nothing, but `ApplyTrayAssignment` and the old `DoTrayAssignments` both set fields on the event objects. A second, cheaper check needs no clone: call `Solve` twice on the same `Input` and assert the two `Result`s are equal and the input events are unchanged (doc 02, invariant 9).
 
 ## 5. Benchmark method
 

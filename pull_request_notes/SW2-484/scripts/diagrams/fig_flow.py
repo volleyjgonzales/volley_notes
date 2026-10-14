@@ -123,26 +123,24 @@ def target_architecture():
     W = 960
     EX, NEW, CORE = T.sky, T.amber, T.violet
     sched = uml_class(d, W / 2, 0, "Scheduler", accent=EX, stereo="orchestrator · existing",
-                      attrs=["- tray_solver_: TrayMoveSolver", "- agv_solver_: AgvAssignmentSolver",
-                             "- gg_, table_, motion_cost_  (owned)"],
-                      methods=["+ Plan(request): PlanResponse", "  keeps validation, job expansion,",
+                      attrs=["- tray_solver_: tray_assignment::Solver", "- agv_solver_: agv_assignment::Solver",
+                             "- gg_, table_, cost_model_, layout_  (owned)", "- services_: GarageServices"],
+                      methods=["+ Plan(request): PlanResponse", "  keeps validation, job expansion,", "  ApplyTrayAssignment(),",
                                "  Reduce(), sanity checks, PlanMotions"], center_x=True)
     iy = sched.y1 + 70
     iw = 330
     lx, rx = 40, W - 40 - iw
-    ti = uml_class(d, lx, iy, "TrayMoveSolver", accent=NEW, stereo="interface", abstract=True, w=iw,
-                   methods=["+ Solve(TraySolveRequest) const", "    : BoolStringPair  = 0"])
-    ai = uml_class(d, rx, iy, "AgvAssignmentSolver", accent=NEW, stereo="interface", abstract=True, w=iw,
-                   methods=["+ Solve(AgvSolveRequest) const", "    : BoolStringPair  = 0"])
+    ti = uml_class(d, lx, iy, "tray_assignment::Solver", accent=NEW, stereo="interface", abstract=True, w=iw,
+                   methods=["+ Solve(const Input&) const", "    : stdx::Expected<Result>  = 0"])
+    ai = uml_class(d, rx, iy, "agv_assignment::Solver", accent=NEW, stereo="interface", abstract=True, w=iw,
+                   methods=["+ SolveInPlace(const Input&,", "    ScheduleEventDag&) const", "    : stdx::Result  = 0"])
     dy = ti.y1 + 70
-    td = uml_class(d, lx, dy, "DefaultTrayMoveSolver", accent=NEW, stereo="default implementation", w=iw,
-                   attrs=["- gg_: const GarageGraph&", "- table_: const CollisionTable&", "- cost_: motion-cost collaborator",
-                          "- log_: logging collaborator"],
-                   methods=["+ Solve(request) const  // today:", "    DoTrayAssignments + helpers"])
-    ad = uml_class(d, rx, dy, "DefaultAgvAssignmentSolver", accent=NEW, stereo="default implementation", w=iw,
-                   attrs=["- gg_: const GarageGraph&", "- table_: const CollisionTable&", "- cost_: motion-cost collaborator",
-                          "- log_: logging collaborator"],
-                   methods=["+ Solve(request) const  // today:", "    DoAgvAssignments + helpers"])
+    td = uml_class(d, lx, dy, "tray_assignment::DefaultSolver", accent=NEW, stereo="default implementation", w=iw,
+                   attrs=["- services_: const GarageServices&"],
+                   methods=["+ Solve(input) const  // today:", "    DoTrayAssignments + helpers"])
+    ad = uml_class(d, rx, dy, "agv_assignment::DefaultSolver", accent=NEW, stereo="default implementation", w=iw,
+                   attrs=["- services_: const GarageServices&"],
+                   methods=["+ SolveInPlace(input, events) const", "    // today: DoAgvAssignments + helpers"])
     # planner_core package
     py = max(td.y1, ad.y1) + 64
     ph = 96
@@ -158,17 +156,17 @@ def target_architecture():
 
     # relations
     connect(d, [(sched.x0 + 40, sched.y1), (sched.x0 + 40, sched.y1 + 30), (ti.cx, sched.y1 + 30), (ti.cx, ti.y0)],
-            kind="assoc", color=T.fg2, label="Solve(request)", label_at=((sched.x0 + 40 + ti.cx) / 2, sched.y1 + 30))
+            kind="assoc", color=T.fg2, label="Solve(input)", label_at=((sched.x0 + 40 + ti.cx) / 2, sched.y1 + 30))
     connect(d, [(sched.x1 - 40, sched.y1), (sched.x1 - 40, sched.y1 + 30), (ai.cx, sched.y1 + 30), (ai.cx, ai.y0)],
-            kind="assoc", color=T.fg2, label="Solve(request)", label_at=((sched.x1 - 40 + ai.cx) / 2, sched.y1 + 30))
+            kind="assoc", color=T.fg2, label="SolveInPlace(...)", label_at=((sched.x1 - 40 + ai.cx) / 2, sched.y1 + 30))
     connect(d, [(td.cx, td.y0), (ti.cx, ti.y1)], kind="real", color=NEW, label="implements",
             label_at=(td.cx, (td.y0 + ti.y1) / 2))
     connect(d, [(ad.cx, ad.y0), (ai.cx, ai.y1)], kind="real", color=NEW, label="implements",
             label_at=(ad.cx, (ad.y0 + ai.y1) / 2))
     connect(d, [(td.cx, td.y1), (td.cx, py)], kind="dep", color=CORE,
-            label="mutates events, first_tray_event", label_at=(td.cx, (td.y1 + py) / 2))
+            label="reads events; returns Result", label_at=(td.cx, (td.y1 + py) / 2))
     connect(d, [(ad.cx, ad.y1), (ad.cx, py)], kind="dep", color=CORE,
-            label="mutates events", label_at=(ad.cx, (ad.y1 + py) / 2))
+            label="edits events (first pass)", label_at=(ad.cx, (ad.y1 + py) / 2))
     # middle notes
     nx = ti.x1 + 26
     nw = ai.x0 - 26 - nx
@@ -177,11 +175,12 @@ def target_architecture():
     note(d, nx, dy + 30, nw, "Benchmarks (SW2-487) can drive a solver directly — no full Scheduler needed.",
          title="Benchmarkable")
     frame(d, title="Proposed solver interface boundary",
-          subtitle="Solver contracts separate assignment policy from orchestration. Default solvers may still "
-                   "depend on graph, collision and cost services, injected by const reference.",
+          subtitle="Solver contracts separate assignment policy from orchestration. Both default solvers get graph, "
+                   "collision, cost and layout services through one const GarageServices&. The tray solver returns its "
+                   "edits; the AGV solver edits the DAG in place until benchmarks allow the same change.",
           badge_key="proposed",
           legend=[("box", EX, "existing class"), ("box", NEW, "proposed type"), ("box", CORE, "existing package"),
-                  ("assoc", T.fg2, "calls"), ("real", NEW, "realizes interface"), ("dep", CORE, "depends / mutates")])
+                  ("assoc", T.fg2, "calls"), ("real", NEW, "realizes interface"), ("dep", CORE, "reads / edits")])
     return d
 
 

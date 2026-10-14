@@ -785,7 +785,7 @@ It is a common C++ style, and it has real reasons behind it, but it makes the co
 - **One growing structure is convenient.** Every step needs the latest DAG and the latest `last_entity_event`. Passing one context pointer around is less code than threading inputs and results through every call.
 - **Composition is free.** When `PlanRetrieveJob` calls `PlanReparkTrayJob`, the inner method simply appends to the same DAG, and its events immediately take part in rule B for the outer job. With pure functions, the caller has to merge the inner result itself.
 - **The later stages really are graph rewrites.** Tray and AGV assignment fill in fields of existing events, add events and add edges across all jobs. In-place editing is natural there, and job expansion uses the same style for consistency.
-- **Events are shared objects** (`std::shared_ptr`). Producing a modified copy of a DAG would need deep copies (doc 02, section 6), so mutation is the cheap option.
+- **Events are shared objects** (`std::shared_ptr`). Producing a modified copy of a DAG would need deep copies, so mutation is the cheap option. (Doc 02, section 6.4, shows a middle way for tray assignment: return an ordered log of edits and let one function apply it.)
 
 **What it costs**
 
