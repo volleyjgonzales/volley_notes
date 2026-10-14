@@ -16,7 +16,7 @@ Read it in three passes. Each pass is useful on its own.
 | 2 · Data and objects (1 h) | Sections 6–11 | Name the main types, who owns them, and follow one `Plan()` call from request to response |
 | 3 · Algorithms (3 h, with the code open) | Sections 12–18 | Explain job expansion, tray assignment, AGV assignment, motion planning and bay rebalancing. Section 12 is long: read 12.1–12.6 first, then the job types you will work on |
 
-Then work through the checkpoint questions in section 23, read the design FAQ in section 22, run one test from section 20 under a debugger, and keep section 21 (C++ idioms) open as a reference.
+Then work through the checkpoint questions in section 24, read the design FAQ in section 23, follow the call trace in section 22 when you open the code, run one test from section 20 under a debugger, and keep section 21 (C++ idioms) open as a reference.
 
 ### How to read the code snippets
 
@@ -749,7 +749,7 @@ Three details matter in practice:
 
 *Figure 17 — The three edge rules used during job expansion. Rule A (`UpdateLastEntityEvent`) chains events that touch the same AGV, tray, bay or VECS, even across jobs. Rule B (`UpdateLeafDependencies`) makes a new event wait for the current leaf events of the **same** job. Rule C (in `PlanReparkTrayJob`) makes a tray move into a bay or VECS wait for that resource's last event.*
 
-Precisely (the letters A, B and C are this guide's shorthand; the code uses the function names, see the FAQ in section 22):
+Precisely (the letters A, B and C are this guide's shorthand; the code uses the function names, see the FAQ in section 23):
 
 - **Rule A — same entity.** `ctx->last_entity_event` is a map from `GarageEntityIdMsg` (which AGV, tray, bay or VECS) to the last event that touched it. `UpdateLastEntityEvent(id, e)` adds the edge `last[id] -> e` if there is one, then sets `last[id] = e`. This is the only rule that links **different jobs**: if job 0 and job 1 both move tray T19, job 1's move waits for job 0's.
 - **Rule B — earlier leaves of the same job.** A *leaf* is an event with no outgoing edge anywhere in the DAG. `UpdateLeafDependencies(e, job_index)` adds `leaf -> e` for every leaf whose `GetJobIndex() == job_index`. Within one job this makes each new event wait for "everything the job has done so far that nothing else waits for". It never links different jobs.
@@ -1392,7 +1392,73 @@ A good first exercise: run `SchedulerJobs.RetrieveJob` under a debugger, break i
 | Templates | Generic code | `DagBase<T>`, `GarageOccupancyChecker<T>` | Also used with `T = ActionNodeMsg` and `T = uint16_t` |
 | ROS IDL aliases | Generated structs | `PlanRequestMsg`, `GaragePoseMsg` | Field names are a wire contract |
 
-## 22. FAQ: design questions
+## 22. Reading the C++ code: a call trace and a route through the source
+
+This section is for the moment you open the code. It shows **who calls whom, in what order**, with the signature and the file and line of every function, so you can jump straight to it.
+
+### How to read the call-trace figures
+
+- **Time runs downwards.** Row 12 happens after row 11.
+- **Indentation is call depth.** A row indented under another is called *from* it. The grey line under a call runs down past all the calls it makes, like the bars in a flame chart turned on their side.
+- **Each row is one function.** The box holds its signature (as written in the source, long parameter lists shortened with `...`) and a one-line note. The right column gives **where it is defined** (`file:line`) and **where it is called from**.
+- **Colours say where the code lives.** Teal for the ROS layer, blue for `Scheduler` methods, light blue for free functions in `scheduler.cpp`, green for `ScheduleContext` in `scheduler.hpp`, violet for `utils.cpp`. Dashed grey boxes are in other packages (`planner_core`, `common_ros`, `motion_planner`, `task_planner`) that are not in the snapshot.
+- **Amber "loop:" rows** mark loops; the calls under them repeat.
+
+Line numbers are those of the files inside `sources/repomix-scheduler.xml`. If your branch has moved on, search for the signature instead of trusting the number.
+
+![Call trace: start-up and one Plan() call](figures/39_call_trace_plan.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#39_call_trace_plan) · [standalone SVG](figures/39_call_trace_plan.svg)</sub>
+
+*Figure 43 — Start-up (rows 1–10) and one `/plan` request with a single RETRIEVE job (rows 11 onward), success path only. `DoTrayAssignments` and `DoAgvAssignments` are collapsed here and expanded in the next figure.*
+
+![Call trace: tray and AGV assignment](figures/39_call_trace_assignment.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#39_call_trace_assignment) · [standalone SVG](figures/39_call_trace_assignment.svg)</sub>
+
+*Figure 44 — Inside `DoTrayAssignments` and `DoAgvAssignments`, with the helpers in the order they are first called.*
+
+### Where to start: a reading route
+
+Read in this order. Each step is small enough for one sitting and builds on the one before.
+
+| # | Read | Where | What to look for |
+|---|---|---|---|
+| 1 | `ScheduleContext` and the `Scheduler` class declaration | `scheduler.hpp:57` and `:121` | The per-call state (section 8) and the list of methods (the `private:` section starts at `:303`) |
+| 2 | Start-up wiring | `scheduler_component.cpp:35`, `scheduler_ros.cpp:14` | Parameters, the `plan` service lambda (`:38`), the `*_request_fn_` callbacks |
+| 3 | `Scheduler::Plan` | `scheduler.cpp:404`–`695` | The whole pipeline in one function: validation, the job loop (`:454`), the stage calls (`:580`–`:656`), every early return |
+| 4 | One job method, then the workhorse | `PlanRetrieveJob` `:783`, `PlanReparkTrayJob` `:937` | Section 12.11 and 12.7 side by side with the code |
+| 5 | Tray assignment | `DoTrayAssignments` `:2533`, then `AssignDestForUntargetedMove` `:2222`, `ResolveBlockingTrays` `:1984` | Section 14; the main loop is long, read the comments at `:2591`–`:2660` first |
+| 6 | AGV assignment | `DoAgvAssignments` `:3475`, then `MoveAgvToTrayPose` `:2414`, `EnsureAgvMovePathsClear` `:3458` | Section 15; the `while` loop at `:3541` is the core |
+| 7 | The last stages | `SanityCheckEvents` `:3841`, `PlanMotions` `:4005`, `ResponseFromTrajectories` `:4069` and its helpers `:28`–`:340` | Sections 16 and 17 |
+| 8 | Utilities | `utils.cpp`: `ValidateBaseState` `:12`, bay rebalancing `:53`–`:305`, `InsertVrcActionsIntoDag` `:366` | Section 18 |
+
+Where things are in `scheduler.cpp` (4 202 lines):
+
+| Lines | Contents |
+|---|---|
+| 1–340 | Free helpers for building the response (`ToActionNode`, `BuildActionDagFromMotions`, `BuildScheduledActionsArray`, ...) |
+| 342–403 | `InitRetrievalHeadings`, constructor |
+| 404–695 | `Plan` |
+| 696–1770 | The job methods, in the order `PlanAgvMoveJob` ... `PlanChargePayloadJob` |
+| 1771–1849 | Heading helpers (`UsePreferredHeading`, `UseEvChargeHeading`, `UseRetrievalHeading`) |
+| 1850–2339 | Blocking-tray search (`FindOpenSpaceForRootTray`, `TryFindBlockingTrayResolution`, `ResolveBlockingTrays`) and tray-assignment helpers |
+| 2340–2532 | AGV event helpers (`AppendAgvLiftEvent`, `AddNodeArrivalDeps`, `MoveAgvToTrayPose`, ...) |
+| 2533–3093 | `DoTrayAssignments` |
+| 3094–3474 | AGV costs, AGV ordering and path repair |
+| 3475–3840 | `DoAgvAssignments` |
+| 3841–4004 | `SanityCheckEvents`, `AddDepsAfterAmiga` |
+| 4005–4130 | `PlanMotions`, `ResponseFromTrajectories` |
+| 4131–4202 | `IsMovePossible`, `FailJob`, `SetBayReadinessRatioCallback` |
+
+### Following the calls yourself
+
+- **Use a debugger on a test.** `TEST(SchedulerJobs, RetrieveJob)` (`scheduler_jobs_tests.cpp:769`) runs the same kind of request as Figure 43, through `Plan()`. `TEST(Scheduler, TrayAndAgvAssignments)` (`scheduler_tests.cpp:324`) calls the two assignment stages directly. Put breakpoints on the rows of the figures and step.
+- **Let the editor jump for you.** Build with `--cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` and point clangd (or your IDE) at `build/compile_commands.json`; "go to definition" then also works into `planner_core` and `motion_planner`.
+- **Search by name.** `rg -n "Scheduler::PlanRetrieveJob\("` finds a definition; `rg -n "PlanReparkTrayJob\(" src` lists every call site.
+- **Turn on the DAG dumps.** The `debug/printdags` service (section 20) prints the event DAG after each stage, which shows what the calls in the second figure built.
+
+## 23. FAQ: design questions
 
 Questions new engineers ask once they have read sections 9 to 17. The answers separate what the code does (with evidence) from opinion (marked as such).
 
@@ -1434,7 +1500,7 @@ It helps to separate three things that are easy to blur: the **DAG** (the constr
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#54_partial_order_parallel) · [standalone SVG](figures/54_partial_order_parallel.svg)</sub>
 
-*Figure 43 — (1) The input is one action DAG; its three lanes are linked by edges. (2) A topological sort lists the same ten actions so that every edge points right; it adds no information about time. (3) The response stores that list as `Schedule.nodes`, and each node keeps the indices of its parents. (4) In execution, every node whose parents are done can start, so Y1, A1 and B1 start together, and B3 waits only for its parent A3.*
+*Figure 45 — (1) The input is one action DAG; its three lanes are linked by edges. (2) A topological sort lists the same ten actions so that every edge points right; it adds no information about time. (3) The response stores that list as `Schedule.nodes`, and each node keeps the indices of its parents. (4) In execution, every node whose parents are done can start, so Y1, A1 and B1 start together, and B3 waits only for its parent A3.*
 
 Read it as a pipeline:
 
@@ -1478,7 +1544,7 @@ No. The letters are this guide's shorthand, chosen to keep the figures readable.
 
 The three rules are not the whole story. They only order what the job methods know about. Geometric conflicts (a tray in the way, two AGVs on one node) are turned into edges later by tray and AGV assignment (sections 14 and 15).
 
-## 23. Known limitations and reading checkpoint
+## 24. Known limitations and reading checkpoint
 
 Limits of this guide: `GarageGraph`, `CollisionTable`, `GarageOccupancyChecker`, the search environments, `BottleneckAssignment`, CHUGG, `DiscreteGarageState` and the event classes live in other packages and were not in the snapshot. Dispatch, AGV firmware and the Pecos garage's real occupancy were not supplied. Do not infer those details from a schematic figure.
 
