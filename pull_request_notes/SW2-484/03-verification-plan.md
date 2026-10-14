@@ -2,6 +2,19 @@
 
 This document says how to prove the refactor in [02](02-issue-and-proposal.md) changed nothing, and how to measure it. It starts with what the existing tests already cover (computed from `sources/repomix-scheduler.xml`), then defines the parity comparison and the benchmark method.
 
+## Contents
+
+<!-- toc -->
+- [1. Two separate goals](#1-two-separate-goals)
+- [2. What the existing tests cover](#2-what-the-existing-tests-cover)
+- [3. Proposed benchmark dataset (requirements, not completed scenarios)](#3-proposed-benchmark-dataset-requirements-not-completed-scenarios)
+- [4. Compare meaning, not pointers or GUIDs](#4-compare-meaning-not-pointers-or-guids)
+- [5. Benchmark method](#5-benchmark-method)
+- [6. Build and run commands](#6-build-and-run-commands)
+- [7. Acceptance checklist](#7-acceptance-checklist)
+- [8. Evidence limits](#8-evidence-limits)
+<!-- /toc -->
+
 ## 1. Two separate goals
 
 **Behavioural equivalence** asks whether the extracted default solver makes the same decisions and adds the same constraints as the old `Scheduler` method. **Performance benchmarking** asks whether run time or resource use changes for comparable inputs. A passing GoogleTest is neither: it shows the code still meets that test's assertions, not that output is identical or equally fast.

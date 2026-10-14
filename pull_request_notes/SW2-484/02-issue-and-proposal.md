@@ -11,6 +11,22 @@ This document explains *what* the refactor changes and *why*, using the code in 
 | `working_state` | `volley::DiscreteGarageState` (local copy) | `initial_state` with already-planned events applied, used to answer "where is everything *now*?" |
 | `gg_`, `table_`, `cost_model_`, `layout_`, `logger_` | `GarageGraph`, `CollisionTable`, `cost::MotionCostModel`, `LayoutSPtr`, `rclcpp::Logger` | `Scheduler` data members built once in the constructor |
 
+## Contents
+
+<!-- toc -->
+- [1. Ticket and scope](#1-ticket-and-scope)
+- [2. Where the two algorithms sit today](#2-where-the-two-algorithms-sit-today)
+- [3. What the two algorithms touch](#3-what-the-two-algorithms-touch)
+- [4. Current versus target responsibilities](#4-current-versus-target-responsibilities)
+- [5. Target architecture](#5-target-architecture)
+- [6. Proposed interface (design sketch, not compile-ready)](#6-proposed-interface-design-sketch-not-compile-ready)
+- [7. Key invariants to maintain](#7-key-invariants-to-maintain)
+- [8. Staged plan](#8-staged-plan)
+- [9. Decisions to resolve in review](#9-decisions-to-resolve-in-review)
+- [10. Proposed UML and call sequence](#10-proposed-uml-and-call-sequence)
+- [11. Next actions](#11-next-actions)
+<!-- /toc -->
+
 ## 1. Ticket and scope
 
 **Parent Jira initiative:** **Scheduler Core Refactor** (parent key not given in the supplied ticket text). **Specific tasks:** [SW2-484](https://volleyautomation.atlassian.net/browse/SW2-484) (tray solver interface, in progress), [SW2-769](https://volleyautomation.atlassian.net/browse/SW2-769) (scheduler package reorganization, marked done) and [SW2-487](https://volleyautomation.atlassian.net/browse/SW2-487) (tray benchmark set, To Do). The links follow the usual Jira URL pattern; the base domain and current status have not been verified. Related keys reported by the user: SW2-677, SW2-652, SW2-593, SW2-488, SW2-496, SW2-514, SW2-663, SW2-18, SW2-686, SW2-776 and SW2-905. **Do not assume all of them block the refactor.**
