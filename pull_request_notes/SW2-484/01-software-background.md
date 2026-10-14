@@ -561,7 +561,27 @@ for(const SchedulerJobMsg& job : request_data.pending_jobs) {        // in reque
 
 #### How `job_index` works
 
-Every event needs to remember which job it belongs to, so the response can say "this action is part of job X". The code does not store the job's `guid` in the event; it stores a small integer, `job_index`, and looks the job up at the end.
+**One job almost always creates several events.** A RETRIEVE creates up to five (stop charging, open the bay, move the tray already in the bay out, move the car's tray in, hand the car over); a REPARK_TRAY creates one (two if the tray must first stop charging); a REBALANCE_GARAGE creates a few per bay it switches. Every one of them belongs to the same job. Sections 12.7 to 12.17 list what each job type creates.
+
+So every event needs to remember which job it belongs to, and the response needs to say "this action is part of job X". The code does not store the job's `guid` in the event. Each event is constructed with a small integer, the `job_index`, and the job is looked up from it at the end:
+
+```cpp
+// inside PlanRetrieveJob(ScheduleContextSPtr ctx, const GuidMsg& payload_id, size_t job_index)
+auto bay_transition = std::make_shared<BayTransition>(job_index, *bay_opt, cmd);  // tagged with job_index
+...
+PlanReparkTrayJob(ctx, payload_opt->tray_id, job_index, false, dest_pose);        // its TrayMove: same tag
+...
+auto process = std::make_shared<BayTransition>(job_index, *bay_opt, cmd);         // same tag again
+```
+
+The relationship is **one job → many events → many actions**:
+
+| Level | How many | How it points to the job |
+|---|---|---|
+| Job | one entry in `plan_ctx->scheduled_jobs` | its position in that list is the `job_index` |
+| Events | all events the job method creates, **plus** the ones later stages add for it | `event->GetJobIndex()`. Tray assignment builds blocker moves as `TrayMove(move->GetJobIndex())` and AGV assignment builds approach moves as `AgvMove(root_event->GetJobIndex(), ...)`, so they inherit the index of the move that needed them |
+| Actions | one `ActionNode` per motion of those events | `job_id` = the job's `guid`; the job's `node_indices` list their positions |
+
 
 - **What the number is.** `job_index` is the job's position in `plan_ctx->scheduled_jobs`, the list of jobs that have **succeeded so far**. It is not the loop counter (the job's position in `request_data.pending_jobs`).
 - **How it is chosen.** Just before calling the job method, `Plan()` passes `plan_ctx->scheduled_jobs.size()`. If the method succeeds, `PushBackScheduledJob(job)` appends the job at exactly that position, so `scheduled_jobs[job_index]` is now this job. If it fails, nothing is appended and the next job is offered the same number.
@@ -571,9 +591,9 @@ A worked example, the same one as in Figure 14 below:
 
 | Loop counter `i` | Job in the request | `scheduled_jobs.size()` before the call = `job_index` | Result | `scheduled_jobs` afterwards |
 |---|---|---|---|---|
-| 0 | RETRIEVE car on T17 | 0 | success, 4 events tagged 0 | `[RETRIEVE]` |
+| 0 | RETRIEVE car on T17 | 0 | success: one job, 4 events, all tagged 0 | `[RETRIEVE]` |
 | 1 | INSERT bay B7 | 1 | fails, no events added | `[RETRIEVE]` (unchanged) |
-| 2 | REPARK_TRAY T19 → P24 | 1 | success, 1 event tagged 1 | `[RETRIEVE, REPARK_TRAY]` |
+| 2 | REPARK_TRAY T19 → P24 | 1 | success: one job, 1 event, tagged 1 | `[RETRIEVE, REPARK_TRAY]` |
 
 If the code used `i` instead, the REPARK's event would carry 2, and `scheduled_jobs[2]` would not exist.
 
@@ -581,7 +601,7 @@ If the code used `i` instead, the REPARK's event would carry 2, and `scheduled_j
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#36_expansion_loop) · [standalone SVG](figures/36_expansion_loop.svg)</sub>
 
-*Figure 14 — The loop, one row per iteration: the code that runs, then `plan_ctx->scheduled_jobs`, `plan_ctx->events` and `result.scheduled_jobs` after it. The bottom row follows one event's `job_index` back to its job's `guid` when the response is built.*
+*Figure 14 — The loop, one row per iteration: the code that runs, then `plan_ctx->scheduled_jobs`, `plan_ctx->events` and `result.scheduled_jobs` after it. In the events column each box is one event and each dashed group is everything one job-method call created: the RETRIEVE (job index 0) created four events, the REPARK_TRAY (job index 1) one. The bottom row shows the same index carried through later stages to the response.*
 
 If every job fails, `plan_ctx->scheduled_jobs` is empty and `Plan()` returns right after the loop with "No jobs succeeded to plan".
 

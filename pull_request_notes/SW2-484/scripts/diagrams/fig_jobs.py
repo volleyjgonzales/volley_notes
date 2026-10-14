@@ -282,132 +282,162 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
 def expansion_loop():
     d = Doc("36_expansion_loop", "Job expansion: the loop in Plan(), step by step",
             "Three pending jobs. Each row shows the code that runs for one loop iteration and the three containers "
-            "after it. The last row shows how job_index is used when the response is built.")
-    cols = [("loop iteration and the code that runs", 0, 372), ("plan_ctx->scheduled_jobs", 392, 228),
-            ("plan_ctx->events", 640, 250), ("result.scheduled_jobs", 910, 210)]
-    for t, x, w in cols:
-        d.text(x, 0, t, size=11.5, family="mono", weight=600, fill=T.muted)
+            "after it. One job can create several events; all of them carry that job's index.")
+    CX = {"code": 0, "jobs": 384, "ev": 602, "res": 960}
+    CW = {"jobs": 198, "ev": 338, "res": 160}
+    for t, k in (("loop iteration and the code that runs", "code"), ("plan_ctx->scheduled_jobs", "jobs"),
+                 ("plan_ctx->events  (one box = one event)", "ev"), ("result.scheduled_jobs", "res")):
+        d.text(CX[k], 0, t, size=11.5, family="mono", weight=600, fill=T.muted)
 
-    def jobs_box(x, y, items, h):
-        d.rect(x, y, 228, h, rx=8, fill=T.bg_deep, stroke=T.tint(T.green, 0.5, T.bg), sw=1.1)
+    def jobs_box(y, items, h):
+        x = CX["jobs"]
+        d.rect(x, y, CW["jobs"], h, rx=8, fill=T.bg_deep, stroke=T.tint(T.green, 0.5, T.bg), sw=1.1)
         if not items:
             d.text(x + 12, y + 18, "{ }  size() = 0", size=11, family="mono", fill=T.faint)
+            return
         for k, (lab, new) in enumerate(items):
-            col = T.green
             yy = y + 18 + k * 22
-            d.text(x + 12, yy, f"[{k}]", size=11, family="mono", weight=700, fill=col)
+            d.text(x + 12, yy, f"[{k}]", size=11, family="mono", weight=700, fill=T.green)
             d.text(x + 44, yy, lab, size=11, family="mono", fill=T.fg if new else T.fg2)
             if new:
-                label_pill(d, x + 216, yy, "new", color=col, size=9.5, anchor="end", bg=T.tint(col, 0.15, T.bg))
-        if items:
-            d.text(x + 12, y + h - 12, f"size() = {len(items)}", size=10.5, family="mono", fill=T.muted)
+                label_pill(d, x + CW["jobs"] - 10, yy, "new", color=T.green, size=9.5, anchor="end",
+                           bg=T.tint(T.green, 0.15, T.bg))
+        d.text(x + 12, y + h - 12, f"size() = {len(items)}", size=10.5, family="mono", fill=T.muted)
 
-    def events_box(x, y, evs, h):
-        d.rect(x, y, 250, h, rx=8, fill=T.bg_deep, stroke=T.tint(T.amber, 0.5, T.bg), sw=1.1)
-        if not evs:
+    EW, EH = 150, 34
+
+    def events_box(y, groups, h):
+        """groups: list of (title, [(kind, text, job)], new)."""
+        x = CX["ev"]
+        d.rect(x, y, CW["ev"], h, rx=8, fill=T.bg_deep, stroke=T.tint(T.amber, 0.5, T.bg), sw=1.1)
+        if not groups:
             d.text(x + 12, y + 18, "empty DAG", size=11, family="mono", fill=T.faint)
-        for k, (kind, lab, job, new) in enumerate(evs):
-            col = EVENT_COLOR[kind]
-            ex, ey = x + 10 + (k % 4) * 59, y + 8 + (k // 4) * 40
-            d.rect(ex, ey, 54, 32, rx=6, fill=T.card, stroke=col, sw=1.6 if new else 1, opacity=None if new else 0.6)
-            d.text(ex + 27, ey + 11, lab, size=9.5, family="mono", fill=T.fg if new else T.muted, anchor="middle")
-            d.text(ex + 27, ey + 24, f"job {job}", size=9.5, family="mono", weight=700, fill=col, anchor="middle")
+            return
+        gy = y + 8
+        for title, evs, new in groups:
+            rows = (len(evs) + 1) // 2
+            gh = 20 + rows * (EH + 6)
+            d.rect(x + 6, gy, CW["ev"] - 12, gh, rx=7, fill="none",
+                   stroke=T.tint(T.fg2, 0.55 if new else 0.25, T.bg), sw=1, dash="4 3")
+            d.text(x + 14, gy + 10, title, size=9.5, family="mono", fill=T.fg2 if new else T.faint)
+            for k, (kind, text, job) in enumerate(evs):
+                col = EVENT_COLOR[kind]
+                ex, ey = x + 14 + (k % 2) * (EW + 8), gy + 18 + (k // 2) * (EH + 6)
+                d.rect(ex, ey, EW, EH, rx=6, fill=T.card, stroke=col, sw=1.5 if new else 1,
+                       opacity=None if new else 0.55)
+                d.text(ex + 8, ey + 11, text, size=9.5, family="mono", fill=T.fg if new else T.muted)
+                d.text(ex + 8, ey + 25, f"job_index = {job}", size=9.5, family="mono", weight=700, fill=col)
+            gy += gh + 6
 
-    def result_box(x, y, items, h):
-        d.rect(x, y, 210, h, rx=8, fill=T.bg_deep, stroke=T.tint(T.red, 0.45, T.bg), sw=1.1)
+    def ev_height(groups):
+        return 16 + sum(20 + ((len(e) + 1) // 2) * (EH + 6) + 6 for _, e, _ in groups)
+
+    def result_box(y, items, h):
+        x = CX["res"]
+        d.rect(x, y, CW["res"], h, rx=8, fill=T.bg_deep, stroke=T.tint(T.red, 0.45, T.bg), sw=1.1)
         if not items:
             d.text(x + 12, y + 18, "{ }", size=11, family="mono", fill=T.faint)
         for k, (lab, col) in enumerate(items):
             d.text(x + 12, y + 18 + k * 22, lab, size=10.5, family="mono", fill=col)
 
-    E_RET = [("BayTransition", "B21", 0), ("TrayMove", "T21", 0), ("TrayMove", "T17", 0), ("BayTransition", "B21", 0)]
+    RET = [("BayTransition", "B21 TO_RETRIEVE", 0), ("TrayMove", "T21: B21 -> ?", 0),
+           ("TrayMove", "T17: P17 -> B21", 0), ("BayTransition", "B21 PROCESS_RETRIEVE", 0)]
+    G_RET = "PlanRetrieveJob(.., 0) made these 4"
+    G_REP = "PlanReparkTrayJob(.., 1) made this 1"
+    REP = [("TrayMove", "T19: P19 -> P24", 1)]
     rows = [
         ("before the loop", [
             ("plan_ctx built from request_data.base_state", T.fg2),
-            ("request_data.pending_jobs = [RETRIEVE, INSERT, REPARK]", T.fg2)],
+            ("pending_jobs = [RETRIEVE, INSERT, REPARK_TRAY]", T.fg2)],
          [], [], [], None),
         ("i = 0  ·  TYPE_RETRIEVE (car on T17)", [
             ("job_index = scheduled_jobs.size()  -> 0", T.teal),
             ("PlanRetrieveJob(plan_ctx, job.payload_id, 0)", T.sky),
-            ("-> success: 4 events tagged job 0", T.green),
-            ("plan_ctx->PushBackScheduledJob(job)", T.sky)],
-         [("RETRIEVE", True)], [e + (True,) for e in E_RET], [], T.green),
+            ("-> success. ONE job, FOUR events, each", T.green),
+            ("   constructed with job_index 0", T.green),
+            ("plan_ctx->PushBackScheduledJob(job)  -> [0]", T.sky)],
+         [("RETRIEVE", True)], [(G_RET, RET, True)], [], T.green),
         ("i = 1  ·  TYPE_INSERT (bay B7)", [
             ("job_index = scheduled_jobs.size()  -> 1", T.teal),
             ("PlanInsertJob(plan_ctx, job.bay_id, 1)", T.sky),
-            ("-> fails before adding events:", T.red),
+            ("-> fails before adding any event:", T.red),
             ("   \"... the bay has no tray in discrete state.\"", T.red),
             ("result.scheduled_jobs.push_back(FailJob(job, msg))", T.sky),
             ("clean_garage_request_fn_()   // INSERT only", T.sky)],
-         [("RETRIEVE", False)], [e + (False,) for e in E_RET], [("INSERT  STATE_ERROR", T.red)], T.red),
+         [("RETRIEVE", False)], [(G_RET, RET, False)], [("INSERT  STATE_ERROR", T.red)], T.red),
         ("i = 2  ·  TYPE_REPARK_TRAY (T19 -> P24)", [
             ("job_index = scheduled_jobs.size()  -> 1   (again)", T.teal),
             ("PlanReparkTrayJob(plan_ctx, job.tray_id, 1, ...)", T.sky),
-            ("-> success: 1 event tagged job 1", T.green),
-            ("plan_ctx->PushBackScheduledJob(job)", T.sky)],
-         [("RETRIEVE", False), ("REPARK_TRAY", True)], [e + (False,) for e in E_RET] + [("TrayMove", "T19", 1, True)],
+            ("-> success. ONE job, ONE event, job_index 1", T.green),
+            ("plan_ctx->PushBackScheduledJob(job)  -> [1]", T.sky)],
+         [("RETRIEVE", False), ("REPARK_TRAY", True)], [(G_RET, RET, False), (G_REP, REP, True)],
          [("INSERT  STATE_ERROR", T.red)], T.green),
     ]
     y = 22
-    for title, code, jobs, evs, res, col in rows:
-        h = max(18 + len(code) * 19 + 26, 96)
+    for title, code, jobs, groups, res, col in rows:
+        h = max(18 + len(code) * 19 + 26, ev_height(groups) + 16, 96)
         d.rect(-10, y, W + 20, h, rx=10, fill=T.tint(T.card, 0.45, T.bg), layer="bg")
         if col:
             d.rect(-10, y, 4, h, rx=2, fill=col, layer="bg")
         d.text(0, y + 16, title, size=12.5, family="mono", weight=700, fill=T.fg)
         for k, (ln, c) in enumerate(code):
             d.text(0, y + 38 + k * 19, ln, size=10.5, family="mono", fill=c)
-        jobs_box(392, y + 8, jobs, h - 16)
-        events_box(640, y + 8, evs, h - 16)
-        result_box(910, y + 8, res, h - 16)
+        jobs_box(y + 8, jobs, h - 16)
+        events_box(y + 8, groups, h - 16)
+        result_box(y + 8, res, h - 16)
         y += h + 12
-    # ---- response building row ----
+
+    # ---- one job -> many events -> many actions ----
     y += 14
-    d.text(0, y, "after tray assignment, AGV assignment and motion planning: building the response", size=13,
+    d.text(0, y, "One job, many events, many actions: how the index ties them together to the end", size=13,
            weight=600, fill=T.fg)
-    y += 18
-    h = 196
+    y += 16
+    h = 214
     d.rect(-10, y, W + 20, h, rx=10, fill=T.tint(T.sky, 0.05, T.bg), stroke=T.tint(T.sky, 0.35, T.bg), sw=1,
            layer="bg")
-    # lookup chain: event -> index -> scheduled job -> guid
-    ex, ey = 10, y + 30
-    d.rect(ex, ey, 120, 44, rx=7, fill=T.card, stroke=TRAY, sw=1.5)
-    d.text(ex + 60, ey + 14, "TrayMove T19", size=10.5, family="mono", fill=T.fg, anchor="middle")
-    d.text(ex + 60, ey + 31, "GetJobIndex() = 1", size=10.5, family="mono", weight=700, fill=TRAY, anchor="middle")
-    jx = 300
-    d.rect(jx, ey - 8, 250, 60, rx=7, fill=T.bg_deep, stroke=T.tint(T.green, 0.5, T.bg), sw=1.1)
-    d.text(jx + 12, ey + 8, "[0] RETRIEVE   guid = g_ret", size=10.5, family="mono", fill=T.fg2)
-    d.text(jx + 12, ey + 32, "[1] REPARK_TRAY guid = g_rep", size=10.5, family="mono", weight=700, fill=T.green)
-    connect(d, [(ex + 120, ey + 30), (jx, ey + 30)], kind="flow", color=T.teal, size=8, sw=1.6,
-            label="scheduled_jobs[1]", label_at=(215, ey + 12))
-    ax = 620
-    d.rect(ax, ey - 8, 250, 60, rx=7, fill=T.card, stroke=T.sky, sw=1.4)
-    d.text(ax + 12, ey + 8, "ActionNode (one per motion)", size=10.5, family="mono", fill=T.sky)
-    d.text(ax + 12, ey + 32, "job_id = g_rep", size=10.5, family="mono", weight=700, fill=T.fg)
-    connect(d, [(jx + 250, ey + 30), (ax, ey + 30)], kind="flow", color=T.sky, size=8, sw=1.6,
-            label=".job.guid", label_at=(585, ey + 12))
-    d.text(ax + 262, ey + 4, "ToActionNode(motion,", size=10.5, family="mono", fill=T.faint)
-    d.text(ax + 262, ey + 20, "  ctx->scheduled_jobs[", size=10.5, family="mono", fill=T.faint)
-    d.text(ax + 262, ey + 36, "  event->GetJobIndex()].job.guid)", size=10.5, family="mono", fill=T.faint)
-    lines = [("Then, for every entry of plan_ctx->scheduled_jobs: node_indices = positions of its ActionNodes, "
-              "state = STATE_EXECUTING (RETRIEVE also gets bay_id), and it is appended to result.scheduled_jobs.", T.fg2),
-             ("Final result.scheduled_jobs = [INSERT STATE_ERROR, RETRIEVE STATE_EXECUTING, REPARK_TRAY STATE_EXECUTING]: "
-              "failures first, in loop order, then successes.", T.fg),
+    stages = [
+        ("job", ["scheduled_jobs[0]", "RETRIEVE", "guid = g_ret"], T.green, 0, 170),
+        ("after job expansion", ["4 events", "job_index = 0"], T.amber, 200, 190),
+        ("after tray + AGV assignment", ["the 4, plus any blocker", "TrayMoves and AgvMoves", "(approach, lift, lower)",
+                                          "all job_index = 0"], T.amber, 420, 240),
+        ("in the response", ["N ActionNodes,", "job_id = g_ret", "node_indices = [..]"], T.sky, 690, 200),
+    ]
+    by = y + 34
+    prev = None
+    for title, lines, col, x, w in stages:
+        bh = 30 + 17 * len(lines)
+        d.text(x + 10, by - 10, title, size=10.5, family="mono", weight=600, fill=T.muted)
+        d.rect(x + 10, by, w, bh, rx=8, fill=T.card, stroke=col, sw=1.4)
+        for k, ln in enumerate(lines):
+            d.text(x + 22, by + 18 + k * 17, ln, size=10.5, family="mono", fill=T.fg)
+        if prev:
+            connect(d, [(prev, by + 24), (x + 10, by + 24)], kind="flow", color=T.faint, size=8, sw=1.4)
+        prev = x + 10 + w
+    d.text(910, by + 6, "lookup in ToActionNode():", size=10, family="mono", fill=T.faint)
+    d.text(910, by + 22, "scheduled_jobs[", size=10, family="mono", fill=T.faint)
+    d.text(910, by + 38, "  event->GetJobIndex()]", size=10, family="mono", fill=T.faint)
+    d.text(910, by + 54, "  .job.guid", size=10, family="mono", fill=T.faint)
+    lines = [("Later stages keep the tag: a blocker TrayMove is built as TrayMove(move->GetJobIndex()) and an AGV "
+              "approach as AgvMove(root_event->GetJobIndex(), ...), so they belong to the job whose move needed them.",
+              T.fg2),
+             ("Final result.scheduled_jobs = [INSERT STATE_ERROR, RETRIEVE STATE_EXECUTING, REPARK_TRAY "
+              "STATE_EXECUTING]: failures first, in loop order, then successes with their node_indices.", T.fg),
              ("Why size() and not i: the index must point into scheduled_jobs, which only holds successful jobs. "
-              "With i, the REPARK's events would say 2 and scheduled_jobs[2] does not exist.", T.amber)]
-    yy = ey + 76
+              "With i, the REPARK's event would say 2, and scheduled_jobs[2] does not exist.", T.amber)]
+    yy = by + 112
     for t, c in lines:
         for ln in wrap(t, W - 20, 11.5):
             d.text(10, yy, ln, size=11.5, fill=c)
             yy += 17
         yy += 4
     frame(d, title="Job expansion: the loop in Plan(), step by step",
-          subtitle="job_index is not the job's position in the request (i). It is its position in "
-                   "plan_ctx->scheduled_jobs, the list of jobs that have succeeded so far, and that list is what the "
-                   "response uses to map every event back to its job.",
+          subtitle="job_index is the job's position in plan_ctx->scheduled_jobs (jobs that have succeeded so far), "
+                   "not its position in the request (i). A job usually creates several events; every one of them is "
+                   "constructed with the same job_index, and so are the events later stages add for that job.",
           badge_key="as-built",
-          legend=[("box", TRAY, "TrayMove"), ("box", BAYC, "BayTransition"), ("fill", T.green, "job succeeded"),
-                  ("fill", T.red, "job failed"), ("fill", T.teal, "where job_index comes from")])
+          legend=[("box", TRAY, "TrayMove"), ("box", BAYC, "BayTransition"), ("dashbox", T.fg2, "events made by one job call"),
+                  ("fill", T.green, "job succeeded"), ("fill", T.red, "job failed"),
+                  ("fill", T.teal, "where job_index comes from")])
     return d
 
 
