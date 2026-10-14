@@ -379,7 +379,9 @@ REGIONS = {"qa": (QA_X, QA_Y), "full": (FULL_X, FULL_Y), "mid": (FULL_X, (9.2, 2
 
 
 def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, events, edges, steps,
-               notes=(), outside=(), legend_extra=(), bw=320, badge="yaml+hyp", request_title="Request", scale=None):
+               notes=(), outside=(), legend_extra=(), bw=320, badge="yaml+hyp", request_title="Request", scale=None,
+               legend_override=None, events_title="Events appended to ctx->events",
+               events_sub="numbered in creation order; arrows = edges this method adds"):
     d = Doc(name, heading, subtitle)
     xl, yl = REGIONS[region]
     s = W / (xl[1] - xl[0])
@@ -396,8 +398,8 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
         b = note(d, 0, yl_ + 18, lw, text, title=title, accent=T.teal)
         yl_ = b.y1
     ex = lw + 50
-    d.text(ex, y2 + 8, "Events appended to ctx->events", size=13, weight=600, fill=T.fg)
-    d.text(ex, y2 + 27, "numbered in creation order; arrows = edges this method adds", size=11, fill=T.muted)
+    d.text(ex, y2 + 8, events_title, size=13, weight=600, fill=T.fg)
+    d.text(ex, y2 + 27, events_sub, size=11, fill=T.muted)
     if events:
         boxes = event_column(d, ex, y2 + 50, events, edges, bw=bw)
         yr = boxes[-1].y1
@@ -414,6 +416,8 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
               ("box", VECS, "VecsTransition"), ("arrow", T.fg2, "rule A: same entity (colour = entity)"),
               ("dasharrow", RULE_B, "rule B: earlier leaf of the same job"),
               ("dasharrow", BAYC, "rule C: into a bay / VECS"), ("ring", T.fg2, "? = left for DoTrayAssignments")]
+    if legend_override is not None:
+        legend = legend_override
     frame(d, title=heading, subtitle=subtitle, badge_key=badge, legend=list(legend) + list(legend_extra))
     return d
 
