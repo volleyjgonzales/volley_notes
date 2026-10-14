@@ -13,7 +13,7 @@
 - Explain what an automated garage contains (bays, trays, AGVs, stalls, chargers, waypoints) and how it becomes a **facility graph**.
 - Tell apart the three graphs in this topic: the **facility graph**, the **timed plan** and the **Action Dependency Graph (ADG)**.
 - Read a multi-robot plan as a filmstrip and as a table, and check by hand that it is collision-free.
-- Turn an AGV's path into the paper's **actions** $\langle s, g, t, R\rangle$, and spot which ones are **waits**.
+- Turn an AGV's path into the paper's **actions** ⟨s=start, g=goal, t=step, R=AGV⟩, and spot which ones are **waits**.
 
 ---
 
@@ -59,7 +59,7 @@ Read the example lines in the cards from left to right, all about AGV-3:
 
 1. **Problem:** AGV-3 has to get from W13 to W25.
 2. **MAPF solver:** AGV-3's path is $\pi_3$ = `W13 W18 W18 W22 W25` — its place at t = 0, 1, 2, 3, 4. W18 appears twice: AGV-3 stands still for one step.
-3. **Actions:** the path is cut into steps. `A3-1` = ⟨W18, W18, 1, AGV-3⟩ is that standing still (a *wait*); `A3-2` = ⟨W18, W22, 2, AGV-3⟩ drives into the junction.
+3. **Actions:** the path is cut into steps. `A3-1` = ⟨s=W18, g=W18, t=1, R=AGV-3⟩ is that standing still (a *wait*); `A3-2` = ⟨s=W18, g=W22, t=2, R=AGV-3⟩ drives into the junction.
 4. **ADG:** `A3-0 → A3-2` (AGV-3 does its own steps in order) and `A2-2 → A3-2` (AGV-2 must have left W22 before AGV-3 may enter it).
 5. **Executor:** start A3-2 as soon as A3-0 and A2-2 have reported "done". No clock involved.
 
@@ -83,6 +83,42 @@ The single most common mistake when learning this material is to mix up three di
 
 A line `W18 — W22` in the facility graph says "you can drive there". An arrow `A1-1 → A2-1` in the ADG says "AGV-2 may not start driving into W22 until AGV-1 has finished leaving W22". A path through (W18, 1) → (W22, 2) in the time-expanded graph says "this AGV *is* at W22 at step 2". Three different kinds of statement.
 
+### 3.1 The time-expanded graph, built by hand
+
+The middle graph is the least familiar, so here it is built from scratch on a smaller example: two AGVs and four places around the junction (W41 to the west, W25 to the north, W18 to the south).
+
+**Step 1 — the timed paths.** A MAPF plan is a table: one row per AGV, one column per time step, each cell the place the AGV is at.
+
+| | t = 0 | t = 1 | t = 2 | t = 3 |
+|---|---|---|---|---|
+| AGV-1 | W18 | W22 | W25 | W25 |
+| AGV-2 | W41 | *W41* | W22 | W18 |
+
+AGV-1 drives north. AGV-2 waits one step at W41 (the repeated place), then crosses W22 behind AGV-1 and turns south into W18.
+
+**Step 2 — copy every place once per step.** Make one vertex for every pair (place, step): 4 places × 4 steps = 16 vertices. Draw them as a grid, places as rows and steps as columns. The vertex (W22, 2) means "W22, at step 2".
+
+**Step 3 — add an arrow for every possible step.** From each vertex (v, t) draw arrows to the next column:
+
+- to (v, t+1): **wait** at v;
+- to (w, t+1) for every neighbour w of v in the facility graph: **drive** from v to w.
+
+From (W22, 1) there are four arrows: wait, or drive to W41, W25 or W18. Arrows only point to the next column, so time can only move forward, and every arrow takes exactly one step.
+
+**Step 4 — draw the paths.** Each AGV's row of the table becomes a line through the graph that visits exactly one vertex per column: AGV-1 is (W18, 0) → (W22, 1) → (W25, 2) → (W25, 3). A wait is a flat segment and a move is a sloped one. So "a plan" and "one path per AGV through the time-expanded graph" are the same thing.
+
+![From timed paths to the time-expanded graph](../figures/04-time-expanded.svg)
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#04-time-expanded) · [standalone SVG](../figures/04-time-expanded.svg)</sub>
+
+*Figure 1.4 — Top: the two-AGV plan as a table, with the garage at t = 0. Middle: building the time-expanded graph (dots, then all possible arrows, then the two paths). Bottom: the two ways two paths can collide. A shared dot is a vertex conflict; two paths crossing as an X on the same road is a swap conflict.*
+
+**Two ways two paths can collide.** Once the plan is drawn this way, "collision-free" can be checked by looking at the lines:
+
+1. **Shared dot (vertex conflict).** If AGV-2 does not wait, its path is W41 W22 W18 W18. Both lines then pass through the dot (W22, 1): $\pi_1(1) = \pi_2(1) = $ W22, two AGVs on one spot at the same step. The fix is the wait in step 1, which shifts AGV-2's line one column to the right.
+2. **Crossing on one edge (swap conflict).** Now let AGV-1 head west instead: W18 W22 W41 W41, with AGV-2 waiting as before. Check every column and no dot is shared. But between t = 1 and t = 2 the two lines form an **X**: AGV-1 uses the arrow (W22, 1) → (W41, 2) while AGV-2 uses (W41, 1) → (W22, 2). They are two *different* arrows, so "no shared dot" and even "no shared arrow" both pass. On the floor, though, both AGVs are on the road W22–W41 at the same time, in opposite directions: a head-on crash. In symbols, $\pi_1(1) = \pi_2(2)$ and $\pi_2(1) = \pi_1(2)$. The fix needs a place to step aside: AGV-1 pulls into W25, lets AGV-2 through, then continues (W18 W22 W25 W25 W22 W41).
+
+So a MAPF solver needs two checks, not one: no shared dots, and no pair of arrows that use the same road in opposite directions during the same step. Section 5.2 states both formally and figure 1.6 shows them on the real aisle.
+
 ## 4. The facility graph of the worked example
 
 Formally, the garage is a graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$. $\mathcal{V}$ is the set of **vertices**: places where an AGV can stand (waypoints, stalls, bays, chargers). $\mathcal{E}$ is the set of **edges**: pairs of places an AGV can drive between directly. Our example uses nine vertices and eight edges:
@@ -93,11 +129,11 @@ Formally, the garage is a graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$. $\ma
 
 These are 9 of the YAML's 28 nodes and 8 of its 37 edges. The other nodes and edges exist, but no route of the example uses them.
 
-![Four routes through one junction](../figures/04-facility.svg)
+![Four routes through one junction](../figures/05-facility.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#04-facility) · [standalone SVG](../figures/04-facility.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#05-facility) · [standalone SVG](../figures/05-facility.svg)</sub>
 
-*Figure 1.4 — The four routes drawn in the garage, and the same nine places as a bare graph (top right). AGV-1, AGV-3 and AGV-4 drive north up the aisle in a convoy; AGV-1 and AGV-3 continue to the top row, AGV-4 turns west at W22 towards the bay. AGV-2 carries the car east from the bay, across the aisle, into stall P23. The routes panel lists each AGV's place at every time step.*
+*Figure 1.5 — The four routes drawn in the garage, and the same nine places as a bare graph (top right). AGV-1, AGV-3 and AGV-4 drive north up the aisle in a convoy; AGV-1 and AGV-3 continue to the top row, AGV-4 turns west at W22 towards the bay. AGV-2 carries the car east from the bay, across the aisle, into stall P23. The routes panel lists each AGV's place at every time step.*
 
 Three things to notice:
 
@@ -121,16 +157,16 @@ where $\pi_R(t)$ is the place AGV $R$ occupies at step $t$. Between step $t$ and
 
 A MAPF solver must avoid two kinds of conflict between any two AGVs $i \ne j$:
 
-- **Vertex conflict** — both on the same place at the same step: $\pi_i(t) = \pi_j(t)$.
-- **Swap (edge) conflict** — they exchange places along one edge: $\pi_i(t) = \pi_j(t+1)$ **and** $\pi_j(t) = \pi_i(t+1)$. On a single-lane aisle this is a head-on crash.
+- **Vertex conflict** — both on the same place at the same step: $\pi_i(t) = \pi_j(t)$. In the time-expanded graph: a shared dot.
+- **Swap (edge) conflict** — they exchange places along one edge: $\pi_i(t) = \pi_j(t+1)$ **and** $\pi_j(t) = \pi_i(t+1)$. On a single-lane aisle this is a head-on crash. In the time-expanded graph: an X between two neighbouring columns.
 
 A third pattern is normally **allowed**: **following**, where one AGV enters a place in the same step in which another leaves it.
 
-![Conflict types](../figures/05-conflicts.svg)
+![Conflict types](../figures/06-conflicts.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#05-conflicts) · [standalone SVG](../figures/05-conflicts.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#06-conflicts) · [standalone SVG](../figures/06-conflicts.svg)</sub>
 
-*Figure 1.5 — Two AGVs, AGV-1 and AGV-3, on three waypoints of the aisle at two consecutive steps. Left: both end up on W18 (vertex conflict). Middle: they swap W18 and W22 (swap conflict). Right: AGV-3 moves into W18 while AGV-1 moves out (following) — legal in the plan, but only safe if AGV-1 really leaves before AGV-3 really arrives.*
+*Figure 1.6 — Two AGVs, AGV-1 and AGV-3, on three waypoints of the aisle at two consecutive steps. Left: both end up on W18 (vertex conflict). Middle: they swap W18 and W22 (swap conflict). Right: AGV-3 moves into W18 while AGV-1 moves out (following) — legal in the plan, but only safe if AGV-1 really leaves before AGV-3 really arrives.*
 
 Following is worth a second look because it is exactly where timed execution breaks. In the plan, AGV-1 leaves W18 and AGV-3 arrives at W18 "at the same moment". On the floor, if AGV-1 starts a second late, AGV-3 drives into W18 while AGV-1 is still there. Chapter 02 shows this happening in the example and how the ADG prevents it.
 
@@ -140,19 +176,19 @@ The paper encodes the "no conflict" requirement as its **Definition 2**: in a va
 
 Here is the plan used in the rest of the kit. (Chapter 02 shows how Conflict-Based Search finds it.) First as a filmstrip, so you can see it move:
 
-![The plan step by step](../figures/06-filmstrip.svg)
+![The plan step by step](../figures/07-filmstrip.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#06-filmstrip) · [standalone SVG](../figures/06-filmstrip.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#07-filmstrip) · [standalone SVG](../figures/07-filmstrip.svg)</sub>
 
-*Figure 1.6 — One frame per time step. Each AGV is drawn where the plan puts it; the dashed arrow shows the move it makes before the next frame; "waits" marks an AGV that stands still for that step. The label at the top right of each frame says who is at the junction W22.*
+*Figure 1.7 — One frame per time step. Each AGV is drawn where the plan puts it; the dashed arrow shows the move it makes before the next frame; "waits" marks an AGV that stands still for that step. The label at the top right of each frame says who is at the junction W22.*
 
 Then as the table the algorithms actually work with:
 
-![Plan table and visit order](../figures/07-plan-table.svg)
+![Plan table and visit order](../figures/08-plan-table.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#07-plan-table) · [standalone SVG](../figures/07-plan-table.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#08-plan-table) · [standalone SVG](../figures/08-plan-table.svg)</sub>
 
-*Figure 1.7 — Top: one row per AGV, one column per time step; the cell is $\pi_R(t)$. Teal cells are visits to the junction, dashed amber cells are waits, grey cells mean "already at goal". Bottom: the same table read per place — for each shared place, which AGV uses it, in which order.*
+*Figure 1.8 — Top: one row per AGV, one column per time step; the cell is $\pi_R(t)$. Teal cells are visits to the junction, dashed amber cells are waits, grey cells mean "already at goal". Bottom: the same table read per place — for each shared place, which AGV uses it, in which order.*
 
 ### 6.1 Read the plan AGV by AGV
 
@@ -163,7 +199,7 @@ Then as the table the algorithms actually work with:
 
 ### 6.2 Check it yourself
 
-You can verify a plan by hand with two scans of figure 1.7.
+You can verify a plan by hand with two scans of figure 1.8.
 
 1. **Columns (vertex conflicts).** In each column all entries must be different (count goal cells too — a parked AGV still occupies its place). Column $t = 2$ reads `W25, W22, W18, W13`: all different. Do the same for the other columns.
 2. **Neighbouring columns (swap conflicts).** For every pair of AGVs, check that they never trade places between column $t$ and $t + 1$. Here nobody ever drives *towards* another AGV on the same edge, so there is no swap.
@@ -172,7 +208,7 @@ This is exactly what `conflicts()` in `scripts/adg/adg.py` does, and it returns 
 
 ### 6.3 Read the table per place: visit order
 
-The lower half of figure 1.7 regroups the same information by place. For the junction **W22** the order is AGV-1 (step 1) → AGV-2 (step 2) → AGV-3 (step 3) → AGV-4 (step 4). For **W18** it is AGV-1 → AGV-3 → AGV-4. Each arrow there means *the earlier AGV must have left before the next one arrives*. Hold on to that sentence: in chapter 02 every one of those arrows becomes a **type-2 dependency** of the ADG.
+The lower half of figure 1.8 regroups the same information by place. For the junction **W22** the order is AGV-1 (step 1) → AGV-2 (step 2) → AGV-3 (step 3) → AGV-4 (step 4). For **W18** it is AGV-1 → AGV-3 → AGV-4. Each arrow there means *the earlier AGV must have left before the next one arrives*. Hold on to that sentence: in chapter 02 every one of those arrows becomes a **type-2 dependency** of the ADG.
 
 ## 7. From paths to actions
 
@@ -183,6 +219,8 @@ a = \langle s, g, t, R \rangle,
 $$
 
 with **start** place $s$, **goal** place $g$, **time step** $t$ and **robot** (AGV) $R$. The action at step $t$ takes AGV $R$ from $\pi_R(t)$ to $\pi_R(t+1)$, so $s = \pi_R(t)$ and $g = \pi_R(t+1)$. If $s = g$, the action is a **wait**. Code and later chapters write the parts as `a.s`, `a.g`, `a.t` and `a.R`.
+
+**Notation used throughout this kit.** When an action is written out with concrete values, every field is labelled: ⟨s=W18, g=W22, t=2, R=AGV-3⟩, never the bare ⟨W18, W22, 2, 3⟩. Read it as "start W18, goal W22, during step 2, done by AGV-3". The same goes for CBS constraints in chapter 02, written ⟨R=AGV-3, v=W22, t=2⟩: "AGV-3 may not be at place W22 at step 2".
 
 In this kit an action is named by its AGV and time step: `A3-2` is AGV-3's action at $t = 2$. The worked example has 15 actions:
 
@@ -206,7 +244,7 @@ In this kit an action is named by its AGV and time step: `A3-2` is AGV-3's actio
 
 Two conventions to internalise now, because the rest depends on them:
 
-- **An action "enters" its goal and "leaves" its start.** `A2-1` = ⟨W41, W22, 1, AGV-2⟩ enters the junction; `A2-2` = ⟨W22, P23, 2, AGV-2⟩ leaves it. AGV-2 occupies W22 from the end of `A2-1` until the end of `A2-2`.
+- **An action "enters" its goal and "leaves" its start.** `A2-1` = ⟨s=W41, g=W22, t=1, R=AGV-2⟩ enters the junction; `A2-2` = ⟨s=W22, g=P23, t=2, R=AGV-2⟩ leaves it. AGV-2 occupies W22 from the end of `A2-1` until the end of `A2-2`.
 - **A wait neither enters nor leaves anything.** `A3-1` starts and ends at W18. The paper's first improvement (chapter 03) is the observation that, for this reason, waits never contribute a unique dependency.
 
 ## Checkpoint

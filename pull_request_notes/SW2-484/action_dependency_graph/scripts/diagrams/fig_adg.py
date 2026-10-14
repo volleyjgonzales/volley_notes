@@ -41,9 +41,9 @@ def _soc(P):
     return sum(len(p) - 1 for p in P.values())
 
 
-@figure("08-cbs", "Conflict-Based Search on the worked example", DOC)
+@figure("09-cbs", "Conflict-Based Search on the worked example", DOC)
 def cbs():
-    d = Doc("08-cbs", "Conflict-Based Search on the worked example")
+    d = Doc("09-cbs", "Conflict-Based Search on the worked example")
     root = dict(ROOT_PATHS)
     Lc = dict(root, A2=["B21", "W41", "W41", "W22", "P23"])
     Rc = dict(root, A3=["W13", "W18", "W18", "W22", "W25"])
@@ -84,18 +84,18 @@ def cbs():
     rb = node(tot / 2 - w1 / 2, 0, w1, "Root: everyone's shortest path", root, set(), None, T.sky,
               verdict=f"conflict: AGV-2 and AGV-3 both at {J}, t=2")
     y1 = rb.y1 + 70
-    lb = node((xs2[0] + xs2[1] + w2) / 2 - w1 / 2, y1, w1, "Child L", Lc, {"A2"}, f"+ ⟨AGV-2, {J}, 2⟩",
+    lb = node((xs2[0] + xs2[1] + w2) / 2 - w1 / 2, y1, w1, "Child L", Lc, {"A2"}, f"+ ⟨R=AGV-2, v={J}, t=2⟩",
               T.border, verdict=f"conflict: AGV-2 and AGV-4 both at {J}, t=3")
-    rbx = node((xs2[2] + xs2[3] + w2) / 2 - w1 / 2, y1, w1, "Child R", Rc, {"A3"}, f"+ ⟨AGV-3, {J}, 2⟩",
+    rbx = node((xs2[2] + xs2[3] + w2) / 2 - w1 / 2, y1, w1, "Child R", Rc, {"A3"}, f"+ ⟨R=AGV-3, v={J}, t=2⟩",
                T.border, verdict="conflict: AGV-3 and AGV-4 both at W18, t=2")
     y2 = max(lb.y1, rbx.y1) + 70
-    ll = node(xs2[0], y2, w2, "Child LL", None, set(), f"+ ⟨AGV-2, {J}, 3⟩", T.border,
+    ll = node(xs2[0], y2, w2, "Child LL", None, set(), f"+ ⟨R=AGV-2, v={J}, t=3⟩", T.border,
               verdict="cost 15, still conflicts", vcol=T.muted, dim=True)
-    lr = node(xs2[1], y2, w2, "Child LR", LR, {"A4"}, f"+ ⟨AGV-4, {J}, 3⟩", T.green,
+    lr = node(xs2[1], y2, w2, "Child LR", LR, {"A4"}, f"+ ⟨R=AGV-4, v={J}, t=3⟩", T.green,
               verdict="no conflict: a solution", vcol=T.green)
-    rl = node(xs2[2], y2, w2, "Child RL", None, set(), "+ ⟨AGV-3, W18, 2⟩", T.border,
+    rl = node(xs2[2], y2, w2, "Child RL", None, set(), "+ ⟨R=AGV-3, v=W18, t=2⟩", T.border,
               verdict="cost 15, still conflicts", vcol=T.muted, dim=True)
-    rr = node(xs2[3], y2, w2, "Child RR  ← used in this kit", RR, {"A4"}, "+ ⟨AGV-4, W18, 2⟩", T.teal,
+    rr = node(xs2[3], y2, w2, "Child RR  ← used in this kit", RR, {"A4"}, "+ ⟨R=AGV-4, v=W18, t=2⟩", T.teal,
               verdict="no conflict: a solution", vcol=T.teal)
     for parent, kids, labs in ((rb, (lb, rbx), (f"AGV-2 may not be at {J} at t=2", f"AGV-3 may not be at {J} at t=2")),
                                (lb, (ll, lr), ("AGV-2 waits again", "AGV-4 waits at W18")),
@@ -106,8 +106,8 @@ def cbs():
                     color=T.fg2, size=8, sw=1.4)
             label_pill(d, kid.cx, my + 2, lab, color=T.amber, size=11, family="sans", bg=T.bg)
     rows = [
-        ("AGV-1: W18 W22 ...", "AGV-1's path: its place at t = 0, 1, 2, ... (figure 1.6 draws the final one)", T.fg2),
-        ("⟨AGV-3, W22, 2⟩", "a constraint: AGV-3 may not be at W22 at time step t = 2", T.amber),
+        ("AGV-1: W18 W22 ...", "AGV-1's path: its place at t = 0, 1, 2, ... (figure 1.7 draws the final one)", T.fg2),
+        ("⟨R=AGV-3, v=W22, t=2⟩", "a constraint: AGV R = AGV-3 may not be at place v = W22 at time step t = 2", T.amber),
         ("cost 15", "sum of costs: total number of steps of all four paths (lower is better)", T.fg2),
         ("conflict", "the earliest moment two AGVs are on the same place (or swap places)", T.red),
         ("bold line", "the AGV that was re-planned in this node because of the new constraint", T.fg),
@@ -228,9 +228,9 @@ def snapshot_scene(d, x0, y0, sched, tau, title, *, bad=False):
     return G.box
 
 
-@figure("09-delay", "One late AGV: clock-driven vs dependency-driven execution", DOC)
+@figure("10-delay", "One late AGV: clock-driven vs dependency-driven execution", DOC)
 def delay():
-    d = Doc("09-delay", "Clock-driven vs dependency-driven execution")
+    d = Doc("10-delay", "Clock-driven vs dependency-driven execution")
     timed = dict(timed_schedule(ex.ACTIONS))
     adg = _execute(ex.ACTIONS, ex.T1_FULL | ex.T2_FULL, _dur)
     occ_t, occ_a = j_occupancy(timed), j_occupancy(adg)
@@ -273,9 +273,9 @@ def delay():
 
 
 # --------------------------------------------------------------------------------------
-@figure("10-type2-rule", "One type-2 dependency, step by step", DOC)
+@figure("11-type2-rule", "One type-2 dependency, step by step", DOC)
 def type2_rule():
-    d = Doc("10-type2-rule", "One type-2 dependency, step by step")
+    d = Doc("11-type2-rule", "One type-2 dependency, step by step")
     a0, b0 = A["A1-0"], A["A3-0"]
     d.text(0, 0, "In the garage at t = 0", size=13, weight=600, fill=T.fg)
     G = Garage(d, 0, 18, 30, xlim=(25.6, 36.2), ylim=(15.6, 23.2))
@@ -332,9 +332,9 @@ def type2_rule():
     return d
 
 
-@figure("11-adg-full", "The full ADG of the worked example (Algorithm 1)", DOC)
+@figure("12-adg-full", "The full ADG of the worked example (Algorithm 1)", DOC)
 def adg_full():
-    d = Doc("11-adg-full", "The full ADG of the worked example")
+    d = Doc("12-adg-full", "The full ADG of the worked example")
     L = _lanes(d, 0, 0)
     for a in ex.ACTIONS:
         L.action(a)

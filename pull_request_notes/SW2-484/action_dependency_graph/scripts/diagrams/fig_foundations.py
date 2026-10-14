@@ -94,13 +94,13 @@ def pipeline():
         ("MAPF solver", T.sky, "e.g. CBS (chapter 02)",
          ["π_3 = W13 W18 W18 W22 W25", "= AGV-3's place at t = 0..4", "assumes everyone is on time"]),
         ("Actions", T.violet, "cut each path into steps",
-         ["A3-1 = ⟨W18, W18, 1, 3⟩  wait", "A3-2 = ⟨W18, W22, 2, 3⟩  move", "⟨start, goal, t, AGV⟩"]),
+         ["A3-1 (a wait):", "⟨s=W18, g=W18, t=1, R=AGV-3⟩", "A3-2 (a move):", "⟨s=W18, g=W22, t=2, R=AGV-3⟩"]),
         ("ADG construction", T.teal, "this paper: drop waits + SCP",
          ["A3-0 " + AR + " A3-2  same AGV", "A2-2 " + AR + " A3-2  AGV-2 leaves", "W22 before AGV-3 enters"]),
         ("Executor", T.green, "start a step when allowed",
          ["start A3-2 when A3-0", "and A2-2 report 'done'", "no clock needed"]),
     ]
-    w, h, gap = 250, 158, 28
+    w, h, gap = 250, 178, 28
     boxes = []
     for i, (title, col, sub, lines) in enumerate(cards):
         x = i * (w + gap)
@@ -140,7 +140,7 @@ def pipeline():
         ("W13 B21 P23", "places in the garage of figure 1.1 (W waypoint, B bay, P parking stall)", T.fg2),
         ("AGV-1 \u2026 AGV-4", "the four AGVs, numbered in the order they pass the junction W22", T.fg2),
         ("π_3", "the path of AGV-3: the place AGV-3 is at, for each time step t = 0, 1, 2, ...", T.fg2),
-        ("⟨s,g,t,R⟩", "an action: AGV number R goes from place s to place g during step t (s = g: a wait)",
+        ("⟨s=…, g=…, t=…, R=…⟩", "an action, always written with its field names: s = start place, g = goal place, t = time step, R = which AGV. Example: <s=W18, g=W22, t=2, R=AGV-3> = AGV-3 drives from W18 to W22 during step 2. s = g means a wait",
          T.fg2),
         ("A3-2", "short name for an action: AGV-3's step 2", T.fg2),
         ("A2-2 " + AR + " A3-2", "a dependency: A3-2 may not start until A2-2 has completed", T.teal),
@@ -250,9 +250,266 @@ def three_graphs():
 
 
 # --------------------------------------------------------------------------------------
-@figure("04-facility", "The worked example: four routes through one junction", DOC)
+TEG_ROWS = ["W25", "W22", "W18", "W41"]           # row order chosen so that valid paths never cross visually
+TEG_EDGES = [("W41", "W22"), ("W22", "W25"), ("W22", "W18")]
+TEG_OK = {"A1": ["W18", "W22", "W25", "W25"], "A2": ["W41", "W41", "W22", "W18"]}
+TEG_VERTEX = {"A1": ["W18", "W22", "W25", "W25"], "A2": ["W41", "W22", "W18", "W18"]}
+TEG_SWAP = {"A1": ["W18", "W22", "W41", "W41"], "A2": ["W41", "W41", "W22", "W18"]}
+TEG_SWAP_FIX = {"A1": ["W18", "W22", "W25", "W25", "W22", "W41"], "A2": ["W41", "W41", "W41", "W22", "W18", "W18"]}
+
+
+def _teg_conflicts(P):
+    a, b = P["A1"], P["A2"]
+    n = max(len(a), len(b))
+    at = lambda p, t: p[min(t, len(p) - 1)]
+    vx = [(at(a, t), t) for t in range(n) if at(a, t) == at(b, t)]
+    sw = [(at(a, t), at(a, t + 1), t) for t in range(n - 1)
+          if at(a, t) != at(a, t + 1) and at(a, t) == at(b, t + 1) and at(b, t) == at(a, t + 1)]
+    return vx, sw
+
+
+assert _teg_conflicts(TEG_OK) == ([], [])
+assert _teg_conflicts(TEG_VERTEX) == ([("W22", 1)], [])
+assert _teg_conflicts(TEG_SWAP) == ([], [("W22", "W41", 1)])
+assert _teg_conflicts(TEG_SWAP_FIX) == ([], [])
+for _P in (TEG_OK, TEG_VERTEX, TEG_SWAP, TEG_SWAP_FIX):
+    for _p in _P.values():
+        for _u, _v in zip(_p, _p[1:]):
+            assert _u == _v or (_u, _v) in TEG_EDGES or (_v, _u) in TEG_EDGES
+
+
+def _teg(d, x, y, *, paths=None, edges="all", dots_label_col=None, out_from=None, vertex=None, swap=None,
+         tmax=4, cw=78, rh=44):
+    """Small time-expanded graph for the 4-place T junction. Returns (bbox, X, Y)."""
+    lx = x + 36
+    X = {t: lx + 22 + t * cw for t in range(tmax)}
+    Y = {v: y + 26 + i * rh for i, v in enumerate(TEG_ROWS)}
+    adj = {v: {v} for v in TEG_ROWS}
+    for u, v in TEG_EDGES:
+        adj[u].add(v); adj[v].add(u)
+    for t in range(tmax):
+        d.text(X[t], y + 4, f"t={t}", size=11, family="mono", fill=T.muted, anchor="middle")
+    for v in TEG_ROWS:
+        d.text(lx, Y[v], v, size=11, family="mono", fill=T.fg2, anchor="end")
+    if edges != "none":
+        col = "#2A3852" if edges == "all" else "#1F2A3F"
+        for t in range(tmax - 1):
+            for u in TEG_ROWS:
+                for v in adj[u]:
+                    d.line(X[t] + 4, Y[u], X[t + 1] - 4, Y[v], stroke=col, sw=1.1, layer="under")
+    if out_from:
+        v0, t0 = out_from
+        for v in sorted(adj[v0], key=TEG_ROWS.index):
+            connect(d, [(X[t0], Y[v0]), (X[t0 + 1], Y[v])], kind="flow", color=T.teal, size=7, sw=1.8)
+    for t in range(tmax):
+        for v in TEG_ROWS:
+            d.circle(X[t], Y[v], 4, fill=T.faint, stroke=T.bg_deep, sw=1, layer="main")
+    if dots_label_col is not None:
+        t = dots_label_col
+        for v in TEG_ROWS:
+            label_pill(d, X[t] + 6, Y[v] + 14, f"({v}, {t})", color=T.fg2, size=9.5, family="mono",
+                       border=T.border, anchor="start")
+    offs = {"A1": -2.0, "A2": 2.0}
+    for r, p in (paths or {}).items():
+        pts = [(X[t], Y[p[t]] + offs[r]) for t in range(min(len(p), tmax))]
+        d.polyline(pts, stroke=ex.COLOR[r], sw=2.8, radius=0, layer="edges")
+        for (px, py) in pts:
+            d.circle(px, py, 4.6, fill=ex.COLOR[r], stroke=T.bg_deep, sw=1, layer="over")
+    if vertex:
+        v, t = vertex
+        d.circle(X[t], Y[v], 13, fill="none", stroke=T.red, sw=2.2, dash="4 3", layer="top")
+    if swap:
+        u, v, t = swap
+        cx, cy = (X[t] + X[t + 1]) / 2, (Y[u] + Y[v]) / 2
+        d.circle(cx, cy, 14, fill="none", stroke=T.red, sw=2.2, dash="4 3", layer="top")
+    return BBox(x, y - 8, X[tmax - 1] + 10, Y[TEG_ROWS[-1]] + 10), X, Y
+
+
+def _teg_floor(d, x, y, s, agvs, *, title=None, arrows=(), ring=None, cross=None, labels=None):
+    """Garage crop around W22 with the four places of the mini example. agvs: [(robot, (x, y) or place, side)]."""
+    if title:
+        d.text(x, y, title, size=11.5, family="mono", weight=600, fill=T.muted)
+        y += 12
+    G = Garage(d, x, y, s, xlim=(25.2, 33.9), ylim=(18.2, 25.3))
+    G.floor(grid=True)
+    G.corridors()
+    for u, v in TEG_EDGES:
+        d.line(*G.P(u), *G.P(v), stroke="#55657F", sw=1.5, layer="edges")
+    for v in TEG_ROWS:
+        px, py = G.P(v)
+        d.circle(px, py, 4.5, fill=T.teal if v == "W22" else T.fg2, stroke=T.bg_deep, sw=1.5, layer="over")
+        dx, dy, anc = labels[v]
+        lx, ly = px + dx, py + dy
+        d.text(lx, ly, v, size=10.5, family="mono", fill=T.teal if v == "W22" else T.muted, anchor=anc,
+               layer="labels")
+    for r, at, side in agvs:
+        if isinstance(side, tuple):      # explicit label position (dx, dy) from the AGV centre
+            ax, ay = G.agv(at, None, heading="w", color=ex.COLOR[r], size=0.82)
+            chip(d, ax + side[0], ay + side[1], f"AGV-{r[1:]}", ex.COLOR[r], anchor="start", size=10.5,
+                 fill=T.tint(ex.COLOR[r], 0.25, T.bg_deep), layer="top")
+        else:
+            G.agv(at, f"AGV-{r[1:]}", heading="w", color=ex.COLOR[r], size=0.82, label_side=side)
+    for r, a, b, off in arrows:
+        (xa, ya), (xb, yb) = G.P(a), G.P(b)
+        connect(d, [(xa + off[0], ya + off[1]), (xb + off[0], yb + off[1])], kind="flow", color=ex.COLOR[r],
+                size=8, sw=2.2)
+    if ring:
+        px, py = G.P(ring)
+        d.circle(px, py, 36, fill="none", stroke=T.red, sw=2.2, dash="5 4", layer="top")
+    if cross:
+        (xa, ya), (xb, yb) = G.P(cross[0]), G.P(cross[1])
+        xm, ym = (xa + xb) / 2, (ya + yb) / 2
+        d.path(f"M{xm - 10} {ym - 10} L{xm + 10} {ym + 10} M{xm + 10} {ym - 10} L{xm - 10} {ym + 10}",
+               stroke=T.red, sw=2.6, layer="top")
+    return G.box
+
+
+@figure("04-time-expanded", "From timed paths to the time-expanded graph", DOC)
+def time_expanded():
+    d = Doc("04-time-expanded", "From timed paths to the time-expanded graph")
+    C1, C2 = ex.COLOR["A1"], ex.COLOR["A2"]
+
+    def step(x, y, n, title, col=T.fg):
+        num_badge(d, x + 11, y, n, col)
+        d.text(x + 30, y, title, size=14, weight=600, fill=T.fg)
+        return y + 26
+
+    def para(x, y, w, txt, size=12, fill=T.fg2):
+        lines = wrap(txt, w, size, "sans")
+        d.text_lines(x, y, lines, size=size, fill=fill, lh=1.45)
+        return y + len(lines) * size * 1.45
+
+    # ---- row 1: step 1, the timed paths --------------------------------------------------
+    y1 = step(0, 0, 1, "Start from the timed paths: two AGVs at a T-junction")
+    fb = _teg_floor(d, 0, y1 + 4, 30, [("A1", "W18", "left"), ("A2", "W41", "below")],
+                    labels={"W22": (12, -14, "start"), "W41": (-34, 4, "end"), "W25": (-14, 2, "end"),
+                            "W18": (34, 26, "start")},
+                    arrows=[("A1", "W18", "W22", (52, 0)), ("A1", "W22", "W25", (52, 0)),
+                            ("A2", "W41", "W22", (0, -40))])
+    d.text(fb.x0, fb.y1 + 18, "the garage at t = 0, arrows: where each AGV is headed", size=11, fill=T.muted)
+    # table
+    tx, ty = fb.x1 + 40, y1 + 24
+    cwt, rht, lw = 70, 38, 92
+    for t in range(4):
+        d.text(tx + lw + t * cwt + cwt / 2, ty, f"t = {t}", size=11.5, family="mono", fill=T.muted, anchor="middle")
+    for i, r in enumerate(("A1", "A2")):
+        yy = ty + 18 + i * (rht + 8)
+        d.text(tx, yy + rht / 2, f"AGV-{r[1:]}", size=12.5, family="mono", weight=700, fill=ex.COLOR[r])
+        for t, v in enumerate(TEG_OK[r]):
+            xx = tx + lw + t * cwt
+            wait = t > 0 and TEG_OK[r][t - 1] == v
+            d.rect(xx + 3, yy, cwt - 6, rht, rx=7, fill=T.tint(ex.COLOR[r], 0.10, T.bg),
+                   stroke=T.tint(ex.COLOR[r], 0.55, T.bg), sw=1.1, dash="4 3" if wait else None)
+            d.text(xx + cwt / 2, yy + rht / 2, v, size=12, family="mono", weight=600, fill=T.fg, anchor="middle")
+    yt = ty + 18 + 2 * (rht + 8) + 14
+    yt = para(tx, yt, 4 * cwt + lw, "Each row is one AGV's timed path π: its place at t = 0, 1, 2, 3. "
+              "A dashed cell repeats the place before it: a one-step wait.")
+    yt = para(tx, yt + 8, 4 * cwt + lw, "AGV-1 drives north W18 → W22 → W25. AGV-2 waits at W41 for "
+              "one step, crosses W22 behind AGV-1 and turns south into W18, which AGV-1 has left.")
+    note(d, tx + 4 * cwt + lw + 30, y1 + 10, 330,
+         "A table like this is easy to read but hard to reason about. The trick is to turn it into a graph in which "
+         "'AGV-2 is at W22 at step 2' is a single dot, and a whole timed path is a line through dots. "
+         "Steps 2 to 4 below do exactly that.", title="Why build a graph?", accent=T.teal)
+
+    # ---- row 2: steps 2-4 ------------------------------------------------------------------
+    y2 = max(fb.y1 + 30, yt) + 40
+    pw, gap = 392, 22
+    ph = 300
+    heads = [
+        (2, "Copy every place once per step",
+         "One dot per (place, step): 4 places × 4 steps = 16 dots. Rows are places, columns are steps. "
+         "The labels show the names of the t = 1 column."),
+        (3, "Add an arrow for every possible step",
+         "From each dot, one arrow to the next column: flat = wait in place, sloped = drive to a neighbour on "
+         "the map. Teal: the 4 ways out of (W22, 1), since W22 has 3 neighbours plus waiting."),
+        (4, "Draw each AGV's path through it",
+         "A timed path becomes a line with one dot per column. These two lines never share a dot and never "
+         "use one road in opposite directions at the same step, so the plan is collision-free."),
+    ]
+    for k, (n, title, txt) in enumerate(heads):
+        x0 = k * (pw + gap)
+        d.rect(x0, y2, pw, ph, rx=10, fill=T.tint(T.card, 0.5, T.bg), stroke=T.border, sw=1.1, layer="bg")
+        yy = step(x0 + 14, y2 + 24, n, title, T.teal)
+        kw = dict(dots_label_col=1, edges="none") if n == 2 else \
+            dict(out_from=("W22", 1)) if n == 3 else dict(paths=TEG_OK, edges="faint")
+        bb, X, Y = _teg(d, x0 + 30, yy + 10, **kw)
+        para(x0 + 16, bb.y1 + 24, pw - 32, txt, size=11.5)
+        if n == 3:
+            for v, lab in (("W25", "move to W25"), ("W22", "wait at W22"), ("W18", "move to W18"),
+                           ("W41", "move to W41")):
+                label_pill(d, X[2] + 12, Y[v], lab, color=T.teal, size=10, family="sans",
+                           border=T.tint(T.teal, 0.6, T.bg), anchor="start")
+    for k in range(2):
+        xa = k * (pw + gap) + pw
+        connect(d, [(xa + 2, y2 + ph / 2), (xa + gap - 2, y2 + ph / 2)], kind="flow", color=T.teal, size=8, sw=1.6)
+
+    # ---- row 3: the two problems -----------------------------------------------------------
+    y3 = y2 + ph + 46
+    qw = (3 * pw + 2 * gap - gap) / 2
+    probs = [
+        ("Problem 1: two paths share a dot = vertex conflict", TEG_VERTEX, dict(vertex=("W22", 1)),
+         dict(agvs=[("A1", (NODES["W22"].x, NODES["W22"].y + 0.45), (44, -4)),
+                    ("A2", (NODES["W22"].x, NODES["W22"].y - 0.45), (44, 4))], ring="W22",
+              labels={"W22": (-30, 44, "end"), "W41": (-34, 4, "end"), "W25": (-14, 2, "end"),
+                      "W18": (14, 4, "start")},
+              title="the garage at t = 1"),
+         "Suppose AGV-2 does not wait: π₂ = W41 W22 W18 W18. Both lines go through the dot (W22, 1): "
+         "π₁(1) = π₂(1) = W22, two AGVs on one spot at the same step.",
+         "Fix: AGV-2 waits one step at W41, which moves its line one column to the right (the plan of step 4)."),
+        ("Problem 2: two paths cross on one edge = swap conflict", TEG_SWAP, dict(swap=("W22", "W41", 1)),
+         dict(agvs=[("A1", "W22", "right"), ("A2", "W41", "left")], cross=("W41", "W22"),
+              labels={"W22": (30, 34, "start"), "W41": (0, 52, "middle"), "W25": (-14, 2, "end"),
+                      "W18": (14, 4, "start")},
+              arrows=[("A1", "W22", "W41", (0, -30)), ("A2", "W41", "W22", (0, 30))],
+              title="the garage at t = 1, about to move"),
+         "Now AGV-1 heads west instead: π₁ = W18 W22 W41 W41. No dot is shared at any step, yet the "
+         "lines form an X between t = 1 and t = 2: AGV-1 drives W22 → W41 while AGV-2 drives W41 → W22, "
+         "head-on on the same road. In symbols: π₁(1) = π₂(2) and π₂(1) = π₁(2).",
+         "Fix: one AGV must step aside. AGV-1 pulls into W25, lets AGV-2 pass, then continues: "
+         "π₁ = W18 W22 W25 W25 W22 W41."),
+    ]
+    hmax = 0
+    for k, (title, P, mark, floor, txt, fix) in enumerate(probs):
+        x0 = k * (qw + gap)
+        top = y3
+        yy = top + 24
+        d.text(x0 + 16, yy, title, size=14, weight=600, fill=T.fg)
+        d.text(x0 + qw - 16, yy, "✗ forbidden", size=12, family="mono", weight=600, fill=T.red, anchor="end")
+        bb, X, Y = _teg(d, x0 + 10, yy + 34, paths=P, edges="faint", **mark)
+        fb2 = _teg_floor(d, bb.x1 + 26, yy + 26, 25, floor["agvs"], title=floor["title"],
+                         ring=floor.get("ring"), cross=floor.get("cross"), arrows=floor.get("arrows", ()),
+                         labels=floor["labels"])
+        yb = max(bb.y1, fb2.y1) + 18
+        yb = para(x0 + 16, yb, qw - 32, txt, size=12)
+        yb = para(x0 + 16, yb + 8, qw - 32, fix, size=12, fill=T.green)
+        hmax = max(hmax, yb - top + 14)
+    for k in range(2):
+        x0 = k * (qw + gap)
+        d.rect(x0, y3, qw, hmax, rx=10, fill=T.tint(T.red, 0.04, T.bg), stroke=T.tint(T.red, 0.45, T.bg), sw=1.2,
+               layer="bg")
+    note(d, 0, y3 + hmax + 22, 3 * pw + 2 * gap,
+         "Why the second check is needed: in the time-expanded graph the two swapping AGVs use two different arrows, "
+         "(W22, 1) → (W41, 2) and (W41, 1) → (W22, 2), so 'no shared dot' and even 'no shared arrow' both "
+         "pass. What they share is the road W22 – W41 of the garage, in opposite directions during one step. "
+         "A MAPF solver therefore checks two things: dots (vertex conflicts) and crossing pairs of arrows on the same "
+         "road (swap conflicts). Figure 1.6 shows both on the real aisle.", title="Two checks, not one", accent=T.amber)
+    frame(d, title="From timed paths to the time-expanded graph",
+          subtitle="A two-AGV example on four places around junction W22. Step 1 is the plan as a table; steps 2-4 "
+                   "build the time-expanded graph and draw the plan as one path per AGV through it. The bottom row "
+                   "shows the two ways two paths can collide.",
+          badge_key="illustrative",
+          legend=[("box", C1, "AGV-1 (path, dots it visits)"), ("box", C2, "AGV-2"),
+                  ("dot", T.faint, "a (place, step) vertex"), ("line", T.teal, "possible step out of (W22, 1)"),
+                  ("ring", T.red, "conflict")],
+          footnote="Places are real Pecos nodes (W41, W22, W25, W18) but this two-AGV plan is a teaching example, "
+                   "separate from the four-AGV worked example. AGVs face west (heading 90) and drive sideways.")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+@figure("05-facility", "The worked example: four routes through one junction", DOC)
 def facility():
-    d = Doc("04-facility", "Four routes through one junction")
+    d = Doc("05-facility", "Four routes through one junction")
     G = Garage(d, 0, 0, 34)
     G.base(axes=True, highlight=(J,), zones=True)
     draw_trays(G)
@@ -302,9 +559,9 @@ def facility():
 
 
 # --------------------------------------------------------------------------------------
-@figure("05-conflicts", "Vertex conflict, swap conflict and following", DOC)
+@figure("06-conflicts", "Vertex conflict, swap conflict and following", DOC)
 def conflicts_fig():
-    d = Doc("05-conflicts", "MAPF conflict types")
+    d = Doc("06-conflicts", "MAPF conflict types")
     panels = [
         ("Vertex conflict", T.red, "✗ forbidden", [("A1", "W22", "W18"), ("A3", "W13", "W18")],
          "Both AGVs are at W18 at t = 1."),
@@ -370,9 +627,9 @@ def conflicts_fig():
 
 
 # --------------------------------------------------------------------------------------
-@figure("06-filmstrip", "The plan, step by step", DOC)
+@figure("07-filmstrip", "The plan, step by step", DOC)
 def filmstrip():
-    d = Doc("06-filmstrip", "The plan, step by step")
+    d = Doc("07-filmstrip", "The plan, step by step")
     T_MAX = max(len(p) for p in ex.PATHS.values())
     s = 29
     xl, yl = (20.0, 40.4), (11.6, 26.0)
@@ -409,7 +666,7 @@ def filmstrip():
         for i, ln in enumerate(wrap(txt, fw, 11, "sans")):
             d.text(x0, y0 + 18 + fh + 16 + i * 15, ln, size=11, fill=T.fg2)
     frame(d, title="The plan, step by step",
-          subtitle="The four routes of figure 1.4 with their timing: one frame per time step t. Dashed arrows show "
+          subtitle="The four routes of figure 1.5 with their timing: one frame per time step t. Dashed arrows show "
                    "the move each AGV makes before the next frame. Read across the junction W22 (ringed): "
                    "AGV-1 uses it at t = 1, AGV-2 at t = 2, AGV-3 at t = 3, AGV-4 at t = 4.",
           badge_key="illustrative",
@@ -420,9 +677,9 @@ def filmstrip():
 
 
 # --------------------------------------------------------------------------------------
-@figure("07-plan-table", "The plan as a table, and the visit order it implies", DOC)
+@figure("08-plan-table", "The plan as a table, and the visit order it implies", DOC)
 def plan_table():
-    d = Doc("07-plan-table", "The plan as a table")
+    d = Doc("08-plan-table", "The plan as a table")
     T_MAX = max(len(p) for p in ex.PATHS.values())
     cw, rh, lw = 98, 40, 110
     d.text(0, 0, "1 · The place π_R(t) of each AGV R at each time step t", size=13.5, weight=600, fill=T.fg)
@@ -484,7 +741,7 @@ def plan_table():
          "Each arrow here, 'the earlier AGV must have left before the next one enters', becomes a type-2 edge of "
          "the action dependency graph in chapter 02.", title="Where this is going", accent=T.teal)
     frame(d, title="The plan as a table, and the visit order it implies",
-          subtitle="The same plan as figure 1.6, written as the MAPF solution Π that the algorithms work with. "
+          subtitle="The same plan as figure 1.7, written as the MAPF solution Π that the algorithms work with. "
                    "Row = one AGV's path; column = one time step. Collision-free: no column contains the same place "
                    "twice, and no two AGVs swap places between neighbouring columns.",
           badge_key="illustrative",

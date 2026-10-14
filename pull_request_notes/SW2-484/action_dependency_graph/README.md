@@ -15,9 +15,9 @@ Chapters 1–3 share **one worked example**: four AGVs (AGV-1 to AGV-4, numbered
 
 ## Figures
 
-All 16 figures are rendered SVGs embedded in the chapters (they work offline in VS Code's Markdown preview and on GitHub). For pan and zoom, open [`figures/viewer.html`](figures/viewer.html) in a browser, or open any `.svg` directly.
+All 18 figures are rendered SVGs embedded in the chapters (they work offline in VS Code's Markdown preview and on GitHub). For pan and zoom, open [`figures/viewer.html`](figures/viewer.html) in a browser, or open any `.svg` directly.
 
-**Every figure explains its own symbols** in a key at the bottom. Scenes of the garage (figures 1.1, 1.3–1.5, 2.2, 2.3, 3.6) use the reference pack's garage assets: stalls, bays with doors, chargers, AGVs with lift plate and heading chevron, trays, cars.
+**Every figure explains its own symbols** in a key at the bottom. Scenes of the garage (figures 1.1, 1.4–1.7, 2.2, 2.3, 3.6) use the reference pack's garage assets: stalls, bays with doors, chargers, AGVs with lift plate and heading chevron, trays, cars.
 
 **Every ADG edge, path, conflict and timing in the figures is computed, not drawn by hand.** `scripts/adg/adg.py` implements Algorithm 1, CP, SCP (both the printed variant and a walk-back variant), wait removal, reachability checks and an event-driven executor; the figure scripts call it and assert the facts they display.
 

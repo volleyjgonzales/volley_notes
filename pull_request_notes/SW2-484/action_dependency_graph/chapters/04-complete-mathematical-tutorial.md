@@ -977,7 +977,7 @@ Both robots occupy V at $t=1$. The joint plan violates the vertex exclusion cons
 
 ### Exercise 3: Determine a type-2 edge
 
-Action $c=\langle P,Q,2,\mathrm{robot\ B}\rangle$, and action $a=\langle R,P,5,\mathrm{robot\ A}\rangle$.
+Action $c=\langle s{=}P,\ g{=}Q,\ t{=}2,\ R{=}\mathrm{robot\ B}\rangle$, and action $a=\langle s{=}R,\ g{=}P,\ t{=}5,\ R{=}\mathrm{robot\ A}\rangle$. (Careful: here the *place* happens to be called R; the last field $R{=}\dots$ is the robot.)
 
 <details><summary>Solution</summary>
 

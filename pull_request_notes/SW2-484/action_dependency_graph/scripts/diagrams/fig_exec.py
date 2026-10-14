@@ -23,9 +23,9 @@ def _dur(a):
     return 1.0 if a.wait else FAST.get(a.R, 1.0)
 
 
-@figure("16-waits-throughput", "Planned waits vs emergent waits when AGVs run early", DOC)
+@figure("17-waits-throughput", "Planned waits vs emergent waits when AGVs run early", DOC)
 def waits_throughput():
-    d = Doc("16-waits-throughput", "Planned waits vs emergent waits")
+    d = Doc("17-waits-throughput", "Planned waits vs emergent waits")
     w = execute(ex.ACTIONS, ex.T1_FULL | ex.T2_FULL, _dur)
     n = execute(ex.MOVES, ex.T1 | ex.T2_SCP, _dur)
     mw, mn = max(e for _, e in w.values()), max(e for _, e in n.values())
@@ -60,9 +60,9 @@ def waits_throughput():
     return d
 
 
-@figure("17-execution-snapshot", "What the executor knows at t = 3.5 s", DOC)
+@figure("18-execution-snapshot", "What the executor knows at t = 3.5 s", DOC)
 def snapshot():
-    d = Doc("17-execution-snapshot", "Executor snapshot")
+    d = Doc("18-execution-snapshot", "Executor snapshot")
     E = ex.T1 | ex.T2_SCP
     sch = execute(ex.MOVES, E, lambda a: 1.0)
     tau = 3.5
