@@ -23,9 +23,9 @@ The high level repeatedly takes the cheapest unexplored node and looks for the e
 
 ### 1.2 CBS on the worked example
 
-![CBS constraint tree](../figures/07-cbs.svg)
+![CBS constraint tree](../figures/08-cbs.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#07-cbs) · [standalone SVG](../figures/07-cbs.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#08-cbs) · [standalone SVG](../figures/08-cbs.svg)</sub>
 
 *Figure 2.1 — The constraint tree for the worked example. Every node lists all four paths; the bold coloured line is the one the low level just re-planned. Two leaves are conflict-free at cost 15; the kit uses RR. The dashed nodes would also cost 15 but still contain conflicts, so CBS would have to keep expanding them.*
 
@@ -36,7 +36,7 @@ Walk through it node by node.
    - *L* forbids AGV-2 at $(W22, 2)$. AGV-2's new shortest path waits one step at W41. That pushes AGV-2 into W22 at $t = 3$, where it now collides with AGV-4.
    - *R* forbids AGV-3 at $(W22, 2)$. AGV-3 waits one step at W18 — but AGV-4, right behind, wants W18 at $t = 2$. New conflict: AGV-3 and AGV-4 at $(W18, 2)$.
 3. **Grandchildren (cost 15).**
-   - *RR* forbids AGV-4 at $(W18, 2)$. AGV-4 waits at W13 for one step. Every column of the table is now conflict-free: **solution**. This is the plan of figures 1.5 and 1.6.
+   - *RR* forbids AGV-4 at $(W18, 2)$. AGV-4 waits at W13 for one step. Every column of the table is now conflict-free: **solution**. This is the plan of figures 1.6 and 1.7.
    - *LR* forbids AGV-4 at $(W22, 3)$. AGV-4 waits at W18 instead; also conflict-free and also cost 15.
 
 Both LR and RR are optimal. Which one a given CBS implementation returns depends on how it breaks ties between equally cheap nodes; nothing in what follows depends on that choice.
@@ -51,9 +51,9 @@ The result of CBS is only the four paths. It does not record *why* AGV-3 waits (
 
 Suppose we execute the plan by the clock: each action starts at its planned time (one second per step), or as soon as the robot has finished its previous action if it is running late. Now disturb one robot: **A2-1 (W41 → W22) takes 2.5 s instead of 1 s.**
 
-![Clock-driven vs ADG-driven execution](../figures/08-delay.svg)
+![Clock-driven vs ADG-driven execution](../figures/09-delay.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#08-delay) · [standalone SVG](../figures/08-delay.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#09-delay) · [standalone SVG](../figures/09-delay.svg)</sub>
 
 *Figure 2.2 — The same plan executed two ways. Each bar is one action; the row "at W22" shows who is at the junction (from arriving until fully gone). The garage views on the right freeze both runs at 3.75 s (the dashed amber line). In (a), AGV-2 reaches W22 at 3.5 s instead of 2 s, but AGV-3 and AGV-4 keep to their timetable and drive into the junction on top of it. In (b), nobody enters W22 until the previous occupant's move out of it has completed; AGV-3 simply holds at W18.*
 
@@ -98,11 +98,11 @@ Read the condition in plain words. Call the source $c$ (for *candidate*, the pap
 | $c.t \le a.t$ | in the plan, $c$ leaves no later than $a$ enters |
 | $c.R \ne a.R$ | they are different robots |
 
-Then $c \to a$: robot $a.R$ may not start driving into $v$ until robot $c.R$ has finished driving out of it. That is precisely the "earlier robot must have left before the next one arrives" arrow of figure 1.6, now attached to specific actions.
+Then $c \to a$: robot $a.R$ may not start driving into $v$ until robot $c.R$ has finished driving out of it. That is precisely the "earlier robot must have left before the next one arrives" arrow of figure 1.7, now attached to specific actions.
 
-![One type-2 dependency](../figures/09-type2-rule.svg)
+![One type-2 dependency](../figures/10-type2-rule.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#09-type2-rule) · [standalone SVG](../figures/09-type2-rule.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#10-type2-rule) · [standalone SVG](../figures/10-type2-rule.svg)</sub>
 
 *Figure 2.3 — The first type-2 edge of the example, A1-0 → A3-0. Top left: the two AGVs on the aisle at $t = 0$, AGV-1 about to drive W18 → W22 while AGV-3 drives W13 → W18 right behind it. All three conditions of the rule hold, so A3-0 depends on A1-0: AGV-3 may only start moving into W18 once AGV-1 has completely left it. The key at the bottom explains every symbol.*
 
@@ -139,9 +139,9 @@ Notice also how much repetition there is. A4-3 (AGV-4 enters W22) gets three inc
 
 ### 3.4 The full graph
 
-![Full ADG](../figures/10-adg-full.svg)
+![Full ADG](../figures/11-adg-full.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#10-adg-full) · [standalone SVG](../figures/10-adg-full.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#11-adg-full) · [standalone SVG](../figures/11-adg-full.svg)</sub>
 
 *Figure 2.4 — The complete ADG built by Algorithm 1. One lane per AGV; columns are plan time steps (for reading only — execution ignores them). Each box is one action, e.g. `A3-2 / W18 → W22` = AGV-3's step 2, driving from W18 to W22. Coloured arrows along a lane are type-1 edges; light arrows between lanes are type-2 edges, with the handed-over place in the pill. Dashed boxes are the two waits.*
 

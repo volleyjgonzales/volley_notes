@@ -37,9 +37,9 @@ A redundant edge can be deleted without changing *any* ordering the executor enf
 
 A wait $w$ has $s = g$, so it can get type-2 edges in two ways: *into* it (someone left its vertex earlier) and *out of* it (someone enters its vertex later). The worked example has both.
 
-![Wait removal](../figures/11-wait-removal.svg)
+![Wait removal](../figures/12-wait-removal.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#11-wait-removal) · [standalone SVG](../figures/11-wait-removal.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#12-wait-removal) · [standalone SVG](../figures/12-wait-removal.svg)</sub>
 
 *Figure 3.1 — (a) The edge into AGV-3's wait, A1-0 → A3-1, is implied by A1-0 → A3-0 → A3-1. (b) The edge out of AGV-3's wait, A3-1 → A4-2, is implied by A3-1 → A3-2 → A4-2. (c) With all their edges redundant, the waits disappear and their neighbours are joined directly.*
 
@@ -88,9 +88,9 @@ for each action a in A:
 
 CP produces **exactly the same edges** as Algorithm 1; it only skips checks that could never succeed.
 
-![Candidate index and binary search](../figures/12-candidate-index.svg)
+![Candidate index and binary search](../figures/13-candidate-index.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#12-candidate-index) · [standalone SVG](../figures/12-candidate-index.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#13-candidate-index) · [standalone SVG](../figures/13-candidate-index.svg)</sub>
 
 *Figure 3.2 — Left: the index S for the 13 moves of the worked example (waits already removed), each list sorted by time. Right: the query for A4-3 (AGV-4 enters W22 at $t = 3$). Only S[W22] is consulted; the binary search finds the boundary of "$t \le 3$"; CP would add three edges, SCP adds one. Bottom: work done by each algorithm on this example.*
 
@@ -155,9 +155,9 @@ CP: 12 edges. SCP: 8 edges. The four it skips are A1-1 → A3-2, A1-0 → A4-2, 
 
 Skipping edges is only allowed if the skipped orderings still hold through paths. The paper's argument is a chain along the sorted list.
 
-![Why the latest candidate is enough](../figures/13-why-latest.svg)
+![Why the latest candidate is enough](../figures/14-why-latest.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#13-why-latest) · [standalone SVG](../figures/13-why-latest.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#14-why-latest) · [standalone SVG](../figures/14-why-latest.svg)</sub>
 
 *Figure 3.3 — (a) The hand-over chain at W22: A1-1 → A2-1 → A2-2 → A3-2 → A3-3 → A4-3, alternating type-2 edges ("next robot enters W22") and type-1 edges ("same robot then leaves W22"). Every red edge added by CP is implied by this chain. (b) The corner case where the latest candidate is the target's own robot.*
 
@@ -192,9 +192,9 @@ Total: $O(n \log n)$ time and $O(n)$ edges, against $O(n^2)$ for both Algorithm 
 
 ## 5. The result
 
-![ADG after both improvements](../figures/14-adg-scp.svg)
+![ADG after both improvements](../figures/15-adg-scp.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#14-adg-scp) · [standalone SVG](../figures/14-adg-scp.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#15-adg-scp) · [standalone SVG](../figures/15-adg-scp.svg)</sub>
 
 *Figure 3.4 — The final ADG: 13 moves, 9 type-1 edges and 8 type-2 edges, at most one type-2 edge into any action. Faint boxes mark where the two waits used to be. Red dashed: the four edges CP would add and SCP skips. Amber: A2-1 → A4-4, kept by SCP although it is implied by a longer path.*
 
@@ -212,9 +212,9 @@ The paper says SCP produces a graph "without any redundant dependencies". That i
 
 ### 6.1 Emergent waits are faster than planned waits
 
-![Waits and throughput](../figures/15-waits-throughput.svg)
+![Waits and throughput](../figures/16-waits-throughput.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#15-waits-throughput) · [standalone SVG](../figures/15-waits-throughput.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#16-waits-throughput) · [standalone SVG](../figures/16-waits-throughput.svg)</sub>
 
 *Figure 3.5 — AGV-1 and AGV-2 run early (0.5 s per move instead of 1 s). (a) With waits in the graph, AGV-3 still has to complete its 1-s wait A3-1 before A3-2 may start, even though AGV-2 left W22 at 2 s. (b) Without waits, A3-2 starts at 2 s; AGV-4 benefits in turn. Makespan 6.5 s → 6 s.*
 
@@ -222,9 +222,9 @@ This is the paper's third argument for removing waits. A planned wait is a guess
 
 ### 6.2 What the executor does
 
-![Executor snapshot](../figures/16-execution-snapshot.svg)
+![Executor snapshot](../figures/17-execution-snapshot.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#16-execution-snapshot) · [standalone SVG](../figures/16-execution-snapshot.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#17-execution-snapshot) · [standalone SVG](../figures/17-execution-snapshot.svg)</sub>
 
 *Figure 3.6 — A nominal run of the final ADG, frozen at 3.5 s. Seven actions are done, A2-2 is running (AGV-2 is carrying the car out of the junction towards P23), the rest are blocked. The garage view shows the same moment on the floor: AGV-3 stands at W18 waiting for AGV-2, AGV-4 stands behind AGV-3. The right column is all the executor stores: for each action, how many predecessors are still unfinished.*
 

@@ -41,9 +41,9 @@ def _soc(P):
     return sum(len(p) - 1 for p in P.values())
 
 
-@figure("07-cbs", "Conflict-Based Search on the worked example", DOC)
+@figure("08-cbs", "Conflict-Based Search on the worked example", DOC)
 def cbs():
-    d = Doc("07-cbs", "Conflict-Based Search on the worked example")
+    d = Doc("08-cbs", "Conflict-Based Search on the worked example")
     root = dict(ROOT_PATHS)
     Lc = dict(root, A2=["B21", "W41", "W41", "W22", "P23"])
     Rc = dict(root, A3=["W13", "W18", "W18", "W22", "W25"])
@@ -106,7 +106,7 @@ def cbs():
                     color=T.fg2, size=8, sw=1.4)
             label_pill(d, kid.cx, my + 2, lab, color=T.amber, size=11, family="sans", bg=T.bg)
     rows = [
-        ("AGV-1: W18 W22 ...", "AGV-1's path: its place at t = 0, 1, 2, ... (figure 1.5 draws the final one)", T.fg2),
+        ("AGV-1: W18 W22 ...", "AGV-1's path: its place at t = 0, 1, 2, ... (figure 1.6 draws the final one)", T.fg2),
         ("⟨AGV-3, W22, 2⟩", "a constraint: AGV-3 may not be at W22 at time step t = 2", T.amber),
         ("cost 15", "sum of costs: total number of steps of all four paths (lower is better)", T.fg2),
         ("conflict", "the earliest moment two AGVs are on the same place (or swap places)", T.red),
@@ -228,9 +228,9 @@ def snapshot_scene(d, x0, y0, sched, tau, title, *, bad=False):
     return G.box
 
 
-@figure("08-delay", "One late AGV: clock-driven vs dependency-driven execution", DOC)
+@figure("09-delay", "One late AGV: clock-driven vs dependency-driven execution", DOC)
 def delay():
-    d = Doc("08-delay", "Clock-driven vs dependency-driven execution")
+    d = Doc("09-delay", "Clock-driven vs dependency-driven execution")
     timed = dict(timed_schedule(ex.ACTIONS))
     adg = _execute(ex.ACTIONS, ex.T1_FULL | ex.T2_FULL, _dur)
     occ_t, occ_a = j_occupancy(timed), j_occupancy(adg)
@@ -273,9 +273,9 @@ def delay():
 
 
 # --------------------------------------------------------------------------------------
-@figure("09-type2-rule", "One type-2 dependency, step by step", DOC)
+@figure("10-type2-rule", "One type-2 dependency, step by step", DOC)
 def type2_rule():
-    d = Doc("09-type2-rule", "One type-2 dependency, step by step")
+    d = Doc("10-type2-rule", "One type-2 dependency, step by step")
     a0, b0 = A["A1-0"], A["A3-0"]
     d.text(0, 0, "In the garage at t = 0", size=13, weight=600, fill=T.fg)
     G = Garage(d, 0, 18, 30, xlim=(25.6, 36.2), ylim=(15.6, 23.2))
@@ -332,9 +332,9 @@ def type2_rule():
     return d
 
 
-@figure("10-adg-full", "The full ADG of the worked example (Algorithm 1)", DOC)
+@figure("11-adg-full", "The full ADG of the worked example (Algorithm 1)", DOC)
 def adg_full():
-    d = Doc("10-adg-full", "The full ADG of the worked example")
+    d = Doc("11-adg-full", "The full ADG of the worked example")
     L = _lanes(d, 0, 0)
     for a in ex.ACTIONS:
         L.action(a)

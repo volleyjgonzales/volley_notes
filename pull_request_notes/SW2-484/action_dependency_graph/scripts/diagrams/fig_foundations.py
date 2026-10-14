@@ -158,9 +158,101 @@ def pipeline():
 
 
 # --------------------------------------------------------------------------------------
-@figure("03-facility", "The worked example: four routes through one junction", DOC)
+@figure("03-three-graphs", "Three graphs, one example", DOC)
+def three_graphs():
+    from adgdraw import Lanes
+    d = Doc("03-three-graphs", "Three graphs, one example")
+    T_MAX = max(len(p) for p in ex.PATHS.values())
+
+    def head(x, y, title, vtxt, etxt, col):
+        d.text(x, y, title, size=14, weight=600, fill=col)
+        d.rich(x, y + 24, [("vertex = ", "sans", 600, T.fg2), (vtxt, "sans", 400, T.fg2)], size=12)
+        d.rich(x, y + 42, [("edge = ", "sans", 600, T.fg2), (etxt, "sans", 400, T.fg2)], size=12)
+        return y + 66
+
+    # (a) facility graph
+    ya = head(0, 0, "(a) Facility graph", "a place", "you can drive between the two places", T.fg)
+    sa = 52
+    grid = {"B21": (0, 0), "W41": (1, 0), "W22": (2, 0), "P23": (3, 0), "W25": (2, -1), "W26": (3, -1),
+            "W18": (2, 1), "W13": (2, 2), "W8": (2, 3)}
+    gp = {v: (24 + gx * sa, ya + 24 + (gy + 1) * sa) for v, (gx, gy) in grid.items()}
+    for u, v in ex.EDGES:
+        d.line(*gp[u], *gp[v], stroke=T.border, sw=2)
+    for v, (x, y) in gp.items():
+        hl = v == J
+        d.circle(x, y, 17, fill=T.card, stroke=T.teal if hl else T.fg2, sw=1.8 if hl else 1.2)
+        d.text(x, y + 0.5, v, size=10, family="mono", weight=600, fill=T.teal if hl else T.fg, anchor="middle")
+    d.text(0, ya + 24 + 5 * sa, "no time, no AGVs: just where", size=11.5, fill=T.muted)
+    d.text(0, ya + 24 + 5 * sa + 16, "driving is possible", size=11.5, fill=T.muted)
+
+    # (b) time-expanded graph = timed plan
+    xb = 270
+    yb = head(xb, 0, "(b) Timed plan = paths in the time-expanded graph", "a place at a time step, e.g. (W22, 2)",
+              "stay put or drive to a neighbour during one step", T.fg)
+    rows = ["W26", "W25", "P23", "W22", "W41", "B21", "W18", "W13", "W8"]
+    rh, cw, lx = 32, 92, xb + 52
+    Y = {v: yb + 30 + i * rh for i, v in enumerate(rows)}
+    X = {t: lx + 20 + t * cw for t in range(T_MAX)}
+    adj = {v: {v} for v in rows}
+    for u, v in ex.EDGES:
+        adj[u].add(v); adj[v].add(u)
+    for t in range(T_MAX - 1):
+        for u in rows:
+            for v in adj[u]:
+                d.line(X[t], Y[u], X[t + 1], Y[v], stroke="#243048", sw=1, layer="under")
+    for t in range(T_MAX):
+        d.text(X[t], yb + 10, f"t={t}", size=11, family="mono", fill=T.muted, anchor="middle")
+        for v in rows:
+            d.circle(X[t], Y[v], 3.2, fill=T.faint, layer="main")
+    for v in rows:
+        d.text(lx, Y[v], v, size=11, family="mono", fill=T.teal if v == J else T.fg2, anchor="end")
+    offs = {"A1": -2, "A2": 2, "A3": -4, "A4": 4}
+    for r in ex.ROBOTS:
+        p = ex.PATHS[r]
+        pts = [(X[t], Y[p[t]] + offs[r] * 0.6) for t in range(len(p))]
+        d.polyline(pts, stroke=ex.COLOR[r], sw=2.6, radius=0, layer="edges")
+        for (x, y) in pts:
+            d.circle(x, y, 4.2, fill=ex.COLOR[r], layer="over")
+    x22, y22 = X[2], Y[J]
+    d.circle(x22, y22, 11, fill="none", stroke=T.teal, sw=1.6, dash="3 2", layer="top")
+    xr = X[T_MAX - 1] + 24
+    d.line(x22 + 11, y22 - 6, xr, Y["P23"] - 26, stroke=T.teal, sw=1, dash="3 3", layer="top")
+    label_pill(d, xr, Y["P23"] - 26, "dot (W22, 2): AGV-2 is here", color=T.teal, size=10.5, family="sans",
+               border=T.tint(T.teal, 0.6, T.bg), anchor="start")
+    d.text(xb, Y[rows[-1]] + 30, "Grey: every possible move or wait. Coloured: the four paths the MAPF solver picked.",
+           size=11.5, fill=T.muted)
+    d.text(xb, Y[rows[-1]] + 46, "A horizontal segment is a wait. Collision-free = no two paths share a dot or "
+           "cross on one edge.", size=11.5, fill=T.muted)
+
+    # (c) ADG excerpt
+    yc = Y[rows[-1]] + 90
+    yc2 = head(0, yc, "(c) Action dependency graph", "an action = one step of one AGV, e.g. A2-1 (W41 \u2192 W22)",
+               "the target may not start before the source has completed", T.fg)
+    Ln = Lanes(d, 0, yc2 + 6, ["A1", "A2", "A3"], ex.COLOR, 3, col_w=176, label_w=92, lane_h=70, axis=True)
+    acts = [ex.A[k] for k in ("A1-1", "A2-1", "A2-2", "A3-2", "A3-3")]
+    for a in acts:
+        Ln.action(a)
+    Ln.type1(ex.A["A2-1"], ex.A["A2-2"])
+    Ln.type1(ex.A["A3-2"], ex.A["A3-3"])
+    Ln.type2([(ex.A["A1-1"], ex.A["A2-1"]), (ex.A["A2-2"], ex.A["A3-2"])], style=lambda c, a: {"color": T.fg2})
+    note(d, Ln.x0 + Ln.W + 30, yc2 + 6, 330,
+         "Same example, third view. There is no time axis any more (the columns are only for reading): an arrow "
+         "just says 'first this, then that'. A1-1 \u2192 A2-1: AGV-2 may enter W22 only after AGV-1 has left it. "
+         "Chapter 02 builds the whole graph.", title="Excerpt", accent=T.teal)
+    frame(d, title="Three graphs, one example",
+          subtitle="All three are graphs: dots joined by lines. What a dot and a line stand for is what differs. "
+                   "(a) is the map, (b) is the map unrolled over time, with the plan as four paths through it, "
+                   "(c) keeps only the order in which steps must happen.",
+          badge_key="illustrative",
+          legend=[("box", ex.COLOR[r], f"AGV-{r[1:]}") for r in ex.ROBOTS] +
+                 [("ring", T.teal, "junction W22")])
+    return d
+
+
+# --------------------------------------------------------------------------------------
+@figure("04-facility", "The worked example: four routes through one junction", DOC)
 def facility():
-    d = Doc("03-facility", "Four routes through one junction")
+    d = Doc("04-facility", "Four routes through one junction")
     G = Garage(d, 0, 0, 34)
     G.base(axes=True, highlight=(J,), zones=True)
     draw_trays(G)
@@ -210,9 +302,9 @@ def facility():
 
 
 # --------------------------------------------------------------------------------------
-@figure("04-conflicts", "Vertex conflict, swap conflict and following", DOC)
+@figure("05-conflicts", "Vertex conflict, swap conflict and following", DOC)
 def conflicts_fig():
-    d = Doc("04-conflicts", "MAPF conflict types")
+    d = Doc("05-conflicts", "MAPF conflict types")
     panels = [
         ("Vertex conflict", T.red, "✗ forbidden", [("A1", "W22", "W18"), ("A3", "W13", "W18")],
          "Both AGVs are at W18 at t = 1."),
@@ -278,14 +370,14 @@ def conflicts_fig():
 
 
 # --------------------------------------------------------------------------------------
-@figure("05-filmstrip", "The plan, step by step", DOC)
+@figure("06-filmstrip", "The plan, step by step", DOC)
 def filmstrip():
-    d = Doc("05-filmstrip", "The plan, step by step")
+    d = Doc("06-filmstrip", "The plan, step by step")
     T_MAX = max(len(p) for p in ex.PATHS.values())
-    s = 22
-    xl, yl = (19.9, 40.6), (11.4, 25.2)
+    s = 29
+    xl, yl = (20.0, 40.4), (11.6, 26.0)
     fw, fh = (xl[1] - xl[0]) * s, (yl[1] - yl[0]) * s
-    gx, gy = 28, 76
+    gx, gy = 30, 80
     for t in range(T_MAX):
         col, row = t % 2, t // 2
         x0, y0 = col * (fw + gx), row * (fh + gy)
@@ -317,7 +409,7 @@ def filmstrip():
         for i, ln in enumerate(wrap(txt, fw, 11, "sans")):
             d.text(x0, y0 + 18 + fh + 16 + i * 15, ln, size=11, fill=T.fg2)
     frame(d, title="The plan, step by step",
-          subtitle="The four routes of figure 1.3 with their timing: one frame per time step t. Dashed arrows show "
+          subtitle="The four routes of figure 1.4 with their timing: one frame per time step t. Dashed arrows show "
                    "the move each AGV makes before the next frame. Read across the junction W22 (ringed): "
                    "AGV-1 uses it at t = 1, AGV-2 at t = 2, AGV-3 at t = 3, AGV-4 at t = 4.",
           badge_key="illustrative",
@@ -328,9 +420,9 @@ def filmstrip():
 
 
 # --------------------------------------------------------------------------------------
-@figure("06-plan-table", "The plan as a table, and the visit order it implies", DOC)
+@figure("07-plan-table", "The plan as a table, and the visit order it implies", DOC)
 def plan_table():
-    d = Doc("06-plan-table", "The plan as a table")
+    d = Doc("07-plan-table", "The plan as a table")
     T_MAX = max(len(p) for p in ex.PATHS.values())
     cw, rh, lw = 98, 40, 110
     d.text(0, 0, "1 · The place π_R(t) of each AGV R at each time step t", size=13.5, weight=600, fill=T.fg)
@@ -392,7 +484,7 @@ def plan_table():
          "Each arrow here, 'the earlier AGV must have left before the next one enters', becomes a type-2 edge of "
          "the action dependency graph in chapter 02.", title="Where this is going", accent=T.teal)
     frame(d, title="The plan as a table, and the visit order it implies",
-          subtitle="The same plan as figure 1.5, written as the MAPF solution Π that the algorithms work with. "
+          subtitle="The same plan as figure 1.6, written as the MAPF solution Π that the algorithms work with. "
                    "Row = one AGV's path; column = one time step. Collision-free: no column contains the same place "
                    "twice, and no two AGVs swap places between neighbouring columns.",
           badge_key="illustrative",

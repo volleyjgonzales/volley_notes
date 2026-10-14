@@ -29,9 +29,9 @@ def _panel_title(d, x, y, s, sub=None):
 
 
 # --------------------------------------------------------------------------------------
-@figure("11-wait-removal", "Why every edge touching a wait is redundant", DOC)
+@figure("12-wait-removal", "Why every edge touching a wait is redundant", DOC)
 def wait_removal():
-    d = Doc("11-wait-removal", "Why every edge touching a wait is redundant")
+    d = Doc("12-wait-removal", "Why every edge touching a wait is redundant")
     E = ex.T2_FULL
     # Theorem 2: edge INTO a wait  (L0 -> M1)
     assert (A["A1-0"], A["A3-1"]) in E and (A["A1-0"], A["A3-0"]) in E
@@ -103,9 +103,9 @@ def wait_removal():
 
 
 # --------------------------------------------------------------------------------------
-@figure("12-candidate-index", "Candidate partitioning and the binary search", DOC)
+@figure("13-candidate-index", "Candidate partitioning and the binary search", DOC)
 def candidate_index():
-    d = Doc("12-candidate-index", "Candidate partitioning and the binary search")
+    d = Doc("13-candidate-index", "Candidate partitioning and the binary search")
     S_ = ex.INDEX
     # ---- left: the whole index
     _panel_title(d, 0, 0, "1 · Build S: for every place v, the moves that START at v, sorted by t")
@@ -211,9 +211,9 @@ def candidate_index():
 
 
 # --------------------------------------------------------------------------------------
-@figure("13-why-latest", "Why the latest candidate is enough (Theorem 3)", DOC)
+@figure("14-why-latest", "Why the latest candidate is enough (Theorem 3)", DOC)
 def why_latest():
-    d = Doc("13-why-latest", "Why the latest candidate is enough")
+    d = Doc("14-why-latest", "Why the latest candidate is enough")
     # chain at vertex C: L1 -> X1 -> X2 -> M2 -> M3 -> N3
     chain = [A["A1-1"], A["A2-1"], A["A2-2"], A["A3-2"], A["A3-3"], A["A4-3"]]
     T1 = ex.T1
@@ -293,9 +293,9 @@ def why_latest():
 
 
 # --------------------------------------------------------------------------------------
-@figure("14-adg-scp", "The ADG after both improvements", DOC)
+@figure("15-adg-scp", "The ADG after both improvements", DOC)
 def adg_scp():
-    d = Doc("14-adg-scp", "The ADG after both improvements")
+    d = Doc("15-adg-scp", "The ADG after both improvements")
     L = Lanes(d, 0, 0, ex.ROBOTS, ex.COLOR, max(a.t for a in ex.ACTIONS))
     for a in ex.ACTIONS:
         L.action(a, style="ghost" if a.wait else "normal")

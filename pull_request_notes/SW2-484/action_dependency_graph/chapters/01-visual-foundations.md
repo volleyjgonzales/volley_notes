@@ -65,9 +65,15 @@ Read the example lines in the cards from left to right, all about AGV-3:
 
 ## 3. Three graphs that are easy to confuse
 
-The single most common mistake when learning this material is to mix up three different graphs.
+The single most common mistake when learning this material is to mix up three different graphs. Yes, all three are graphs, including the timed plan. It lives in the **time-expanded graph**: copy the facility graph once per time step, so every vertex is a pair (place, step). From (W18, 1) there is an edge to (W18, 2), meaning *wait*, and one to (W22, 2), meaning *drive to a neighbour*, each taking exactly one step. A MAPF plan is then **one path per AGV through this graph**, and "collision-free" means no two paths use the same vertex (same place at the same step) or cross the same edge in opposite directions (a swap).
 
-| | Facility graph | Timed plan | Action Dependency Graph |
+![Three graphs](../figures/03-three-graphs.svg)
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#03-three-graphs) · [standalone SVG](../figures/03-three-graphs.svg)</sub>
+
+*Figure 1.3 — The same example seen as three graphs. (a) Facility graph: places and the roads between them. (b) Time-expanded graph: each place repeated for every step; grey arrows are all possible moves and waits, coloured paths are the plan the solver picked. (c) Action Dependency Graph: the plan's steps as boxes, arrows say "must finish before". Only (b) has a clock.*
+
+
+| | Facility graph | Timed plan (time-expanded graph) | Action Dependency Graph |
 |---|---|---|---|
 | **Vertex** | a place: `W18`, `W22`, `W26`, … | a place *at a time*: (W22, 2) | an action: `A3-2` = "AGV-3 drives W18 → W22 in step 2" |
 | **Edge** | an AGV *may drive* between two places | an AGV *may move or wait* from one step to the next | the target action *must not start* before the source action is done |
@@ -75,7 +81,7 @@ The single most common mistake when learning this material is to mix up three di
 | **Question it answers** | Where can AGVs go? | Where is each AGV at each step? | In what order must things happen? |
 | **Has a clock?** | no | yes, discrete steps $t = 0, 1, 2, \dots$ | **no** — only "before / after" |
 
-A line `W18 — W22` in the facility graph says "you can drive there". An arrow `A1-1 → A2-1` in the ADG says "AGV-2 may not start driving into W22 until AGV-1 has finished leaving W22". They are different kinds of statement.
+A line `W18 — W22` in the facility graph says "you can drive there". An arrow `A1-1 → A2-1` in the ADG says "AGV-2 may not start driving into W22 until AGV-1 has finished leaving W22". A path through (W18, 1) → (W22, 2) in the time-expanded graph says "this AGV *is* at W22 at step 2". Three different kinds of statement.
 
 ## 4. The facility graph of the worked example
 
@@ -87,11 +93,11 @@ Formally, the garage is a graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$. $\ma
 
 These are 9 of the YAML's 28 nodes and 8 of its 37 edges. The other nodes and edges exist, but no route of the example uses them.
 
-![Four routes through one junction](../figures/03-facility.svg)
+![Four routes through one junction](../figures/04-facility.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#03-facility) · [standalone SVG](../figures/03-facility.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#04-facility) · [standalone SVG](../figures/04-facility.svg)</sub>
 
-*Figure 1.3 — The four routes drawn in the garage, and the same nine places as a bare graph (top right). AGV-1, AGV-3 and AGV-4 drive north up the aisle in a convoy; AGV-1 and AGV-3 continue to the top row, AGV-4 turns west at W22 towards the bay. AGV-2 carries the car east from the bay, across the aisle, into stall P23. The routes panel lists each AGV's place at every time step.*
+*Figure 1.4 — The four routes drawn in the garage, and the same nine places as a bare graph (top right). AGV-1, AGV-3 and AGV-4 drive north up the aisle in a convoy; AGV-1 and AGV-3 continue to the top row, AGV-4 turns west at W22 towards the bay. AGV-2 carries the car east from the bay, across the aisle, into stall P23. The routes panel lists each AGV's place at every time step.*
 
 Three things to notice:
 
@@ -120,11 +126,11 @@ A MAPF solver must avoid two kinds of conflict between any two AGVs $i \ne j$:
 
 A third pattern is normally **allowed**: **following**, where one AGV enters a place in the same step in which another leaves it.
 
-![Conflict types](../figures/04-conflicts.svg)
+![Conflict types](../figures/05-conflicts.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#04-conflicts) · [standalone SVG](../figures/04-conflicts.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#05-conflicts) · [standalone SVG](../figures/05-conflicts.svg)</sub>
 
-*Figure 1.4 — Two AGVs, AGV-1 and AGV-3, on three waypoints of the aisle at two consecutive steps. Left: both end up on W18 (vertex conflict). Middle: they swap W18 and W22 (swap conflict). Right: AGV-3 moves into W18 while AGV-1 moves out (following) — legal in the plan, but only safe if AGV-1 really leaves before AGV-3 really arrives.*
+*Figure 1.5 — Two AGVs, AGV-1 and AGV-3, on three waypoints of the aisle at two consecutive steps. Left: both end up on W18 (vertex conflict). Middle: they swap W18 and W22 (swap conflict). Right: AGV-3 moves into W18 while AGV-1 moves out (following) — legal in the plan, but only safe if AGV-1 really leaves before AGV-3 really arrives.*
 
 Following is worth a second look because it is exactly where timed execution breaks. In the plan, AGV-1 leaves W18 and AGV-3 arrives at W18 "at the same moment". On the floor, if AGV-1 starts a second late, AGV-3 drives into W18 while AGV-1 is still there. Chapter 02 shows this happening in the example and how the ADG prevents it.
 
@@ -134,30 +140,30 @@ The paper encodes the "no conflict" requirement as its **Definition 2**: in a va
 
 Here is the plan used in the rest of the kit. (Chapter 02 shows how Conflict-Based Search finds it.) First as a filmstrip, so you can see it move:
 
-![The plan step by step](../figures/05-filmstrip.svg)
+![The plan step by step](../figures/06-filmstrip.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#05-filmstrip) · [standalone SVG](../figures/05-filmstrip.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#06-filmstrip) · [standalone SVG](../figures/06-filmstrip.svg)</sub>
 
-*Figure 1.5 — One frame per time step. Each AGV is drawn where the plan puts it; the dashed arrow shows the move it makes before the next frame; "waits" marks an AGV that stands still for that step. The label at the top right of each frame says who is at the junction W22.*
+*Figure 1.6 — One frame per time step. Each AGV is drawn where the plan puts it; the dashed arrow shows the move it makes before the next frame; "waits" marks an AGV that stands still for that step. The label at the top right of each frame says who is at the junction W22.*
 
 Then as the table the algorithms actually work with:
 
-![Plan table and visit order](../figures/06-plan-table.svg)
+![Plan table and visit order](../figures/07-plan-table.svg)
 
-<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#06-plan-table) · [standalone SVG](../figures/06-plan-table.svg)</sub>
+<sub>Pan / zoom: [interactive viewer](../figures/viewer.html#07-plan-table) · [standalone SVG](../figures/07-plan-table.svg)</sub>
 
-*Figure 1.6 — Top: one row per AGV, one column per time step; the cell is $\pi_R(t)$. Teal cells are visits to the junction, dashed amber cells are waits, grey cells mean "already at goal". Bottom: the same table read per place — for each shared place, which AGV uses it, in which order.*
+*Figure 1.7 — Top: one row per AGV, one column per time step; the cell is $\pi_R(t)$. Teal cells are visits to the junction, dashed amber cells are waits, grey cells mean "already at goal". Bottom: the same table read per place — for each shared place, which AGV uses it, in which order.*
 
 ### 6.1 Read the plan AGV by AGV
 
-- **L** (`W18 W22 W25 W26`) starts closest to the junction and simply drives through. It is first at W22 (step 1) and reaches W26 at step 3.
-- **X** (`B21 W41 W22 P23`) leaves the bay with the car and reaches W22 at step 2, the step after AGV-1 leaves it.
-- **M** (`W13 W18 W18 W22 W25`) would like to be at W22 at step 2, but AGV-2 is there. So AGV-3 **waits at W18 for one step** and enters W22 at step 3.
-- **N** (`W8 W13 W13 W18 W22 W41`) is stuck behind AGV-3: W18 is occupied by AGV-3 at step 2, so AGV-4 **waits at W13 for one step**, then follows AGV-3 through W18 and W22 and turns west into W41, which AGV-2 left long ago.
+- **AGV-1** (`W18 W22 W25 W26`) starts closest to the junction and simply drives through. It is first at W22 (step 1) and reaches W26 at step 3.
+- **AGV-2** (`B21 W41 W22 P23`) leaves the bay with the car and reaches W22 at step 2, the step after AGV-1 leaves it.
+- **AGV-3** (`W13 W18 W18 W22 W25`) would like to be at W22 at step 2, but AGV-2 is there. So AGV-3 **waits at W18 for one step** and enters W22 at step 3.
+- **AGV-4** (`W8 W13 W13 W18 W22 W41`) is stuck behind AGV-3: W18 is occupied by AGV-3 at step 2, so AGV-4 **waits at W13 for one step**, then follows AGV-3 through W18 and W22 and turns west into W41, which AGV-2 left long ago.
 
 ### 6.2 Check it yourself
 
-You can verify a plan by hand with two scans of figure 1.6.
+You can verify a plan by hand with two scans of figure 1.7.
 
 1. **Columns (vertex conflicts).** In each column all entries must be different (count goal cells too — a parked AGV still occupies its place). Column $t = 2$ reads `W25, W22, W18, W13`: all different. Do the same for the other columns.
 2. **Neighbouring columns (swap conflicts).** For every pair of AGVs, check that they never trade places between column $t$ and $t + 1$. Here nobody ever drives *towards* another AGV on the same edge, so there is no swap.
@@ -166,7 +172,7 @@ This is exactly what `conflicts()` in `scripts/adg/adg.py` does, and it returns 
 
 ### 6.3 Read the table per place: visit order
 
-The lower half of figure 1.6 regroups the same information by place. For the junction **W22** the order is AGV-1 (step 1) → AGV-2 (step 2) → AGV-3 (step 3) → AGV-4 (step 4). For **W18** it is AGV-1 → AGV-3 → AGV-4. Each arrow there means *the earlier AGV must have left before the next one arrives*. Hold on to that sentence: in chapter 02 every one of those arrows becomes a **type-2 dependency** of the ADG.
+The lower half of figure 1.7 regroups the same information by place. For the junction **W22** the order is AGV-1 (step 1) → AGV-2 (step 2) → AGV-3 (step 3) → AGV-4 (step 4). For **W18** it is AGV-1 → AGV-3 → AGV-4. Each arrow there means *the earlier AGV must have left before the next one arrives*. Hold on to that sentence: in chapter 02 every one of those arrows becomes a **type-2 dependency** of the ADG.
 
 ## 7. From paths to actions
 
