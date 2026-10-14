@@ -1175,3 +1175,137 @@ def job_charge_payload():
                ("Stop-charging events", "RETRIEVE and REPARK add the opposite transition (CHARGING -> "
                 "READY_TO_CHARGE) without rule A, so it is not chained to this one by entity.", T.border)],
         bw=300)
+
+
+# ======================================================================================
+# 38 — reads / mutates / returns for one job method
+# ======================================================================================
+
+def _panel(d, x, y, w, title, items, col, *, sub=None, size=11):
+    """items: list of (mono_text, sans_note or None)."""
+    pad = 12
+    rows = []
+    for code, nt in items:
+        cl = wrap(code, w - 2 * pad, size, "mono")
+        nl = wrap(nt, w - 2 * pad - 10, 10.5, "sans") if nt else []
+        rows.append((cl, nl))
+    sl = wrap(sub, w - 2 * pad, 10.5, "sans") if sub else []
+    h = pad + 24 + len(sl) * 15 + sum(len(c) * 16 + len(n) * 14 + 8 for c, n in rows) + pad - 4
+    d.rect(x, y, w, h, rx=10, fill=T.tint(col, 0.07, T.bg), stroke=col, sw=1.5)
+    d.text(x + pad, y + pad + 6, title, size=12.5, weight=600, fill=col)
+    yy = y + pad + 26
+    for ln in sl:
+        d.text(x + pad, yy, ln, size=10.5, fill=T.muted)
+        yy += 15
+    for cl, nl in rows:
+        for ln in cl:
+            d.text(x + pad, yy, ln, size=size, family="mono", fill=T.fg)
+            yy += 16
+        for ln in nl:
+            d.text(x + pad + 10, yy - 2, ln, size=10.5, fill=T.fg2)
+            yy += 14
+        yy += 8
+    return BBox(x, y, x + w, y + h)
+
+
+@figure("38_job_method_dataflow", "What a job method reads, changes and returns", DOC1)
+def job_method_dataflow():
+    d = Doc("38_job_method_dataflow", "What PlanRetrieveJob reads, changes and returns",
+            "Read-only inputs, the context it changes in place, local scratch state, the return value, and the "
+            "external side effects some job methods have.")
+    MUT, RO, OUT, LOC, EXT = T.amber, T.sky, T.green, T.fg2, T.red
+    _sig = [("std::tuple<bool, std::string, bool>", "// RETURNED: {success, message, retain_job}"),
+            ("Scheduler::PlanRetrieveJob(ScheduleContextSPtr ctx,", "// the shared_ptr is copied; *ctx is shared and CHANGED"),
+            ("                           const GuidMsg& payload_id,", "// read-only"),
+            ("                           size_t job_index) const;", "// read-only copy; 'const' = members of *this read-only")]
+    sig = code_panel(d, 0, 0, W, [a.ljust(58) + b for a, b in _sig
+], title="include/scheduler/scheduler.hpp", size=11.5)
+    y0 = sig.y1 + 34
+    # ---- left: read-only ----
+    lw = 330
+    ro = _panel(d, 0, y0, lw, "Read-only inputs", [
+        ("this->layout_", "bay prioritisation, inbound heading, resource windows"),
+        ("this->gg_  (and table_ via filters)", "pose -> graph vertex"),
+        ("payload_id, job_index", "the job's fields, by const& / by value"),
+        ("ctx->initial_state", "copied, never changed"),
+        ("ctx->disabledness_filters[id]", "read, but operator[] on a std::unordered_map inserts a default entry "
+                                          "if id is missing"),
+    ], RO)
+    # ---- centre: the function and its local scratch ----
+    cx, cw = lw + 50, 330
+    d.rect(cx, y0, cw, 228, rx=12, fill=T.card, stroke=T.fg2, sw=1.6)
+    d.text(cx + cw / 2, y0 + 22, "PlanRetrieveJob(...)", size=13.5, family="mono", weight=700, fill=T.fg,
+           anchor="middle")
+    d.text(cx + cw / 2, y0 + 42, "plus nested PlanReparkTrayJob calls", size=11, fill=T.muted, anchor="middle")
+    d.rect(cx + 16, y0 + 62, cw - 32, 150, rx=8, fill=T.bg_deep, stroke=LOC, sw=1, dash="4 3")
+    d.text(cx + 28, y0 + 80, "local scratch (gone at return)", size=11, weight=600, fill=LOC)
+    for k, ln in enumerate(["working_state = ctx->initial_state;", "ctx->events.Apply(working_state);",
+                            "payload_opt, tray, bay_opt, bay_pose,", "dest_pose, cmd ...",
+                            "bay_opt->state = READY_TO_RETRIEVE;", "  // edits the local copy only"]):
+        d.text(cx + 28, y0 + 102 + k * 17, ln, size=10.5, family="mono", fill=T.fg2 if k < 5 else T.faint)
+    fb = BBox(cx, y0, cx + cw, y0 + 228)
+    # ---- right: returned ----
+    rx = cx + cw + 50
+    rw = W - rx
+    out = _panel(d, rx, y0, rw, "Returned", [
+        ("{true, \"\", false}", "success; Plan() then appends the job to scheduled_jobs"),
+        ("{false, msg, retain_job}", "failure; retain_job = true asks Dispatch to keep the job (no bay free, "
+                                     "VECS busy)"),
+    ], OUT, sub="the only output visible in the signature")
+    connect(d, [(ro.x1, y0 + 60), (fb.x0, y0 + 60)], kind="flow", color=RO, size=9, sw=2)
+    connect(d, [(fb.x1, y0 + 60), (out.x0, y0 + 60)], kind="flow", color=OUT, size=9, sw=2)
+    # ---- bottom: mutated in place ----
+    my = max(ro.y1, fb.y1, out.y1) + 56
+    connect(d, [(fb.cx - 30, my), (fb.cx - 30, fb.y1)], kind="flow", color=MUT, size=9, sw=2)
+    connect(d, [(fb.cx + 30, fb.y1), (fb.cx + 30, my)], kind="flow", color=MUT, size=9, sw=2)
+    label_pill(d, fb.cx + 40, (fb.y1 + my) / 2, "read and written through ctx", color=MUT, size=10.5,
+               anchor="start", bg=T.bg)
+    mh = 236
+    d.rect(0, my, W, mh, rx=12, fill=T.tint(MUT, 0.06, T.bg), stroke=MUT, sw=1.6)
+    d.text(14, my + 20, "Changed in place through ctx: the real output, not visible in the return type", size=12.5,
+           weight=600, fill=MUT)
+    hx = [14, 250, 560]
+    for x, h in zip(hx, ["member of *ctx", "before the call (first job)", "after the call"]):
+        d.text(x, my + 46, h, size=10.5, family="mono", weight=600, fill=T.muted)
+    rows = [("ctx->events", "{ }  (no events, no edges)",
+             ["+4 events, all job_index 0:", "  e1 B21 TO_RETRIEVE   e2 T21 -> ?", "  e3 T17 -> B21        e4 B21 PROCESS_RETRIEVE",
+              "+5 edges: e1->e2, e2->e3, e1->e3, e3->e4, e1->e4"]),
+            ("ctx->last_entity_event", "{ }",
+             ["{ B21 -> e4,  T21 -> e2,  T17 -> e3 }", "(used by rule A in later jobs)"]),
+            ("ctx->disabledness_filters", "one entry per collision id", ["unchanged, unless operator[] inserted a key"])]
+    yy = my + 68
+    for name, before, after in rows:
+        d.text(hx[0], yy, name, size=11.5, family="mono", weight=700, fill=T.fg)
+        d.text(hx[1], yy, before, size=11, family="mono", fill=T.muted)
+        for k, ln in enumerate(after):
+            d.text(hx[2], yy + k * 17, ln, size=11, family="mono", fill=T.fg)
+        yy += 17 * max(1, len(after)) + 10
+    d.text(14, my + mh - 16, "Not touched by job methods: ctx->scheduled_jobs (Plan() appends after success), "
+                             "ctx->first_tray_event (tray assignment), ctx->initial_state.", size=11, fill=T.fg2)
+    # ---- external side effects + pure alternative ----
+    ey = my + mh + 26
+    ext = _panel(d, 0, ey, 420, "Side effects outside the plan (other job methods)", [
+        ("PlanInsertJob -> reset_bay_state_request_fn_(bay, READY_TO_INSERT)",
+         "an async ROS request to Dispatch (TransitionBayToInsert), sent during expansion, even if a later "
+         "stage fails the plan"),
+        ("Plan() on INSERT failure -> clean_garage_request_fn_()", "an async Trigger request to Dispatch"),
+    ], EXT)
+    pure = code_panel(d, 450, ey, W - 450, [
+        "// sketch: same work, everything visible in the signature",
+        "struct JobPlan { std::vector<ScheduleEventSPtr> events;",
+        "                 std::vector<Edge> edges;          // rules A, B, C",
+        "                 std::vector<FollowUp> requests; }; // instead of callbacks",
+        "std::expected<JobPlan, JobFailure>",
+        "PlanRetrieveJob(const PlanView& view,   // working_state, DAG, last events: const&",
+        "                const RetrieveJob& job, size_t job_index) const;",
+        "// Plan(): if(plan) Commit(*plan_ctx, *plan) else FailJob(...)",
+    ], title="A pure alternative (not in the code)", size=10.5)
+    frame(d, title="What PlanRetrieveJob reads, changes and returns",
+          subtitle="The return type only says whether the job worked. The events, the edges and the entity "
+                   "bookkeeping are written into the shared ScheduleContext as the method runs, including from "
+                   "nested job-method calls. The same pattern holds for every Plan<Type>Job.",
+          badge_key="as-built",
+          legend=[("box", RO, "read-only input"), ("box", MUT, "changed in place (through ctx)"),
+                  ("box", OUT, "returned"), ("dashbox", LOC, "local copy, discarded"),
+                  ("box", EXT, "leaves the process")])
+    return d
