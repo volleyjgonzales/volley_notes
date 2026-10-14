@@ -106,7 +106,7 @@ def assign_tray_id():
                ("Not reserved", "Nothing marks T23 as taken. Later moves see it in B21 because DoTrayAssignments "
                 "applies each move to working_state before the next event. A TODO in the code suggests choosing a "
                 "tray that is a future blocker anyway.", T.amber),
-               ("Same helper, two callers", "PlanReadyForInsertJob calls it early (best effort, section 12.13); "
+               ("Same helper, two callers", "PlanReadyForInsertJob calls it early (best effort, section 13.13); "
                 "DoTrayAssignments calls it for every move still blank, with the full picture of all jobs.",
                 T.border)],
         legend_override=LEGEND, bw=330)
@@ -213,6 +213,6 @@ def assign_dest():
                ("Two copies of the garage", "Steps 4 to 7 work on ResolveBlockingTrays' own copy. Step 9 applies "
                 "the same moves again to the caller's working_state, which later events will see.", T.sky),
                ("Waypoint stash", "If no parking spot is reachable at all, tier 2 may return a waypoint (T9 on W25 "
-                "is such a leftover). A later CLEAN_GARAGE job puts stashed trays back (section 12.16).",
+                "is such a leftover). A later CLEAN_GARAGE job puts stashed trays back (section 13.16).",
                 T.amber)],
         legend_override=LEGEND, bw=330)

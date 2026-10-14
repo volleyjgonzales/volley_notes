@@ -27,7 +27,7 @@ The package has **72 active `TEST` cases** in four files (a 73rd, `DoubleRetriev
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#35_test_entry_points) · [standalone SVG](figures/35_test_entry_points.svg)</sub>
 
-**Figure 1 — Test entry points.** Columns follow the `Plan()` pipeline from doc 01, section 9. A card's colour stripe shows its file; "+n" means the test also calls n later stages directly.
+**Figure 1 — Test entry points.** Columns follow the `Plan()` pipeline from doc 01, section 10. A card's colour stripe shows its file; "+n" means the test also calls n later stages directly.
 
 | File | Active tests | Style |
 |---|---|---|

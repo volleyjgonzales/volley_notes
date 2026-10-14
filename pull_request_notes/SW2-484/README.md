@@ -4,7 +4,7 @@ A study pack for an engineer joining the scheduler team. It explains how the `sc
 
 | Read | For | Time |
 |---|---|---|
-| [01 — Software background](01-software-background.md) | How the software works: node and interfaces, garage model, `Plan()` step by step, events and the DAG, job expansion (with a 2D garage example for every job type), tray and AGV assignment, motion planning, bays. 47 figures, annotated code snippets, a call trace with file:line for every function, a design FAQ (DAGs vs Open-RMF, parallelism, why the logic is shaped this way), checkpoint questions | 4–5 h in three passes |
+| [01 — Software background](01-software-background.md) | How the software works: node and interfaces, garage model, `Plan()` step by step, events and the DAG, job expansion (with a 2D garage example for every job type), tray and AGV assignment, motion planning, bays, plus a full section on `ScheduleContext`. 49 figures, annotated code snippets, a call trace with file:line for every function, a design FAQ (DAGs vs Open-RMF, parallelism, why the logic is shaped this way), checkpoint questions | 4–5 h in three passes |
 | [02 — Issue and proposed design](02-issue-and-proposal.md) | What the two assignment algorithms are coupled to today (generated matrix); the proposed `tray_assignment`, `agv_assignment` and `common` subfolders, which functions become pure, `stdx::Expected` errors and a returned result instead of editing the context; staged plan and risks | 1 h |
 | [03 — Verification and benchmarks](03-verification-plan.md) | What the 72 existing tests cover, gaps, the parity comparison and benchmark method | 30 min |
 
@@ -58,6 +58,7 @@ python3 scripts/add_toc.py                 # refresh the tables of contents afte
 | `fig_concepts.py` | 51 Layout vs GarageGraph, 52 CollisionTable, 53 topological ordering, 54 partial order and parallel execution |
 | `fig_trayassign.py` | 55 `AssignTrayIdForEmptyMove`, 56 `AssignDestForUntargetedMove` (tray-assignment helpers on a 2D garage) |
 | `fig_proposal.py` | 58 tray-assignment data flow today vs proposed, 59 tray call tree today (UML), 60 proposed `tray_assignment` module (UML) (doc 02) |
+| `fig_context.py` | 61 `ScheduleContext` anatomy, 62 `ScheduleContext` lifecycle across the `Plan()` stages (doc 01) |
 | `svgkit.py`, `components.py`, `facility.py`, `theme.py` | SVG engine, shared components (UML boxes, event boxes, code panels, legends), YAML map renderer, colour tokens |
 | `registry.py`, `build.py`, `viewer.py` | Figure registry, build entry point, offline pan/zoom gallery (figure order and numbers are read from the documents) |
 

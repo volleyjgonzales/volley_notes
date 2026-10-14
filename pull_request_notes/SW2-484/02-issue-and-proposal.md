@@ -1,6 +1,6 @@
 # 02 — Scheduler Core Refactor: problem statement and proposal
 
-This document explains *what* the refactor changes and *why*, using the code in `sources/repomix-scheduler.xml` as evidence. It assumes you have read sections 7–9 and 14–15 of [01 — Software background](01-software-background.md). Code snippets follow the same conventions as doc 01: every snippet says which class it lives in, what `this` is, and the type of each variable that is not obvious. Snippets marked **proposed** do not exist in the repository.
+This document explains *what* the refactor changes and *why*, using the code in `sources/repomix-scheduler.xml` as evidence. It assumes you have read sections 6, 8–10 and 15–16 of [01 — Software background](01-software-background.md). Code snippets follow the same conventions as doc 01: every snippet says which class it lives in, what `this` is, and the type of each variable that is not obvious. Snippets marked **proposed** do not exist in the repository.
 
 | Name in snippets | Type | What it is |
 |---|---|---|
@@ -430,7 +430,7 @@ Why make them pure:
   - only the main loop erases the tray from `blocking_tray_set` → stays in the caller;
   - only `AssignDestForUntargetedMove` checks the result of `Apply`. The main loop *cannot* yet: on the fallback-1 path the advance move was already applied before it reaches this block and is applied a second time here (the `TODO(Gunther)` at `:2933` says so). Checking would make that path fail → a parameter for now; fix the double apply as its own reviewed change.
 
-  The root-move tails differ too: the main loop adds `freeing_moves` edges for the root move's destination and source and registers its source (`:3024`–`:3050`); `AssignDestForUntargetedMove` does neither (doc 01, section 14). `CommitRootMove` keeps both behaviours behind a flag until someone decides whether the second is a bug.
+  The root-move tails differ too: the main loop adds `freeing_moves` edges for the root move's destination and source and registers its source (`:3024`–`:3050`); `AssignDestForUntargetedMove` does neither (doc 01, section 15). `CommitRootMove` keeps both behaviours behind a flag until someone decides whether the second is a bug.
 
 **What stays mutable, and why that is fine.** The loop needs a garage state that changes after every move, an occupancy record and a per-tray “last move” map. Those live in `Pass`, an object created inside `Solve` and destroyed when it returns. Nothing outside can see it. Seen from the caller, `Solve` is still a pure function: same `Input`, same `Result`. This is the usual pattern of “local mutation, pure interface”: rewriting the loop to thread an immutable state through every step would add copying and noise without making the code any safer.
 

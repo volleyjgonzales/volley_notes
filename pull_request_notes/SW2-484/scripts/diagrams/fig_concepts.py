@@ -417,7 +417,7 @@ def topological_ordering():
     edge("e", "f")
     edge("a", "c", via=(-30, 38, -40))
     edge("a", "d", via=(30, 22, 0))
-    d.text(pos["e"].x0, pos["e"].y1 + 22, "Job 0 is the retrieve from section 12; jobs 1 and 2 repark T19 twice "
+    d.text(pos["e"].x0, pos["e"].y1 + 22, "Job 0 is the retrieve from section 13; jobs 1 and 2 repark T19 twice "
            "(rule A: e -> f). Nothing links job 0 to jobs 1 and 2.", size=11, fill=T.muted)
     dag_bottom = pos["e"].y1 + 34
 
@@ -462,7 +462,7 @@ def topological_ordering():
     label_pill(d, (p.x1 + q.x0) / 2, p.y1 + 16, "added by mistake", color=T.red, size=10)
     bottom = max(yc, q.y1 + 34)
     cp = code_panel(d, 0, bottom + 10, W, [
-        "// planner_core, as called from the scheduler (see section 11's table)",
+        "// planner_core, as called from the scheduler (see section 12's table)",
         "std::optional<VertexVec> order = ctx->events.GetTopologicalOrdering();  // VertexVec = std::vector<Vertex>",
         "if(!order.has_value()) return {false, \"Failed to get total ordering\"};     // the DAG has a cycle",
         "for(Vertex v : order.value()) { auto event = ctx->events.GetEventFromVertex(v).value(); ... }",

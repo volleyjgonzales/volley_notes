@@ -195,7 +195,7 @@ def tray_tree_before():
           badge_key="as-built",
           legend=[("box", WRITE, "writes ScheduleContext"), ("box", ARG, "writes an argument / local"),
                   ("box", PURE, "writes nothing"), ("dep", WRITE, "«writes»")],
-          footnote="Signatures abridged. Line numbers and full parameter lists: doc 01, sections 14 and 22.")
+          footnote="Signatures abridged. Line numbers and full parameter lists: doc 01, sections 15 and 23.")
     return d
 
 

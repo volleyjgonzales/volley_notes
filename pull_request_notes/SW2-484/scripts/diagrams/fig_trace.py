@@ -125,7 +125,7 @@ PART1 = [
     dict(depth=0, kind="ros", sig="[this](PlanSrv::Request::SharedPtr request, PlanSrv::Response::SharedPtr "
          "response)", loc="scheduler_ros.cpp:38", note="the /plan service callback"),
     dict(depth=1, kind="sched", sig="PlanResponseMsg Scheduler::Plan(const PlanRequestMsg& request_data, const "
-         "rclcpp::Time& now) const", loc=f"{S}:404", call="scheduler_ros.cpp:39", note="section 9"),
+         "rclcpp::Time& now) const", loc=f"{S}:404", call="scheduler_ros.cpp:39", note="section 10"),
     dict(depth=2, kind="utils", sig="std::pair<std::optional<volley::DiscreteGarageState>, std::string> "
          "ValidateBaseState(const DiscreteGarageStateMsg& state, const volley::Layout& layout)",
          loc="utils.cpp:12", call=f"{S}:412", note="request.base_state -> DiscreteGarageState; failure returns "
@@ -134,21 +134,21 @@ PART1 = [
          "SetVecsDisabled(...)", loc="planner_core", call=f"{S}:427-438", note="entities used by base_schedule"),
     dict(depth=2, kind="ctx", sig="ScheduleContext::ScheduleContext(const GuidMsg& reqid, volley::DiscreteGarageState "
          "initial_state, const rclcpp::Time& now)", loc=f"{H}:59", call=f"{S}:443 (make_shared)",
-         note="plan_ctx: the per-call context"),
+         note="plan_ctx: the per-call context (section 6)"),
     dict(depth=2, kind="ext", sig="GetDisabledEntitiesFilters(gg_, plan_ctx->initial_state, table_)",
          loc="other package", call=f"{S}:447", note="-> plan_ctx->disabledness_filters"),
     dict(depth=2, loop="for(const SchedulerJobMsg& job : request_data.pending_jobs)   switch(job.type)   "
-         f"{S}:454   (section 12)"),
+         f"{S}:454   (section 13)"),
     dict(depth=3, kind="sched", sig="std::tuple<bool, std::string, bool> Scheduler::PlanRetrieveJob("
          "ScheduleContextSPtr ctx, const GuidMsg& payload_id, size_t job_index) const", loc=f"{S}:783",
-         call=f"{S}:468", note="section 12.11"),
+         call=f"{S}:468", note="section 13.11"),
     dict(depth=4, kind="ext", sig="ctx->events.Apply(working_state)", loc="planner_core", call=f"{S}:786",
          note="replay the DAG on a copy of initial_state"),
     dict(depth=4, kind="ctx", sig="void ScheduleContext::UpdateLastEntityEvent(const GarageEntityIdMsg& entity_id, "
          "ScheduleEventSPtr new_event)", loc=f"{H}:72", call=f"{S}:893", note="rule A for TRANSITION_TO_RETRIEVE"),
     dict(depth=4, kind="sched", sig="BoolStringPair Scheduler::PlanReparkTrayJob(ScheduleContextSPtr ctx, "
          "std::optional<uint16_t> tray_id, size_t job_index, bool allow_recip, std::optional<GaragePoseMsg> dest) "
-         "const   x2", loc=f"{S}:937", call=f"{S}:904 (tray out), :918 (car in)", note="section 12.7"),
+         "const   x2", loc=f"{S}:937", call=f"{S}:904 (tray out), :918 (car in)", note="section 13.7"),
     dict(depth=5, kind="sched", sig="void Scheduler::UsePreferredHeading(GaragePoseMsg& dest, const "
          "std::optional<DiscretePayloadStateMsg>& payload_opt, const std::optional<DiscreteTrayStateMsg>& tray_opt) "
          "const", loc=f"{S}:1771", call=f"{S}:1058", note="-> UseEvChargeHeading :1781, UseRetrievalHeading :1805"),
@@ -159,18 +159,18 @@ PART1 = [
     dict(depth=3, kind="ctx", sig="void ScheduleContext::PushBackScheduledJob(const SchedulerJobMsg& job)",
          loc=f"{H}:65", call=f"{S}:473", note="success: the job takes its job_index"),
     dict(depth=2, kind="sched", sig="BoolStringPair Scheduler::DoTrayAssignments(ScheduleContextSPtr ctx) const",
-         loc=f"{S}:2533", call=f"{S}:580", note="section 14; expanded in the next figure"),
+         loc=f"{S}:2533", call=f"{S}:580", note="section 15; expanded in the next figure"),
     dict(depth=2, kind="sched", sig="BoolStringPair Scheduler::DoAgvAssignments(ScheduleContextSPtr ctx) const",
-         loc=f"{S}:3475", call=f"{S}:594", note="section 15; expanded in the next figure"),
+         loc=f"{S}:3475", call=f"{S}:594", note="section 16; expanded in the next figure"),
     dict(depth=2, kind="ext", sig="plan_ctx->events.Reduce()", loc="planner_core", call=f"{S}:608",
-         note="drop redundant edges (section 16)"),
+         note="drop redundant edges (section 17)"),
     dict(depth=2, kind="sched", sig="BoolStringPair Scheduler::SanityCheckEvents(ScheduleContextSPtr ctx) const",
-         loc=f"{S}:3841", call=f"{S}:617", note="section 16"),
+         loc=f"{S}:3841", call=f"{S}:617", note="section 17"),
     dict(depth=3, kind="sched", sig="BoolStringPair Scheduler::IsMovePossible(ScheduleContextSPtr ctx, const "
          "volley::DiscreteGarageState& working_state, const volley::CollisionEntityId_t& collision_id, ...) const",
          loc=f"{S}:4131", call=f"{S}:3886, :3905"),
     dict(depth=2, kind="sched", sig="std::optional<volley::ContinuousState> Scheduler::PlanMotions("
-         "ScheduleContextSPtr ctx) const", loc=f"{S}:4005", call=f"{S}:631", note="section 17"),
+         "ScheduleContextSPtr ctx) const", loc=f"{S}:4005", call=f"{S}:631", note="section 18"),
     dict(depth=3, kind="ext", sig="GetEdgeDurations(gg_, cost_model_); GetAllPairsMinCost(gg_, edge_durations, ...)",
          loc="motion_planner", call=f"{S}:4017, :4020"),
     dict(depth=3, kind="ext", sig="volley::Chugg motion_planner(gg_, table_, ctx->events, ...); "
@@ -178,7 +178,7 @@ PART1 = [
          note="CHUGG: timed trajectories for every entity"),
     dict(depth=2, kind="sched", sig="std::pair<std::optional<std::vector<ActionNodeMsg>>, std::string> "
          "Scheduler::ResponseFromTrajectories(ScheduleContextSPtr ctx, const volley::ContinuousState& final_state) "
-         "const", loc=f"{S}:4069", call=f"{S}:656", note="section 17"),
+         "const", loc=f"{S}:4069", call=f"{S}:656", note="section 18"),
     dict(depth=3, kind="free", sig="std::optional<std::string> CollectAndCollapseTrajectoryMotions(const "
          "volley::ContinuousState& final_state, const volley::Layout& layout, std::set<volley::Motion, "
          "MotionScheduleOrder>& all_motions)", loc=f"{S}:151", call=f"{S}:4072"),
@@ -203,7 +203,7 @@ PART1 = [
 ]
 
 PART2 = [
-    {"section": "Tray assignment (section 14)"},
+    {"section": "Tray assignment (section 15)"},
     dict(depth=0, kind="sched", sig="BoolStringPair Scheduler::DoTrayAssignments(ScheduleContextSPtr ctx) const",
          loc=f"{S}:2533", call=f"{S}:580"),
     dict(depth=1, kind="ext", sig="ctx->events.GetTopologicalOrdering()", loc="planner_core", call=f"{S}:2540"),
@@ -237,7 +237,7 @@ PART2 = [
          "const   per blocking tray", loc=f"{S}:1984", call=f"{S}:2728, :2850, :2865",
          note="fallbacks: advance the root tray, then allow parking on the critical path"),
     dict(depth=2, kind="ext", sig="tray_move->Apply(working_state)", loc="planner_core", call=f"{S}:2833, :2931, :3053"),
-    {"section": "AGV assignment (section 15)"},
+    {"section": "AGV assignment (section 16)"},
     dict(depth=0, kind="sched", sig="BoolStringPair Scheduler::DoAgvAssignments(ScheduleContextSPtr ctx) const",
          loc=f"{S}:3475", call=f"{S}:594"),
     dict(depth=1, kind="sched", sig="volley::Interval::Duration Scheduler::GetAgvOccupiedDuration(uint16_t, "
@@ -303,7 +303,7 @@ def call_trace_plan():
                    "it makes. File:line numbers are those of the snapshot in sources/repomix-scheduler.xml.",
           badge_key="as-built", legend=_legend(),
           footnote="Only the calls that matter for understanding are shown: logging, getters and message "
-                   "conversions are left out. Failure branches (each returns early, section 9) are not drawn.")
+                   "conversions are left out. Failure branches (each returns early, section 10) are not drawn.")
     return d
 
 

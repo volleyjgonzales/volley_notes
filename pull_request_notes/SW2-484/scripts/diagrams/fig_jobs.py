@@ -282,7 +282,7 @@ GENERAL = {
 "47_job_rebalance_garage": [
     REPLAY,
     "Ask which bays should switch to insert mode and which to retrieve mode, given the readiness ratio "
-    "(section 18).",
+    "(section 19).",
     "Run the READY_FOR_INSERT recipe for each bay that should accept cars, under this job's index.",
     "Run the READY_FOR_RETRIEVE recipe for each bay that should hand cars out, under this job's index.",
     "Report success; failures of individual bays are only logged.",
@@ -772,7 +772,7 @@ def job_retrieve():
                 "on a VECS in an unexpected state, it is true: FailJob() copies it so Dispatch keeps the job and "
                 "retries later.", T.sky),
                ("Not decided yet", "Where T21 parks, which trays block T17's path, which AGV does the work and the "
-                "exact route are all chosen by the later stages (sections 14 to 17).", T.border)],
+                "exact route are all chosen by the later stages (sections 15 to 18).", T.border)],
         bw=300)
 
 
@@ -1107,7 +1107,7 @@ def job_clean_garage():
                 "If the hiding spot is a bay, the bay's next transition waits for the AGV (rule A on the bay).",
                 T.green),
                ("Waypoint stash", "When ResolveBlockingTrays() finds no parking it may leave a blocker on a "
-                "waypoint (tier 2, section 14). CLEAN_GARAGE is what puts it back.", T.border)],
+                "waypoint (tier 2, section 15). CLEAN_GARAGE is what puts it back.", T.border)],
         bw=300)
 
 
@@ -1145,7 +1145,7 @@ def job_rebalance():
             ("working_state = ctx->initial_state;\nctx->events.Apply(working_state);", "Empty DAG.", "replay", "ok"),
             ("[to_insert, to_retrieve] = ComputeBayRebalancingActions(\n  working_state,\n"
              "  layout_->GetBayPrioritization(), bay_readiness_ratio_)",
-             "Illustrative result: B7 should become insert-ready, B21 retrieve-ready. Section 18 explains the "
+             "Illustrative result: B7 should become insert-ready, B21 retrieve-ready. Section 19 explains the "
              "classification and the ratio.", "[B7], [B21]", "ok"),
             ("for bay in to_insert:\n  PlanReadyForInsertJob(ctx, bay, job_index)\n  failure -> log and continue",
              "Empty tray T5 (nearest, illustrative) into B7, then B7 to insert mode.", "adds 1, 2", "event"),
@@ -1212,7 +1212,7 @@ def job_charge_agv():
         notes=[("Composite job", "Two of the three events come from other job methods. That is why the matrix "
                 "of building blocks shows AgvMove and BayTrans calls on this row.", T.teal),
                ("Cost, not distance", "GetJustMovingCost() asks the motion cost model for the travel time, using "
-                "static filters so a path must exist. Section 15 uses the same helper.", T.green),
+                "static filters so a path must exist. Section 16 uses the same helper.", T.green),
                ("Not checked", "Whether the charger area is free of trays or other conflicts (a TODO in the "
                 "code).", T.border)],
         bw=300)
