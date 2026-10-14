@@ -1316,19 +1316,98 @@ while(!blocking_trays.empty()) {
 }
 ```
 
-The calls in this snippet:
+The snippet calls seven functions and builds about a dozen local variables. Each function has its own table below, in the order the snippet calls them, followed by one table for the variables. `BlockingTraySearchEnvironment`, `SingleSourceSearch`, `GetStaticFilter` and the search solution come from `motion_planner`, which is not in this snapshot. Their types are inferred from how `scheduler.cpp` uses them and are marked *(inferred)*.
 
-| Call | Signature (simplified) | What it does here | In Figure 34 |
-|---|---|---|---|
-| `BlockingTraySearchEnvironment(...)` | `(uint16_t tray_id, CollisionEntityId_t entity, const GarageGraph&, const CollisionTable&, const DiscreteGarageState&, cost model, vertex goal, GraphFilterProperties filters)` | Describes the search: start tray and its footprint, the graph and collision table, the current state, the cost model, the goal vertex (the destination) and which nodes are usable. Its states carry `blocking_trays`: the trays whose footprint collides with the root tray at that vertex. Defined in `motion_planner` | R, R's footprint, goal `B21` |
-| `volley::SingleSourceSearch(source, Duration(0), env)` | `(State source, Interval::Duration start_time, Environment& env)` → solution | A best-first search from one start state. Start time `0` because tray assignment ignores time; only costs and topology matter | starts at `P17` |
-| `solution.GetTarget()` | `→ std::optional<State>` | The goal state reached, or empty if no path exists even through trays → the job fails with “Failed to find path for t…” | the `B21` state |
-| `solution.GetPath(target)` | `→ std::optional<std::vector<std::pair<State, …>>>` | The states from start to goal. Each `State` has `.vert` and `.blocking_trays` | `P17 → P15 → … → B21`; `P15` lists K |
-| `critical_path` | `VertexCollisionIdMap` (vertex → `CollisionEntityId_t`, from `motion_planner`) | Every vertex of R's path, tagged with R's footprint. Passed as `illegal_poses` so a blocker is not parked where R must pass | `P17`, `P15`, … |
-| `ResolveBlockingTrays(...)` | `(uint16_t tray_id, size_t job_index, const DiscreteGarageState& base_state, const std::set<uint16_t>& immobile_trays = {}, const VertexCollisionIdMap& illegal_poses = {}, bool enforce_retrieval_heading = false, bool allow_waypoint_stash = true) const` → `pair<optional<GaragePoseMsg>, vector<pair<shared_ptr<TrayMove>, vector<GaragePoseMsg>>>>` | Finds a destination for the **blocker** (here `tray_id` is the blocker, not R) plus any moves needed first. Works on its own copy of `base_state`; nothing is applied to `working_state` yet. Explained in full under `AssignDestForUntargetedMove` below | K → `P19`, no extra moves |
-| `immobile_trays` = `{R}` | `std::set<uint16_t>` | Trays the search must route around, never move. R is held still so the solver cannot “solve” the blocker by moving the root tray | `{R}` |
-| `WithPriorDests(id, base)` | local lambda: `(uint16_t, VertexCollisionIdMap) → VertexCollisionIdMap` | `base` plus every spot this blocker was already sent to during this root tray's pass. Stops a blocker from bouncing between two spots forever | `critical_path` (first visit: nothing added) |
-| `move->GetJobIndex()` | `size_t` | The new blocker moves get the root move's job index, so they count as part of that job | job of R |
+**Function 1 · `gg_.GetVertexFromPose(pose)`**: turn a garage pose into a search-graph vertex. Called twice: once for the start, once for the goal.
+
+| Dir | Name | Type | Meaning | In Figure 34 |
+|---|---|---|---|---|
+| in | `this` | `const volley::GarageGraph&` (`gg_`) | The pose graph (section 8), read only | Pecos graph |
+| in | `pose` | `const GaragePoseMsg&` | Node id + heading | `tray_opt->pose` = `P17@…`; `move->GetDest()` = `B21@…` |
+| out | return | `std::optional<Vertex>` | The vertex for that pose; empty if the node does not allow that heading. The snippet calls `.value()` without checking: the destination was already checked in step 1, and the tray's own pose is assumed valid | `source.vert`, the goal vertex |
+
+**Function 2 · `volley::BlockingTraySearchEnvironment(...)` (constructor)**: describe the critical-path search: where to start, where to go, what blocks the way.
+
+| Dir | Name | Type | Meaning | In Figure 34 |
+|---|---|---|---|---|
+| in | `tray_id` | `uint16_t` | The root tray. It is the one moving, so it is not counted as blocking itself | R |
+| in | `entity` | `volley::CollisionEntityId_t` | The root tray's footprint (`root_collision_entity`). A tray with a car is larger than an empty one, so this changes which trays collide | R with a car |
+| in | `gg` | `const volley::GarageGraph&` | Graph to search | `gg_` |
+| in | `table` | `const volley::CollisionTable&` | Answers “does footprint A at pose X overlap footprint B at pose Y?” (section 8) | `table_` |
+| in | `state` | `const volley::DiscreteGarageState&` | Where every tray and AGV is right now in the plan | `working_state` |
+| in | `cost_model` | `const cost::MotionCostModel&` *(inferred)* | Travel cost per edge, so the cheapest path wins, not the shortest | `cost_model_` |
+| in | `goal` | `Vertex` | The destination vertex; reaching it ends the search | `B21` |
+| in | `filters` | `volley::GraphFilterProperties` *(inferred)* | Vertices the tray may not use at all. Built with every tray and AGV ignored, so only permanent obstacles block the search | from `GetStaticFilter` |
+| out | object | `BlockingTraySearchEnvironment` | Passed to `SingleSourceSearch`. Unlike a normal path search, it lets the path go **through** trays and records each one in the state's `blocking_trays` | `blocking_search_env` |
+
+**Function 3 · `volley::SingleSourceSearch(source, start_time, env)`**: run the search.
+
+| Dir | Name | Type | Meaning | In Figure 34 |
+|---|---|---|---|---|
+| in | `source` | `volley::BlockingTrayState` | Start state: `.vert` set to the root tray's vertex; `.blocking_trays` starts empty | `P17` |
+| in | `start_time` | `volley::Interval::Duration` | Time at the start. `Duration(0)`: tray assignment ignores time, so only costs and topology matter | `0` |
+| in | `env` | the environment (here `BlockingTraySearchEnvironment&`) | Decides neighbours, costs and the goal test. The same function runs all three searches in this section; only the environment changes | `blocking_search_env` |
+| out | return | search solution *(inferred: a template type over the state)* | Holds the explored states; queried with `GetTarget()` and `GetPath()` | `blocking_solution` |
+
+**Function 4 · `blocking_solution.GetTarget()`**: did the search reach the goal?
+
+| Dir | Name | Type | Meaning | In Figure 34 |
+|---|---|---|---|---|
+| in | `this` | the search solution | Result of step 3 | `blocking_solution` |
+| out | return | `std::optional<volley::BlockingTrayState>` | The goal state reached, or empty if no path exists even through trays. The real code checks this and fails the job with “Failed to find path for t…”; the snippet calls `.value()` for brevity | the `B21` state |
+
+**Function 5 · `blocking_solution.GetPath(target)`**: read back the path to that goal.
+
+| Dir | Name | Type | Meaning | In Figure 34 |
+|---|---|---|---|---|
+| in | `this` | the search solution | Result of step 3 | `blocking_solution` |
+| in | `target` | `const volley::BlockingTrayState&` | The goal state from step 4 | the `B21` state |
+| out | return | `std::optional<std::vector<std::pair<BlockingTrayState, …>>>` | States from start to goal, in order. The second element of each pair (a cost or time) is ignored here (`_`). Each state has `.vert` and `.blocking_trays`, the trays whose footprint collides with R's at that vertex | `P17 → P15 → … → B21`; the `P15` state lists K |
+
+**Function 6 · `ResolveBlockingTrays(...)`**: find a new home for one blocker. Full description under `AssignDestForUntargetedMove` below.
+
+| Dir | Name | Type | Meaning | In Figure 34 |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Read only: `gg_`, `table_`, `cost_model_`, `layout_` | |
+| in | `tray_id` | `uint16_t` | The tray that needs a home. Here it is the **blocker**, not R | K |
+| in | `job_index` | `size_t` | Stored in every `TrayMove` it creates, so blocker moves count as part of R's job | `move->GetJobIndex()` |
+| in | `base_state` | `const volley::DiscreteGarageState&` | Starting state. Copied inside and never changed; nothing is applied to `working_state` yet | `working_state` |
+| in | `immobile_trays` | `const std::set<uint16_t>&` (default `{}`) | Trays the search must route around and may never move. Holding R still stops the solver from “solving” the blocker by moving the root tray | `{R}` |
+| in | `illegal_poses` | `const VertexCollisionIdMap&` (default `{}`) | Vertices the blocker may not park on | `WithPriorDests(K, critical_path)` |
+| in | `enforce_retrieval_heading` | `bool` (default `false`) | Park facing the node's retrieval heading | `false` (default) |
+| in | `allow_waypoint_stash` | `bool` (default `true`) | Allow parking on a waypoint if no stall is reachable | `true` (default) |
+| out | `.first` (`dest`) | `std::optional<GaragePoseMsg>` | The blocker's new pose, or empty if none was found (the fallbacks then run) | `P19` |
+| out | `.second` (`required_moves`) | `std::vector<std::pair<std::shared_ptr<volley::TrayMove>, std::vector<GaragePoseMsg>>>` | Moves that must happen before the blocker's own move, in order, each with the poses it passes over. The blocker's own move is **not** in this list; the loop creates it afterwards | `[]` |
+
+**Function 7 · `WithPriorDests(for_tray, base)`**: a local lambda in `DoTrayAssignments` (`:2687`) that builds the `illegal_poses` argument.
+
+| Dir | Name | Type | Meaning | In Figure 34 |
+|---|---|---|---|---|
+| captured | `blocking_tray_prior_dests` | `std::unordered_map<uint16_t, VertexCollisionIdMap>&` | For each blocker, every spot it has already been sent to while clearing this root tray's path | empty at first |
+| in | `for_tray` | `uint16_t` | The blocker | K |
+| in | `base` | `VertexCollisionIdMap` (by value) | The starting set of forbidden vertices | `critical_path` (fallback 2 passes `{}`) |
+| out | return | `VertexCollisionIdMap` | `base` plus `for_tray`'s prior spots. Stops a blocker from bouncing between two spots forever | `critical_path` unchanged |
+
+**Variables used in the snippet**
+
+| Name | Type | Set where | Meaning | In Figure 34 |
+|---|---|---|---|---|
+| `move` | `volley::TrayMove*` | `dynamic_cast` of the current event | The root move being processed; both fields are set | R: `P17` → `B21` |
+| `event` | `std::shared_ptr<volley::ScheduleEvent>` | loop variable | The same object as `move`, as the DAG stores it; blocker moves become its prerequisites | the root move |
+| `working_state` | `volley::DiscreteGarageState` | copy of `ctx->initial_state`, updated after every applied move | The garage as it stands at this point in the plan | K at `P15`, T20 at `P20` |
+| `tray_opt` | `std::optional<DiscreteTrayStateMsg>` | `working_state.GetTray(tray_id)` | The root tray's current state (pose, payload) | R at `P17` |
+| `root_collision_entity` | `volley::CollisionEntityId_t` | `CollisionEntityIdFromTrayState(*tray_opt, working_state, layout)` | The root tray's footprint, which depends on its payload | R with a car |
+| `filters` | `volley::GraphFilterProperties` *(inferred)* | `GetStaticFilter(TRAY, gg_, working_state, table_, all trays, all AGVs, {})` | Usable vertices when every tray and AGV is ignored | all non-disabled vertices |
+| `source` | `volley::BlockingTrayState` | built in the snippet | Search start: `.vert` = R's vertex | `P17` |
+| `blocking_search_env` | `volley::BlockingTraySearchEnvironment` | function 2 | The search description | |
+| `blocking_solution` | search solution | function 3 | The search result | |
+| `path` | `std::vector<std::pair<BlockingTrayState, …>>` | function 5 | R's **critical path**: the vertices R travels over, each with the trays in the way there | `P17 → P15 → … → B21` |
+| `path_state` | `const volley::BlockingTrayState&` | loop over `path` | One step of the path | the `P15` step |
+| `critical_path` | `VertexCollisionIdMap` (vertex → `CollisionEntityId_t`) | filled from `path` | Every vertex of R's path tagged with R's footprint; passed as `illegal_poses` so no blocker is parked where R must pass | `P17`, `P15`, … |
+| `blocking_trays` | `std::vector<uint16_t>` | filled from `path_state.blocking_trays` | Trays in R's way, in path order, each once. The `while` loop works through it from the front | `[K]` |
+| `blocking_tray_set` | `std::set<uint16_t>` | alongside `blocking_trays` | Only for de-duplication | `{K}` |
+| `blocking_tray_id` | `uint16_t` | `blocking_trays.front()` | The blocker being resolved in this iteration | K |
+| `dest`, `required_moves` | see function 6 | structured binding of `ResolveBlockingTrays`'s result | The blocker's new spot and its prerequisite moves | `P19`, `[]` |
 
 **The two fallbacks** (`:2796` and `:2865`). If `ResolveBlockingTrays` returns no destination, the loop first tries to **advance the root tray one step** along its critical path: if no other tray collides with the next pose (`table_.Query(...)`), it creates a one-step `TrayMove` for R, applies it, removes R's old vertex from `critical_path`, and retries the blocker. Advancing frees the node R was on, which can give the blocker somewhere to go (the source comment draws three such cases). If that still fails, it retries with `WithPriorDests(blocking_tray_id, {})`: the blocker **may now park on the critical path**. That is allowed because the loop re-scans afterwards, so a blocker parked ahead of R is simply found and moved again. If even that fails, the job fails with “Failed to find open space for blocking tray t…”.
 

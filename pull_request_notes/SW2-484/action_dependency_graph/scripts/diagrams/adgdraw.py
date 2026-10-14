@@ -24,7 +24,7 @@ class Lanes:
         self.label_w = label_w
         self.boxes: dict = {}
         self.pills: list[BBox] = []
-        self.lane_labels = lane_labels or {r: f"AGV {r}" for r in robots}
+        self.lane_labels = lane_labels or {r: f"AGV-{r[1:]}" for r in robots}
         W = self.label_w + (tmax + 1) * col_w - (col_w - box_w) + 22
         self.W = W
         for i, r in enumerate(robots):

@@ -34,9 +34,9 @@ def wait_removal():
     d = Doc("11-wait-removal", "Why every edge touching a wait is redundant")
     E = ex.T2_FULL
     # Theorem 2: edge INTO a wait  (L0 -> M1)
-    assert (A["L0"], A["M1"]) in E and (A["L0"], A["M0"]) in E
+    assert (A["A1-0"], A["A3-1"]) in E and (A["A1-0"], A["A3-0"]) in E
     # Theorem 1: edge OUT of a wait (M1 -> N2)
-    assert (A["M1"], A["N2"]) in E and (A["M2"], A["N2"]) in E
+    assert (A["A3-1"], A["A4-2"]) in E and (A["A3-2"], A["A4-2"]) in E
 
     def panel(x0, y0, robots, acts, red, path_edges, title, sub, tmax):
         yy = _panel_title(d, x0, y0, title, sub)
@@ -59,46 +59,46 @@ def wait_removal():
         L.type2(t2, style=st)
         return BBox(x0, y0, x0 + L.W, L.y1)
 
-    b1 = panel(0, 0, ["L", "M"], [A["L0"], A["L1"], A["M0"], A["M1"], A["M2"]],
-               {(A["L0"], A["M1"])}, {(A["L0"], A["M0"]), (A["M0"], A["M1"])},
+    b1 = panel(0, 0, ["A1", "A3"], [A["A1-0"], A["A1-1"], A["A3-0"], A["A3-1"], A["A3-2"]],
+               {(A["A1-0"], A["A3-1"])}, {(A["A1-0"], A["A3-0"]), (A["A3-0"], A["A3-1"])},
                "(a) Edge INTO a wait  ·  Theorem 2",
-               "M waits at W12 (M1). L0 left W12, so the rule adds L0 → M1. But M had to ENTER W12 first (M0), "
-               "and the same rule already gave L0 → M0. Path L0 → M0 → M1 makes the red edge redundant.",
+               "AGV-3 waits at W18 (A3-1). A1-0 left W18, so the rule adds A1-0 → A3-1. But AGV-3 had to ENTER W18 first (A3-0), "
+               "and the same rule already gave A1-0 → A3-0. Path A1-0 → A3-0 → A3-1 makes the red edge redundant.",
                2)
-    b2 = panel(b1.x1 + 40, 0, ["M", "N"], [A["M1"], A["M2"], A["N1"], A["N2"]],
-               {(A["M1"], A["N2"])}, {(A["M1"], A["M2"]), (A["M2"], A["N2"])},
+    b2 = panel(b1.x1 + 40, 0, ["A3", "A4"], [A["A3-1"], A["A3-2"], A["A4-1"], A["A4-2"]],
+               {(A["A3-1"], A["A4-2"])}, {(A["A3-1"], A["A3-2"]), (A["A3-2"], A["A4-2"])},
                "(b) Edge OUT of a wait  ·  Theorem 1",
-               "N enters W12 later (N2), so the rule adds M1 → N2 (M's wait 'leaves' W12). But M's next move "
-               "M2 really leaves W12, and gives M2 → N2. Path M1 → M2 → N2 makes the red edge "
+               "AGV-4 enters W18 later (A4-2), so the rule adds A3-1 → A4-2 (AGV-3's wait 'leaves' W18). But AGV-3's next move "
+               "A3-2 really leaves W18, and gives A3-2 → A4-2. Path A3-1 → A3-2 → A4-2 makes the red edge "
                "redundant.", 2)
     # bottom: contraction of the lanes
     y = max(b1.y1, b2.y1) + 40
     yy = _panel_title(d, 0, y, "(c) So the waits can go: contract each lane",
-                      "With every type-2 edge on M1 and N1 redundant, delete the two wait vertices and join the "
-                      "neighbours with a type-1 edge. Here M0 → M2 and N0 → N2.")
-    L = Lanes(d, 0, yy, ["M", "N"], ex.COLOR, 2, col_w=170, label_w=92, lane_h=82, axis=False)
-    for a in (A["M0"], A["M2"], A["N0"], A["N2"]):
+                      "With every type-2 edge on A3-1 and A4-1 redundant, delete the two wait vertices and join the "
+                      "neighbours with a type-1 edge. Here A3-0 → A3-2 and A4-0 → A4-2.")
+    L = Lanes(d, 0, yy, ["A3", "A4"], ex.COLOR, 2, col_w=170, label_w=92, lane_h=82, axis=False)
+    for a in (A["A3-0"], A["A3-2"], A["A4-0"], A["A4-2"]):
         L.action(a)
-    L.action(A["M1"], style="ghost")
-    L.action(A["N1"], style="ghost")
-    L.type1(A["M0"], A["M2"], color=FOCUS, sw=2.2)
-    L.type1(A["N0"], A["N2"], color=FOCUS, sw=2.2)
+    L.action(A["A3-1"], style="ghost")
+    L.action(A["A4-1"], style="ghost")
+    L.type1(A["A3-0"], A["A3-2"], color=FOCUS, sw=2.2)
+    L.type1(A["A4-0"], A["A4-2"], color=FOCUS, sw=2.2)
     note(d, L.x0 + L.W + 40, yy, 470,
-         "Only the GRAPH loses the wait. AGV M still stands at W12: if X is slow, M simply does not get the "
-         "'go' for M2 yet. The wait now emerges from the dependencies instead of being a 1-step timer, so M can "
-         "go the moment X2 is done.", title="What does not change", accent=T.amber)
+         "Only the GRAPH loses the wait. AGV-3 still stands at W18: if AGV-2 is slow, AGV-3 simply does not get the "
+         "'go' for A3-2 yet. The wait now emerges from the dependencies instead of being a 1-step timer, so AGV-3 can "
+         "go the moment A2-2 is done.", title="What does not change", accent=T.amber)
     key_panel(d, 0, max(L.y1, yy + 120) + 24, b2.x1, "How to read this figure", action_rows() + [
         ("red dashed", "a type-2 edge that touches a wait and is implied by another path", T.red),
         ("teal path", "the path of other edges that already gives the same order", FOCUS)])
     frame(d, title="Why every edge touching a wait is redundant",
           subtitle="Wait actions (start = goal) appear in the original ADG of figure 2.4 with three type-2 edges: "
-                   "L0 → M1, M1 → N2 and M0 → N1. For each one, the paper shows that a path through "
+                   "A1-0 → A3-1, A3-1 → A4-2 and A3-0 → A4-1. For each one, the paper shows that a path through "
                    "a neighbouring move already enforces the same order.",
           badge_key="illustrative",
           legend=[("dasharrow", T.red, "edge on a wait (redundant)"), ("arrow", FOCUS, "path that replaces it"),
                   ("arrow", T.faint, "other edges"), ("dashbox", T.fg2, "wait action")],
-          footnote="M0 → N1 (M leaves W11, N waits at W11) is the third case; it is replaced by M0 → N0 "
-                   "→ N1, exactly as in panel (a). All edges computed by scripts/adg/adg.py.")
+          footnote="A3-0 → A4-1 (AGV-3 leaves W13, AGV-4 waits at W13) is the third case; it is replaced by A3-0 → A4-0 "
+                   "→ A4-1, exactly as in panel (a). All edges computed by scripts/adg/adg.py.")
     return d
 
 
@@ -109,7 +109,7 @@ def candidate_index():
     S_ = ex.INDEX
     # ---- left: the whole index
     _panel_title(d, 0, 0, "1 · Build S: for every place v, the moves that START at v, sorted by t")
-    order = ["C10", "W11", "W12", "W13", "W14", "B7", "W8"]
+    order = ["W8", "W13", "W18", "W22", "W25", "B21", "W41"]
     y = 40
     rows = {}
     for v in order:
@@ -135,10 +135,10 @@ def candidate_index():
     left_h = y + 20
 
     # ---- right: the query for N3
-    a = A["N3"]
+    a = A["A4-3"]
     C = S_[a.g]
     x0 = 540
-    _panel_title(d, x0, 0, f"2 · Query for one target: a = {a.id} ({a.s} {ARROW} {a.g}, t = {a.t}, AGV {a.R})")
+    _panel_title(d, x0, 0, f"2 · Query for one target: a = {a.id} ({a.s} {ARROW} {a.g}, t = {a.t}, AGV-{a.R[1:]})")
     steps = [
         f"a enters {a.g}, so only moves that LEAVE {a.g} can be its type-2 source:",
         f"look up S[{a.g}] instead of scanning all moves.",
@@ -158,10 +158,10 @@ def candidate_index():
     times = [c.t for c in C]
     k0 = bisect.bisect_right(times, a.t)
     c_sel, kk0, k = latest_candidate(C, a)
-    assert kk0 == k and c_sel.id == "M3"
+    assert kk0 == k and c_sel.id == "A3-3"
     # bracket for t <= a.t
     bx1 = x0 + k0 * (cw + 10) - 10
-    d.path(f"M{x0} {ly + ch + 10} L{x0} {ly + ch + 18} L{bx1} {ly + ch + 18} L{bx1} {ly + ch + 10}",
+    d.path(f"AGV-3{x0} {ly + ch + 10} AGV-1{x0} {ly + ch + 18} AGV-1{bx1} {ly + ch + 18} AGV-1{bx1} {ly + ch + 10}",
            stroke=T.fg2, sw=1.2)
     d.text((x0 + bx1) / 2, ly + ch + 34, f"t ≤ {a.t}: eligible by time", size=11.5, fill=T.fg2, anchor="middle")
     # bisect pointer
@@ -171,7 +171,7 @@ def candidate_index():
            anchor="middle")
     lines = [
         ("times = [" + ", ".join(str(t) for t in times) + f"],  a.t = {a.t}", T.fg2),
-        (f"k = {k0} - 1 = {k}  →  C[{k}] = {c_sel.id}, AGV {c_sel.R} ≠ {a.R}  ✓", T.fg2),
+        (f"k = {k0} - 1 = {k}  →  C[{k}] = {c_sel.id}, AGV-{c_sel.R[1:]} ≠ AGV-{a.R[1:]}  ✓", T.fg2),
         (f"CP  adds every eligible one:  " + ", ".join(f"{c.id}{ARROW}{a.id}" for c in C if c.t <= a.t and c.R != a.R),
          T.muted),
         (f"SCP adds only the latest:     {c_sel.id}{ARROW}{a.id}", FOCUS),
@@ -194,7 +194,7 @@ def candidate_index():
         d.text(x + 14, yb + 44, s, size=12, family="mono", fill=T.fg2)
     key_panel(d, 0, yb + 84, 1000, "Symbols in this figure", [
         ("S[v]", "the index: list of all moves that START at place v, sorted by time step t", T.fg2),
-        ("L1  t=1", "one entry: AGV L's step 1, planned for t = 1 (colour = AGV)", T.sky),
+        ("A1-1  t=1", "one entry: AGV-1's step 1, planned for t = 1 (colour = AGV)", T.sky),
         ("a", "the target action we are finding a type-2 source for; a.g is the place it enters", T.fg2),
         ("bisect_right", "binary search: the position just after the last entry with t <= a.t", T.amber),
         ("C[k]", "entry number k of the list C = S[a.g] (counting from 0)", T.fg2),
@@ -204,7 +204,7 @@ def candidate_index():
                    "place. Group the moves by start place once (CP); sort each group by time and binary-search "
                    "it (SCP).",
           badge_key="illustrative",
-          legend=[("box", ex.COLOR[r], f"AGV {r}") for r in ex.ROBOTS] + [("dash", T.amber, "insertion point of a.t")],
+          legend=[("box", ex.COLOR[r], f"AGV-{r[1:]}") for r in ex.ROBOTS] + [("dash", T.amber, "insertion point of a.t")],
           footnote=f"Counts are for the {len(ex.MOVES)} moves of the worked example after wait removal. At this size "
                    "the difference is cosmetic; the paper's benchmarks go up to 900 agents, where it is not.")
     return d
@@ -215,23 +215,23 @@ def candidate_index():
 def why_latest():
     d = Doc("13-why-latest", "Why the latest candidate is enough")
     # chain at vertex C: L1 -> X1 -> X2 -> M2 -> M3 -> N3
-    chain = [A["L1"], A["X1"], A["X2"], A["M2"], A["M3"], A["N3"]]
+    chain = [A["A1-1"], A["A2-1"], A["A2-2"], A["A3-2"], A["A3-3"], A["A4-3"]]
     T1 = ex.T1
     SCP = ex.T2_SCP
     for u, v in zip(chain, chain[1:]):
         assert (u, v) in T1 or (u, v) in SCP, (u, v)
-    yy = _panel_title(d, 0, 0, "(a) The hand-over chain at the junction W13",
-                      "Read left to right: L leaves W13 (L1); X enters W13 (X1) and leaves (X2); M enters (M2) and "
-                      "leaves (M3); N enters (N3). Every link is an edge SCP keeps.")
+    yy = _panel_title(d, 0, 0, "(a) The hand-over chain at the junction W22",
+                      "Read left to right: AGV-1 leaves W22 (A1-1); AGV-2 enters W22 (A2-1) and leaves (A2-2); AGV-3 enters (A3-2) and "
+                      "leaves (A3-3); AGV-4 enters (A4-3). Every link is an edge SCP keeps.")
     L = Lanes(d, 0, yy, ex.ROBOTS, ex.COLOR, 3, col_w=176, label_w=92, lane_h=74, axis=True)
     for a in chain:
-        L.action(a, style="focus" if a.id == "N3" else "normal")
+        L.action(a, style="focus" if a.id == "A4-3" else "normal")
     for u, v in zip(chain, chain[1:]):
         if (u, v) in T1:
             L.type1(u, v, color=FOCUS, sw=2.4)
     keep = [(u, v) for u, v in zip(chain, chain[1:]) if (u, v) in SCP]
     pruned = [(c, a) for (c, a) in ex.T2_CP - ex.T2_SCP if c in chain and a in chain]
-    assert {(A["L1"], A["N3"]), (A["X2"], A["N3"]), (A["L1"], A["M2"])} <= set(pruned)
+    assert {(A["A1-1"], A["A4-3"]), (A["A2-2"], A["A4-3"]), (A["A1-1"], A["A3-2"])} <= set(pruned)
 
     def st(c, a):
         if (c, a) in pruned:
@@ -239,29 +239,29 @@ def why_latest():
         return {"color": FOCUS, "sw": 2.4}
     L.type2(keep + pruned, style=st)
     note(d, L.x0 + L.W + 30, yy, 340,
-         "S[W13] = [L1, X2, M3, N4]. Between two consecutive leavers of W13, someone must have entered it (here "
-         "X1, then M2). That entering move got an edge from the previous leaver, and its own AGV's type-1 chain "
-         "leads to the next leaver. So L1 reaches X2 and X2 reaches M3, and one edge M3 → N3 is enough.",
+         "S[W22] = [A1-1, A2-2, A3-3, A4-4]. Between two consecutive leavers of W22, someone must have entered it (here "
+         "A2-1, then A3-2). That entering move got an edge from the previous leaver, and its own AGV's type-1 chain "
+         "leads to the next leaver. So A1-1 reaches A2-2 and A2-2 reaches A3-3, and one edge A3-3 → A4-3 is enough.",
          title="The argument in words", accent=FOCUS)
     # (b) own robot case
     y2 = L.y1 + 40
     yy2 = _panel_title(d, 0, y2, "(b) Corner case: the latest candidate is the target's own AGV",
-                       "A separate tiny plan on four places u, v, w, x: Y leaves v at t = 1; Z enters v (Z1), leaves to w "
-                       "(Z2) and comes back (Z3). For Z3, S[v] = [Y1, Z2]: the search lands on Z2, AGV Z itself.")
-    paths = {"Y": ["v", "v", "x"], "Z": ["u", "u", "v", "w", "v"]}
+                       "A separate tiny plan on four places u, v, w, x: AGV-5 leaves v at t = 1; AGV-6 enters v (A6-1), leaves to w "
+                       "(A6-2) and comes back (A6-3). For A6-3, S[v] = [A5-1, A6-2]: the search lands on A6-2, AGV-6 itself.")
+    paths = {"A5": ["v", "v", "x"], "A6": ["u", "u", "v", "w", "v"]}
     assert not conflicts(paths)
     acts = drop_waits(actions_from_paths(paths))
     ids = {a.id: a for a in acts}
     t1 = type1(acts)
     printed, walk = type2_scp_as_printed(acts), type2_scp(acts)
     extra = walk - printed
-    assert extra == {(ids["Y1"], ids["Z3"])}
-    assert (ids["Y1"], ids["Z3"]) in redundant_edges(set(acts), t1 | walk)
-    cols = {"Y": T.amber, "Z": T.teal}
-    L2 = Lanes(d, 0, yy2, ["Y", "Z"], cols, 3, col_w=176, label_w=92, lane_h=74, axis=True,
-               lane_labels={"Y": "AGV Y", "Z": "AGV Z"})
+    assert extra == {(ids["A5-1"], ids["A6-3"])}
+    assert (ids["A5-1"], ids["A6-3"]) in redundant_edges(set(acts), t1 | walk)
+    cols = {"A5": T.amber, "A6": T.teal}
+    L2 = Lanes(d, 0, yy2, ["A5", "A6"], cols, 3, col_w=176, label_w=92, lane_h=74, axis=True,
+               lane_labels={"A5": "AGV-5", "A6": "AGV-6"})
     for a in acts:
-        L2.action(a, style="focus" if a.id == "Z3" else "normal")
+        L2.action(a, style="focus" if a.id == "A6-3" else "normal")
     for u, v in sorted(t1):
         L2.type1(u, v, sw=2.2)
 
@@ -271,17 +271,17 @@ def why_latest():
         return {"color": T.fg2, "sw": 2}
     L2.type2(printed | extra, style=st2)
     note(d, L2.x0 + L2.W + 30, yy2, 340,
-         "Read literally, Algorithm 3 adds no edge for Z3 when C[k] is Z's own move, and that is safe: Y1 → Z1 "
-         "→ Z2 → Z3 already orders Y1 before Z3. Walking back to Y1 instead (as Theorem 3's wording suggests, "
+         "Read literally, Algorithm 3 adds no edge for A6-3 when C[k] is AGV-6's own move, and that is safe: A5-1 → A6-1 "
+         "→ A6-2 → A6-3 already orders A5-1 before A6-3. Walking back to A5-1 instead (as Theorem 3's wording suggests, "
          "red) only adds a redundant edge. A 1835-plan random test in scripts/adg/ confirms both variants keep "
          "every ordering.",
          title="Skipping is safe", accent=T.amber)
     key_panel(d, 0, L2.y1 + 24, L.W + 30 + 340, "Symbols in this figure", [
-        ("L1 → X1", "a type-2 edge: X1 may start only after L1 has completed (pill: the place handed over)", T.fg2),
-        ("X1 → X2", "a type-1 edge: the same AGV does its steps in order", FOCUS),
+        ("A1-1 → A2-1", "a type-2 edge: A2-1 may start only after A1-1 has completed (pill: the place handed over)", T.fg2),
+        ("A2-1 → A2-2", "a type-1 edge: the same AGV does its steps in order", FOCUS),
         ("dashed box", "the target action whose incoming edges we examine", FOCUS),
         ("u v w x", "panel (b) only: four places of a separate, made-up mini garage", T.fg2),
-        ("Y, Z", "panel (b) only: two AGVs of that mini garage", T.fg2)])
+        ("AGV-5, AGV-6", "panel (b) only: two AGVs of that mini garage", T.fg2)])
     frame(d, title="Why the latest candidate is enough (Theorem 3)",
           subtitle="Every move that leaves a place is ordered after every earlier move that left it, through the "
                    "AGVs that entered in between. So a target only needs an edge from the most recent leaver; "
@@ -303,7 +303,7 @@ def adg_scp():
         L.type1(u, v)
     pruned = ex.T2_CP - ex.T2_SCP
     still = redundant_edges(set(ex.MOVES), ex.T1 | ex.T2_SCP)
-    assert still == {(A["X1"], A["N4"])}
+    assert still == {(A["A2-1"], A["A4-4"])}
 
     def st(c, a):
         if (c, a) in pruned:
@@ -322,8 +322,8 @@ def adg_scp():
           badge_key="illustrative",
           legend=[("arrow", T.fg2, "type-2 kept by SCP"), ("dasharrow", T.red, "skipped by SCP (implied)"),
                   ("arrow", T.amber, "kept, yet still implied"), ("dashbox", T.faint, "removed wait")],
-          footnote="SCP is not a full transitive reduction: X1 → N4 (amber) is still implied by "
-                   "X1 → X2 → M2 → M3 → N3 → N4, because it is the only (hence latest) "
-                   "candidate in S[W8]. In a 1835-plan random test, 15% of SCP graphs kept at least one such edge. "
+          footnote="SCP is not a full transitive reduction: A2-1 → A4-4 (amber) is still implied by "
+                   "A2-1 → A2-2 → A3-2 → A3-3 → A4-3 → A4-4, because it is the only (hence latest) "
+                   "candidate in S[W41]. In a 1835-plan random test, 15% of SCP graphs kept at least one such edge. "
                    "Harmless for correctness; it only means 'at most one type-2 edge per action', not 'minimal'.")
     return d

@@ -30,7 +30,7 @@ class Action:
 
     @property
     def id(self) -> str:
-        return f"{self.R}{self.t}"
+        return f"{self.R}-{self.t}"
 
     def __str__(self):
         return f"{self.id}:{self.s}->{self.g}"

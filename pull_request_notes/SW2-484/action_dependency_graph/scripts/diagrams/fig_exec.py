@@ -16,7 +16,7 @@ import example as ex
 from theme import S, T
 
 DOC = "chapters/03-scp-illustrated.md"
-FAST = {"L": 0.5, "X": 0.5}
+FAST = {"A1": 0.5, "A2": 0.5}
 
 
 def _dur(a):
@@ -32,25 +32,25 @@ def waits_throughput():
     assert mn < mw
     tmax = int(mw) + 1
     b1 = gantt(d, 0, 0, w, title=f"(a) Original ADG with wait actions: makespan {mw:g} s", tmax=tmax)
-    b2w = w[ex.A["M2"]][0]
-    label_pill(d, 70 + b2w * 78, b1.y1 + 6, f"M2 starts at {b2w:g} s: X left W13 at {w[ex.A['X2']][1]:g} s, but M's "
-               "1-s wait M1 must run out first", color=T.amber, size=11.5, family="sans", border=T.amber,
+    b2w = w[ex.A["A3-2"]][0]
+    label_pill(d, 70 + b2w * 78, b1.y1 + 6, f"A3-2 starts at {b2w:g} s: AGV-2 left W22 at {w[ex.A['A2-2']][1]:g} s, but AGV-3's "
+               "1-s wait A3-1 must run out first", color=T.amber, size=11.5, family="sans", border=T.amber,
                anchor="start")
     b2 = gantt(d, 0, b1.y1 + 44, n, title=f"(b) Waits removed, SCP edges: makespan {mn:g} s", tmax=tmax)
-    b2n = n[ex.A["M2"]][0]
-    label_pill(d, 70 + b2n * 78, b2.y1 + 6, f"M2 starts at {b2n:g} s, the moment X2 completes",
+    b2n = n[ex.A["A3-2"]][0]
+    label_pill(d, 70 + b2n * 78, b2.y1 + 6, f"A3-2 starts at {b2n:g} s, the moment A2-2 completes",
                color=T.green, size=11.5, family="sans", border=T.green, anchor="start")
     for b, m in ((b1, mw), (b2, mn)):
         x = 70 + m * 78
         d.line(x, b.y0 + 20, x, b.y1 - 14, stroke=T.red if m == mw else T.green, sw=1.6, dash="5 4", layer="over")
     key_panel(d, 0, b2.y1 + 34, b2.x1, "How to read the bars", [
-        ("M2 W12→W13", "one action as a bar: AGV M's step 2, from W12 to W13; length = how long it took", T.green),
-        ("M1 wait", "dashed bar: a planned wait action (1 s)", T.green),
+        ("A3-2 W18→W22", "one action as a bar: AGV-3's step 2, from W18 to W22; length = how long it took", T.green),
+        ("A3-1 wait", "dashed bar: a planned wait action (1 s)", T.green),
         ("makespan", "the time at which the last AGV has finished (dashed vertical line)", T.red)])
     frame(d, title="Planned waits vs emergent waits when AGVs run early",
-          subtitle="L and X are lightly loaded and need only 0.5 s per move; everything else takes 1 s, a wait "
-                   "action also 1 s. With waits in the graph, M and N still sit out their full planned waits. Without "
-                   "them, M and N wait exactly as long as the dependencies require, and the gain cascades down the "
+          subtitle="AGV-1 and AGV-2 are lightly loaded and need only 0.5 s per move; everything else takes 1 s, a wait "
+                   "action also 1 s. With waits in the graph, AGV-3 and AGV-4 still sit out their full planned waits. Without "
+                   "them, AGV-3 and AGV-4 wait exactly as long as the dependencies require, and the gain cascades down the "
                    "convoy.",
           badge_key="illustrative",
           legend=robot_legend([("dashbox", T.fg2, "wait action"), ("dash", T.red, "makespan")]),
@@ -112,16 +112,16 @@ def snapshot():
             txt, c2 = f"open preds {len(missing[a])}: " + ", ".join(missing[a]), T.fg2
         d.text(x0 + 40, y, txt, size=12, family="mono", fill=c2)
     note(d, x0, 38 + len(rows) * 25 + 6, 320,
-         "When X2 reports 'done', the executor decrements the counter of each successor. M2 hits 0 and is sent "
-         "to AGV M. Nothing in this loop reads a clock.", title="Next event", accent=T.teal)
+         "When A2-2 reports 'done', the executor decrements the counter of each successor. A3-2 hits 0 and is sent "
+         "to AGV-3. Nothing in this loop reads a clock.", title="Next event", accent=T.teal)
     # where everybody is
     yg = L.y1 + 24
-    d.text(0, yg, "On the floor at 3.5 s: X is leaving W13; M waits at W12 for it, N waits behind M",
+    d.text(0, yg, "On the floor at 3.5 s: AGV-2 is leaving W22; AGV-3 waits at W18 for it, AGV-4 waits behind AGV-3",
            size=13.5, weight=600, fill=T.fg)
-    G = Garage(d, 0, yg + 16, 26, xlim=(-2.2, 24.6), ylim=(-6.2, 11.4))
-    G.base(labels=True, axes=False, context=False, highlight=("W13",), wp_below=True)
+    G = Garage(d, 0, yg + 16, 26, xlim=(19.6, 46.6), ylim=(10.8, 25.6))
+    G.base(labels=True, axes=False, context=False, highlight=("W22",), wp_below=True)
     for r, st in sched_positions(sch, tau).items():
-        draw_robot(G, r, st["at"], st["heading"], label_side="above" if r != "X" else "right")
+        draw_robot(G, r, st["at"], st["heading"], label_side="right" if r != "A2" else "above")
     key_panel(d, 0, G.box.y1 + 24, max(G.box.x1, x0 + 340), "How to read this figure", action_rows(wait=False) + [
         ("done", "completed action (faded)", T.faint),
         ("RUNNING", "dispatched to its AGV and in progress", T.teal),

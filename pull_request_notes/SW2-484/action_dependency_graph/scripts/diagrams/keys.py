@@ -34,23 +34,23 @@ def key_panel(d: Doc, x, y, w, title, rows, *, accent=T.border):
 def names_rows(robots=True, vertices=True):
     rows = []
     if vertices:
-        rows += [("W12", "a waypoint (W) on the aisle; P = parking stall, B = customer bay, C = AGV charger. "
+        rows += [("W18", "a waypoint (W) on the aisle; P = parking stall, B = customer bay, C = AGV charger. "
                          "The number is just the place's id.", T.fg2),
-                 ("W13", "the junction: the only place all four routes share", T.teal)]
+                 ("W22", "the junction: the only place all four routes share", T.teal)]
     if robots:
-        rows += [("L M N", "three AGVs driving east in a convoy: Lead, Middle, and the Next one behind", T.fg2),
-                 ("X", "an AGV crossing the junction, carrying a customer's car on its tray", T.violet)]
+        rows += [("AGV-1, 3, 4", "three AGVs driving north up the aisle in a convoy", T.fg2),
+                 ("AGV-2", "an AGV crossing the junction, carrying a customer's car on its tray", T.violet)]
     return rows
 
 
 def action_rows(wait=True, t1=True, t2=True):
-    rows = [("M2", "an action: AGV M's step number 2 of the plan (t = 2)", T.green),
-            (f"W12 {AR} W13", "inside a box: where that step starts and where it ends", T.fg2)]
+    rows = [("A3-2", "an action: AGV-3's step number 2 of the plan (t = 2); A = AGV, then AGV number, then step", T.green),
+            (f"W18 {AR} W22", "inside a box: where that step starts and where it ends", T.fg2)]
     if wait:
-        rows.append(("wait W12", "a wait action (dashed box): start = goal, the AGV stays put", T.fg2))
+        rows.append(("wait W18", "a wait action (dashed box): start = goal, the AGV stays put", T.fg2))
     if t1:
-        rows.append((f"M0 {AR} M2", "type-1 edge (lane colour): the same AGV does its steps in order", T.green))
+        rows.append((f"A3-0 {AR} A3-2", "type-1 edge (lane colour): the same AGV does its steps in order", T.green))
     if t2:
-        rows.append((f"X2 {AR} M2", "type-2 edge (light): M2 may start only after X2 has completed. The pill "
-                                    "names the place handed over: X2 leaves it, M2 enters it", T.fg2))
+        rows.append((f"A2-2 {AR} A3-2", "type-2 edge (light): A3-2 may start only after A2-2 has completed. The pill "
+                                    "names the place handed over: A2-2 leaves it, A3-2 enters it", T.fg2))
     return rows

@@ -1,64 +1,79 @@
-"""Top-down garage scene for the worked example, drawn with the reference pack's assets.
+"""Top-down drawing of the Pecos garage (5675_pecos_combined.yaml) with the reference pack's assets.
 
-The drawing primitives (floor grid, corridors, parking stalls, customer bay with door, charger
-bolt, AGV with wheels / lift plate / heading chevron, tray with rails, car silhouette, routes)
-are adapted from the reference `facility.py`. The layout itself is SCHEMATIC: the Pecos YAML was
-not part of the reference material, so node positions are invented in the Pecos naming style
-(P = parking stall, W = waypoint, B = customer bay, C = AGV charger), using the Pecos XL stall
-size (5.79 m x 2.21 m).
+Node positions, types and edges are read from sources/5675_pecos_combined.yaml. Stall rectangles use
+the layout's XL parking window (5.791 m along x by 2.21 m along y), centred on each Parking node, as
+in the reference `facility.py`; bays are drawn 0.9 m wider with the customer door on the garage
+(east) side. The drawing primitives (floor grid, corridors, stalls, bay, charger bolt, AGV with
+wheels / lift plate / heading chevron, tray with rails, car silhouette, routes) are adapted from the
+reference `facility.py`. AGVs, trays and cars are HYPOTHETICAL occupancy: the YAML has none.
 """
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
 
 from components import chip, num_badge
 from svgkit import BBox, Doc, pts_to_path
 from theme import T, S
 
-STALL_L, STALL_W = 5.79, 2.21          # Pecos XL parking window (m)
-BAY_L, BAY_W = 5.79, 3.11              # bay = stall + 0.9 m, as in the reference drawing
+ROOT = Path(__file__).resolve().parents[2]
+YAML = ROOT / "sources" / "5675_pecos_combined.yaml"
 C_PARK, C_BAY, C_CHG, C_WP = "#8FA3BF", T.teal, "#FACC15", T.fg2
 CAR = "#CBD5E1"
 TRAY = T.amber
+PREFIX = {"Parking": "P", "Waypoint": "W", "Bay": "B", "AgvCharge": "C"}
 
 
 @dataclass
 class Node:
-    id: str          # "W13", "P19", ...
+    id: str          # "W22", "P23", ...
     x: float
     y: float
     type: str        # Parking | Waypoint | Bay | AgvCharge
-    axis: str = "x"  # long axis of a stall / bay
-    door: str = ""   # bay door side: n | s | e | w
-    used: bool = True   # part of the worked example graph?
+    num: int
+    headings: list
+    section: str
+    axis: str = "x"  # long axis of stalls / bays / trays: Pecos stalls are 5.79 m along x
+    door: str = ""   # bay door side
+
+    @property
+    def used(self):
+        return self.id in USED
 
 
-# --------------------------------------------------------------------------------------
-# Layout: the nine example vertices + a few context stalls that the example does not use
-# --------------------------------------------------------------------------------------
-NODES = {n.id: n for n in [
-    Node("C10", 0.0, 0.0, "AgvCharge"),
-    Node("W11", 4.0, 0.0, "Waypoint"),
-    Node("W12", 8.0, 0.0, "Waypoint"),
-    Node("W13", 12.0, 0.0, "Waypoint"),
-    Node("W14", 16.0, 0.0, "Waypoint"),
-    Node("P19", 21.2, 0.0, "Parking", axis="x"),
-    Node("W8", 12.0, 4.0, "Waypoint"),
-    Node("B7", 12.0, 8.9, "Bay", axis="y", door="s"),
-    Node("P23", 12.0, -4.9, "Parking", axis="y"),
-    # context only (not part of the example graph)
-    Node("P21", 4.0, -4.9, "Parking", axis="y", used=False),
-    Node("P22", 8.0, -4.9, "Parking", axis="y", used=False),
-    Node("P24", 16.0, -4.9, "Parking", axis="y", used=False),
-    Node("P20", 21.2, 2.4, "Parking", axis="x", used=False),
-    Node("C14", 16.0, 4.0, "AgvCharge", used=False),
-]}
-EDGES = [("C10", "W11"), ("W11", "W12"), ("W12", "W13"), ("W13", "W14"), ("W14", "P19"),
-         ("B7", "W8"), ("W8", "W13"), ("W13", "P23")]
-CONTEXT_EDGES = [("W11", "P21"), ("W12", "P22"), ("W14", "P24"), ("W14", "C14")]
-CORRIDORS = [("C10", "W14"), ("W8", "W13")]
-XLIM, YLIM = (-2.6, 24.8), (-8.6, 12.9)
+def _load():
+    raw = YAML.read_text()
+    data = yaml.safe_load(raw)
+    section, sec_of = "", {}
+    for line in raw.splitlines():
+        m = re.match(r"\s*#\s*5675_pecos_(\w+)", line)
+        if m:
+            section = m.group(1)
+        m = re.match(r"\s*- id:\s*(\d+)", line)
+        if m:
+            sec_of[int(m.group(1))] = section
+    nodes = {}
+    for n in data["nodes"]:
+        lab = PREFIX[n["type"]] + str(n["id"])
+        nodes[lab] = Node(lab, float(n["x"]), float(n["y"]), n["type"], n["id"], list(n.get("headings", [])),
+                          sec_of[n["id"]], door="e" if n["type"] == "Bay" else "")
+    byid = {n.num: n.id for n in nodes.values()}
+    edges = [(byid[e["src"]], byid[e["dst"]]) for e in data["edges"]]
+    win = {w["name"]: w for w in data["parking_windows"]}
+    return nodes, edges, win
+
+
+NODES, ALL_EDGES, WINDOWS = _load()
+assert len(NODES) == 28 and len(ALL_EDGES) == 37
+STALL_L, STALL_W = WINDOWS["XL"]["length_m"], WINDOWS["XL"]["width_m"]
+BAY_L, BAY_W = STALL_L, STALL_W + 0.9
+USED: set = set()              # filled in by example.py: the vertices of the worked example
+EX_EDGES: set = set()          # filled in by example.py
+XLIM, YLIM = (19.6, 46.6), (6.4, 25.6)
 
 
 class Garage:
@@ -109,12 +124,16 @@ class Garage:
                    anchor="middle")
 
     def corridors(self):
+        """Light bands under waypoint-to-waypoint edges and bay connectors = travel corridors (as in the
+        reference drawing)."""
         w = STALL_W * self.s
         self.d.clip_on(self.box, rx=10)
-        for a, b in CORRIDORS:
-            (x0, y0), (x1, y1) = self.P(a), self.P(b)
-            self.d.path(f"M{x0} {y0} L{x1} {y1}", stroke="#18233A", sw=w, cap="square", layer="bg",
-                        bbox=BBox(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)))
+        for a, b in ALL_EDGES:
+            A, B = NODES[a], NODES[b]
+            if {A.type, B.type} <= {"Waypoint", "Bay"} and not (A.type == B.type == "Bay"):
+                (x0, y0), (x1, y1) = self.P(a), self.P(b)
+                self.d.path(f"M{x0} {y0} L{x1} {y1}", stroke="#18233A", sw=w, cap="square", layer="bg",
+                            bbox=BBox(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)))
         self.d.clip_off()
 
     def _rect_of(self, n, L, W):
@@ -156,12 +175,14 @@ class Garage:
                        halo=T.bg_deep, halo_w=3)
 
     def edges(self, *, color="#55657F", sw=1.5, context=True):
-        for a, b in EDGES:
+        for a, b in ALL_EDGES:
+            ex_edge = frozenset((a, b)) in EX_EDGES
+            if not ex_edge and not context:
+                continue
             (x0, y0), (x1, y1) = self.P(a), self.P(b)
-            self.d.line(x0, y0, x1, y1, stroke=color, sw=sw, layer="edges")
-        if context:
-            for a, b in CONTEXT_EDGES:
-                (x0, y0), (x1, y1) = self.P(a), self.P(b)
+            if ex_edge:
+                self.d.line(x0, y0, x1, y1, stroke=color, sw=sw, layer="edges")
+            else:
                 self.d.line(x0, y0, x1, y1, stroke="#334155", sw=1.1, dash="3 4", layer="edges")
 
     def nodes(self, *, labels=True, highlight=(), wp_below=False):
@@ -172,9 +193,9 @@ class Garage:
             if n.type == "Waypoint":
                 hl = n.id in highlight
                 d.circle(x, y, 6.5 if hl else 4.5, fill=T.teal if hl else C_WP, stroke=T.bg_deep, sw=1.5, layer="over")
-                if labels and wp_below and n.id != "W8":
-                    d.text(x, y + 1.45 * self.s, n.id, size=10.5, family="mono", weight=600 if hl else 400,
-                           fill=T.teal if hl else T.muted, anchor="middle", halo=T.bg_deep, halo_w=3.5, layer="labels")
+                if labels and wp_below:
+                    d.text(x - 1.35 * self.s, y + 4, n.id, size=10.5, family="mono", weight=600 if hl else 400,
+                           fill=T.teal if hl else T.muted, anchor="end", halo=T.bg_deep, halo_w=3.5, layer="labels")
                 elif labels:
                     d.text(x - 8, y - 11, n.id, size=10.5, family="mono", weight=600 if hl else 400,
                            fill=T.teal if hl else T.muted, anchor="end", halo=T.bg_deep, halo_w=3.5, layer="labels")
@@ -189,11 +210,36 @@ class Garage:
                         (x - 0.14 * r, y + 0.62 * r), (x + 0.38 * r, y - 0.12 * r), (x + 0.02 * r, y - 0.12 * r)]
                 d.polygon(bolt, fill=C_CHG, layer="over", join="round", opacity=op)
                 if labels:
-                    d.text(x - 1.25 * self.s, y + 4, n.id, size=11, family="mono", weight=600, fill=C_CHG, anchor="end",
+                    d.text(x + r + 4, y + r + 6, n.id, size=10.5, family="mono", weight=600, fill=C_CHG, anchor="start",
                            halo=T.bg_deep, halo_w=3.5, layer="labels", opacity=op)
 
-    def base(self, *, labels=True, highlight=(), axes=True, context=True, wp_below=False):
+    def zones(self):
+        """Dashed outline per YAML section (sandbox_eng / sandbox_qa), as in the reference drawing."""
+        d = self.d
+        groups = {}
+        for n in NODES.values():
+            groups.setdefault(n.section, []).append(n)
+        for sec, ns in groups.items():
+            big = lambda n: n.type in ("Parking", "Bay")
+            x0 = min(n.x - (STALL_L / 2 if big(n) else 0.6) for n in ns) - 0.45
+            x1 = max(n.x + (STALL_L / 2 if big(n) else 0.6) for n in ns) + 0.45
+            y0 = min(n.y - (STALL_W / 2 if big(n) else 0.6) for n in ns) - 0.45
+            y1 = max(n.y + (STALL_W / 2 if big(n) else 0.6) for n in ns) + 1.0
+            x0, x1 = max(x0, self.xmin + 0.15), min(x1, self.xmax - 0.15)
+            y0, y1 = max(y0, self.ymin + 0.15), min(y1, self.ymax - 0.15)
+            if x1 <= x0 or y1 <= y0:
+                continue
+            d.rect(self.X(x0), self.Y(y1), (x1 - x0) * self.s, (y1 - y0) * self.s, rx=8, fill="none",
+                   stroke="#2C3A52", sw=1.2, dash="6 5", layer="bg")
+            d.text(self.X(x0) + 8, self.Y(y1) + 11, f"yaml: 5675_pecos_{sec}", size=10, family="mono",
+                   fill=T.faint, layer="bg")
+
+    def base(self, *, labels=True, highlight=(), axes=True, context=True, wp_below=False, zones=False):
         self.floor(axes=axes)
+        if zones:
+            self.d.clip_on(self.box, rx=10)
+            self.zones()
+            self.d.clip_off()
         self.corridors()
         self.d.clip_on(self.box, rx=10)
         self.stalls(labels=labels, highlight=highlight)
@@ -222,7 +268,7 @@ class Garage:
             self.car(x, y, w * (0.78 if axis == "x" else 0.72), h * (0.72 if axis == "x" else 0.78), axis=axis,
                      dim=dim)
         if label:
-            chip(d, x - w / 2 + 2, y + h / 2 + 10, label, color, anchor="start", size=10,
+            chip(d, x + w / 2 - 3, y, label, color, anchor="end", size=10,
                  fill=T.tint(color, 0.3, T.bg_deep), layer="labels")
 
     def car(self, x, y, w, h, *, axis="x", color=CAR, dim=False):

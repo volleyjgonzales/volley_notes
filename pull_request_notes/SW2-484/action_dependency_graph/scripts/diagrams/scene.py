@@ -3,10 +3,13 @@ continuous time of an executed schedule."""
 from __future__ import annotations
 
 from garage import NODES, heading_between, node_axis
+
+HEADING = "w"   # every Pecos node allows heading 90 (= facing west); AGVs move sideways along the aisle
 import example as ex
 
-CARRIES = {"X": "T7"}          # X carries tray T7 (with a customer's car) for its whole route
-PARKED_TRAYS = [("P19", "T19", False), ("P21", "T21", True), ("P22", "T22", True), ("P24", "T24", False)]
+CARRIES = {"A2": "T23"}         # X carries tray T23 (with a customer's car) for its whole route
+PARKED_TRAYS = [("P15", "T15", True), ("P17", "T17", False), ("P19", "T19", True), ("P20", "T20", True),
+                ("P24", "T24", False), ("P2", "T2", True), ("P3", "T3", False), ("P5", "T5", True), ("P6", "T6", True)]
 
 
 def _heading_at(path, t):
@@ -65,7 +68,7 @@ def sched_positions(sched, tau):
 
 def draw_trays(G, *, skip=(), dim_context=True, labels=True):
     for v, label, car in PARKED_TRAYS:
-        if v in skip:
+        if v in skip or not G.visible(NODES[v], -1.0):
             continue
         G.tray(v, label if labels else None, axis=node_axis(v), payload=car, dim=dim_context and not NODES[v].used)
 
@@ -73,6 +76,6 @@ def draw_trays(G, *, skip=(), dim_context=True, labels=True):
 def draw_robot(G, r, at, heading, *, label=True, label_side="below", ghost=False, size=1.0):
     col = ex.COLOR[r]
     if r in CARRIES and not ghost:
-        G.tray(at, None, axis="y" if heading in "ns" else "x", payload=True)
-    return G.agv(at, f"AGV {r}" if label is True else (label or None), heading=heading, color=col,
+        G.tray(at, None, axis="x", payload=True)
+    return G.agv(at, f"AGV-{r[1:]}" if label is True else (label or None), heading=HEADING, color=col,
                  label_side=label_side, lifted=r in CARRIES, ghost=ghost, size=size)

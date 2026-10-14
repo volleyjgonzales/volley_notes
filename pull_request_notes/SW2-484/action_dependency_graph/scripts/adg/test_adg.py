@@ -23,10 +23,10 @@ from adg import (actions_from_paths, at, closure, conflicts, drop_waits, is_acyc
                  type1, type2_cp, type2_exhaustive, type2_scp, type2_scp_as_printed)
 
 EXAMPLE = {   # same plan as scripts/diagrams/example.py
-    "L": ["W12", "W13", "W14", "P19"],
-    "X": ["B7", "W8", "W13", "P23"],
-    "M": ["W11", "W12", "W12", "W13", "W14"],
-    "N": ["C10", "W11", "W11", "W12", "W13", "W8"],
+    "A1": ["W18", "W22", "W25", "W26"],
+    "A2": ["B21", "W41", "W22", "P23"],
+    "A3": ["W13", "W18", "W18", "W22", "W25"],
+    "A4": ["W8", "W13", "W13", "W18", "W22", "W41"],
 }
 
 

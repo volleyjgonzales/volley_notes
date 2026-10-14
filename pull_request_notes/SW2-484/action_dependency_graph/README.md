@@ -11,7 +11,7 @@ Ground-up learning materials for **Joachim Dunkel, _Streamlining the Action Depe
 | 3 | [The paper's two improvements, step by step](chapters/03-scp-illustrated.md) | 60 min | wait removal (Theorems 1–2); CP; SCP and why it is correct (Theorem 3); execution consequences; caveats |
 | 4 | [Complete mathematical tutorial](chapters/04-complete-mathematical-tutorial.md) | reference | derivations, C++ sketch, exercises (original text, with one correction note in §12.3) |
 
-Chapters 1–3 share **one worked example**: four AGVs (L, M, N, X) in one corner of a parking garage, all crossing the junction W13. Places use the reference naming (P parking stall, W waypoint, B bay, C charger, T tray); AGV names never clash with them. Each chapter ends with checkpoint questions and hidden answers.
+Chapters 1–3 share **one worked example**: four AGVs (AGV-1 to AGV-4, numbered in the order they pass the junction) in the Pecos garage, all crossing the junction W22. Places are the YAML's node ids with the reference prefixes (P parking stall, W waypoint, B bay, C charger; T tray); AGV names never clash with them. Each chapter ends with checkpoint questions and hidden answers.
 
 ## Figures
 
@@ -33,6 +33,7 @@ The figure toolkit (`svgkit.py`, `components.py`, `theme.py`, `viewer.py`) is th
 ## What changed in this revision
 
 - All Graphviz figures were replaced. The ADG figures now use one lane per robot and one column per plan time step, with orthogonally routed type-2 edges labelled by the vertex being handed over.
+- The garage scenes are drawn on the real Pecos layout (`sources/5675_pecos_combined.yaml`), with the reference pack's assets; the worked example uses 9 of its 28 nodes around the junction W22.
 - Chapters 1–3 were rewritten around the worked example, with step-by-step walkthroughs, full edge tables and checkpoint answers.
 - Two technical corrections, both checked by `scripts/adg/test_adg.py`:
   - **Algorithm 3's same-robot branch is safe either way.** If the latest candidate is the target's own robot, skipping the edge (the literal reading of the pseudocode) loses no ordering; walking back to a different-robot candidate (the wording of Theorem 3) only adds a redundant edge. The previous edition said an implementation must walk backwards (chapter 3, §4.5).
@@ -40,6 +41,6 @@ The figure toolkit (`svgkit.py`, `components.py`, `theme.py`, `viewer.py`) is th
 
 ## Scope
 
-The garage and plans are **illustrative**. Stall and bay sizes are the Pecos XL dimensions from the reference pack, but node positions are invented: the Pecos layout YAML was not part of the reference material. With that file the same scenes could be redrawn on real coordinates. Nothing here describes real AGV footprints, firmware or scheduler code. The paper's collision model is "two robots on one vertex"; chapter 3, §7 lists what to re-check before applying its results to a richer model.
+The garage is the **real Pecos layout**: node positions, types, headings and edges are read from [`sources/5675_pecos_combined.yaml`](sources/5675_pecos_combined.yaml) by `scripts/diagrams/garage.py`. The AGVs, trays and cars placed in it, and the plan they follow, are **hypothetical** (the YAML has no occupancy). Nothing here describes real AGV footprints, firmware or scheduler code. The paper's collision model is "two robots on one vertex"; chapter 3, §7 lists what to re-check before applying its results to a richer model.
 
 **Notation:** italic $t$ for scalars, $\langle s, g, t, R\rangle$ for actions, $a \to b$ for a direct dependency and $a \leadsto b$ for a path.
