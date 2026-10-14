@@ -133,26 +133,28 @@ def uml_events():
             "VecsTransition, VrcTransition (resource-state transitions).")
     BASE, MOVE, RES = T.sky, T.green, T.violet
     base_spec = dict(stereo="abstract base class", accent=BASE, abstract=True,
-                     attrs=["# type_: ScheduleEventType", "- job_idx_: size_t"],
+                     attrs=["- type_: ScheduleEventType", "- job_idx_: unsigned int  // set once"],
                      methods=["+ Apply(state) const = 0", "+ GetGarageEntityId() const = 0", "+ GetType() const",
-                              "+ GetJobIndex() const", "+ ~ScheduleEvent()  virtual"])
+                              "+ GetJobIndex() const", "+ ToString() const  virtual", "+ ~ScheduleEvent()  virtual",
+                              "  copy-constructible, not copy-assignable"])
     left = [
         ("TrayMove", ["- tray_id_: optional<uint16_t>", "- dest_: optional<GaragePoseMsg>",
                       "- agv_id_: optional<uint16_t>"],
          ["+ Assigned() const", "+ Get/SetTrayId(id)", "+ Get/SetDest(dest)", "+ Get/SetAgvId(id)",
           "+ Apply(state) const"]),
         ("AgvMove", ["- discrete_change_: variant<", "    AgvLiftChangedMsg,", "    AgvPoseChangedMsg>"],
-         ["+ GetAgvId() const", "+ GetDiscreteChange() const", "+ GetSrc() / GetDest() const",
+         ["+ GetAgvId() const", "+ Get/SetDiscreteChange()", "+ GetSrc() / GetDest() const  // nullopt for lifts",
           "+ Apply(state) const  // std::visit"]),
     ]
     right = [
-        ("BayTransition", ["- bay_state_change_:", "    DiscreteBayStateChangedMsg", "- command_: BayCommandMsg"],
-         ["+ GetBayId() / GetSourceState()", "+ GetCommand() const", "+ Apply(state) const"]),
-        ("VecsTransition", ["- state_change_:", "    DiscreteVecsStateChangedMsg"],
-         ["+ GetStateChange() const", "+ Apply(state) const"]),
-        ("VrcTransition", ["- state_change_:", "    DiscreteVrcStateChangedMsg", "- from_vrc_node_id_: uint32_t",
+        ("BayTransition", ["- src_state_: DiscreteBayStateMsg", "- command_: BayCommandMsg"],
+         ["+ GetBayId() / Get/SetSourceState()", "+ Get/SetCommand()", "+ Apply(state) const"]),
+        ("VecsTransition", ["- state_change_: VecsStateChangedMsg"],
+         ["+ GetVecsId() / Get/SetStateChange()", "+ Apply(state) const"]),
+        ("VrcTransition", ["- state_change_: VrcStateChangedMsg", "- from_vrc_node_id_: uint32_t",
                            "- to_vrc_node_id_: uint32_t"],
-         ["+ GetFromVrcNodeId() / GetToVrcNodeId()", "+ GetRequestedFloor() const", "+ Apply(state) const"]),
+         ["+ GetVrcId() / GetRequestedFloor()", "+ GetFromVrcNodeId() / GetToVrcNodeId()", "+ Apply(state) const",
+          "  // not created by the scheduler package"]),
     ]
     lw = max(class_size(n, attrs=a, methods=m, size=M)[0] for n, a, m in left)
     rw = max(class_size(n, attrs=a, methods=m, size=M)[0] for n, a, m in right)

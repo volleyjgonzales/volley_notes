@@ -466,13 +466,13 @@ Today `DoTrayAssignments(ctx)` edits three things it does not own: the DAG (`ctx
 
 **Why this is practical for tray assignment.** The tray tree reads the DAG exactly once: `GetTopologicalOrdering()` at the start (plus `GetEventFromVertex` to walk it). After that it only *writes*: `AddEvent`, `AddDependency`, the two setters, and `first_tray_event`. Nothing in the loop reads back an edge it added. So the solver never needs to see its own edits in the DAG, and recording them instead of applying them changes nothing it computes. (The garage *state* the loop does read is `working_state`, which is private to the `Pass` anyway.)
 
-**Why not return a whole new DAG.** `ScheduleEventDag` holds `std::shared_ptr<ScheduleEvent>`. Copying it copies pointers, so a “new DAG” would share event objects with the old one, and the setters would still edit the caller's events. A deep copy needs cloning and an old → new identity map for `first_tray_event` and every later stage. An **edit log** avoids both: it refers to existing events by the same `shared_ptr`, adds new events as new objects, and never touches the caller's.
+**Why not return a whole new DAG.** `ScheduleEventDag` holds `std::shared_ptr<ScheduleEvent>`. Copying it copies pointers, so a “new DAG” would share event objects with the old one, and the setters would still edit the caller's events. A deep copy needs cloning and an old → new identity map for `first_tray_event` and every later stage. `planner_core` has no virtual `Clone()`: events are copy-constructible, but only through their concrete type, so cloning means a `dynamic_cast` (or a switch on `GetType()`) over the five subclasses. An **edit log** avoids both: it refers to existing events by the same `shared_ptr`, adds new events as new objects, and never touches the caller's.
 
 The `Result` type and its parts are defined in 6.1. An **edit log** means: `fills` for blanks on existing events, `edits` for new events and edges in the order today's code creates them, and the hand-off map.
 
-**Parity depends on the order.** The DAG's vertex indices follow `AddEvent` order, and what later stages compute (topological order among unordered events, `Reduce`) can depend on that order. `edits` is therefore an ordered log, and `ApplyTrayAssignment` replays it front to back with the same `AddEvent` / `AddDependency` calls today's code makes, so the resulting DAG is the same graph built in the same order. `AddDependency`'s return value (false for a duplicate or rejected edge) is only logged today, so replaying the same calls gives the same edge set.
+**Parity depends on the order.** The DAG's vertex indices follow `AddEvent` order (Boost `vecS`). `ScheduleEventDag::GetTopologicalOrdering()` takes the lowest job index first, but breaks ties within a job by heap order, which depends on vertex order and on the order edges were added; `Reduce()` and every replay use that ordering (doc 01, section 12.5). `edits` is therefore an ordered log, and `ApplyTrayAssignment` replays it front to back with the same `AddEvent` / `AddDependency` calls today's code makes, so the resulting DAG is the same graph built in the same order. `AddDependency` returns `false` only when an endpoint is missing or the edge already exists, and tray assignment only logs it, so replaying the same calls gives the same edge set.
 
-**The one subtle part: the loop needs filled values before they are applied.** After `ChooseEmptyTray`, the main loop plans *that* tray's path, and later `Apply`s the move to `working_state`. Today it reads the id back from the mutated event. In the new design the `Pass` makes a resolved copy, `TrayMove resolved = *move; resolved.SetTrayId(choice.tray_id);`, applies the copy to its `working_state`, records a `TrayFill`, and never touches `*move`. This assumes `TrayMove` is copyable and that `ScheduleEvent::Apply(state&)` changes only the state. The second is what `RunAgvPathRepairPass` already relies on (“Discrete Apply only updates positions for these events”), but both live in `planner_core`, which is not in this snapshot, so **verify before stage C**. If `TrayMove` is not copyable, add a small `TrayMove::WithFields(tray_id, dest)` there.
+**The one subtle part: the loop needs filled values before they are applied.** After `ChooseEmptyTray`, the main loop plans *that* tray's path, and later `Apply`s the move to `working_state`. Today it reads the id back from the mutated event. In the new design the `Pass` makes a resolved copy, `TrayMove resolved = *move; resolved.SetTrayId(choice.tray_id);`, applies the copy to its `working_state`, records a `TrayFill`, and never touches `*move`. Both assumptions hold in `planner_core` (`sources/repomix-planner-core.xml`): `ScheduleEvent`'s copy constructor is public and defaulted, so `TrayMove resolved = *move;` compiles (copy *assignment* is private, so `resolved = *move;` does not), and `Apply` is a `const` member, so it can only change the state it is given. One behaviour to keep in mind: `TrayMove::Apply` with a blank tray id does nothing, and with a blank destination it removes the tray from the state (doc 01, section 11). The resolved copy always has both fields set, so the `Pass` never hits those branches.
 
 **Applying it.** One function owns every write to the context:
 
@@ -480,9 +480,19 @@ The `Result` type and its parts are defined in 6.1. An **edit log** means: `fill
 // PROPOSED — src/tray_assignment/apply.cpp ; declared in include/scheduler/tray_assignment/apply.hpp
 stdx::Result ApplyTrayAssignment(ScheduleContext& ctx, const Result& result) {
   for(const auto& edit : result.edits) {                       // structure first, in recorded order
-    std::visit(Overloaded{
-        [&](const AddEvent& e)      { ctx.events.AddEvent(e.event); },
-        [&](const AddDependency& e) { ctx.events.AddDependency(e.from, e.to); }}, edit);
+    stdx::Result applied = std::visit(Overloaded{
+        [&](const AddEvent& e) -> stdx::Result {
+          if(!ctx.events.AddEvent(e.event)) return stdx::Unexpected("event added twice");  // AddEvent: false if present
+          return {};
+        },
+        [&](const AddDependency& e) -> stdx::Result {
+          if(!ctx.events.HasEvent(e.from) || !ctx.events.HasEvent(e.to)) {      // today: a silent no-op
+            return stdx::Unexpected("edge to an event that is not in the DAG");
+          }
+          ctx.events.AddDependency(e.from, e.to);   // false now only means "edge already there", as today
+          return {};
+        }}, edit);
+    if(!applied) return applied;
   }
   for(const auto& fill : result.fills) {                       // then the blanks
     auto* move = dynamic_cast<TrayMove*>(fill.event.get());
@@ -498,7 +508,7 @@ stdx::Result ApplyTrayAssignment(ScheduleContext& ctx, const Result& result) {
 }
 ```
 
-(`Overloaded` is the usual two-line helper for `std::visit`, in `include/scheduler/common/overloaded.hpp`.) Applying fills after the edits gives the same DAG as long as `AddEvent` and `AddDependency` only use pointer identity and never read event fields (they take `shared_ptr`s; confirm in `planner_core`). Today the setters run earlier only because that was the convenient place.
+(`Overloaded` is the usual two-line helper for `std::visit`, in `include/scheduler/common/overloaded.hpp`.) The two checks are the only intended difference from today. `AddDependency` returns `false` both for a duplicate edge (harmless, and common) and for an endpoint that was never added (a lost edge, silently). Today's tray code always adds an event before linking it, so the check should never fire; if it does, it has found a bug that today would have shipped as a missing dependency. Applying fills after the edits gives the same DAG: `AddEvent` and `AddDependency` only touch `dag_` and the pointer-keyed `ptr_to_vertex_` map, and the only field the DAG ever reads is the job index (for ordering), which fills do not change. Today the setters run earlier only because that was the convenient place.
 
 **What this buys:**
 
@@ -587,7 +597,7 @@ Returning a result is harder there, for reasons visible in the code:
 - The AGV tree **reads the DAG it is building.** It consumes `event_dag_copy` root by root (`event_dag_copy.Remove(root_event)`), and `EnsureAgvMovePathsClear` repeatedly inspects edges added earlier in the same stage (up to 256 repair passes), followed by `Reduce()`.
 - It **reads back fields it set**: `SetAgvId` on a `TrayMove`, then `GetAgvId()` on candidate moves while building later dependencies.
 
-An edit log could still work, if the solver keeps a private *structural* copy of the DAG (copying pointers is enough for edges), applies every edit to that copy as it goes, and logs it, including a `Reduce` step. The field reads are the real obstacle: they would need either cloned events with an identity map, or a side table (`agv_of[event]`) replacing every `GetAgvId()` read, which touches parity-sensitive code. **Recommendation:** for stage F, use the same layout and `stdx` types, and give the AGV solver an `Input` plus an explicitly mutable `ScheduleEventDag&` (named as such in the signature). Convert it to a returned result after the benchmarks exist and can prove nothing changed.
+An edit log could still work, if the solver keeps a private *structural* copy of the DAG (the default copy constructor copies `dag_` and `ptr_to_vertex_`, so the copy shares the events), applies every edit to that copy as it goes, and logs it, including a `Reduce` step. The log must name events by pointer, never by vertex: `Remove` on the work-queue copy renumbers its vertices. The field reads are the real obstacle: they would need either cloned events with an identity map (and `planner_core` has no `Clone()`, see 6.5), or a side table (`agv_of[event]`) replacing every `GetAgvId()` read, which touches parity-sensitive code. **Recommendation:** for stage F, use the same layout and `stdx` types, and give the AGV solver an `Input` plus an explicitly mutable `ScheduleEventDag&` (named as such in the signature). Convert it to a returned result after the benchmarks exist and can prove nothing changed.
 
 ```cpp
 // PROPOSED — sketch only; include/scheduler/agv_assignment/solver.hpp
@@ -613,10 +623,11 @@ class Solver {
 4. Blocking-tray moves are created in recursive prerequisite order, and a tray already being moved is not chosen to move again in the same resolution.
 5. AGV matches respect disabled AGVs, AGVs trapped in a bay that is not `STATE_READY_TO_RETRIEVE`, reachability, collisions, lift state and AGVs already busy.
 6. Arrival ordering never puts two AGVs on one node: `AddNodeArrivalDeps` and `EnsureAgvMovePathsClear` keep doing their jobs.
-7. `Scheduler::Plan` output is unchanged, apart from controlled non-determinism and log text.
+7. `Scheduler::Plan` output is unchanged, apart from log text. The DAG side is deterministic for a given build order (job index first, then heap order); remaining variation comes from `unordered_map` iteration elsewhere, for example the order of `result.scheduled_jobs` (doc 01, section 6).
 8. `Reduce()` and path-repair placement stay where they are during extraction.
 9. `tray_assignment::Solver::Solve` changes nothing reachable from its `Input`; `ApplyTrayAssignment` is the only place tray assignment writes `ctx`. A test snapshots every event's fields before `Solve` and compares after.
-10. `ApplyTrayAssignment` replays `Result::edits` in recorded order, so vertex indices and edge sets match what `DoTrayAssignments` builds today.
+10. `ApplyTrayAssignment` replays `Result::edits` in recorded order, so vertex indices, edge sets **and the order of each vertex's out-edges** match what `DoTrayAssignments` builds today. The last one matters: `ScheduleEventDag::GetTopologicalOrdering()` breaks ties inside a job by heap order, which follows push order, which follows out-edge order (doc 01, section 12.5).
+11. Every event is in the DAG once. `AddEvent` refuses a pointer that is already present, so a solver must never record `AddEvent` for an event of the input DAG.
 
 The tray-move example below is illustrative; real graphs and paths depend on the layout:
 
@@ -648,7 +659,7 @@ A move-only refactor is risky because the helpers in section 3 are shared with j
 
 | Decision | Initial recommendation | Evidence needed |
 |---|---|---|
-| Input/output style | Tray: read-only `Input`, returned `stdx::Expected<Result>` (edit log) applied by `Scheduler` (6.5). AGV: explicit `ScheduleEventDag&` for the first pass (6.7) | `TrayMove` copyable and `Apply` state-only (`planner_core`); replay order gives identical DAG snapshots |
+| Input/output style | Tray: read-only `Input`, returned `stdx::Expected<Result>` (edit log) applied by `Scheduler` (6.5). AGV: explicit `ScheduleEventDag&` for the first pass (6.7) | Confirmed in `planner_core`: `TrayMove` copy-constructible, `Apply` is `const`; replay order gives identical DAG snapshots |
 | Error reporting | `stdx::Expected<T>` / `stdx::Result` with `std::string` errors; `std::optional` only for internal “found nothing” searches (6.4) | Tests that match error text; `std::to_string` vs a `std::formatter<GaragePoseMsg>` |
 | Which functions stay members | Only the solver's `Solve` and the private `Pass`; everything else becomes a pure free function over `GarageServices` (6.3) | Each pure function's unit test passes without a `Scheduler` |
 | Folder layout and names | Subfolders `common/`, `tray_assignment/`, `agv_assignment/` under `include/scheduler/`, `src/` and `test/`; one `CMakeLists.txt`; private headers in `src/<module>/`; namespaces to match (6.2) | `volley_add_library` exports only `include/`; CI include check for dependency direction |
@@ -656,7 +667,8 @@ A move-only refactor is risky because the helpers in section 3 are shared with j
 | Where interfaces live | Small, low-dependency header package | `colcon graph`, `package.xml`, exported CMake targets |
 | Where default solvers live | Scheduler library sub-module first | Avoid new group-level dependency cycles |
 | Benchmarks | Direct solver benchmark plus optional end-to-end `Plan` benchmark | Fixtures, harness, timing environment |
-| What "same result" means | Same tray/AGV assignments, same edge set after `Reduce`, same final state and errors | Stable event identifiers and tie-breaking |
+| What "same result" means | Same tray/AGV assignments, same edge set after `Reduce`, same final state and errors | Stable event identifiers. Tie-breaking is now known: identical `AddEvent`/`AddDependency` sequences give identical orders; otherwise compare orders per job index |
+| `planner_core` changes | None for parity. Later candidates: `[[nodiscard]]` on `AddDependency` (or an error for missing endpoints), a virtual `Clone()` on `ScheduleEvent`, `shared_ptr<const ScheduleEvent>` accessors for read-only users | Agreement from the `planner_core` owners; every other planner package depends on it |
 
 ### Risks that must not be silently "fixed"
 
@@ -664,12 +676,13 @@ These are behaviours a reviewer may want to change. Changing them during extract
 
 1. `GetAgvOccupiedDuration` always returns `Duration::zero()` (`// TODO(isabel) implement!`). The matching costs depend on that.
 2. `Reduce()` runs inside `DoAgvAssignments` *and* again in `Plan`. The `TODO` above the second call says planning may fail without it; nobody has confirmed why.
-3. `DoTrayAssignments` postpones DAG reduction until after AGV assignment; moving it earlier is high risk.
-4. `TrayMove::Apply` reportedly tolerates a missing tray or destination and still mutates state. `planner_core` is not in this snapshot, so confirm in that package before relying on it.
-5. `ScheduleEventDag` uses pointer identity and Boost vertex indices. Removing a vertex can renumber others (verify in `planner_core`), so do not cache vertex descriptors across `Remove`.
-6. Test names such as `576_eccles_half` and `1355_fulton` suggest real sites, but `tiny_lot` and `triple_pick_lot` are synthetic. Record which layouts are real before counting them toward the 10-scenario goal.
-7. SW2-905 (insert fails when an AGV collides with the chosen parking node) is in the parent ticket; that does not mean the refactor causes it.
-8. In fallback 1 (“advance the root tray”), the path recorded for the advance move is `std::vector<GaragePoseMsg>{gg_.GetVertexFromPose(tray_opt->pose).value(), advance_move->GetDest().value()}` (`:2842`–`:2844`). Its first element is a graph *vertex* converted to a `GaragePoseMsg`, and `tray_opt` was already refreshed to the post-advance pose. The `freeing_moves` edges built from that path may therefore be wrong. Reproduce it with a test before touching it; when `TryAdvanceRoot` returns a `PlannedTrayMove`, keep the same path until then.
+3. `DoTrayAssignments` postpones DAG reduction until after AGV assignment (“Reduce here breaks the AgvAssignments for some reason”); moving it earlier is high risk. A likely reason, now that `Reduce()` is readable: AGV assignment has code that looks only at **direct** edges. `PropagateEventCostToChildren` passes a matched tray move's cost to its direct children only, and only tray moves propagate; if `Reduce()` replaces a direct edge “tray move A → tray move C” with the path “A → bay transition → C”, C never sees A's cost and the matching changes. `AddDepsAfterAmiga` also inspects only direct in- and out-edges (and already runs after the reduction at the end of `DoAgvAssignments`). Treat this as a hypothesis to test, not a fix.
+4. `TrayMove::Apply` treats blank fields specially (`planner_core/src/schedule_events.cpp`): no tray id → no-op; no destination → the tray and its payload are **removed** from the state; a tray already on the destination is moved to `0@0`. Later jobs' `working_state` depends on this; a solver that replays half-specified moves must reproduce it exactly.
+5. `ScheduleEventDag` uses pointer identity and Boost `vecS` vertex indices. Removing a vertex shifts every later index down by one (the comment in `RemoveVertexHelper` says so), and CHUGG maps motions back to events by vertex index, so never remove from `ctx->events` and never cache vertex descriptors across `Remove`.
+6. `AddDependency` never checks for cycles and returns `false` silently when an endpoint is missing; `WouldCreateCycle` returns `false` ("safe") in the same case. A refactor that reorders `AddEvent` and `AddDependency` calls can drop edges without any error.
+7. Test names such as `576_eccles_half` and `1355_fulton` suggest real sites, but `tiny_lot` and `triple_pick_lot` are synthetic. Record which layouts are real before counting them toward the 10-scenario goal.
+8. SW2-905 (insert fails when an AGV collides with the chosen parking node) is in the parent ticket; that does not mean the refactor causes it.
+9. In fallback 1 (“advance the root tray”), the path recorded for the advance move is `std::vector<GaragePoseMsg>{gg_.GetVertexFromPose(tray_opt->pose).value(), advance_move->GetDest().value()}` (`:2842`–`:2844`). Its first element is a graph *vertex* converted to a `GaragePoseMsg`, and `tray_opt` was already refreshed to the post-advance pose. The `freeing_moves` edges built from that path may therefore be wrong. Reproduce it with a test before touching it; when `TryAdvanceRoot` returns a `PlannedTrayMove`, keep the same path until then.
 
 ## 10. Proposed UML and call sequence
 

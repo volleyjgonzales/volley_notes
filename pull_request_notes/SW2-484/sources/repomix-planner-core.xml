@@ -1,0 +1,1593 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: test
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+include/
+  planner_core/
+    event_dag.hpp
+    planner_core_msgs.hpp
+    schedule_events.hpp
+src/
+  event_dag.cpp
+  schedule_events.cpp
+CMakeLists.txt
+package.xml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="include/planner_core/event_dag.hpp">
+#pragma once
+
+// NOLINT(modernize-deprecated-headers)
+// NOLINT(readability-identifier-naming)
+// NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
+// NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+#include <stdio.h>
+
+#include <boost/function.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graphviz.hpp>
+#include <boost/graph/topological_sort.hpp>
+#include <boost/graph/transitive_reduction.hpp>
+#include <common/types.hpp>
+#include <common_ros/print_graph.hpp>
+#include <common_ros/roslog.hpp>
+#include <interfaces/msg/action_node.hpp>
+#include <queue>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
+
+#include "planner_core/schedule_events.hpp"
+
+namespace volley {
+
+template <typename T>
+class DagBase {
+public:
+  // Define the Graph type using Boost's adjacency_list with custom Vertex (ScheduleEvent)
+  // properties
+  using DagT = boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, std::shared_ptr<T>>;
+  using Vertex = typename DagT::vertex_descriptor;
+  using Edge = typename DagT::edge_descriptor;
+  using Iterator = typename DagT::vertex_iterator;
+
+  DagBase() = default;
+  virtual ~DagBase() = default;
+  // thx clang
+  DagBase(DagBase const&) = default;
+  DagBase& operator=(DagBase const&) = default;
+  DagBase(DagBase&&) = default;
+  DagBase& operator=(DagBase&&) = default;
+
+  // General properties of the DAG
+  unsigned int NumVertices() const { return boost::num_vertices(dag_); }
+  unsigned int NumEdges() const { return boost::num_edges(dag_); }
+
+  bool Has(const std::shared_ptr<T>& ptr) const { return ptr_to_vertex_.find(ptr) != ptr_to_vertex_.end(); }
+  bool HasVertex(const Vertex& vertex) const { return vertex < NumVertices(); }
+
+  bool HasDependency(const std::shared_ptr<T>& parent, const std::shared_ptr<T>& child) const {
+    if(!Has(parent) || !Has(child)) {
+      return false;
+    }
+    return boost::edge(ptr_to_vertex_.at(parent), ptr_to_vertex_.at(child), dag_).second;
+  }
+  bool HasDependency(const Vertex& parent, const Vertex& child) const {
+    if(!HasVertex(parent) || !HasVertex(child)) {
+      return false;
+    }
+    return boost::edge(parent, child, dag_).second;
+  }
+
+  std::optional<std::shared_ptr<T>> GetFromVertex(const Vertex& vertex) const {
+    if(!HasVertex(vertex)) {
+      return std::nullopt;
+    }
+    return boost::get(boost::vertex_bundle, dag_)[vertex];
+  }
+  std::optional<Vertex> GetVertex(const std::shared_ptr<T>& ptr) const {
+    if(!Has(ptr)) {
+      return std::nullopt;
+    }
+    return ptr_to_vertex_.at(ptr);
+  }
+
+  Vertex GetSourceVertex(const Edge& edge) const { return source(edge, dag_); }
+  Vertex GetTargetVertex(const Edge& edge) const { return target(edge, dag_); }
+
+  const DagT& GetBaseGraph() const { return dag_; }
+
+  // Remove vertex and all in/out edges
+  // NOTE: If you remove a vertex, all vertex IDs larger than the removed vertex will decrement
+  // by 1. Thanks boost! So any DagBase::Vertex references you have will be inaccurate after the
+  // removal. This shouldn't be a huge issue since we mostly use the template class to interact
+  // with the DAG anyways
+  void RemoveVertex(const Vertex& vertex) {
+    auto ptr_opt = GetFromVertex(vertex);
+    if(ptr_opt.has_value()) {
+      RemoveVertexHelper(vertex, ptr_opt.value());
+    }
+  }
+  void Remove(const std::shared_ptr<T>& ptr) {
+    auto vert_opt = GetVertex(ptr);
+    if(vert_opt.has_value()) {
+      RemoveVertexHelper(vert_opt.value(), ptr);
+    }
+  }
+
+  // Note: These functions return a pair consisting of (iterator_start, iterator_end)
+  // Vertex Iterator
+  std::pair<Iterator, Iterator> GetVertices() const { return boost::vertices(dag_); }
+
+  // Get In/Out Edges, throws an exception if the vertex does not exist
+  std::pair<typename DagT::in_edge_iterator, typename DagT::in_edge_iterator> GetInEdges(
+      const Vertex& vertex) const {
+    if(!HasVertex(vertex)) {
+      throw std::invalid_argument("Vertex does not exist: " + std::to_string(vertex));
+    }
+    return boost::in_edges(vertex, dag_);
+  }
+  std::pair<typename DagT::out_edge_iterator, typename DagT::out_edge_iterator> GetOutEdges(
+      const Vertex& vertex) const {
+    if(!HasVertex(vertex)) {
+      throw std::invalid_argument("Vertex does not exist: " + std::to_string(vertex));
+    }
+    return boost::out_edges(vertex, dag_);
+  }
+
+  // Add vertex, returns vertex if added, nullopt if not
+  std::optional<Vertex> Add(const std::shared_ptr<T>& ptr) {
+#pragma GCC diagnostic push
+// disable boost::optional ... m_storage may be used uninitialized
+// This is related to GCC.
+// See also:  https://github.com/boostorg/function/issues/27
+// See also:
+// https://stackoverflow.com/questions/21755206/how-to-get-around-gcc-void-b-4-may-be-used-uninitialized-in-this-funct
+// See also:  https://gcc.gnu.org/bugzilla/show_bug.cgi?id=106922
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+    if(Has(ptr)) {
+      return std::nullopt;
+    }
+    Vertex vertex = boost::add_vertex(ptr, dag_);
+    ptr_to_vertex_[ptr] = vertex;
+    return vertex;
+#pragma GCC diagnostic pop
+  }
+
+  // Add dependency, returns false if not added
+  // Our dependency goes parent -> child. Parent is source, child is target
+  bool AddDependency(const std::shared_ptr<T>& parent, const std::shared_ptr<T>& child) {
+    if(!Has(parent) || !Has(child)) {
+      return false;
+    }
+    Vertex parent_vertex = ptr_to_vertex_.at(parent);
+    Vertex child_vertex = ptr_to_vertex_.at(child);
+    return AddDependency(parent_vertex, child_vertex);
+  }
+  bool AddDependency(const Vertex& parent, const Vertex& child) {
+    if(!HasVertex(parent) || not HasVertex(child)) {
+      return false;
+    }
+    if(HasDependency(parent, child)) {
+      return false;
+    }
+    boost::add_edge(parent, child, dag_);
+    return true;
+  }
+
+  // Add dependent, does the opposite of the above functions
+  bool AddDependent(const std::shared_ptr<T>& child, const std::shared_ptr<T>& parent) {
+    if(!Has(parent) || !Has(child)) {
+      return false;
+    }
+    Vertex parent_vertex = ptr_to_vertex_.at(parent);
+    Vertex child_vertex = ptr_to_vertex_.at(child);
+    return AddDependency(parent_vertex, child_vertex);
+  }
+
+  // Returns true if adding the edge parent -> child would create a cycle, i.e. child can
+  // already reach parent in the current DAG. Uses BFS over out-edges.
+  bool WouldCreateCycle(const Vertex& parent, const Vertex& child) const {
+    if(!HasVertex(parent) || !HasVertex(child)) {
+      return false;
+    }
+    if(parent == child) {
+      return true;
+    }
+    std::unordered_set<Vertex> visited;
+    std::queue<Vertex> bfs;
+    bfs.push(child);
+    visited.insert(child);
+    while(!bfs.empty()) {
+      auto curr = bfs.front();
+      bfs.pop();
+      for(auto [e, e_end] = boost::out_edges(curr, dag_); e != e_end; ++e) {
+        auto next = boost::target(*e, dag_);
+        if(next == parent) {
+          return true;
+        }
+        if(visited.insert(next).second) {
+          bfs.push(next);
+        }
+      }
+    }
+    return false;
+  }
+  bool WouldCreateCycle(const std::shared_ptr<T>& parent, const std::shared_ptr<T>& child) const {
+    if(!Has(parent) || !Has(child)) {
+      return false;
+    }
+    return WouldCreateCycle(ptr_to_vertex_.at(parent), ptr_to_vertex_.at(child));
+  }
+
+  /// @brief Replace the value stored at the vertex containing old_ptr with new_ptr
+  /// @param old_ptr the current value to find the vertex by
+  /// @param new_ptr the new value to store at that vertex
+  /// @return true if the vertex was found and updated, false otherwise
+  bool Replace(const std::shared_ptr<T>& old_ptr, const std::shared_ptr<T>& new_ptr) {
+    auto vert_opt = GetVertex(old_ptr);
+    if(!vert_opt.has_value()) {
+      return false;
+    }
+    return Replace(vert_opt.value(), old_ptr, new_ptr);
+  }
+
+  /// @brief Replace the value stored at a vertex with new_ptr
+  /// @param vertex the vertex to update
+  /// @param new_ptr the new value to store at that vertex
+  /// @return true if the vertex was found and updated, false otherwise
+  bool Replace(const Vertex& vertex, const std::shared_ptr<T>& new_ptr) {
+    auto old_ptr_opt = GetFromVertex(vertex);
+    if(!old_ptr_opt.has_value()) {
+      return false;
+    }
+    return Replace(vertex, old_ptr_opt.value(), new_ptr);
+  }
+
+  /// @brief Get the direct children of a node
+  /// @param ptr shared_ptr to the node
+  /// @return vector of shared_ptrs to the direct children, empty if node not found
+  std::vector<std::shared_ptr<T>> GetChildren(const std::shared_ptr<T>& ptr) const {
+    auto vert_opt = GetVertex(ptr);
+    if(!vert_opt.has_value()) {
+      return {};
+    }
+    return GetChildren(vert_opt.value());
+  }
+
+  /// @brief Get the direct children of a vertex
+  /// @param vertex the vertex descriptor
+  /// @return vector of shared_ptrs to the direct children, empty if vertex not found
+  std::vector<std::shared_ptr<T>> GetChildren(const Vertex& vertex) const {
+    if(!HasVertex(vertex)) {
+      return {};
+    }
+    std::vector<std::shared_ptr<T>> children;
+    for(auto [ei, ei_end] = boost::out_edges(vertex, dag_); ei != ei_end; ++ei) {
+      children.push_back(boost::get(boost::vertex_bundle, dag_)[target(*ei, dag_)]);
+    }
+    return children;
+  }
+
+  /// @brief Get the direct parents of a node
+  /// @param ptr shared_ptr to the node
+  /// @return vector of shared_ptrs to the direct parents, empty if node not found
+  std::vector<std::shared_ptr<T>> GetParents(const std::shared_ptr<T>& ptr) const {
+    auto vert_opt = GetVertex(ptr);
+    if(!vert_opt.has_value()) {
+      return {};
+    }
+    return GetParents(vert_opt.value());
+  }
+
+  /// @brief Get the direct parents of a vertex
+  /// @param vertex the vertex descriptor
+  /// @return vector of shared_ptrs to the direct parents, empty if vertex not found
+  std::vector<std::shared_ptr<T>> GetParents(const Vertex& vertex) const {
+    if(!HasVertex(vertex)) {
+      return {};
+    }
+    std::vector<std::shared_ptr<T>> parents;
+    for(auto [ei, ei_end] = boost::in_edges(vertex, dag_); ei != ei_end; ++ei) {
+      parents.push_back(boost::get(boost::vertex_bundle, dag_)[source(*ei, dag_)]);
+    }
+    return parents;
+  }
+
+  // Get Leaf vertices. Vertices with no children (no dependents)
+  std::vector<Vertex> GetLeafVertices() const {
+    std::vector<Vertex> leaves;
+    for(const auto& vertex : boost::make_iterator_range(GetVertices())) {
+      if(boost::out_degree(vertex, dag_) == 0) {
+        leaves.push_back(vertex);
+      }
+    }
+    return leaves;
+  }
+
+  // Get Root vertices. Vertices with no parents (no dependencies)
+  std::vector<Vertex> GetRootVertices() const {
+    std::vector<Vertex> roots;
+    for(const auto& vertex : boost::make_iterator_range(GetVertices())) {
+      if(boost::in_degree(vertex, dag_) == 0) {
+        roots.push_back(vertex);
+      }
+    }
+    return roots;
+  }
+
+  // Create a topological ordering of the graph. If the graph is not a DAG, nullopt will be
+  // returned.
+  virtual std::optional<std::vector<Vertex>> GetTopologicalOrdering() const {
+    std::vector<Vertex> topo_ordering;
+    try {
+      // NOLINTNEXTLINE
+      boost::topological_sort(dag_, std::back_inserter(topo_ordering));
+      std::reverse(topo_ordering.begin(), topo_ordering.end());
+    }
+    catch(const std::exception& e) {
+      // TODO(Joe) log e.what() in case it's not "The graph must be a DAG."
+      return std::nullopt;
+    }
+    return topo_ordering;
+  }
+
+  BoolStringPair Reduce() {
+    // Note this is complete
+    const size_t num_v = num_vertices(dag_);
+    auto topo_opt = GetTopologicalOrdering();
+    if(!topo_opt.has_value()) {
+      return {false, "The graph must be a DAG."};
+    }
+
+    auto topo_order = topo_opt.value();
+
+    // Get topological ordering - O(V + E)
+    std::vector<int> vertex_order(num_v);
+    for(size_t i = 0; i < num_v; ++i) {
+      vertex_order[topo_order[i]] = i;
+    }
+    // Create reachability matrix using dynamic programming - O(V * E)
+    std::vector<std::vector<bool>> reachable(num_v, std::vector<bool>(num_v, false));
+    // Process vertices in reverse topological order
+    for(auto it = topo_order.rbegin(); it != topo_order.rend(); ++it) {
+      Vertex u = *it;
+      // Direct successors are reachable
+      for(auto [ei, ei_end] = boost::out_edges(u, dag_); ei != ei_end; ++ei) {
+        Vertex v = target(*ei, dag_);
+        reachable[u][v] = true;
+        // If v can reach w, then u can reach w
+        for(size_t w = 0; w < num_v; ++w) {
+          if(reachable[v][w]) {
+            reachable[u][w] = true;
+          }
+        }
+      }
+    }
+    // Store edges to remove
+    std::vector<Edge> edges_to_remove;
+    // Check each edge for redundancy - O(E * V)
+    for(auto [ei, ei_end] = edges(dag_); ei != ei_end; ++ei) {
+      Vertex u = source(*ei, dag_);
+      Vertex v = target(*ei, dag_);
+      // Remove edge temporarily
+      bool is_redundant = false;
+      // Check if u can still reach v through other paths
+      for(auto [out_i, out_end] = boost::out_edges(u, dag_); out_i != out_end && !is_redundant; ++out_i) {
+        if(*out_i == *ei) {
+          continue;
+        }
+        Vertex w = boost::target(*out_i, dag_);
+        if(vertex_order[w] < vertex_order[v] && reachable[w][v]) {
+          is_redundant = true;
+        }
+      }
+      if(is_redundant) {
+        edges_to_remove.push_back(*ei);
+      }
+    }
+    // Remove redundant edges
+    for(const Edge& e : edges_to_remove) {
+      boost::remove_edge(e, dag_);
+    }
+    return {true, "Success"};
+  }
+
+  std::string DrawGraph(std::string name = "dag") const {
+    struct VertexLabelWriter {
+      void operator()(std::ostream& out, const Vertex& vertex) const {
+        out << " [label=\"" << "Vert: " << vertex << std::to_string(*GetFromVertex(vertex)) << "\"]";
+      }
+      // NOLINTNEXTLINE
+      std::function<std::shared_ptr<T>(const Vertex&)> GetFromVertex;
+    } vertex_label_writer;
+    vertex_label_writer.GetFromVertex = [this](const Vertex& vertex) -> std::shared_ptr<T> {
+      return GetFromVertex(vertex).value_or(nullptr);
+    };
+
+    std::string filename = "/tmp/" + name + ".dot";
+    std::ofstream dotfile(filename);
+
+    // TODO(Gunther): Custom Label Writer
+    boost::write_graphviz(dotfile, dag_, vertex_label_writer);
+    dotfile.close();
+    return filename;
+  }
+
+  std::string to_str(const BayCommandMsg& command) const {
+    std::ostringstream os;
+    switch(command.command_type) {
+    case BayCommandMsg::COMMAND_TYPE_TRANSITION_TO_INSERT:
+      os << "toInsrt";
+      break;
+    case BayCommandMsg::COMMAND_TYPE_PROCESS_RETRIEVE:
+      os << "PrcsRtrv";
+      break;
+    case BayCommandMsg::COMMAND_TYPE_TRANSITION_TO_RETRIEVE:
+      os << "toRtrv";
+      break;
+    default:
+      os << "Unknown BayCommand type: " << std::to_string(command.command_type);
+      break;
+    }
+
+    return os.str();
+  }
+
+  std::string to_str(const GaragePoseMsg& pose) const {
+    return std::to_string(pose.node_id);
+    // + "@" + std::to_string(pose.heading);
+  }
+
+  std::string to_str(const AgvGoalMsg& goal) const { return to_str(goal.pose); }
+
+  std::string to_str(const AgvCommandMsg& command) const { return "->" + to_str(command.dst); }
+  std::string to_str(const VecsCommandMsg& command) const {
+    std::ostringstream os;
+    switch(command.command_type) {
+    case VecsCommandMsg::COMMAND_TYPE_START_CHARGING:
+      os << "Startcharging";
+      break;
+    case VecsCommandMsg::COMMAND_TYPE_STOP_CHARGING:
+      os << "Stopcharging";
+      break;
+    default:
+      os << "Unknown VecsCommand type: " << std::to_string(command.command_type);
+      break;
+    }
+
+    return os.str();
+  }
+  std::string to_str(const ActionNodeMsg& node) const {
+    std::ostringstream os;
+    switch(node.type) {
+    case ActionNodeMsg::TYPE_AGV_COMMAND:
+      // os << "AGV ";
+      os << std::to_string(volley::AgvId(node.agv_id)) << " ";
+      os << to_str(node.agv_command);
+      break;
+    case ActionNodeMsg::TYPE_BAY_COMMAND:
+      // os << "Bay ";
+      os << std::to_string(volley::BayId(node.bay_id)) << " ";
+      os << to_str(node.bay_command);
+      break;
+    case ActionNodeMsg::TYPE_VECS_COMMAND:
+      // os << "VECS ";
+      os << std::to_string(volley::VecsId(node.vecs_id)) << " ";
+      os << to_str(node.vecs_command);
+      break;
+    case ActionNodeMsg::TYPE_VRC_COMMAND:
+      os << std::to_string(volley::VrcId(node.vrc_id)) << " ";
+      os << "floor->" << std::to_string(node.vrc_command.requested_floor);
+      break;
+    default:
+      os << "Unknown: " << std::to_string(node.type);
+      break;
+    }
+    return os.str();
+  }
+  std::string to_str(const volley::ScheduleEvent& event) const {
+    switch(event.GetType()) {
+    case ScheduleEventType::AGV_MOVE:
+      return std::to_string(event.GetJobIndex()) + "AM";
+    case ScheduleEventType::BAY_TRANSITION:
+      return std::to_string(event.GetJobIndex()) + "BT";
+    case ScheduleEventType::TRAY_MOVE:
+      return std::to_string(event.GetJobIndex()) + "TM";
+    case ScheduleEventType::VECS_TRANSITION:
+      return std::to_string(event.GetJobIndex()) + "VT";
+    default:
+      return std::to_string(event.GetJobIndex()) + "Unknown event type ";
+    }
+    return std::to_string(event.GetJobIndex());
+  }
+
+  std::string ToDotFormatString(bool left_right = true) const {
+    // Build the dot file contents using dot file syntax.
+    auto g_writer = [&](std::ostream& out) {
+      if(left_right) {
+        out << "  rankdir=LR;\n";
+      }
+    };
+    auto v_writer = [this](std::ostream& out, const Vertex& vertex) {
+      out << " [label=\"" << to_str(*(GetFromVertex(vertex).value()))  // ptr.value()->GetJobIndex()
+          << "\"]";
+    };
+    auto e_no_writer = [](std::ostream& out, const Edge&) { (void)out; };
+
+    // Write the dot file contents to a string.
+    std::ostringstream dotcontents;
+    boost::write_graphviz(dotcontents, dag_, v_writer, e_no_writer, g_writer);
+    std::string content = dotcontents.str();
+    return content;
+  }
+
+  // Print this graph to the log
+  void PrintGraph(const std::string& label, rclcpp::Logger logger = rclcpp::get_logger("")) const {
+    std::string dotcontents = ToDotFormatString();
+    const char* color = "\033[1;93m";  // High Intensity Yellow
+    volley::PrintGraph(label, dotcontents, logger, color);
+  }
+
+protected:
+  bool Replace(const Vertex& vertex, const std::shared_ptr<T>& old_ptr, const std::shared_ptr<T>& new_ptr) {
+    boost::get(boost::vertex_bundle, dag_)[vertex] = new_ptr;
+    ptr_to_vertex_.erase(old_ptr);
+    ptr_to_vertex_[new_ptr] = vertex;
+    return true;
+  }
+
+  // Helper function that removes the vertex and its in/out edges. We assume that the vertex
+  // exists at this point
+  void RemoveVertexHelper(const Vertex& vert, const std::shared_ptr<T>& ptr) {
+    // Remove all edges, because boost doesn't do this automatically.
+    std::vector<Edge> edges;
+    for(auto [curr, end] = GetInEdges(vert); curr != end; ++curr) {
+      edges.push_back(*curr);
+    }
+    for(auto [curr, end] = GetOutEdges(vert); curr != end; ++curr) {
+      edges.push_back(*curr);
+    }
+    for(auto edge : edges) {
+      boost::remove_edge(edge, dag_);
+    }
+
+    // Decrement the ID of the vertices that events point to if their ID is higher than the ID
+    // of the vertex we are removing. This keeps ptr_to_vertex_ map up to date. See comment
+    // below for further explanation
+    for(unsigned int vert_id = 0u; vert_id < NumVertices(); ++vert_id) {
+      auto curr_vert = static_cast<Vertex>(vert_id);
+      auto curr_ptr = GetFromVertex(curr_vert).value();
+      if(curr_vert > vert) {
+        ptr_to_vertex_[curr_ptr] = static_cast<Vertex>(vert_id - 1);
+      }
+    }
+
+    // We call remove_vertex last because it can shift the vertex IDs of other vertices. If we
+    // have a graph with 5 vertices, the IDs will be 0, 1, 2, 3, 4. If we remove vertex 1, boost
+    // shifts the vertices as so: 1 is gone. 2 -> 1. 3 -> 2. 4 -> 3. The IDs are then 0, 1,
+    // 2, 3. Boost ensures that the IDs are 0, 1, ..., n-1 for n vertices
+    boost::remove_vertex(vert, dag_);
+    ptr_to_vertex_.erase(ptr);
+  }
+
+  // Boost graph representation of the DAG
+  DagT dag_;
+
+  // Mapping of shared_ptr to vertex index
+  std::unordered_map<std::shared_ptr<T>, Vertex> ptr_to_vertex_;
+};
+
+// Specialization for ScheduleEvent.
+class ScheduleEventDag : public DagBase<ScheduleEvent> {
+public:
+  using VertexVec = std::vector<Vertex>;
+
+  // Apply this DAG of events to the DiscreteGarageState.
+  // This calls event->Apply() in topological order, to correctly mutate the DGS.
+  // Example usage: copy the intial DGS, then apply this DAG to mutate the copy.
+  BoolStringPair Apply(volley::DiscreteGarageState& state) const;
+
+  bool AddEvent(const ScheduleEventSPtr& event) { return Add(event).has_value(); }
+  bool HasEvent(const ScheduleEventSPtr& event) const { return Has(event); }
+
+  std::optional<ScheduleEventSPtr> GetEventFromVertex(const Vertex& vertex) const {
+    return GetFromVertex(vertex);
+  }
+  std::optional<Vertex> GetVertexFromEvent(const ScheduleEventSPtr& event) const { return GetVertex(event); }
+
+  std::vector<ScheduleEventSPtr> GetLeafEvents() const;
+  std::vector<ScheduleEventSPtr> GetRootEvents() const;
+
+  // Create a topological ordering of the graph. If the graph is not a DAG, nullopt will be
+  // returned. We override the DagBase class implementation to incorporate job ordering
+  std::optional<VertexVec> GetTopologicalOrdering() const override;
+};
+
+}  // namespace volley
+</file>
+
+<file path="include/planner_core/planner_core_msgs.hpp">
+#pragma once
+
+#include <interfaces/msg/action_node.hpp>
+#include <interfaces/msg/agv_command.hpp>
+#include <interfaces/msg/agv_lift_changed.hpp>
+#include <interfaces/msg/agv_pose_changed.hpp>
+#include <interfaces/msg/bay_command.hpp>
+#include <interfaces/msg/bay_report.hpp>
+#include <interfaces/msg/bay_state_changed.hpp>
+#include <interfaces/msg/discrete_agv_state.hpp>
+#include <interfaces/msg/discrete_bay_state.hpp>
+#include <interfaces/msg/discrete_tray_state.hpp>
+#include <interfaces/msg/discrete_vrc_state.hpp>
+#include <interfaces/msg/payload_existence_changed.hpp>
+#include <interfaces/msg/tray_existence_changed.hpp>
+#include <interfaces/msg/tray_pose_set_manually.hpp>
+#include <interfaces/msg/vecs_state_changed.hpp>
+#include <interfaces/msg/vrc_command.hpp>
+#include <interfaces/msg/vrc_state_changed.hpp>
+
+using ActionNodeMsg = interfaces::msg::ActionNode;
+using AgvCommandMsg = interfaces::msg::AgvCommand;
+using AgvGoalMsg = interfaces::msg::AgvGoal;
+using BayCommandMsg = interfaces::msg::BayCommand;
+using BayReportMsg = interfaces::msg::BayReport;
+using GarageEntityIdMsg = interfaces::msg::GarageEntityId;
+using GarageNodeMsg = interfaces::msg::GarageNode;
+using GaragePoseMsg = interfaces::msg::GaragePose;
+
+using DiscreteAgvStateMsg = interfaces::msg::DiscreteAgvState;
+using DiscreteBayStateMsg = interfaces::msg::DiscreteBayState;
+using DiscreteTrayStateMsg = interfaces::msg::DiscreteTrayState;
+using DiscreteGarageEventMsg = interfaces::msg::DiscreteGarageEvent;
+using DiscretePayloadStateMsg = interfaces::msg::DiscretePayloadState;
+using DiscreteGarageStateMsg = interfaces::msg::DiscreteGarageState;
+
+using AgvLiftChangedMsg = interfaces::msg::AgvLiftChanged;
+using AgvPoseChangedMsg = interfaces::msg::AgvPoseChanged;
+using BayStateChangedMsg = interfaces::msg::BayStateChanged;
+using PayloadExistenceChangedMsg = interfaces::msg::PayloadExistenceChanged;
+using TrayPoseSetManuallyMsg = interfaces::msg::TrayPoseSetManually;
+using TrayPoseChangedMsg = TrayPoseSetManuallyMsg;
+using DiscreteVrcStateMsg = interfaces::msg::DiscreteVrcState;
+using VecsStateChangedMsg = interfaces::msg::VecsStateChanged;
+using VrcCommandMsg = interfaces::msg::VrcCommand;
+using VrcStateChangedMsg = interfaces::msg::VrcStateChanged;
+</file>
+
+<file path="include/planner_core/schedule_events.hpp">
+#pragma once
+#include <common/enum.hpp>
+#include <common/types.hpp>
+#include <common_ros/discrete_garage_state.hpp>
+#include <common_ros/pose_utils.hpp>
+#include <common_ros/print_utils.hpp>
+#include <optional>
+#include <ostream>
+#include <planner_core/planner_core_msgs.hpp>
+#include <string>
+#include <variant>
+
+namespace volley {
+
+// Apply commands to the given DiscreteGarageState
+BoolStringPair ApplyCommand(const AgvCommandMsg& command, unsigned int agv_id,
+    // NOLINTNEXTLINE(google-runtime-references)
+    volley::DiscreteGarageState& state);
+BoolStringPair ApplyCommand(const BayCommandMsg& command, unsigned int bay_id,
+    // NOLINTNEXTLINE(google-runtime-references)
+    volley::DiscreteGarageState& state);
+BoolStringPair ApplyCommand(const ActionNodeMsg& command,
+    // NOLINTNEXTLINE(google-runtime-references)
+    volley::DiscreteGarageState& state);
+
+enum class ScheduleEventType : uint8_t {
+  UNDEFINED = 0,
+  AGV_MOVE = 1,
+  BAY_TRANSITION = 2,
+  TRAY_MOVE = 3,
+  VECS_TRANSITION = 4,
+  VRC_TRANSITION = 5,
+};
+
+// A ScheduleEvent represents a node in the Action DAG.
+class ScheduleEvent {
+private:
+  // C++ "Rule-of-5" is not needed.
+  ScheduleEvent& operator=(ScheduleEvent const&) = default;
+  ScheduleEvent& operator=(ScheduleEvent&&) = default;
+
+public:
+  explicit ScheduleEvent(ScheduleEventType type, unsigned int job_index) :
+      type_(type), job_idx_(job_index) { }
+
+  ScheduleEvent() = delete;
+  virtual ~ScheduleEvent() = default;
+
+  // C++ "Rule-of-5"
+  ScheduleEvent(ScheduleEvent&&) = default;
+  ScheduleEvent(ScheduleEvent const&) = default;
+
+  virtual BoolStringPair Apply(volley::DiscreteGarageState& state) const = 0;
+  virtual std::optional<GarageEntityIdMsg> GetGarageEntityId() const = 0;
+  unsigned int GetJobIndex() const { return job_idx_; }
+  ScheduleEventType GetType() const { return type_; }
+
+  virtual std::string ToString() const {
+    return "Task ID: " + std::to_string(GetJobIndex()) + " " + common::EnumNameString(GetType());
+  }
+
+private:
+  // The type of Schedule Event of this instance
+  ScheduleEventType type_;
+
+  // The ID of the task that this event is associated with
+  unsigned int job_idx_;
+};
+
+using ScheduleEventSPtr = std::shared_ptr<ScheduleEvent>;
+
+// An AgvMove represents a desired AGV move that is either a lift/lower or a move. If it's a
+// move, it's simply the source and destination; the intermediate moves are still to be planned.
+class AgvMove : public ScheduleEvent {
+public:
+  explicit AgvMove(unsigned int job_index, const std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>& change);
+
+  const std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>& GetDiscreteChange() const {
+    return discrete_change_;
+  }
+  void SetDiscreteChange(const std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>& discrete_change) {
+    discrete_change_ = discrete_change;
+  }
+
+  uint16_t GetAgvId() const;
+
+  std::optional<GarageEntityIdMsg> GetGarageEntityId() const override { return volley::AgvId(GetAgvId()); }
+
+  // TODO(any) these aren't implemented anywhere
+  // also if all we store is AgvLiftChanged for a lift discrete event then
+  // there's nowhere to get the AGV's pose from
+  void SetDest(AgvGoalMsg goal);
+  void SetSrc(AgvGoalMsg src);
+
+  // Returns nullopt if it's a lift change
+  std::optional<GaragePoseMsg> GetSrc() const;
+  std::optional<GaragePoseMsg> GetDest() const;
+
+  std::string ToString() const override {
+    std::string result = ScheduleEvent::ToString();
+    result += " Agv ID: ";
+    result += std::to_string(GetAgvId());
+    std::visit(
+        [&result](auto&& arg) { result += " Discrete Change: " + std::to_string(arg); }, discrete_change_);
+    return result;
+  }
+
+  // Apply to DiscreteGarageState
+  // NOLINTNEXTLINE(google-runtime-references)
+  BoolStringPair Apply(volley::DiscreteGarageState& state) const override;
+
+private:
+  // This class is either a lift/lower or a move, which is easily encapsulated in a
+  // std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>
+  std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg> discrete_change_;
+};
+
+// An TrayMove represents a desired Tray move that has a source and
+// destination defined, but the intermediate moves are still to be planned. It can
+// be either expanded or not. If it is NOT expanded, the tray is moved (teleported)
+// directly to the destination with no regard for any blocking trays, etc. If it is
+// expanded, then it stores the sequence of underlying AGV moves that correspond to
+// the desired tray move.  Note that the correctness of the underlying AGV moves is
+// not checked.
+class TrayMove : public ScheduleEvent {
+public:
+  explicit TrayMove(unsigned int job_index);
+
+  bool Assigned() const { return tray_id_ && dest_; }
+
+  std::optional<uint16_t> GetTrayId() const { return tray_id_; }
+  void SetTrayId(uint16_t id) { tray_id_ = id; }
+
+  // Not sure this is safe, have to see where we have an unassigned tray move, we might
+  // end up missing some needed dependency if the tray selected in tray assignments has
+  // some other moves before and after it. Will need to splice but won't know our position
+  // in the total order I believe. If there are any bugs caused by this, I'm sorry.
+  std::optional<GarageEntityIdMsg> GetGarageEntityId() const override {
+    if(tray_id_) {
+      return volley::TrayId(GetTrayId().value());
+    }
+    return std::nullopt;
+  }
+
+  std::optional<GaragePoseMsg> GetDest() const { return dest_; }
+  void SetDest(GaragePoseMsg dest) { dest_ = dest; }
+
+  std::optional<uint16_t> GetAgvId() const { return agv_id_; }
+  void SetAgvId(uint16_t id) { agv_id_ = id; }
+
+  // Apply to DiscreteGarageState
+  // NOLINTNEXTLINE(google-runtime-references)
+  BoolStringPair Apply(volley::DiscreteGarageState& state) const override;
+
+  std::string ToString() const override;
+
+private:
+  std::optional<uint16_t> tray_id_;
+  std::optional<uint16_t> agv_id_;
+  std::optional<GaragePoseMsg> dest_;
+};
+
+// An BayTransition represents a desired Bay Transition from source state to destination
+// state, but the dependencies of this action are not yet determined
+class BayTransition : public ScheduleEvent {
+public:
+  explicit BayTransition(
+      unsigned int job_index, const DiscreteBayStateMsg& src_state, const BayCommandMsg& command);
+
+  const DiscreteBayStateMsg& GetSourceState() const { return src_state_; }
+  const BayCommandMsg& GetCommand() const { return command_; }
+  uint16_t GetBayId() const { return src_state_.id; }
+
+  std::optional<GarageEntityIdMsg> GetGarageEntityId() const override { return volley::BayId(GetBayId()); }
+
+  void SetSourceState(const DiscreteBayStateMsg& src_state) { src_state_ = src_state; }
+  void SetCommand(const BayCommandMsg& command) { command_ = command; }
+
+  // Apply to DiscreteGarageState
+  // NOLINTNEXTLINE(google-runtime-references)
+  BoolStringPair Apply(volley::DiscreteGarageState& state) const override;
+
+  std::string ToString() const override {
+    std::string result = ScheduleEvent::ToString();
+    result += " Bay Id: " + std::to_string(GetBayId());
+    result += " State: " + std::to_string(src_state_.state);
+    result += " Command: " + std::to_string(command_.command_type);
+    return result;
+  }
+
+private:
+  // The source state of the bay and the command to take it to it's desired destination state
+  DiscreteBayStateMsg src_state_;
+  BayCommandMsg command_;
+};
+
+// An VecsTransition represents a desired VECS Transition from source state to destination
+// state, but the dependencies of this action are not yet determined
+class VecsTransition : public ScheduleEvent {
+public:
+  explicit VecsTransition(unsigned int job_index, const VecsStateChangedMsg& state_change);
+
+  const VecsStateChangedMsg& GetStateChange() const { return state_change_; }
+  uint16_t GetVecsId() const { return state_change_.vecs_id; }
+  void SetStateChange(const VecsStateChangedMsg& state_change) { state_change_ = state_change; }
+  std::optional<GarageEntityIdMsg> GetGarageEntityId() const override { return volley::VecsId(GetVecsId()); }
+
+  // Apply to DiscreteGarageState
+  // NOLINTNEXTLINE(google-runtime-references)
+  BoolStringPair Apply(volley::DiscreteGarageState& state) const override;
+
+  std::string ToString() const override {
+    std::string result = ScheduleEvent::ToString();
+    result += " Vecs " + std::to_string(GetVecsId());
+    result += " Current state: " + std::to_string(state_change_.state_curr);
+    result += " Next state: " + std::to_string(state_change_.state_next);
+    return result;
+  }
+
+private:
+  // Discrete state change
+  VecsStateChangedMsg state_change_;
+};
+
+// A VrcTransition represents a desired VRC floor change. It stores the from/to VRC
+// node IDs so that any entity riding the VRC can be teleported in the discrete state simulation.
+class VrcTransition : public ScheduleEvent {
+public:
+  explicit VrcTransition(unsigned int job_index, const VrcStateChangedMsg& state_change,
+      uint32_t from_vrc_node_id, uint32_t to_vrc_node_id);
+
+  const VrcStateChangedMsg& GetStateChange() const { return state_change_; }
+  uint16_t GetVrcId() const { return state_change_.current_discrete_state.id; }
+  uint16_t GetRequestedFloor() const { return state_change_.next_discrete_state.current_floor; }
+  uint32_t GetFromVrcNodeId() const { return from_vrc_node_id_; }
+  uint32_t GetToVrcNodeId() const { return to_vrc_node_id_; }
+
+  std::optional<GarageEntityIdMsg> GetGarageEntityId() const override { return volley::VrcId(GetVrcId()); }
+
+  // Apply to DiscreteGarageState (two-step: IDLE→MOVING then MOVING→IDLE@new_floor + entity teleport)
+  // NOLINTNEXTLINE(google-runtime-references)
+  BoolStringPair Apply(volley::DiscreteGarageState& state) const override;
+
+  std::string ToString() const override {
+    std::string result = ScheduleEvent::ToString();
+    result += " Vrc " + std::to_string(GetVrcId());
+    result += " floor " + std::to_string(state_change_.current_discrete_state.current_floor);
+    result += " -> " + std::to_string(state_change_.next_discrete_state.current_floor);
+    return result;
+  }
+
+private:
+  VrcStateChangedMsg state_change_;
+  uint32_t from_vrc_node_id_;
+  uint32_t to_vrc_node_id_;
+};
+
+}  // namespace volley
+
+// std::to_string specializations
+namespace std {
+// Clang tidy wants camel case even for these to_string functions
+// NOLINTNEXTLINE(readability-identifier-naming)
+std::string to_string(const volley::ScheduleEvent& event);
+}  // namespace std
+</file>
+
+<file path="src/event_dag.cpp">
+#include "planner_core/event_dag.hpp"
+
+namespace volley {
+
+// Apply this DAG of events to the DiscreteGarageState.
+// This calls event->Apply() in topological order, to correctly mutate the DGS.
+// Example usage: copy the intial DGS, then apply this DAG to mutate the copy.
+BoolStringPair ScheduleEventDag::Apply(volley::DiscreteGarageState& state) const {
+  // NOLINTNEXTLINE
+  auto topo_ordering = GetTopologicalOrdering();
+  if(!topo_ordering.has_value()) {
+    return {false, "The graph must be a DAG."};
+  }
+
+  for(auto vertex : topo_ordering.value()) {
+    auto event = GetEventFromVertex(vertex).value();
+    auto [success, error] = event->Apply(state);
+    if(!success) {
+      return {false, "Event " + std::to_string(*event) + ": " + error};
+    }
+  }
+  return {true, ""};
+}
+
+std::vector<ScheduleEventSPtr> ScheduleEventDag::GetLeafEvents() const {
+  std::vector<ScheduleEventSPtr> leaf_events;
+  auto verts = GetLeafVertices();
+  for(const auto& vertex : verts) {
+    leaf_events.push_back(GetEventFromVertex(vertex).value());
+  }
+  return leaf_events;
+}
+
+std::vector<ScheduleEventSPtr> ScheduleEventDag::GetRootEvents() const {
+  std::vector<ScheduleEventSPtr> root_events;
+  auto verts = GetRootVertices();
+  for(const auto& vertex : verts) {
+    root_events.push_back(GetEventFromVertex(vertex).value());
+  }
+  // Sort so it's in ascending order of job index
+  std::sort(root_events.begin(), root_events.end(),
+      [](const ScheduleEventSPtr& event_a, const ScheduleEventSPtr& event_b) {
+        return event_a->GetJobIndex() < event_b->GetJobIndex();
+      });
+  return root_events;
+}
+
+// Create a topological ordering of the graph. If the graph is not a DAG, nullopt will be
+// returned. We override the DagBase class implementation to incorporate job ordering
+std::optional<ScheduleEventDag::VertexVec> ScheduleEventDag::GetTopologicalOrdering() const {
+  ScheduleEventDag::VertexVec topo_ordering;
+
+  // Using lambda to compare vertices by the corresponding event's job index
+  // We are using a min priority queue so that lower job indices appear first. That way the
+  // earlier job's events get prioritized
+  auto vert_cmp = [this](Vertex left, Vertex right) {
+    return (GetEventFromVertex(left).value()->GetJobIndex()) >
+           (GetEventFromVertex(right).value()->GetJobIndex());
+  };
+  std::priority_queue<Vertex, VertexVec, decltype(vert_cmp)> priority_q(vert_cmp);
+
+  std::unordered_map<Vertex, int> live_in_degree_ctr;
+  for(const auto& vert : boost::make_iterator_range(GetVertices())) {
+    live_in_degree_ctr.insert({vert, boost::in_degree(vert, GetBaseGraph())});
+    if(boost::in_degree(vert, GetBaseGraph()) == 0) {
+      priority_q.push(vert);
+    }
+  }
+
+  // If there's a cycle, not all the vertices will get visited. Count them as we go
+  unsigned int count = 0;
+  while(!priority_q.empty()) {
+    Vertex u = priority_q.top();
+    priority_q.pop();
+    topo_ordering.push_back(u);
+
+    for(const auto& edge : boost::make_iterator_range(GetOutEdges(u))) {
+      auto dst = static_cast<Vertex>(edge.m_target);
+      if(--live_in_degree_ctr[dst] == 0) {
+        priority_q.push(dst);
+      }
+    }
+    ++count;
+  }
+
+  // got a cycle
+  if(count != NumVertices()) {
+    return std::nullopt;
+  }
+
+  return topo_ordering;
+}
+
+}  // namespace volley
+</file>
+
+<file path="src/schedule_events.cpp">
+#include "planner_core/schedule_events.hpp"
+
+#include <vrc_interfaces/msg/vrc_state.hpp>
+
+namespace volley {
+
+BoolStringPair ApplyCommand(
+    const AgvCommandMsg& command, unsigned int agv_id, volley::DiscreteGarageState& state) {
+  // First make sure the AGV command is valid. Exactly one of the lift, node id, or heading should
+  // change between the src and dst
+  int num_changes = 0;
+  num_changes += (command.src.lift != command.dst.lift);
+  num_changes += (command.src.pose.node_id != command.dst.pose.node_id);
+  num_changes += (command.src.pose.heading != command.dst.pose.heading);
+  if(num_changes != 1) {
+    return std::make_pair(false, "Invalid AGV command: " + std::to_string(command));
+  }
+
+  auto agv_opt = state.GetAgv(agv_id);
+  if(!agv_opt.has_value()) {
+    return std::make_pair(
+        false, std::to_string(volley::AgvId(agv_id)) + " does not exist in the discrete garage state!");
+  }
+  if(agv_opt->pose != command.src.pose || agv_opt->lift != command.src.lift) {
+    return std::make_pair(
+        false, "Not applying AgvCommand: AGV states do not match! Src: " + std::to_string(agv_opt.value()) +
+                   " |Command: " + std::to_string(command));
+  }
+
+  if(command.src.lift != command.dst.lift) {
+    // AGV lift
+    AgvLiftChangedMsg agv_lift_changed {};
+    agv_lift_changed.agv_id = agv_id;
+    agv_lift_changed.raised = command.dst.lift;
+    return state.OnEvent(agv_lift_changed);
+  }
+  else {
+    // AGV move/rotate
+    AgvPoseChangedMsg agv_pose_changed {};
+    agv_pose_changed.agv_id = agv_id;
+    agv_pose_changed.node_id_curr = command.src.pose.node_id;
+    agv_pose_changed.heading_curr = command.src.pose.heading;
+    agv_pose_changed.node_id_next = command.dst.pose.node_id;
+    agv_pose_changed.heading_next = command.dst.pose.heading;
+    return state.OnEvent(agv_pose_changed);
+  }
+}
+
+BoolStringPair ApplyCommand(
+    const BayCommandMsg& command, unsigned int bay_id, volley::DiscreteGarageState& state) {
+  BayStateChangedMsg bay_state_changed {};
+  bay_state_changed.bay_id = bay_id;
+
+  auto bay_opt = state.GetBay(bay_id);
+  if(!bay_opt.has_value()) {
+    return std::make_pair(
+        false, std::to_string(volley::BayId(bay_id)) + " does not exist in the discrete garage state!");
+  }
+
+  switch(command.command_type) {
+  case BayCommandMsg::COMMAND_TYPE_TRANSITION_TO_INSERT: {
+    bay_state_changed.state_curr = BayReportMsg::STATE_READY_TO_RETRIEVE;
+    bay_state_changed.state_next = BayReportMsg::STATE_READY_TO_INSERT;
+    return state.OnEvent(bay_state_changed);
+  }
+  case BayCommandMsg::COMMAND_TYPE_PROCESS_RETRIEVE: {
+    auto tray_opt = state.GetTrayOnNode(bay_id);
+    if(!tray_opt.has_value()) {
+      return std::make_pair(false, "No tray on bay node " + std::to_string(bay_id) +
+                                       " so cannot remove payload during process retrieve");
+    }
+
+    auto payload_opt = state.GetPayload(tray_opt->payload_id);
+
+    if(!payload_opt) {
+      return std::make_pair(false, "Payload " + std::to_string(tray_opt->payload_id) + " On t" +
+                                       std::to_string(tray_opt->id) + " doesn't exist in discrete state");
+    }
+
+    // After processing a retrieve the bay state will be in Ready to Insert
+    bay_state_changed.state_curr = BayReportMsg::STATE_READY_TO_RETRIEVE;
+    bay_state_changed.state_next = BayReportMsg::STATE_READY_TO_INSERT;
+    auto [success, message] = state.OnEvent(bay_state_changed);
+    if(!success) {
+      return std::make_pair(success, message);
+    }
+
+    PayloadExistenceChangedMsg payload_existence_changed {};
+    payload_existence_changed.added = false;
+    payload_existence_changed.payload_id = tray_opt->payload_id.bytes;
+    payload_existence_changed.tray_id = tray_opt->id;
+    payload_existence_changed.mass = payload_opt->payload.mass;
+    payload_existence_changed.length_m = payload_opt->payload.length_m;
+    payload_existence_changed.width_m = payload_opt->payload.width_m;
+    payload_existence_changed.height_m = payload_opt->payload.height_m;
+    payload_existence_changed.ev_charge_requested = payload_opt->payload.ev_charge_requested;
+    payload_existence_changed.reciprocal_to_tray = payload_opt->reciprocal_to_tray;
+
+    return state.OnEvent(payload_existence_changed);
+  }
+  case BayCommandMsg::COMMAND_TYPE_TRANSITION_TO_RETRIEVE: {
+    if(bay_opt->state == BayReportMsg::STATE_READY_TO_INSERT) {
+      bay_state_changed.state_curr = BayReportMsg::STATE_READY_TO_INSERT;
+    }
+    else if(bay_opt->state == BayReportMsg::STATE_VEHICLE_INSERTED) {
+      bay_state_changed.state_curr = BayReportMsg::STATE_VEHICLE_INSERTED;
+    }
+    else {
+      return std::make_pair(
+          false, "Bay " + std::to_string(bay_id) + " is not in a state that can transition to retrieve");
+    }
+    bay_state_changed.state_next = BayReportMsg::STATE_READY_TO_RETRIEVE;
+    return state.OnEvent(bay_state_changed);
+  }
+  default:
+    break;
+  }
+  return std::make_pair(
+      false, "Failed to apply BayCommand for " + std::to_string(volley::BayId(bay_id)) +
+                 " to DiscreteGarageState: Unknown BayCommand type: " + std::to_string(command.command_type));
+}
+
+BoolStringPair ApplyCommand(const ActionNodeMsg& command, volley::DiscreteGarageState& state) {
+  switch(command.type) {
+  case ActionNodeMsg::TYPE_AGV_COMMAND:
+    return ApplyCommand(command.agv_command, command.agv_id, state);
+  case ActionNodeMsg::TYPE_BAY_COMMAND:
+    return ApplyCommand(command.bay_command, command.bay_id, state);
+  case ActionNodeMsg::TYPE_VRC_COMMAND:
+    // VRC commands are handled via VrcTransition events; nothing to apply here
+    return std::make_pair(true, "");
+  default:
+    break;
+  }
+
+  return std::make_pair(false, "Unknown ActionNode type: " + std::to_string(command.type));
+}
+
+// AgvMove
+
+AgvMove::AgvMove(
+    unsigned int job_index, const std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>& discrete_change) :
+    ScheduleEvent(ScheduleEventType::AGV_MOVE, job_index), discrete_change_(discrete_change) {
+}
+
+BoolStringPair AgvMove::Apply(volley::DiscreteGarageState& state) const {
+  return std::visit(
+      [this, &state](auto&& arg) -> BoolStringPair { return state.OnEvent(arg); }, discrete_change_);
+}
+
+uint16_t AgvMove::GetAgvId() const {
+  return std::visit([](auto&& arg) -> uint16_t { return arg.agv_id; }, discrete_change_);
+}
+
+std::optional<GaragePoseMsg> AgvMove::GetSrc() const {
+  if(std::holds_alternative<AgvLiftChangedMsg>(discrete_change_)) {
+    return std::nullopt;
+  }
+  auto pose_change = std::get<AgvPoseChangedMsg>(discrete_change_);
+  return volley::ConstructGaragePose(pose_change.node_id_curr, pose_change.heading_curr);
+}
+
+std::optional<GaragePoseMsg> AgvMove::GetDest() const {
+  if(std::holds_alternative<AgvLiftChangedMsg>(discrete_change_)) {
+    return std::nullopt;
+  }
+  auto pose_change = std::get<AgvPoseChangedMsg>(discrete_change_);
+  return volley::ConstructGaragePose(pose_change.node_id_next, pose_change.heading_next);
+}
+
+// TrayMove
+
+TrayMove::TrayMove(unsigned int job_index) : ScheduleEvent(ScheduleEventType::TRAY_MOVE, job_index) {
+}
+
+std::string TrayMove::ToString() const {
+  std::string result = ScheduleEvent::ToString();
+  result += " Tray ID: ";
+  result += (tray_id_ ? std::to_string(*tray_id_) : "Unassigned");
+  result += " Dest: ";
+  result += (dest_ ? std::to_string(*dest_) : "Unassigned");
+  result += " Agv ID: ";
+  result += (agv_id_ ? std::to_string(*agv_id_) : "Unassigned");
+  return result;
+}
+
+BoolStringPair TrayMove::Apply(volley::DiscreteGarageState& state) const {
+  if(!GetTrayId().has_value()) {
+    // Not sure what to do here yet, there will be a tray at the dest but we don't know
+    // which one yet.
+    // This is fine for now, but might cause issues with blocking tray calculations
+    // for independent tray moves or reasoning about the bay states since there will
+    // not be a tray in the bay in the discrete state
+    return std::make_pair(true, "");
+    // return std::make_pair(false, "Tray ID not set in TrayMove!");
+  }
+  if(!GetDest().has_value()) {
+    // TODO(Gunther): Right now we're removing it, instead we should set it
+    // to an invalid pose (or a pose of (0@0)) to indicate that it could be anywhere,
+    // but still allow future tasks to see its existence and its payload.
+    // Doesn't always matter for tray assignments, since it won't be applied before
+    // being assigned
+
+    if(state.GetTray(*GetTrayId())->payload_id != volley::kEmptyGuid) {
+      auto payload = state.GetPayload(state.GetTray(GetTrayId().value())->payload_id).value();
+
+      auto payload_existence_changed = volley::Reverse(volley::GetAddEvent(payload));
+
+      auto [success, msg] = state.OnEvent(payload_existence_changed);
+      if(!success) {
+        return std::make_pair(false, "Failed to remove payload " + std::to_string(payload.payload.id) +
+                                         " from DiscreteGarageState: " + msg);
+      }
+    }
+
+    auto tray_existence_changed =
+        volley::Reverse(volley::GetAddEvent(state.GetTray(GetTrayId().value()).value()));
+
+    return state.OnEvent(tray_existence_changed);
+  }
+
+  // Move the blocking tray to 0@0. This should really just happen in job planning
+  auto blocking_tray_opt = state.GetTrayOnNode(GetDest()->node_id);
+  if(blocking_tray_opt.has_value() && GetTrayId().value() != blocking_tray_opt->id) {
+    auto blocking_tray = blocking_tray_opt.value();
+
+    TrayPoseChangedMsg tray_pose_changed {};
+    tray_pose_changed.tray_id = blocking_tray.id;
+    tray_pose_changed.node_id_curr = blocking_tray.pose.node_id;
+    tray_pose_changed.heading_curr = blocking_tray.pose.heading;
+    tray_pose_changed.node_id_next = 0;
+    tray_pose_changed.heading_next = 0;
+    // TODO(someone) if a later step of this function fails then we should undo this change.
+    // Probably doesn't matter though for how we are using it now
+    auto [success, message] = state.OnEvent(tray_pose_changed);
+    if(!success) {
+      return std::make_pair(success, "Couldn't move blocking tray to 0@0.  " + message);
+    }
+  }
+
+  // If we don't have an AGV ID, then we are moving the tray magically
+  // otherwise, applying and AGV pose change event will move the AGV and the
+  // tray
+  auto tray_opt = state.GetTray(GetTrayId().value());
+  if(!GetAgvId()) {
+    if(!tray_opt.has_value()) {
+      return std::make_pair(false,
+          std::to_string(volley::TrayId(*GetTrayId())) + " does not exist in the discrete garage state!");
+    }
+
+    TrayPoseChangedMsg tray_pose_changed {};
+    tray_pose_changed.tray_id = tray_opt->id;
+    tray_pose_changed.node_id_curr = tray_opt->pose.node_id;
+    tray_pose_changed.heading_curr = tray_opt->pose.heading;
+    tray_pose_changed.node_id_next = GetDest()->node_id;
+    tray_pose_changed.heading_next = GetDest()->heading;
+    return state.OnEvent(tray_pose_changed);
+  }
+
+  auto agv_opt = state.GetAgv(GetAgvId().value());
+  if(!agv_opt.has_value()) {
+    return std::make_pair(false,
+        std::to_string(volley::AgvId(GetAgvId().value())) + " does not exist in the discrete garage state!");
+  }
+
+  if(!volley::IsAngleOrReciprocal(tray_opt->pose, agv_opt->pose)) {
+    return std::make_pair(false, "Tray move has assigned AGV but AGV is not at tray pose!");
+  }
+
+  if(!agv_opt->lift) {
+    return std::make_pair(false, "Tray move has assigned AGV but AGV is not lifted!");
+  }
+
+  if(agv_opt->tray_id != GetTrayId().value()) {
+    return std::make_pair(false, "Tray move has assigned AGV a" + std::to_string(GetAgvId().value()) +
+                                     " but it is not carrying t" + std::to_string(GetTrayId().value()));
+  }
+
+  int agv_heading_offset = (tray_opt->pose.heading == agv_opt->pose.heading) ? 0 : 180;
+
+  AgvPoseChangedMsg agv_pose_changed {};
+  agv_pose_changed.agv_id = GetAgvId().value();
+  agv_pose_changed.node_id_curr = agv_opt->pose.node_id;
+  agv_pose_changed.heading_curr = agv_opt->pose.heading;
+  agv_pose_changed.node_id_next = GetDest()->node_id;
+  agv_pose_changed.heading_next = static_cast<int16_t>(volley::Wrap(GetDest()->heading + agv_heading_offset));
+
+  auto [success, msg] = state.OnEvent(agv_pose_changed);
+
+  if(!success) {
+    return std::make_pair(false, "Failed to move  a" + std::to_string(GetAgvId().value()) +
+                                     " carrying tray " + std::to_string(GetTrayId().value()) + " to " +
+                                     std::to_string(GetDest().value()) + " in DiscreteGarageState: " + msg);
+  }
+
+  // TODO(Gunther): Deal with lift states, ie if the agv is lifted, lower it after moving it
+
+  return std::make_pair(true, "");
+}
+
+// BayTransition
+
+BayTransition::BayTransition(
+    unsigned int job_index, const DiscreteBayStateMsg& src_state, const BayCommandMsg& command) :
+    ScheduleEvent(ScheduleEventType::BAY_TRANSITION, job_index), src_state_(src_state), command_(command) {
+}
+
+BoolStringPair BayTransition::Apply(volley::DiscreteGarageState& state) const {
+  // Make sure the source state matches the discrete bay state in the discrete garage state before
+  // applying
+  auto bay_opt = state.GetBay(src_state_.id);
+  if(!bay_opt.has_value()) {
+    return std::make_pair(false,
+        std::to_string(volley::BayId(src_state_.id)) + " does not exist in the discrete garage state!");
+  }
+  if(bay_opt->state != src_state_.state) {
+    return std::make_pair(
+        false, "Not applying BayTransition: bay states do not match! Src: " + std::to_string(src_state_) +
+                   " |Current state: " + std::to_string(bay_opt.value()));
+  }
+
+  return ApplyCommand(command_, src_state_.id, state);
+}
+
+// VecsTransition
+
+VecsTransition::VecsTransition(unsigned int job_index, const VecsStateChangedMsg& state_change) :
+    ScheduleEvent(ScheduleEventType::VECS_TRANSITION, job_index), state_change_(state_change) {
+}
+
+BoolStringPair VecsTransition::Apply(volley::DiscreteGarageState& state) const {
+  return state.OnEvent(state_change_);
+}
+
+// VrcTransition
+
+VrcTransition::VrcTransition(unsigned int job_index, const VrcStateChangedMsg& state_change,
+    uint32_t from_vrc_node_id, uint32_t to_vrc_node_id) :
+    ScheduleEvent(ScheduleEventType::VRC_TRANSITION, job_index),
+    state_change_(state_change),
+    from_vrc_node_id_(from_vrc_node_id),
+    to_vrc_node_id_(to_vrc_node_id) {
+}
+
+BoolStringPair VrcTransition::Apply(volley::DiscreteGarageState& state) const {
+  // Step 1: IDLE → MOVING (VRC cannot go from IDLE to IDLE at a different floor directly)
+  VrcStateChangedMsg step1;
+  step1.current_discrete_state = state_change_.current_discrete_state;
+  step1.next_discrete_state = state_change_.current_discrete_state;
+  step1.next_discrete_state.state.value = vrc_interfaces::msg::VrcState::STATE_MOVING;
+  step1.next_discrete_state.requested_floor = state_change_.next_discrete_state.current_floor;
+  auto [s1, m1] = state.OnEvent(step1);
+  if(!s1) {
+    return {false, "VrcTransition (IDLE->MOVING): " + m1};
+  }
+
+  // Step 2: MOVING → IDLE at new floor
+  VrcStateChangedMsg step2;
+  step2.current_discrete_state = step1.next_discrete_state;
+  step2.next_discrete_state = state_change_.next_discrete_state;
+  auto [s2, m2] = state.OnEvent(step2);
+  if(!s2) {
+    return {false, "VrcTransition (MOVING->IDLE): " + m2};
+  }
+
+  // Teleport any AGV at from_vrc_node_id to to_vrc_node_id
+  std::vector<uint16_t> agvs_at_vrc;
+  for(const auto& [agv_id, agv] : state.GetAgvs()) {
+    if(agv.pose.node_id == from_vrc_node_id_) {
+      agvs_at_vrc.push_back(agv_id);
+    }
+  }
+  for(uint16_t agv_id : agvs_at_vrc) {
+    auto agv = state.GetAgv(agv_id).value();
+    AgvPoseChangedMsg pose_change;
+    pose_change.agv_id = agv_id;
+    pose_change.node_id_curr = from_vrc_node_id_;
+    pose_change.heading_curr = agv.pose.heading;
+    pose_change.node_id_next = to_vrc_node_id_;
+    pose_change.heading_next = agv.pose.heading;
+    auto [s3, m3] = state.OnEvent(pose_change);
+    if(!s3) {
+      return {false, std::format("VrcTransition AGV teleport for a{}: {}", std::to_string(agv_id), m3)};
+    }
+  }
+
+  // Teleport remaining trays riding the VRC on their own
+  // A tray carried by an AGV is moved by the AgvPoseChangedMsg handling
+  std::vector<uint16_t> trays_at_vrc;
+  for(const auto& [tray_id, tray] : state.GetTrays()) {
+    if(tray.pose.node_id == from_vrc_node_id_) {
+      trays_at_vrc.push_back(tray_id);
+    }
+  }
+  for(uint16_t tray_id : trays_at_vrc) {
+    auto tray = state.GetTray(tray_id).value();
+    TrayPoseSetManuallyMsg pose_change;
+    pose_change.tray_id = tray_id;
+    pose_change.node_id_curr = from_vrc_node_id_;
+    pose_change.heading_curr = tray.pose.heading;
+    pose_change.node_id_next = to_vrc_node_id_;
+    pose_change.heading_next = tray.pose.heading;
+    auto [s4, m4] = state.OnEvent(pose_change);
+    if(!s4) {
+      return {false, std::format("VrcTransition tray teleport for t{}: {}", std::to_string(tray_id), m4)};
+    }
+  }
+
+  return {true, ""};
+}
+
+}  // namespace volley
+
+namespace std {
+
+// NOLINTNEXTLINE
+std::string to_string(const volley::ScheduleEvent& event) {
+  return event.ToString();
+}
+
+/*
+
+
+// NOLINTNEXTLINE
+std::string to_string(const volley::AgvMove& move) {
+    std::ostringstream os;
+    os << "Task ID: " << std::to_string(move.GetJobIndex()) << " "
+       << common::EnumNameString(move.GetType());
+    os << std::visit([](auto&& arg) -> std::string { return std::to_string(arg); },
+                     move.GetDiscreteChange());
+
+    return os.str();
+}
+
+
+// NOLINTNEXTLINE
+std::string to_string(const volley::BayTransition& transition) {
+    std::ostringstream os;
+    os << "Task ID: " << std::to_string(transition.GetJobIndex()) << " "
+       << common::EnumNameString(transition.GetType());
+    os << " |Src state: " + std::to_string(transition.GetSourceState()) +
+              " |Command: " + std::to_string(transition.GetCommand());
+
+    return os.str();
+}
+
+
+// NOLINTNEXTLINE
+std::string to_string(const volley::TrayMove& move) {
+    std::ostringstream os;
+    os << "Task ID: " << std::to_string(move.GetJobIndex()) << " "
+       << common::EnumNameString(move.GetType());
+    os << " |Src state: " + std::to_string(move.GetSourceState()) +
+              " |Dst state: " + std::to_string(move.GetDestState());
+
+    return os.str();
+}
+*/
+}  // namespace std
+</file>
+
+<file path="CMakeLists.txt">
+cmake_minimum_required(VERSION 3.28)
+project(planner_core)
+
+find_package(volley_cmake REQUIRED)
+volley_package()
+
+find_package(Boost REQUIRED CONFIG)
+
+volley_add_library(
+  ${PROJECT_NAME}
+  SHARED
+  src/event_dag.cpp
+  src/schedule_events.cpp
+)
+
+if(BUILD_TESTING)
+  volley_add_gtest(
+    event_dag_tests
+    test/event_dag_tests.cpp
+    src/event_dag.cpp
+    src/schedule_events.cpp
+  )
+
+  volley_add_gtest(
+    schedule_events_tests
+    test/schedule_events_tests.cpp
+    src/schedule_events.cpp
+  )
+endif()
+
+volley_ament_auto_package()
+</file>
+
+<file path="package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>planner_core</name>
+  <version>0.0.1</version>
+  <description>
+    Shared domain model for the planner group: the schedule event hierarchy and the event DAG that
+    every other package in src/planner plans over. Depends on no other package in the group.
+  </description>
+  <maintainer email="sw@volleyautomation.com">dev</maintainer>
+  <license>proprietary</license>
+
+  <buildtool_depend>volley_cmake</buildtool_depend>
+
+  <build_depend>libboost-dev</build_depend>
+
+  <depend>common</depend>
+  <depend>common_ros</depend>
+  <depend>interfaces</depend>
+  <depend>rclcpp</depend>
+  <depend>vrc_interfaces</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+</file>
+
+</files>

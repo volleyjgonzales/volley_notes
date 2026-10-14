@@ -2,7 +2,7 @@
 
 *A ground-up guide to the `scheduler` ROS 2 package for engineers who are new to the team. It is written against the package snapshot in `sources/repomix-scheduler.xml` (headers, sources, tests, CMake and `package.xml`), the ROS interface definitions, and the `5675_pecos_combined.yaml` facility layout.*
 
-> **Scope and evidence.** This guide documents the *existing* implementation, not the proposed solver refactor (that is [02](02-issue-and-proposal.md)). Everything labelled **AS-BUILT** was checked against `scheduler.hpp`, `scheduler.cpp`, `utils.cpp`, `scheduler_ros.cpp` and `scheduler_component.cpp`. Code from other packages (`planner_core`, `common_ros`, `motion_planner`, `task_planner`) was **not** in the snapshot; where this guide describes it, it does so from call sites and says so. The Pecos figures use real node positions and edges, but **AGV, tray and payload occupancy is hypothetical**. The Pecos YAML has bays and chargers but **no VRC**.
+> **Scope and evidence.** This guide documents the *existing* implementation, not the proposed solver refactor (that is [02](02-issue-and-proposal.md)). Everything labelled **AS-BUILT** was checked against `scheduler.hpp`, `scheduler.cpp`, `utils.cpp`, `scheduler_ros.cpp` and `scheduler_component.cpp`. `planner_core` (the event classes and the event DAG) was checked against a second snapshot, `sources/repomix-planner-core.xml` (`event_dag.hpp/.cpp`, `schedule_events.hpp/.cpp`, without its tests). Code from `common_ros`, `motion_planner` and `task_planner` was **not** in either snapshot; where this guide describes it, it does so from call sites and says so. The Pecos figures use real node positions and edges, but **AGV, tray and payload occupancy is hypothetical**. The Pecos YAML has bays and chargers but **no VRC**.
 
 > **Viewing the figures.** Markdown previews (VS Code, GitHub) show SVGs as static images, so the figures are drawn to be readable at preview width. For pan and zoom, open [`figures/viewer.html`](figures/viewer.html) in a browser (all figures, scroll to zoom, drag to pan, arrow keys to switch), or open any `.svg` file directly in a browser. Every figure carries a status badge: **AS-BUILT**, **PROPOSED**, **ILLUSTRATIVE**, **SCHEMATIC**, **CONCEPTUAL**, or **YAML GEOMETRY · HYPOTHETICAL OCCUPANCY**.
 
@@ -33,8 +33,18 @@
   - [Creating the per-call context](#creating-the-per-call-context)
 - [10. One `Plan()` call, step by step](#10-one-plan-call-step-by-step)
 - [11. Event types and polymorphism](#11-event-types-and-polymorphism)
+  - [The base class](#the-base-class)
+  - [The subclasses, and what `Apply` does](#the-subclasses-and-what-apply-does)
 - [12. Directed acyclic graphs, then `ScheduleEventDag`](#12-directed-acyclic-graphs-then-scheduleeventdag)
-  - [What a topological ordering is, in plain words](#what-a-topological-ordering-is-in-plain-words)
+  - [12.1 Graph theory in one paragraph](#121-graph-theory-in-one-paragraph)
+  - [12.2 What a topological ordering is, in plain words](#122-what-a-topological-ordering-is-in-plain-words)
+  - [12.3 The class: `DagBase<T>` and `ScheduleEventDag`](#123-the-class-dagbaset-and-scheduleeventdag)
+  - [12.4 What is stored: vertices, edges and shared events](#124-what-is-stored-vertices-edges-and-shared-events)
+  - [12.5 The operations](#125-the-operations)
+  - [12.6 Copies share events: `event_dag_copy` as a work queue](#126-copies-share-events-event_dag_copy-as-a-work-queue)
+  - [12.7 How the DAG grows during `Plan()`](#127-how-the-dag-grows-during-plan)
+  - [12.8 `Reduce()`: fewer edges, same order](#128-reduce-fewer-edges-same-order)
+  - [12.9 Gotchas](#129-gotchas)
 - [13. Job expansion: from jobs to events](#13-job-expansion-from-jobs-to-events)
   - [How to read the job figures](#how-to-read-the-job-figures)
   - [13.1 What a job is](#131-what-a-job-is)
@@ -489,8 +499,8 @@ Reading notes:
 | `Scheduler` | The planner. Validates requests, expands jobs into events, assigns trays and AGVs, checks the result, runs motion planning, builds the response | `scheduler.hpp` | `Plan`, `Plan*Job`, `DoTrayAssignments`, `DoAgvAssignments`, `SanityCheckEvents`, `PlanMotions`, `ResponseFromTrajectories` |
 | `SchedulerParams` | Constructor-time settings | `scheduler.hpp` | `bay_readiness_ratio`, `cost_audit`, `motion_cost` |
 | `ScheduleContext` | Mutable working set for one plan call | `scheduler.hpp` | `initial_state`, `events`, `scheduled_jobs`, `last_entity_event`, `first_tray_event`, `disabledness_filters`, `UpdateLastEntityEvent`, `UpdateLeafDependencies` |
-| `ScheduleEvent` and subclasses | Discrete state changes that can be replayed against a DGS | `planner_core/schedule_events.hpp` (not in snapshot) | `Apply`, `GetGarageEntityId`, `GetJobIndex`, `GetType` |
-| `DagBase<T>`, `ScheduleEventDag` | Boost-graph DAG of `shared_ptr<T>`, and its event specialisation | `planner_core/event_dag.hpp` (not in snapshot) | `AddEvent`, `AddDependency`, `GetTopologicalOrdering`, `GetRootEvents`, `GetLeafEvents`, `WouldCreateCycle`, `Reduce`, `Remove`, `Apply` |
+| `ScheduleEvent` and subclasses | Discrete state changes that can be replayed against a DGS | `planner_core/schedule_events.hpp`, `src/schedule_events.cpp` | `Apply`, `GetGarageEntityId`, `GetJobIndex`, `GetType` |
+| `DagBase<T>`, `ScheduleEventDag` | Boost-graph DAG of `shared_ptr<T>`, and its event specialisation | `planner_core/event_dag.hpp`, `src/event_dag.cpp` | `AddEvent`, `AddDependency`, `GetTopologicalOrdering`, `GetRootEvents`, `GetLeafEvents`, `WouldCreateCycle`, `Reduce`, `Remove`, `Apply` |
 | `DiscreteGarageState` | Garage snapshot with typed accessors | `common_ros/discrete_garage_state.hpp` (not in snapshot) | `Set`, `GetAgv`, `GetTray`, `GetTrayOnNode`, `GetPayload`, `GetBay`, `GetVecs` |
 | `GarageGraph`, `PoseGraph` | Pose graph for searches | `common_ros/garage_graph.hpp` (not in snapshot) | `GetVertexFromPose`, `GetPoseFromVertex`, `SetRetrievalHeading` |
 | `CollisionTable` | Pairwise footprint conflicts between entity types at poses | `common_ros` (not in snapshot) | `Query(id_a, id_b, pose_a, pose_b)` |
@@ -636,7 +646,7 @@ The methods in `scheduler.cpp`, in file order, form a useful map:
 
 ## 11. Event types and polymorphism
 
-A `ScheduleEvent` is an in-memory C++ object for one discrete state change that can be replayed against a `DiscreteGarageState`. The base class is small: a virtual destructor, a pure virtual `Apply(DiscreteGarageState&)`, and queries such as `GetGarageEntityId()`, `GetJobIndex()` and `GetType()`.
+A `ScheduleEvent` is an in-memory C++ object for one discrete state change that can be replayed against a `DiscreteGarageState`. The classes are in `planner_core/schedule_events.hpp` and `src/schedule_events.cpp` (in `sources/repomix-planner-core.xml`).
 
 The design idea is **runtime polymorphism**. `ctx->events` stores `std::shared_ptr<ScheduleEvent>`, but each pointer actually points to a `TrayMove`, `AgvMove`, `BayTransition`, `VecsTransition` or `VrcTransition`. When the Scheduler replays the DAG, virtual dispatch runs the right `Apply`. When it needs subclass-specific data it checks `event->GetType()` and then downcasts:
 
@@ -654,9 +664,67 @@ if(!move->GetTrayId()) { /* std::optional<uint16_t> is empty: no tray chosen yet
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#12_uml_event_hierarchy) · [standalone SVG](figures/12_uml_event_hierarchy.svg)</sub>
 
-*Figure 13 — Existing C++ inheritance hierarchy. The single **hollow triangle** under `ScheduleEvent` means public inheritance; every branch reads “`TrayMove` **is a** `ScheduleEvent`”, not “`ScheduleEvent` contains a `TrayMove`”. Blue marks the abstract base type, green the movement / assignment events, violet the other resource-state transitions. Members are abridged from `planner_core/schedule_events.hpp`.*
+*Figure 13 — The `ScheduleEvent` hierarchy from `planner_core/schedule_events.hpp`. The single **hollow triangle** under `ScheduleEvent` means public inheritance; every branch reads “`TrayMove` **is a** `ScheduleEvent`”, not “`ScheduleEvent` contains a `TrayMove`”. Blue marks the abstract base type, green the movement / assignment events, violet the other resource-state transitions.*
 
 Two confusions to avoid: inheritance says nothing about execution order, and the subclasses are siblings, not phases. A `TrayMove` never “turns into” an `AgvMove`; AGV assignment adds separate `AgvMove` events around it.
+
+### The base class
+
+```cpp
+// planner_core/schedule_events.hpp (abridged)
+enum class ScheduleEventType : uint8_t {
+  UNDEFINED = 0, AGV_MOVE = 1, BAY_TRANSITION = 2, TRAY_MOVE = 3, VECS_TRANSITION = 4, VRC_TRANSITION = 5,
+};
+
+class ScheduleEvent {
+public:
+  explicit ScheduleEvent(ScheduleEventType type, unsigned int job_index);
+  ScheduleEvent() = delete;
+  ScheduleEvent(ScheduleEvent const&) = default;        // copy-constructible ...
+  virtual ~ScheduleEvent() = default;
+
+  virtual BoolStringPair Apply(DiscreteGarageState& state) const = 0;     // const: never changes the event
+  virtual std::optional<GarageEntityIdMsg> GetGarageEntityId() const = 0;  // which AGV / tray / bay / VECS / VRC
+  unsigned int GetJobIndex() const;                     // set once, in the constructor
+  ScheduleEventType GetType() const;
+  virtual std::string ToString() const;                 // "Task ID: <job> <TYPE>" + subclass details
+private:
+  ScheduleEvent& operator=(ScheduleEvent const&) = default;   // ... but NOT copy-assignable
+  ScheduleEventType type_;
+  unsigned int job_idx_;
+};
+using ScheduleEventSPtr = std::shared_ptr<ScheduleEvent>;
+```
+
+Four facts the rest of the guide relies on:
+
+- **`Apply` is `const`.** Replaying an event changes only the `DiscreteGarageState` passed in, never the event. That is why the same event objects can be replayed by every job method and every stage.
+- **The job index is fixed at construction.** There is no setter. Blocker moves get their index by being constructed with the root move's `GetJobIndex()`.
+- **Events can be copy-constructed but not assigned.** `TrayMove copy = *move;` compiles; `copy = *move;` does not (the base copy assignment is private). Doc 02's proposal relies on the first.
+- **`GetGarageEntityId()` drives rule A.** It returns the entity whose last event a new event must wait for. A `TrayMove` with no tray yet returns `std::nullopt`, which is why such moves skip rule A (section 13.5).
+
+### The subclasses, and what `Apply` does
+
+| Event | Data | `GetGarageEntityId()` | What `Apply(state)` does |
+|---|---|---|---|
+| `TrayMove` | `tray_id_`, `dest_`, `agv_id_`: all `std::optional`; `Assigned()` is true when tray and destination are both set | `TrayId(tray)`, or `std::nullopt` while the tray is blank | Five cases, see the next figure |
+| `AgvMove` | `std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg> discrete_change_` | `AgvId(agv)` | `state.OnEvent(change)`: lift or lower, or move the AGV (and any tray it carries) from `node_id_curr@heading_curr` to `node_id_next@heading_next` |
+| `BayTransition` | `src_state_` (`DiscreteBayStateMsg`, includes the bay id), `command_` (`BayCommandMsg`) | `BayId(src_state_.id)` | Fails unless the bay's current state equals `src_state_.state`; then `ApplyCommand`: `TRANSITION_TO_INSERT` READY_TO_RETRIEVE → READY_TO_INSERT; `PROCESS_RETRIEVE` needs a tray with a payload on the bay's node (looked up with the bay id as node id), sets READY_TO_RETRIEVE → READY_TO_INSERT and removes the payload (the car leaves); `TRANSITION_TO_RETRIEVE` READY_TO_INSERT or VEHICLE_INSERTED → READY_TO_RETRIEVE |
+| `VecsTransition` | `state_change_` (`VecsStateChangedMsg`: VECS id, current and next state) | `VecsId(vecs)` | `state.OnEvent(state_change_)` |
+| `VrcTransition` | `state_change_` (`VrcStateChangedMsg`), `from_vrc_node_id_`, `to_vrc_node_id_` | `VrcId(vrc)` | IDLE → MOVING → IDLE on the new floor, then teleports every AGV and every loose tray on `from_vrc_node_id_` to `to_vrc_node_id_` |
+
+![What TrayMove::Apply does](figures/67_traymove_apply.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#67_traymove_apply) · [standalone SVG](figures/67_traymove_apply.svg)</sub>
+
+*Figure 14 — `TrayMove::Apply`, branch by branch. A blank tray id makes it a no-op. A blank destination **removes** the tray (and its payload) from the state. Otherwise any other tray already on the destination node is moved to the placeholder pose `0@0`, and the tray is either teleported (no AGV yet) or carried by its AGV, which must be at the tray's pose, lifted and holding that tray.*
+
+`TrayMove::Apply` matters because job methods replay half-specified moves:
+
+- **Blank tray id → nothing happens.** `READY_FOR_INSERT`'s “some empty tray → bay” leaves no trace in a later job's `working_state`: the bay still looks empty. The source comment admits this “might cause issues with blocking tray calculations”.
+- **Blank destination → the tray disappears.** “T21 → ?” removes T21 and its payload from `working_state` (a TODO suggests parking it at `0@0` instead). A later job in the same request cannot see or reuse that tray, and its old node looks free.
+- **Destination occupied → the occupant goes to `0@0`.** The discrete replay never fails because two trays want one node; the earlier occupant is parked at the placeholder node. Tray assignment is what later makes such a move physically possible.
+- **With an AGV → strict checks.** After AGV assignment, `Apply` fails unless the AGV is at the tray's pose (same or opposite heading), lifted, and carrying that tray. This is why AGV assignment adds the approach and lift events **before** the `TrayMove`.
 
 What each event looks like when it is created (constructor arguments as used in `scheduler.cpp`):
 
@@ -666,10 +734,15 @@ What each event looks like when it is created (constructor arguments as used in 
 | `AgvMove` | `std::make_shared<AgvMove>(job_index, AgvPoseChangedMsg)` or `(job_index, AgvLiftChangedMsg)` | — |
 | `BayTransition` | `std::make_shared<BayTransition>(job_index, DiscreteBayStateMsg, BayCommandMsg)` | — |
 | `VecsTransition` | `std::make_shared<VecsTransition>(job_index, VecsStateChangedMsg)` | — |
+| `VrcTransition` | never created by the scheduler package: VRC trips are added to the action DAG instead (section 19) | — |
 
-A `TrayMove` is **not** an AGV command. Before assignment it may mean “bring *some* empty tray to this bay” (no tray id) or “put this tray *somewhere* sensible” (no destination).
+A `TrayMove` is **not** an AGV command. Before assignment it may mean “bring *some* empty tray to this bay” (no tray id) or “put this tray *somewhere* sensible” (no destination). `AgvMove` also declares `SetSrc` and `SetDest`, but a source comment says they “aren't implemented anywhere”; do not call them.
 
 ## 12. Directed acyclic graphs, then `ScheduleEventDag`
+
+`ctx->events`, a `ScheduleEventDag`, *is* the plan while `Plan()` runs. Job expansion writes intent into it, tray and AGV assignment extend it, `Reduce()` thins it, the sanity check replays it, CHUGG turns it into timed motions, and the response turns its edges into the action nodes' parent lists. This section starts with the graph theory (12.1, 12.2), then goes inside the class: its type family (12.3), what it stores (12.4), each operation (12.5), how copies behave (12.6), how the DAG grows during `Plan()` (12.7), what `Reduce()` does (12.8), and the traps (12.9).
+
+### 12.1 Graph theory in one paragraph
 
 **Graph theory first.** A directed graph **$\mathcal G=(\mathcal V,\mathcal E)$** has vertices **$\mathcal V$** and directed edges **$\mathcal E\subseteq\mathcal V\times\mathcal V$**. Here an edge **$(u,v)\in\mathcal E$** means event **$u$** must finish before event **$v$** may start. A DAG has no directed cycle; otherwise some event would have to finish before itself.
 
@@ -679,7 +752,7 @@ $$
 (u,v)\in\mathcal E\quad\Longrightarrow\quad\pi(u)<\pi(v).
 $$
 
-### What a topological ordering is, in plain words
+### 12.2 What a topological ordering is, in plain words
 
 The DAG says *what must come before what*, but not *in which single sequence* to do things. A **topological ordering** is such a sequence: a list of all events in which every edge points forward, so each event appears after everything it depends on. Usually there are many valid lists, because independent events (two different jobs, say) can be interleaved in any way. If the graph has a cycle, there is no valid list at all: some event would have to come before itself.
 
@@ -689,30 +762,222 @@ To compute one by hand, repeatedly take any event whose prerequisites have all b
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#53_topological_ordering) · [standalone SVG](figures/53_topological_ordering.svg)</sub>
 
-*Figure 14 — The retrieve from section 13 plus two reparks of another tray. One hand computation, two valid orders, one invalid order (an edge points backwards) and a cycle, for which `GetTopologicalOrdering()` returns an empty optional.*
+*Figure 15 — The retrieve from section 13 plus two reparks of another tray. One hand computation, two valid orders, one invalid order (an edge points backwards) and a cycle, for which `GetTopologicalOrdering()` returns an empty optional.*
 
-Two consequences for the code: a pass that walks the order must work for **any** valid order (how ties are broken is decided in `planner_core`), and any edge that would close a cycle makes every later pass fail with "Failed to get total ordering". That is why risky edges are guarded with `WouldCreateCycle(a, b)`.
+Two consequences for the code: a pass that walks the order should not depend on which valid order it gets (`ScheduleEventDag` puts lower job indices first, but leaves ties within a job to a heap, 12.5), and any edge that would close a cycle makes every later pass fail with "Failed to get total ordering". That is why risky edges are guarded with `WouldCreateCycle(a, b)`.
 
 ![Dependencies](figures/04_dependencies.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#04_dependencies) · [standalone SVG](figures/04_dependencies.svg)</sub>
 
-*Figure 15 — Abstract prerequisite ordering. Swimlanes group events by resource; the columns give one valid topological order. The arrows express dependencies, not geometric movement or travel time. The dashed edge is implied by a longer path, which is the kind of redundant edge `Reduce()` removes.*
+*Figure 16 — Abstract prerequisite ordering. Swimlanes group events by resource; the columns give one valid topological order. The arrows express dependencies, not geometric movement or travel time. The dashed edge is implied by a longer path, which is the kind of redundant edge `Reduce()` removes.*
 
-**Now the implementation.** `DagBase<T>` wraps a Boost `adjacency_list` whose vertices hold `std::shared_ptr<T>`; `ScheduleEventDag` is `DagBase<ScheduleEvent>` plus event helpers. The operations the scheduler uses, all seen at call sites:
+### 12.3 The class: `DagBase<T>` and `ScheduleEventDag`
 
-| Call | Returns | Used for |
-|---|---|---|
-| `events.AddEvent(ev)` | — | add a vertex |
-| `events.AddDependency(a, b)` | `bool` (false if it already existed) | edge a → b; does **not** check for cycles |
-| `events.WouldCreateCycle(a, b)` | `bool` | ask before adding a risky edge |
-| `events.GetTopologicalOrdering()` | `std::optional<VertexVec>` | empty optional means there is a cycle |
-| `events.GetRootEvents()`, `GetLeafEvents()` | `std::vector<ScheduleEventSPtr>` | no in-edges / no out-edges |
-| `events.Apply(state)` | `BoolStringPair` | replay every event in topological order |
-| `events.Reduce()` | — | transitive reduction: drop edges implied by longer paths |
-| `events.Remove(ev)` | — | used on the copy `event_dag_copy` in `DoAgvAssignments` |
+Both classes are in `planner_core/event_dag.hpp` (with four methods in `src/event_dag.cpp`); the code is in `sources/repomix-planner-core.xml`. `DagBase<T>` is a header-only template that wraps a Boost graph; `ScheduleEventDag` derives from `DagBase<ScheduleEvent>` and adds eight methods (one of them overrides the topological sort).
 
-How `GetTopologicalOrdering()` breaks ties between events that are ready at the same time is decided in `planner_core` (not in the snapshot). Because vertices hold `shared_ptr`s, **copying a DAG does not copy the events**: `auto event_dag_copy(ctx->events);` in `DoAgvAssignments` shares every event object with `ctx->events`, which is exactly what that loop relies on when it calls `tray_move->SetAgvId(...)`.
+![ScheduleEventDag and the DagBase family](figures/63_event_dag_classes.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#63_event_dag_classes) · [standalone SVG](figures/63_event_dag_classes.svg)</sub>
+
+*Figure 17 — `DagBase<T>` holds a Boost `adjacency_list` whose vertices store `std::shared_ptr<T>`, plus a map from pointer to vertex. `ScheduleEventDag` inherits everything and adds the event-specific methods; it overrides `GetTopologicalOrdering()` to put lower job indices first. The scheduler uses four DAG objects: `ctx->events` (the plan), `event_dag_copy` (a work queue inside AGV assignment), `agv_event_dag` (which matched AGV goes first in one round) and `final_actions_dag` (the response's action nodes).*
+
+```cpp
+// planner_core/event_dag.hpp (abridged)
+template <typename T>
+class DagBase {
+public:
+  using DagT   = boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, std::shared_ptr<T>>;
+  using Vertex = typename DagT::vertex_descriptor;   // vecS: an index 0 .. n-1 (std::size_t)
+  using Edge   = typename DagT::edge_descriptor;     // what GetInEdges / GetOutEdges iterate over
+  DagBase(DagBase const&) = default;                 // copies dag_ and ptr_to_vertex_: same shared_ptrs
+  virtual ~DagBase() = default;
+  // ... about 30 methods, listed in 12.5 ...
+  virtual std::optional<std::vector<Vertex>> GetTopologicalOrdering() const;   // Boost DFS version
+protected:
+  DagT dag_;                                                   // vertices + edges
+  std::unordered_map<std::shared_ptr<T>, Vertex> ptr_to_vertex_;  // pointer -> vertex, kept in sync
+};
+
+class ScheduleEventDag : public DagBase<ScheduleEvent> {
+public:
+  using VertexVec = std::vector<Vertex>;
+  BoolStringPair Apply(DiscreteGarageState& state) const;      // replay every event, in order
+  bool AddEvent(const ScheduleEventSPtr& event) { return Add(event).has_value(); }
+  bool HasEvent(const ScheduleEventSPtr& event) const { return Has(event); }
+  std::optional<ScheduleEventSPtr> GetEventFromVertex(const Vertex& v) const { return GetFromVertex(v); }
+  std::optional<Vertex> GetVertexFromEvent(const ScheduleEventSPtr& e) const { return GetVertex(e); }
+  std::vector<ScheduleEventSPtr> GetLeafEvents() const;        // vertex order
+  std::vector<ScheduleEventSPtr> GetRootEvents() const;        // sorted by job index
+  std::optional<VertexVec> GetTopologicalOrdering() const override;  // job-index priority (12.5)
+};
+```
+
+Three design choices explain most of the behaviour in the rest of this section:
+
+- **`boost::vecS` for vertices.** Vertices are plain indices `0 … n−1`, so lookups by vertex are array accesses and `HasVertex(v)` is just `v < NumVertices()`. The price: removing a vertex shifts every later index down by one.
+- **`bidirectionalS`.** Each vertex stores both its in-edges and its out-edges, so `GetInEdges`, `GetParents` and in-degree checks are cheap. Rule B's leaf search and the root search both use the degrees.
+- **A side map `ptr_to_vertex_`.** Boost only maps vertex → value. `DagBase` keeps the reverse map itself, so “where is this event?” is a hash lookup. Every pointer-taking method goes through it, and it is why the same event cannot be added twice: `Add(ptr)` returns `std::nullopt` if `ptr` is already a key.
+
+### 12.4 What is stored: vertices, edges and shared events
+
+![ScheduleEventDag storage and event identity](figures/64_event_dag_storage.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#64_event_dag_storage) · [standalone SVG](figures/64_event_dag_storage.svg)</sub>
+
+*Figure 18 — The example DAG from the topological-ordering figure, as it sits in memory. `dag_` stores one vertex per event (an index holding a `shared_ptr`) and the edges between indices; `ptr_to_vertex_` maps each pointer back to its index. The bookkeeping maps in `ScheduleContext` and the AGV-assignment copy point at the same event objects. Bottom: the three ways the code names an event, and the calls that convert between them.*
+
+The code refers to one event in three different ways, and much confusion comes from mixing them up:
+
+| Name | Type | What it identifies | Where you meet it | Convert with |
+|---|---|---|---|---|
+| The event pointer | `ScheduleEventSPtr` (`std::shared_ptr<ScheduleEvent>`) | The object itself; equality is pointer identity | `AddDependency(a, b)`, `WouldCreateCycle(a, b)`, `Remove(e)`, keys and values of `last_entity_event`, `first_tray_event`, `freeing_moves` | → vertex: `GetVertexFromEvent(e)` = `GetVertex(e)`, a lookup in `ptr_to_vertex_`, `std::nullopt` if absent; → job: `e->GetJobIndex()` |
+| The vertex | `DagBase<ScheduleEvent>::Vertex` (`std::size_t`) | The event's position in **this** DAG | `GetTopologicalOrdering()` results, `edge.m_source` / `m_target`, CHUGG's `motion.GetActionId()` | → event: `GetEventFromVertex(v)` = `GetFromVertex(v)`, `std::nullopt` if `v >= NumVertices()` |
+| The job index | `unsigned int`, stored in the event | Which job the event belongs to | `scheduled_jobs[k]`, rule B, `GetRootEvents()` sorting, topological tie-breaking | Many events share one index; there is no index → event lookup |
+
+The vertex is the fragile one. It is only meaningful for one DAG object, and the comment above `RemoveVertex` says plainly what happens on removal: “If you remove a vertex, all vertex IDs larger than the removed vertex will decrement by 1.” The helper keeps `ptr_to_vertex_` correct, but any `Vertex` you saved elsewhere is now wrong. `ctx->events` never has a vertex removed, and the code depends on that: CHUGG reports each motion with the vertex index of the event it came from, and `BuildActionDagFromMotions` maps it back with `GetEventFromVertex`.
+
+### 12.5 The operations
+
+![ScheduleEventDag operations](figures/65_event_dag_operations.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#65_event_dag_operations) · [standalone SVG](figures/65_event_dag_operations.svg)</sub>
+
+*Figure 19 — Each panel applies one operation to the same six-event DAG. (1) `AddEvent` adds an unconnected vertex. (2) `AddDependency(d, g)` adds the edge d → g. (3) Roots are events with no incoming edge (returned sorted by job index), leaves events with no outgoing edge. (4) A topological ordering is a list of vertex indices, lower job indices first. (5) `Apply` replays all events in that order onto a garage state. (6) `WouldCreateCycle(d, a)` is true because a already reaches d. (7) `Reduce()` removes edges implied by longer paths. (8) `Remove` is only ever called on a copy.*
+
+Every public method, grouped by purpose. “Used in” names representative call sites in the scheduler; methods marked *unused* exist but the scheduler package never calls them.
+
+| Group | Call | Returns | Exact behaviour (from `event_dag.hpp` / `.cpp`) | Used in |
+|---|---|---|---|---|
+| **build** | `AddEvent(e)` (`ScheduleEventDag`) | `bool` | `Add(e).has_value()`: `true` if added, `false` if `e` was already in the DAG | every job method, tray and AGV assignment (17 calls) |
+| | `Add(ptr)` | `std::optional<Vertex>` | The new vertex, or `std::nullopt` if `ptr` is already present | `GetEventDag`; the action DAGs in the response and VRC insertion |
+| | `AddDependency(parent, child)` | `bool` | Adds parent → child. `false` if either endpoint is not in the DAG, or the edge already exists. **No cycle check.** Overloads take two pointers or two vertices | 24 calls + 2 in `ScheduleContext`; tray assignment only logs the result, `GetEventDag` throws on `false`, `TryClearBlockedAgvMove` uses it (“an edge was added”), everything else ignores it |
+| | `AddDependent(child, parent)` | `bool` | The same edge, arguments swapped | *unused* |
+| **look up** | `Has(ptr)` / `HasEvent(e)` / `HasVertex(v)` | `bool` | Pointer in `ptr_to_vertex_`; `v < NumVertices()` | *unused* in the scheduler |
+| | `GetVertex(ptr)` / `GetVertexFromEvent(e)` | `std::optional<Vertex>` | Lookup in `ptr_to_vertex_` | `PropagateEventCostToChildren`, `AddDepsAfterAmiga` |
+| | `GetFromVertex(v)` / `GetEventFromVertex(v)` | `std::optional<std::shared_ptr<T>>` | The pointer stored at `v`; `std::nullopt` if out of range | everywhere a topological order is walked |
+| | `NumVertices()` / `NumEdges()` | `unsigned int` | Boost counts | `NumVertices` in tests; `NumEdges` *unused* |
+| **structure** | `GetRootEvents()` | `std::vector<ScheduleEventSPtr>` | In-degree 0, then `std::sort` by job index (ties in unspecified order) | AGV assignment's work queue |
+| | `GetLeafEvents()` | `std::vector<ScheduleEventSPtr>` | Out-degree 0, in vertex order | rule B (`UpdateLeafDependencies`) |
+| | `GetRootVertices()` / `GetLeafVertices()` | `std::vector<Vertex>` | The same, as vertices | via the two above |
+| | `GetInEdges(v)` / `GetOutEdges(v)` | Boost edge-iterator pair | Throws `std::invalid_argument("Vertex does not exist: …")` if `v` is out of range | `AddDepsAfterAmiga`, `PropagateEventCostToChildren`, the response |
+| | `GetSourceVertex(e)` / `GetTargetVertex(e)` | `Vertex` | The two ends of an edge (callers also read `m_source` / `m_target`) | `MoveAgvToTrayPose`, `PropagateEventCostToChildren` |
+| | `GetParents(x)` / `GetChildren(x)` | `std::vector<std::shared_ptr<T>>` | Direct predecessors / successors; empty if `x` is absent | *unused* |
+| | `GetVertices()` | iterator pair | All vertices | the “any `TrayMove`s?” check in AGV assignment |
+| | `HasDependency(parent, child)` | `bool` | Is there a **direct** edge? `false` if either endpoint is absent | tests |
+| | `GetBaseGraph()` | `const DagT&` | The Boost graph itself | the topological sort |
+| **order and replay** | `GetTopologicalOrdering()` | `std::optional<VertexVec>` | `ScheduleEventDag`: Kahn's algorithm with a min-priority queue on job index (below). `DagBase<T>`: Boost `topological_sort` (DFS), reversed. `std::nullopt` on a cycle | 8 calls on `ctx->events` (tray and AGV assignment, `PlanReadyForInsertJob`, sanity check, path repair, `AddDepsAfterAmiga`, the response); `agv_event_dag` and the response's action DAG use the Boost version |
+| | `WouldCreateCycle(parent, child)` | `bool` | Breadth-first search from `child` along out-edges; `true` if it reaches `parent` or `parent == child`. **`false` if either endpoint is absent** | the path-blocking edge in `MoveAgvToTrayPose`; path repair in `TryClearBlockedAgvMove`; VRC insertion on the action DAG |
+| | `Apply(state)` (`ScheduleEventDag`) | `BoolStringPair` | `GetTopologicalOrdering()`, then `event->Apply(state)` for each; stops at the first failure with `"Event <event>: <error>"`, leaving `state` partly advanced | 13 calls in the job methods (`PlanReadyForInsertJob` has two): how each job gets its `working_state` |
+| **rewrite** | `Reduce()` | `BoolStringPair` | Transitive reduction (12.8). `{false, "The graph must be a DAG."}` on a cycle | end of `DoAgvAssignments`; again in `Plan()`. Both ignore the result |
+| | `Remove(ptr)` / `RemoveVertex(v)` | — | Removes the vertex and its edges; later vertices shift down by one; `ptr_to_vertex_` is updated | only `event_dag_copy.Remove(...)` |
+| | `Replace(old, new)` / `Replace(v, new)` | `bool` | Stores `new` at the vertex of `old`, updating `ptr_to_vertex_` | only on the action DAG (VRC insertion) |
+| **debug** | `PrintGraph(label, logger)` | — | Logs a Graphviz string; vertices are labelled `<job><type>`, e.g. `0TM`, `1BT` | `Plan()` when `printdags_` is set |
+| | `DrawGraph(name)` | `std::string` | Writes `/tmp/<name>.dot`, returns the file name | tests |
+| | `ToDotFormatString(left_right)` | `std::string` | The Graphviz text `PrintGraph` logs | via `PrintGraph` |
+
+**Edges, roots, leaves.** An edge u → v reads “u must finish before v starts”, nothing more: not “u is near v” and not “the same AGV does both”. A root can start as soon as the plan starts; a leaf is something nothing else waits for. Rule B (section 13.5) is built on leaves: a new event of job k waits for every current leaf of job k, which is “everything job k has done so far that nothing else is waiting for”.
+
+**How `ScheduleEventDag` orders events.** It overrides the Boost DFS sort with Kahn's algorithm:
+
+```cpp
+// planner_core/src/event_dag.cpp — ScheduleEventDag::GetTopologicalOrdering (abridged)
+auto vert_cmp = [this](Vertex l, Vertex r) {                      // min-heap on job index
+  return GetEventFromVertex(l).value()->GetJobIndex() > GetEventFromVertex(r).value()->GetJobIndex();
+};
+std::priority_queue<Vertex, VertexVec, decltype(vert_cmp)> priority_q(vert_cmp);
+// push every vertex with in-degree 0; then repeatedly:
+//   u = lowest job index among the ready vertices; append u; decrement the in-degree of u's children;
+//   push each child that reaches in-degree 0
+if(count != NumVertices()) return std::nullopt;                   // some vertices never became ready: a cycle
+```
+
+![How ScheduleEventDag orders events](figures/68_topological_priority.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#68_topological_priority) · [standalone SVG](figures/68_topological_priority.svg)</sub>
+
+*Figure 20 — `ScheduleEventDag::GetTopologicalOrdering()` on the example DAG. At each step the ready set holds the events whose prerequisites are done; the one with the lowest job index is taken. Job 0's events therefore come out before job 1's whenever the edges allow it. Among events of the same job, the heap decides, which depends on the order the vertices were pushed (vertex order for the first roots, then out-edge insertion order). A cycle leaves some vertices never ready, and the method returns `std::nullopt`.*
+
+So the order is **deterministic** for a given DAG built in a given order, and it **prefers earlier jobs**. That is a property callers may rely on (replays and walks process job 0 first), but it is not a promise about events *within* one job: the priority queue only compares job indices, so among equal indices the heap's internal order decides.
+
+**Replay.** `Apply(state)` is how a stage answers “where is everything after the events planned so far?” It does not change the DAG or the events (`ScheduleEvent::Apply` is `const`); it advances the `DiscreteGarageState` it is given, discretely. What each event type does to the state is in section 11. Every job method starts with the same two lines:
+
+```cpp
+volley::DiscreteGarageState working_state = ctx->initial_state;   // a fresh copy of the request's garage
+auto [success, message] = ctx->events.Apply(working_state);       // every event so far, in topological order
+```
+
+Tray assignment, AGV assignment, path repair and `SanityCheckEvents` do the same replay by hand (walk `GetTopologicalOrdering()` and call `event->Apply(working_state)` per event), because they need to stop or act between events.
+
+### 12.6 Copies share events: `event_dag_copy` as a work queue
+
+`DagBase` declares its copy constructor `= default`, so copying copies `dag_` and `ptr_to_vertex_`: new vertices and edges, but each vertex holds the same `shared_ptr` as the original. Changing the structure of the copy (removing a vertex) does not affect the original; changing an **event** through either one changes it for both. `DoAgvAssignments` uses exactly that combination.
+
+![event_dag_copy as a work queue](figures/66_event_dag_copy_queue.svg)
+
+<sub>Pan / zoom: [interactive viewer](figures/viewer.html#66_event_dag_copy_queue) · [standalone SVG](figures/66_event_dag_copy_queue.svg)</sub>
+
+*Figure 21 — `DoAgvAssignments` processes the DAG in rounds. The copy's roots (sorted by job index) are the events whose prerequisites have all been handled. Phase 1 applies and removes non-tray roots (here the bay transition a); phase 2 matches AGVs to the `TrayMove` roots, calls `SetAgvId` on them, and removes them. Meanwhile `ctx->events` only grows: the AGV's approach, lift and lower events are added there, never to the copy. Because both DAGs hold the same objects, the AGV ids set through the copy's roots are what `ctx->events` ends up with.*
+
+```cpp
+// Scheduler::DoAgvAssignments (src/scheduler.cpp), structure only
+auto event_dag_copy(ctx->events);                         // ScheduleEventDag: new vertices/edges, SAME event objects
+while(event_dag_copy.GetRootEvents().size() > 0) {
+  // phase 1: apply every non-TrayMove root to working_state, then event_dag_copy.Remove(root)
+  // phase 2: BottleneckAssignment over (AGV, TrayMove root) pairs; for each match:
+  //            add approach / lift events to ctx->events, tray_move->SetAgvId(agv),
+  //            add edges in ctx->events, event_dag_copy.Remove(root), add the lower event
+}
+// then EnsureAgvMovePathsClear, ctx->events.Reduce(), AddDepsAfterAmiga for each bay / VECS transition
+```
+
+This is Kahn's algorithm again, done in rounds so that all tray moves that are ready at the same time are matched together. Unmatched tray-move roots stay in the copy for the next round. Each `Remove` renumbers the copy's later vertices, which is harmless because the loop only ever talks to the copy through event pointers. The comment above phase 1 (SW2-377) explains why all non-tray roots are drained first: a bay transition can hide a tray move that the matching must see in the same round.
+
+### 12.7 How the DAG grows during `Plan()`
+
+The same object, `ctx->events`, is extended by three stages and read by three more. Each stage adds its own kinds of edges:
+
+| Stage | Adds events | Adds edges | Reads |
+|---|---|---|---|
+| Job expansion (section 13) | `TrayMove`, `AgvMove`, `BayTransition`, `VecsTransition`: the intent of each job | Rule A (same entity, across jobs), rule B (leaves of the same job), rule C (into a bay or VECS), plus a few direct `AddDependency` calls in individual job methods | `Apply` for `working_state` |
+| Tray assignment (section 15) | Blocker `TrayMove`s (and advance moves of the root tray) | Chain of required moves; per-tray chain (`last_tray_event`); blocker → root move; `freeing_moves` edges from earlier users of each pose | `GetTopologicalOrdering` once at the start, once at the end |
+| AGV assignment (section 16) | Approach `AgvMove`s, lift and lower `AgvMove`s | Per-AGV chain (`last_agv_event`); node-arrival order (`AddNodeArrivalDeps`); “wait for the blocking tray's first move” (`first_tray_event`, cycle-checked); path repair (`EnsureAgvMovePathsClear`, cycle-checked); bay / VECS transitions against lifts (`AddDepsAfterAmiga`) | the copy as a work queue; `GetTopologicalOrdering` for repair and the final check |
+| `Reduce()` (sections 16, 17) | — | **removes** edges implied by longer paths, at the end of AGV assignment and again in `Plan()` | — |
+| Sanity check, motion planning, response (sections 17, 18) | — | — | `SanityCheckEvents` replays it; CHUGG receives `ctx->events`; `TransferEventDagDepsToActionDag` turns each edge u → v into an action edge “last action of u → first action of v” |
+
+No `VrcTransition` is ever added by the scheduler package; VRC trips are inserted later, at the action level (section 19). Two end-of-stage checks catch mistakes: tray and AGV assignment each finish with `GetTopologicalOrdering()` and fail with “Failed to get new total ordering” (logged as “… introduced a loop!!!!”) if they created a cycle.
+
+### 12.8 `Reduce()`: fewer edges, same order
+
+`Reduce()` computes the **transitive reduction**: it removes every edge u → v for which another path u → … → v exists. The set of valid orders does not change, but the graph becomes smaller and easier to read, and the response's parent lists get shorter. The stages above add edges liberally, so this matters. (The response code relies on the same idea for its action DAG: “Overkill but pruned later by Reduce()”.)
+
+The implementation is hand-written (the `boost/graph/transitive_reduction.hpp` header is included but not used):
+
+1. Get a topological order (the job-priority one, since `GetTopologicalOrdering` is virtual) and each vertex's position in it. On a cycle, return `{false, "The graph must be a DAG."}` without changing anything.
+2. Build a `V × V` reachability matrix of `bool`s, filling it in reverse topological order: u reaches each child v, and everything v reaches.
+3. Mark edge u → v redundant if u has another child w that comes before v and reaches v.
+4. Remove the marked edges.
+
+Memory is `V²` bits and time is roughly `O(V · E)`, which is fine for the tens to low hundreds of events one plan has.
+
+Where it runs, and where it doesn't:
+
+- **Not after tray assignment.** The call is commented out with “TODO(Gunther): Reduce here breaks the AgvAssignments for some reason.”
+- **At the end of AGV assignment**, before `AddDepsAfterAmiga`.
+- **Again in `Plan()`**, before `SanityCheckEvents`, with “TODO(any) Planning may fail if Reduce() is not called”.
+
+Both calls discard the returned `BoolStringPair`, so a cyclic DAG at that point is not reported by `Reduce()`; the next `GetTopologicalOrdering()` catches it. Nobody has written down why the placement matters (doc 02, risk 2). Doc 02, risk 3, gives a likely reason for the tray-assignment case: two AGV-assignment helpers look only at direct edges, which `Reduce()` may replace with longer paths. A test shows the visible effect: after `DoAgvAssignments`, the direct edges `tray_move_1 → tray_move_2` that the test added are gone (`EXPECT_FALSE(ctx->events.HasDependency(...))`), because the AGV chains now imply them. `HasDependency` checks a direct edge only, so after `Reduce()` it is the wrong question for “must a finish before b?”.
+
+### 12.9 Gotchas
+
+- **Never remove a vertex from `ctx->events`.** Vertex indices are how CHUGG's motions find their events again, and removal shifts every later index. Removing from a copy is fine; that is what the copy is for.
+- **A copy is not a snapshot of the events.** `auto copy(ctx->events)` shares every event object. To compare “before” and “after” a stage (as the parity tests in doc 03 must), build two contexts independently.
+- **`AddDependency` fails silently.** It returns `false` when either endpoint was never added (a forgotten `AddEvent`) or the edge exists, and almost every caller ignores the result. A missing `AddEvent` therefore means a missing edge, not an error.
+- **Not every edge is cycle-checked, and the check needs both events present.** `AddDependency` never checks for cycles. Only the two risky AGV-assignment edges ask `WouldCreateCycle` first, and it answers `false` (safe) if either endpoint is missing. Everything else relies on the stage-end `GetTopologicalOrdering()` check, which reports *that* there is a cycle, not *which edge* closed it. When debugging one, dump the graph with `debug/printdags` (section 21).
+- **Order is by job index, then heap order.** `GetTopologicalOrdering()` and `GetRootEvents()` both prefer lower job indices. Within one job, `GetRootEvents()` uses `std::sort` (not stable) and the topological sort uses a heap, so code must not assume anything about the order of same-job events beyond what the edges force.
+- **`Apply` stops at the first failing event.** The state has then been advanced by every event before it. Job methods return the error, but `working_state` is already partly replayed.
+- **Replays are repeated, not cached.** Each job method copies `initial_state` and replays the whole DAG, nested calls replay again, and `AddDepsAfterAmiga` recomputes a topological order and replays from scratch for each dependency it inspects. This is simple and correct, but cost grows with the square of the number of events.
+- **Lookups assume membership.** Most call sites write `GetEventFromVertex(v).value()`, which throws `std::bad_optional_access` for an out-of-range vertex; `GetInEdges` / `GetOutEdges` throw `std::invalid_argument`. `PropagateEventCostToChildren` throws its own `std::runtime_error("Failed to get AGV vertex in DAG")` when an event is missing.
 
 ## 13. Job expansion: from jobs to events
 
@@ -826,7 +1091,7 @@ The relationship is **one job → many events → many actions**:
 - **How it is chosen.** Just before calling the job method, `Plan()` passes `plan_ctx->scheduled_jobs.size()`. If the method succeeds, `PushBackScheduledJob(job)` appends the job at exactly that position, so `scheduled_jobs[job_index]` is now this job. If it fails, nothing is appended and the next job is offered the same number.
 - **How it is used.** When the response is built, `ToActionNode(motion, ctx->scheduled_jobs[event->GetJobIndex()].job.guid, event)` turns the index back into the job's `guid`. Rule B (13.5) also compares indices to decide which events belong to the same job.
 
-A worked example, the same one as in Figure 16 below:
+A worked example, the same one as in Figure 22 below:
 
 | Loop counter `i` | Job in the request | `scheduled_jobs.size()` before the call = `job_index` | Result | `scheduled_jobs` afterwards |
 |---|---|---|---|---|
@@ -840,7 +1105,7 @@ If the code used `i` instead, the REPARK's event would carry 2, and `scheduled_j
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#36_expansion_loop) · [standalone SVG](figures/36_expansion_loop.svg)</sub>
 
-*Figure 16 — The loop, one row per iteration: the code that runs, then `plan_ctx->scheduled_jobs`, `plan_ctx->events` and `result.scheduled_jobs` after it. In the events column each box is one event and each dashed group is everything one job-method call created: the RETRIEVE (job index 0) created four events, the REPARK_TRAY (job index 1) one. The bottom row shows the same index carried through later stages to the response.*
+*Figure 22 — The loop, one row per iteration: the code that runs, then `plan_ctx->scheduled_jobs`, `plan_ctx->events` and `result.scheduled_jobs` after it. In the events column each box is one event and each dashed group is everything one job-method call created: the RETRIEVE (job index 0) created four events, the REPARK_TRAY (job index 1) one. The bottom row shows the same index carried through later stages to the response.*
 
 If every job fails, `plan_ctx->scheduled_jobs` is empty and `Plan()` returns right after the loop with "No jobs succeeded to plan".
 
@@ -911,13 +1176,13 @@ Only `TrayMove` has blanks. That is why the next stage is called *tray* assignme
 
 #### What a job method reads, changes and returns
 
-The signatures make job methods look like functions that take a job and return a yes/no answer. They are not. Most of their output is written **into `*ctx` while they run**, and the return value only reports whether that worked. Figure 17 shows this for `PlanRetrieveJob`; every `Plan<Type>Job` follows the same pattern.
+The signatures make job methods look like functions that take a job and return a yes/no answer. They are not. Most of their output is written **into `*ctx` while they run**, and the return value only reports whether that worked. Figure 23 shows this for `PlanRetrieveJob`; every `Plan<Type>Job` follows the same pattern.
 
 ![What PlanRetrieveJob reads, changes and returns](figures/38_job_method_dataflow.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#38_job_method_dataflow) · [standalone SVG](figures/38_job_method_dataflow.svg)</sub>
 
-*Figure 17 — Data flow of one job method. Blue: read only. Green: the return value. Amber: members of the shared `ScheduleContext` that the method (and the job methods it calls) change in place: four new events, five edges and three `last_entity_event` entries. Grey: a local copy thrown away at return. Red: requests sent to Dispatch while planning.*
+*Figure 23 — Data flow of one job method. Blue: read only. Green: the return value. Amber: members of the shared `ScheduleContext` that the method (and the job methods it calls) change in place: four new events, five edges and three `last_entity_event` entries. Grey: a local copy thrown away at return. Red: requests sent to Dispatch while planning.*
 
 The same information as a table, for `PlanRetrieveJob(ctx, payload_id, job_index)` called as the first job:
 
@@ -972,11 +1237,11 @@ Doc 02 makes the same trade-off for the tray and AGV solvers: it keeps in-place 
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#23_working_state_replay) · [standalone SVG](figures/23_working_state_replay.svg)</sub>
 
-*Figure 18 — Every `Plan<Type>Job` copies `ctx->initial_state` and replays the whole event DAG built so far. Job 1 (a retrieve) therefore sees tray T15 at P23, where job 0 will have put it, not at P15 as in the request.*
+*Figure 24 — Every `Plan<Type>Job` copies `ctx->initial_state` and replays the whole event DAG built so far. Job 1 (a retrieve) therefore sees tray T15 at P23, where job 0 will have put it, not at P15 as in the request.*
 
 Three details matter in practice:
 
-- **`Apply()` is discrete.** A tray "teleports" to its destination; time and paths do not exist yet. What `Apply()` does with a `TrayMove` whose tray or destination is still blank is defined in `planner_core` (not in this snapshot), so do not rely on where such a tray appears in a later job's `working_state`.
+- **`Apply()` is discrete.** A tray "teleports" to its destination; time and paths do not exist yet. Blank fields are not neutral (section 11): a `TrayMove` with no tray id does nothing, one with no destination **removes** the tray and its payload from `working_state`, and a tray already sitting on a destination is moved to the placeholder pose `0@0`. So a later job does not see an empty tray that READY_FOR_INSERT will bring into a bay, and does not see a tray whose destination is still open.
 - **Nested calls replay again.** When `PlanRetrieveJob` calls `PlanReparkTrayJob`, the inner call copies and replays too, so it already sees the bay transition the outer method has just added.
 - **The cost is repeated replay.** Each job method replays the whole DAG, and nested calls replay it again. The code accepts this for simplicity.
 
@@ -986,7 +1251,7 @@ Three details matter in practice:
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#25_dependency_rules) · [standalone SVG](figures/25_dependency_rules.svg)</sub>
 
-*Figure 19 — The three edge rules used during job expansion. Rule A (`UpdateLastEntityEvent`) chains events that touch the same AGV, tray, bay or VECS, even across jobs. Rule B (`UpdateLeafDependencies`) makes a new event wait for the current leaf events of the **same** job. Rule C (in `PlanReparkTrayJob`) makes a tray move into a bay or VECS wait for that resource's last event.*
+*Figure 25 — The three edge rules used during job expansion. Rule A (`UpdateLastEntityEvent`) chains events that touch the same AGV, tray, bay or VECS, even across jobs. Rule B (`UpdateLeafDependencies`) makes a new event wait for the current leaf events of the **same** job. Rule C (in `PlanReparkTrayJob`) makes a tray move into a bay or VECS wait for that resource's last event.*
 
 Precisely (the letters A, B and C are this guide's shorthand; the code uses the function names, see the FAQ in section 24):
 
@@ -1005,7 +1270,7 @@ Not every event goes through every rule:
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#37_job_building_blocks) · [standalone SVG](figures/37_job_building_blocks.svg)</sub>
 
-*Figure 20 — Generated from `scheduler.cpp`: which methods each job method calls, which event types it creates itself, and whether it applies rules A and B itself. `PlanOpenBayDoor` and `PlanUnstashWaypointTraysJob` are helpers, not job types.*
+*Figure 26 — Generated from `scheduler.cpp`: which methods each job method calls, which event types it creates itself, and whether it applies rules A and B itself. `PlanOpenBayDoor` and `PlanUnstashWaypointTraysJob` are helpers, not job types.*
 
 Two patterns stand out:
 
@@ -1039,7 +1304,7 @@ BoolStringPair PlanReparkTrayJob(ScheduleContextSPtr ctx, std::optional<uint16_t
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#41_job_repark_tray) · [standalone SVG](figures/41_job_repark_tray.svg)</sub>
 
-*Figure 21 — Two jobs move tray T19: P19 → P24, then P24 → P23. Rule A chains the second move after the first.*
+*Figure 27 — Two jobs move tray T19: P19 → P24, then P24 → P23. Rule A chains the second move after the first.*
 
 In words: create one `TrayMove`, set its tray and (if given) its destination with the right heading, and add it with rules A, C and B. Things to remember:
 
@@ -1072,7 +1337,7 @@ BoolStringPair PlanAgvMoveJob(ScheduleContextSPtr ctx, std::optional<uint16_t> a
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#40_job_move_agv) · [standalone SVG](figures/40_job_move_agv.svg)</sub>
 
-*Figure 22 — An empty AGV produces an `AgvMove`; an AGV carrying a tray produces a `TrayMove` with that AGV already assigned.*
+*Figure 28 — An empty AGV produces an `AgvMove`; an AGV carrying a tray produces a `TrayMove` with that AGV already assigned.*
 
 In words: check the AGV and destination, then add one event. Remember that **this is the only job that can create a `TrayMove` with its AGV already set**, and that the `allow_recip` branch is never used (both callers pass `false`).
 
@@ -1100,7 +1365,7 @@ BoolStringPair PlanBayTransitionJob(ScheduleContextSPtr ctx, uint16_t bay_id, ui
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#49_job_bay_transition) · [standalone SVG](figures/49_job_bay_transition.svg)</sub>
 
-*Figure 23 — Job 0 switches B21 to retrieve mode. Job 1 is rejected because an AGV stands in B7's ODP collision area (extent drawn for illustration).*
+*Figure 29 — Job 0 switches B21 to retrieve mode. Job 1 is rejected because an AGV stands in B7's ODP collision area (extent drawn for illustration).*
 
 In words: validate (bay exists, enabled, its `BAY_ODP` area is clear, the bay is in the right starting state), then add one `BayTransition`. Retrieve transitions made here and in `PlanOpenBayDoor` carry a floor number (`GetBaySystemFloors(bay)[0]`); the ones `PlanRetrieveJob` and `PlanAgvChargeJob` build inline leave `cmd.floor` at 0.
 
@@ -1126,7 +1391,7 @@ BoolStringPair PlanChargePayloadJob(ScheduleContextSPtr ctx, const GuidMsg& payl
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#50_job_charge_payload) · [standalone SVG](figures/50_job_charge_payload.svg)</sub>
 
-*Figure 24 — The car on T20 is moved to a VECS (invented here; the Pecos layout has none) and the VECS is switched to CHARGING.*
+*Figure 30 — The car on T20 is moved to a VECS (invented here; the Pecos layout has none) and the VECS is switched to CHARGING.*
 
 In words: if the tray is not already on a ready VECS, borrow the open-space search of `ResolveBlockingTrays()` to find one, move the tray there through `PlanReparkTrayJob`, then add the `VecsTransition`.
 
@@ -1153,7 +1418,7 @@ std::tuple<bool, std::string, bool> PlanRetrieveJob(ScheduleContextSPtr ctx, con
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#42_job_retrieve) · [standalone SVG](figures/42_job_retrieve.svg)</sub>
 
-*Figure 25 — Retrieving the car on T17. Bay B21 is chosen, switched to retrieve mode (1), the empty tray inside is planned out (2), T17 is planned in (3), and the bay hands over the car (4).*
+*Figure 31 — Retrieving the car on T17. Bay B21 is chosen, switched to retrieve mode (1), the empty tray inside is planned out (2), T17 is planned in (3), and the bay hands over the car (4).*
 
 In words, five decisions in order:
 
@@ -1186,7 +1451,7 @@ BoolStringPair PlanInsertJob(ScheduleContextSPtr ctx, uint16_t bay_id, size_t jo
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#43_job_insert) · [standalone SVG](figures/43_job_insert.svg)</sub>
 
-*Figure 26 — The loaded tray T21 leaves bay B21. Its parking spot is chosen later. Refilling the bay is requested as a separate job through a callback.*
+*Figure 32 — The loaded tray T21 leaves bay B21. Its parking spot is chosen later. Refilling the bay is requested as a separate job through a callback.*
 
 In words: check that the bay holds a loaded tray and is `VEHICLE_INSERTED` or `READY_TO_RETRIEVE`, switch it to retrieve mode with `PlanOpenBayDoor` (event 1), move the tray out with no destination (event 2), then call `reset_bay_state_request_fn_` so Dispatch schedules the bay's refill on its own.
 
@@ -1212,7 +1477,7 @@ BoolStringPair PlanReadyForInsertJob(ScheduleContextSPtr ctx, uint16_t bay_id, s
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#44_job_ready_for_insert) · [standalone SVG](figures/44_job_ready_for_insert.svg)</sub>
 
-*Figure 27 — An empty tray is planned into B21 (chosen early here: T23), then B21 switches to insert mode.*
+*Figure 33 — An empty tray is planned into B21 (chosen early here: T23), then B21 switches to insert mode.*
 
 In words: the bay must be `READY_TO_RETRIEVE`. If it is empty, or holds a loaded tray, plan "any empty tray → bay" (a `TrayMove` with no tray). If the car in the bay asked for charging, plan `PlanChargePayloadJob` first. Then try to pick the empty tray right away with `AssignTrayIdForEmptyMove`, and finish with `TRANSITION_TO_INSERT`.
 
@@ -1240,7 +1505,7 @@ BoolStringPair PlanReadyForRetrieveJob(ScheduleContextSPtr ctx, uint16_t bay_id,
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#45_job_ready_for_retrieve) · [standalone SVG](figures/45_job_ready_for_retrieve.svg)</sub>
 
-*Figure 28 — B21 switches to retrieve mode and the empty tray inside is planned out. There is no final bay event.*
+*Figure 34 — B21 switches to retrieve mode and the empty tray inside is planned out. There is no final bay event.*
 
 In words: the bay must be in insert or retrieve mode. If in insert mode, open it (event 1). If a tray is inside, send an EV car to a VECS, otherwise move the tray out with no destination (event 2).
 
@@ -1266,7 +1531,7 @@ BoolStringPair PlanAgvChargeJob(ScheduleContextSPtr ctx, uint16_t agv_id, size_t
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#48_job_charge_agv) · [standalone SVG](figures/48_job_charge_agv.svg)</sub>
 
-*Figure 29 — AGV A is trapped in bay B21 (insert mode). The bay opens (1), A drives to the cheapest free charger C14 (2), and the bay returns to insert mode (3). Costs are illustrative.*
+*Figure 35 — AGV A is trapped in bay B21 (insert mode). The bay opens (1), A drives to the cheapest free charger C14 (2), and the bay returns to insert mode (3). Costs are illustrative.*
 
 In words: free the AGV if a bay in insert mode traps it, cost every `TYPE_AGV_CHARGE` node with no AGV on it using `GetJustMovingCost`, move to the cheapest with `PlanAgvMoveJob`, and put the bay back with `PlanBayTransitionJob`.
 
@@ -1291,7 +1556,7 @@ BoolStringPair PlanCleanGarageJob(ScheduleContextSPtr ctx, size_t job_index) con
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#46_job_clean_garage) · [standalone SVG](figures/46_job_clean_garage.svg)</sub>
 
-*Figure 30 — AGVs A and B are hidden under trays (1, 2). Tray T9, left on a waypoint by an earlier plan, is planned back into parking (3).*
+*Figure 36 — AGVs A and B are hidden under trays (1, 2). Tray T9, left on a waypoint by an earlier plan, is planned back into parking (3).*
 
 In words: if this is `job_index` 0, ask `volley::HideAgvs` (from another package) for one hiding pose per AGV and add an `AgvMove` for each AGV that is not already there. Then `PlanUnstashWaypointTraysJob` adds a destination-less `TrayMove` for every tray standing on a `TYPE_WAYPOINT` node. Only the hiding step (or the initial replay of the DAG) can fail the job.
 
@@ -1316,7 +1581,7 @@ BoolStringPair PlanRebalanceGarageJob(ScheduleContextSPtr ctx, size_t job_index)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#47_job_rebalance_garage) · [standalone SVG](figures/47_job_rebalance_garage.svg)</sub>
 
-*Figure 31 — B7 gets an empty tray and insert mode (1, 2); B21 gets retrieve mode and its tray is planned out (3, 4). One job index for both bays makes rule B run them one after the other.*
+*Figure 37 — B7 gets an empty tray and insert mode (1, 2); B21 gets retrieve mode and its tray is planned out (3, 4). One job index for both bays makes rule B run them one after the other.*
 
 In words: `ComputeBayRebalancingActions()` returns two bay lists; run `PlanReadyForInsertJob` for the first and `PlanReadyForRetrieveJob` for the second, all with the same `job_index`. Per-bay failures are only logged; the job fails only if the initial replay of the DAG fails.
 
@@ -1348,7 +1613,7 @@ These are behaviours of the current code that surprise people. They are not fixe
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#24_job_recipes) · [standalone SVG](figures/24_job_recipes.svg)</sub>
 
-*Figure 32 — Cheat sheet: one row per job type, **not** a sequence of scenarios. Each row lists the events that job method can add, left to right in creation order. Dashed boxes appear only when needed; "+ recipe" means the method calls another job method; "?" is a blank for `DoTrayAssignments()`. The figures in 13.7 to 13.17 show each row in a garage.*
+*Figure 38 — Cheat sheet: one row per job type, **not** a sequence of scenarios. Each row lists the events that job method can add, left to right in creation order. Dashed boxes appear only when needed; "+ recipe" means the method calls another job method; "?" is a blank for `DoTrayAssignments()`. The figures in 13.7 to 13.17 show each row in a garage.*
 
 Check yourself before moving on:
 
@@ -1376,7 +1641,7 @@ Before the details of each stage, here is one retrieve followed through all thre
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#26_retrieve_walkthrough) · [standalone SVG](figures/26_retrieve_walkthrough.svg)</sub>
 
-*Figure 33 — One `TYPE_RETRIEVE` job on Pecos, stage by stage. Map numbers match event ids. Band 1: job expansion creates intent, including a move of the empty tray T21 out of the bay with no destination. Band 2: tray assignment gives T21 a destination and inserts a move for blocker T15, which sits on T17's critical path. Band 3: AGV assignment wraps every `TrayMove` in move → lift → carry → lower, and `AddDepsAfterAmiga` ties the bay transitions to the right lift and lower. Destinations and AGV order are illustrative.*
+*Figure 39 — One `TYPE_RETRIEVE` job on Pecos, stage by stage. Map numbers match event ids. Band 1: job expansion creates intent, including a move of the empty tray T21 out of the bay with no destination. Band 2: tray assignment gives T21 a destination and inserts a move for blocker T15, which sits on T17's critical path. Band 3: AGV assignment wraps every `TrayMove` in move → lift → carry → lower, and `AddDepsAfterAmiga` ties the bay transitions to the right lift and lower. Destinations and AGV order are illustrative.*
 
 ## 15. Tray assignment: `DoTrayAssignments`
 
@@ -1404,19 +1669,19 @@ When `DoTrayAssignments(ctx)` returns `{true, ""}`, three things hold:
 - every blocking tray has its own new `TrayMove`, ordered before the move it unblocks;
 - the DAG has edges that keep moves from entering space before it is freed (`freeing_moves`, below), and `ctx->first_tray_event` records the first move of each tray for AGV assignment.
 
-The rest of the section follows one event through the stage: the overall flow (Figure 35), the main blocking-tray loop for a move that already has both fields, then the two helpers that fill a blank tray id and a blank destination, and finally how occupancy becomes DAG edges.
+The rest of the section follows one event through the stage: the overall flow (Figure 41), the main blocking-tray loop for a move that already has both fields, then the two helpers that fill a blank tray id and a blank destination, and finally how occupancy becomes DAG edges.
 
 ![Scene used in the following figures](figures/15_facility_scenario.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#15_facility_scenario) · [standalone SVG](figures/15_facility_scenario.svg)</sub>
 
-*Figure 34 — The problem in one picture. A job asked for the car on tray R, so **R is the root tray**: it sits at `P17` and must reach bay `B21`. It cannot, because every exit from `P17` is occupied or useless: `P15` holds the empty tray K, `P20` holds T20 (with a car), and charger `C16` is a dead end. K and T20 are therefore **blocking trays**: no job asked to move them, but one of them must move before R can. Tray assignment finds that out and adds the extra move. Bays `B7` and `B21` sit on the customer side; AGV A waits near `C10`, and T15 (with a payload) is at `P3`. All positions are explanatory stand-ins, not YAML occupancy.*
+*Figure 40 — The problem in one picture. A job asked for the car on tray R, so **R is the root tray**: it sits at `P17` and must reach bay `B21`. It cannot, because every exit from `P17` is occupied or useless: `P15` holds the empty tray K, `P20` holds T20 (with a car), and charger `C16` is a dead end. K and T20 are therefore **blocking trays**: no job asked to move them, but one of them must move before R can. Tray assignment finds that out and adds the extra move. Bays `B7` and `B21` sit on the customer side; AGV A waits near `C10`, and T15 (with a payload) is at `P3`. All positions are explanatory stand-ins, not YAML occupancy.*
 
 ![DoTrayAssignments flow](figures/27_tray_assignment_flow.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#27_tray_assignment_flow) · [standalone SVG](figures/27_tray_assignment_flow.svg)</sub>
 
-*Figure 35 — Inside `DoTrayAssignments()`. Non-tray events register their pose with `freeing_moves` and are applied. Missing tray ids come from an empty-tray search; missing destinations from `ResolveBlockingTrays`. Moves with both go through the blocking-tray loop with two fallbacks.*
+*Figure 41 — Inside `DoTrayAssignments()`. Non-tray events register their pose with `freeing_moves` and are applied. Missing tray ids come from an empty-tray search; missing destinations from `ResolveBlockingTrays`. Moves with both go through the blocking-tray loop with two fallbacks.*
 
 Per event, in topological order (`scheduler.cpp:2533`):
 
@@ -1439,7 +1704,7 @@ The three searches all come from `motion_planner` and run through `volley::Singl
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#15_blocking_tray_move) · [standalone SVG](figures/15_blocking_tray_move.svg)</sub>
 
-*Figure 36 — Why blocking trays matter. Root tray R at `P17` must reach bay `B21`. In the Pecos graph `P17` connects only to `P15`, `P20` and charger `C16`; with K at `P15` and T20 at `P20`, every exit is occupied. AGV A therefore ① drives under K and lifts it, ② reparks K at the free stall `P19`, ③ returns unloaded to lift R, and ④ carries R out. It does **not** claim the current solver would pick this relocation target or route.*
+*Figure 42 — Why blocking trays matter. Root tray R at `P17` must reach bay `B21`. In the Pecos graph `P17` connects only to `P15`, `P20` and charger `C16`; with K at `P15` and T20 at `P20`, every exit is occupied. AGV A therefore ① drives under K and lifts it, ② reparks K at the free stall `P19`, ③ returns unloaded to lift R, and ④ carries R out. It does **not** claim the current solver would pick this relocation target or route.*
 
 This is what happens to a `TrayMove` that has both a tray id and a destination, such as “R: `P17` → `B21`”. The loop is long in the source (about 450 lines), but it does five things in order:
 
@@ -1484,7 +1749,7 @@ The snippet calls seven functions and builds about a dozen local variables. Each
 
 **Function 1 · `gg_.GetVertexFromPose(pose)`**: turn a garage pose into a search-graph vertex. Called twice: once for the start, once for the goal.
 
-| Dir | Name | Type | Meaning | In Figure 36 |
+| Dir | Name | Type | Meaning | In Figure 42 |
 |---|---|---|---|---|
 | in | `this` | `const volley::GarageGraph&` (`gg_`) | The pose graph (section 3), read only | Pecos graph |
 | in | `pose` | `const GaragePoseMsg&` | Node id + heading | `tray_opt->pose` = `P17@…`; `move->GetDest()` = `B21@…` |
@@ -1492,7 +1757,7 @@ The snippet calls seven functions and builds about a dozen local variables. Each
 
 **Function 2 · `volley::BlockingTraySearchEnvironment(...)` (constructor)**: describe the critical-path search: where to start, where to go, what blocks the way.
 
-| Dir | Name | Type | Meaning | In Figure 36 |
+| Dir | Name | Type | Meaning | In Figure 42 |
 |---|---|---|---|---|
 | in | `tray_id` | `uint16_t` | The root tray. It is the one moving, so it is not counted as blocking itself | R |
 | in | `entity` | `volley::CollisionEntityId_t` | The root tray's footprint (`root_collision_entity`). A tray with a car is larger than an empty one, so this changes which trays collide | R with a car |
@@ -1506,7 +1771,7 @@ The snippet calls seven functions and builds about a dozen local variables. Each
 
 **Function 3 · `volley::SingleSourceSearch(source, start_time, env)`**: run the search.
 
-| Dir | Name | Type | Meaning | In Figure 36 |
+| Dir | Name | Type | Meaning | In Figure 42 |
 |---|---|---|---|---|
 | in | `source` | `volley::BlockingTrayState` | Start state: `.vert` set to the root tray's vertex; `.blocking_trays` starts empty | `P17` |
 | in | `start_time` | `volley::Interval::Duration` | Time at the start. `Duration(0)`: tray assignment ignores time, so only costs and topology matter | `0` |
@@ -1515,14 +1780,14 @@ The snippet calls seven functions and builds about a dozen local variables. Each
 
 **Function 4 · `blocking_solution.GetTarget()`**: did the search reach the goal?
 
-| Dir | Name | Type | Meaning | In Figure 36 |
+| Dir | Name | Type | Meaning | In Figure 42 |
 |---|---|---|---|---|
 | in | `this` | the search solution | Result of step 3 | `blocking_solution` |
 | out | return | `std::optional<volley::BlockingTrayState>` | The goal state reached, or empty if no path exists even through trays. The real code checks this and fails the job with “Failed to find path for t…”; the snippet calls `.value()` for brevity | the `B21` state |
 
 **Function 5 · `blocking_solution.GetPath(target)`**: read back the path to that goal.
 
-| Dir | Name | Type | Meaning | In Figure 36 |
+| Dir | Name | Type | Meaning | In Figure 42 |
 |---|---|---|---|---|
 | in | `this` | the search solution | Result of step 3 | `blocking_solution` |
 | in | `target` | `const volley::BlockingTrayState&` | The goal state from step 4 | the `B21` state |
@@ -1530,7 +1795,7 @@ The snippet calls seven functions and builds about a dozen local variables. Each
 
 **Function 6 · `ResolveBlockingTrays(...)`**: find a new home for one blocker. Full description under `AssignDestForUntargetedMove` below.
 
-| Dir | Name | Type | Meaning | In Figure 36 |
+| Dir | Name | Type | Meaning | In Figure 42 |
 |---|---|---|---|---|
 | in | `this` | `const Scheduler*` | Read only: `gg_`, `table_`, `cost_model_`, `layout_` | |
 | in | `tray_id` | `uint16_t` | The tray that needs a home. Here it is the **blocker**, not R | K |
@@ -1545,7 +1810,7 @@ The snippet calls seven functions and builds about a dozen local variables. Each
 
 **Function 7 · `WithPriorDests(for_tray, base)`**: a local lambda in `DoTrayAssignments` (`:2687`) that builds the `illegal_poses` argument.
 
-| Dir | Name | Type | Meaning | In Figure 36 |
+| Dir | Name | Type | Meaning | In Figure 42 |
 |---|---|---|---|---|
 | captured | `blocking_tray_prior_dests` | `std::unordered_map<uint16_t, VertexCollisionIdMap>&` | For each blocker, every spot it has already been sent to while clearing this root tray's path | empty at first |
 | in | `for_tray` | `uint16_t` | The blocker | K |
@@ -1554,7 +1819,7 @@ The snippet calls seven functions and builds about a dozen local variables. Each
 
 **Variables used in the snippet**
 
-| Name | Type | Set where | Meaning | In Figure 36 |
+| Name | Type | Set where | Meaning | In Figure 42 |
 |---|---|---|---|---|
 | `move` | `volley::TrayMove*` | `dynamic_cast` of the current event | The root move being processed; both fields are set | R: `P17` → `B21` |
 | `event` | `std::shared_ptr<volley::ScheduleEvent>` | loop variable | The same object as `move`, as the DAG stores it; blocker moves become its prerequisites | the root move |
@@ -1596,7 +1861,7 @@ BoolStringPair Scheduler::AssignTrayIdForEmptyMove(
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#55_assign_tray_id_empty) · [standalone SVG](figures/55_assign_tray_id_empty.svg)</sub>
 
-*Figure 37 — `AssignTrayIdForEmptyMove` on a `READY_FOR_INSERT` job. The job asked for “an empty tray into `B21`”, so its `TrayMove` has a destination but no tray. The helper searches **outward from the destination** (numbers show the order nodes are reached) and stops at the first tray without a payload, T23 at `P23`; loaded trays such as T20 and T24 are passed over. It writes T23 into the same event and adds no events or edges. The main blocking-tray loop then plans T23's path to the bay. Search order is illustrative.*
+*Figure 43 — `AssignTrayIdForEmptyMove` on a `READY_FOR_INSERT` job. The job asked for “an empty tray into `B21`”, so its `TrayMove` has a destination but no tray. The helper searches **outward from the destination** (numbers show the order nodes are reached) and stops at the first tray without a payload, T23 at `P23`; loaded trays such as T20 and T24 are passed over. It writes T23 into the same event and adds no events or edges. The main blocking-tray loop then plans T23's path to the bay. Search order is illustrative.*
 
 How it works, step by step:
 
@@ -1638,7 +1903,7 @@ BoolStringPair Scheduler::AssignDestForUntargetedMove(volley::TrayMove* move, Sc
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#56_assign_dest_untargeted) · [standalone SVG](figures/56_assign_dest_untargeted.svg)</sub>
 
-*Figure 38 — `AssignDestForUntargetedMove` on a `RETRIEVE` job. Before the car can come out, the empty tray T21 must leave bay `B21`, but the job did not say where to, so the event is `T21: B21 → ?`. `ResolveBlockingTrays` searches for open space from the bay. Its first answer, `P24` (red), is behind T23, so it first moves the blocker T23 one stall **deeper** into `P24` (2), then searches again and finds `P23` free and close (3). The helper writes `P23` into the original event, adds T23's move as a new event, and adds the edge “T23's move → T21's move”. T9, stashed on waypoint `W25` by an earlier plan, is the tier-2 case described below. Search results are illustrative: the real costs come from `motion_planner`.*
+*Figure 44 — `AssignDestForUntargetedMove` on a `RETRIEVE` job. Before the car can come out, the empty tray T21 must leave bay `B21`, but the job did not say where to, so the event is `T21: B21 → ?`. `ResolveBlockingTrays` searches for open space from the bay. Its first answer, `P24` (red), is behind T23, so it first moves the blocker T23 one stall **deeper** into `P24` (2), then searches again and finds `P23` free and close (3). The helper writes `P23` into the original event, adds T23's move as a new event, and adds the edge “T23's move → T21's move”. T9, stashed on waypoint `W25` by an earlier plan, is the tier-2 case described below. Search results are illustrative: the real costs come from `motion_planner`.*
 
 The helper is a thin wrapper; the real work is done by `ResolveBlockingTrays`. In order:
 
@@ -1675,9 +1940,9 @@ Its loop, `while(!dest)`:
 3. **Otherwise move one blocker.** For each blocker of that target, in order, call `TryFindBlockingTrayResolution(...)` (`:1895`) until one succeeds. It searches open space for the blocker (parking first, then waypoints). If the blocker's best spot is free, it returns that spot and the path. If the blocker is itself blocked, it **recurses** into `ResolveBlockingTrays` for the blocker with the current tray added to `immobile_trays` (so the chain cannot loop back), and returns the recursion's moves as `prereq_moves` with an empty `path`. No blocker can be resolved → return `{nullopt, {}}`.
 4. **Apply the result to the private copy**: each prerequisite move, then a new `TrayMove(job_index)` for the blocker to its spot. Append them to `required_moves` and go back to step 1.
 
-Searching again after every single blocker move is what makes the result **dense**. The code comment says the aim is to “push them deeper and park in a good spot” instead of “reparking blocking trays halfway across the garage”. In Figure 38, moving T23 one stall deeper makes `P23` free, and the next search picks it. The unit test `ResolveBlockingTraysRecursivelyUnblocksChain` exercises a chain of three trays.
+Searching again after every single blocker move is what makes the result **dense**. The code comment says the aim is to “push them deeper and park in a good spot” instead of “reparking blocking trays halfway across the garage”. In Figure 44, moving T23 one stall deeper makes `P23` free, and the next search picks it. The unit test `ResolveBlockingTraysRecursivelyUnblocksChain` exercises a chain of three trays.
 
-A **tier-2 waypoint stash** (T9 on `W25` in Figure 38) is a deliberate half-solution: the tray is left on a travel node so the current plan can go ahead, and a later `CLEAN_GARAGE` job runs `PlanUnstashWaypointTraysJob`, which plans an untargeted move for every stashed tray and so comes back through this same helper.
+A **tier-2 waypoint stash** (T9 on `W25` in Figure 44) is a deliberate half-solution: the tray is left on a travel node so the current plan can go ahead, and a later `CLEAN_GARAGE` job runs `PlanUnstashWaypointTraysJob`, which plans an untargeted move for every stashed tray and so comes back through this same helper.
 
 ### Occupancy becomes dependencies: `freeing_moves`
 
@@ -1685,7 +1950,7 @@ A **tier-2 waypoint stash** (T9 on `W25` in Figure 38) is a deliberate half-solu
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#28_freeing_moves) · [standalone SVG](figures/28_freeing_moves.svg)</sub>
 
-*Figure 39 — `freeing_moves` is a `GarageOccupancyChecker<std::shared_ptr<ScheduleEvent>>`. Every event that used a pose (a source pose, every pose on a path, a bay pose touched by a transition) is recorded. A later move through a colliding pose gets an edge from each recorded event. The checker uses `table_`, so “colliding” means overlapping footprints, not just equal node ids.*
+*Figure 45 — `freeing_moves` is a `GarageOccupancyChecker<std::shared_ptr<ScheduleEvent>>`. Every event that used a pose (a source pose, every pose on a path, a bay pose touched by a transition) is recorded. A later move through a colliding pose gets an edge from each recorded event. The checker uses `table_`, so “colliding” means overlapping footprints, not just equal node ids.*
 
 Two pieces of bookkeeping leave this stage:
 
@@ -1708,7 +1973,7 @@ Now every `TrayMove` knows *what* moves where. `DoAgvAssignments(ctx)` decides *
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#29_agv_matching) · [standalone SVG](figures/29_agv_matching.svg)</sub>
 
-*Figure 40 — Matching AGVs to root tray moves. Each edge is one feasible pair with its estimated cost; AGV C carries another tray, so it has no edges. Bottleneck matching minimises the **worst** single cost, so it can prefer a pairing with a higher total. Costs are illustrative.*
+*Figure 46 — Matching AGVs to root tray moves. Each edge is one feasible pair with its estimated cost; AGV C carries another tray, so it has no edges. Bottleneck matching minimises the **worst** single cost, so it can prefer a pairing with a higher total. Costs are illustrative.*
 
 The cost of assigning AGV **$i$** to tray move **$j$** is
 
@@ -1722,13 +1987,13 @@ where cost **$c_{ij}$** [s] is the estimated time until the tray is lifted, **$t
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#15_agv_approach_and_pickup) · [standalone SVG](figures/15_agv_approach_and_pickup.svg)</sub>
 
-*Figure 41 — Unloaded approach example. A hypothetical AGV at charger `C10` approaches tray T15 at `P3` via `10 → 9 → 11 → 6 → 3`, driving under the empty stall `P6`. The strip restates the intent as simplified events. The route is a graph walk, not a recorded run.*
+*Figure 47 — Unloaded approach example. A hypothetical AGV at charger `C10` approaches tray T15 at `P3` via `10 → 9 → 11 → 6 → 3`, driving under the empty stall `P6`. The strip restates the intent as simplified events. The route is a graph walk, not a recorded run.*
 
 ![AGV event expansion](figures/30_agv_event_expansion.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#30_agv_event_expansion) · [standalone SVG](figures/30_agv_event_expansion.svg)</sub>
 
-*Figure 42 — What one assignment adds: `MoveAgvToTrayPose` (skipped if the AGV is already there), a lift, `SetAgvId` on the `TrayMove`, and a lower. The first event gets edges from four sources: the AGV's previous event, the first move of any tray parked on its navigation path, the previous occupant of the destination node, and matched AGVs it must follow.*
+*Figure 48 — What one assignment adds: `MoveAgvToTrayPose` (skipped if the AGV is already there), a lift, `SetAgvId` on the `TrayMove`, and a lower. The first event gets edges from four sources: the AGV's previous event, the first move of any tray parked on its navigation path, the previous occupant of the destination node, and matched AGVs it must follow.*
 
 ```cpp
 // Where: Scheduler::DoAgvAssignments(ScheduleContextSPtr ctx) const, after BottleneckAssignment.
@@ -1761,7 +2026,7 @@ for(const auto& [agv_id, root_event_opt] : ordered_matching) {
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#31_agv_path_repair) · [standalone SVG](figures/31_agv_path_repair.svg)</sub>
 
-*Figure 43 — `EnsureAgvMovePathsClear` replays the final topological order. When an AGV reposition has no collision-free path only because another AGV's body is in the way, it adds one edge from that AGV's next departure to the blocked move (unless that would form a cycle) and starts over, at most 256 times. Tray and disabled-node obstructions are left for `SanityCheckEvents` to report.*
+*Figure 49 — `EnsureAgvMovePathsClear` replays the final topological order. When an AGV reposition has no collision-free path only because another AGV's body is in the way, it adds one edge from that AGV's next departure to the blocked move (unless that would form a cycle) and starts over, at most 256 times. Tray and disabled-node obstructions are left for `SanityCheckEvents` to report.*
 
 This pass exists because `DoAgvAssignments` builds dependencies in its own serial assignment order, which can differ from the order the DAG is eventually replayed in. The source comments in `MoveAgvToTrayPose` describe an earlier, proactive attempt that both missed real blockers and added spurious edges.
 
@@ -1790,7 +2055,7 @@ The comment explains the motivation: “The motion planner doesn't fail in the m
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#32_motions_to_actions) · [standalone SVG](figures/32_motions_to_actions.svg)</sub>
 
-*Figure 44 — From timed trajectories to `ActionNode[]`. Every motion with a delta (pose change, lift change, bay / VECS / VRC state change) becomes one `ActionNode`; waits are dropped. Actions are chained per entity, ordered by occupancy, given the event-level dependencies, reduced, extended with VRC commands, and finally written out in topological order with integer parent indices. Times are illustrative; the shape matches the `RetrieveJob` test.*
+*Figure 50 — From timed trajectories to `ActionNode[]`. Every motion with a delta (pose change, lift change, bay / VECS / VRC state change) becomes one `ActionNode`; waits are dropped. Actions are chained per entity, ordered by occupancy, given the event-level dependencies, reduced, extended with VRC commands, and finally written out in topological order with integer parent indices. Times are illustrative; the shape matches the `RetrieveJob` test.*
 
 ```cpp
 // Where: anonymous-namespace helper ToActionNode(const volley::Motion& motion, GuidMsg job_id,
@@ -1815,7 +2080,7 @@ Finally `Plan()` marks every planned job `STATE_EXECUTING`, and for `TYPE_RETRIE
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#33_bay_logic) · [standalone SVG](figures/33_bay_logic.svg)</sub>
 
-*Figure 45 — The three bay commands the scheduler issues, the `ClassifyBay` rules from `utils.cpp`, and a worked example of `ComputeBayRebalancingActions`. Other bay states are reached through bay or customer activity outside this package.*
+*Figure 51 — The three bay commands the scheduler issues, the `ClassifyBay` rules from `utils.cpp`, and a worked example of `ComputeBayRebalancingActions`. Other bay states are reached through bay or customer activity outside this package.*
 
 `bay_readiness_ratio` is the fraction of usable bays that should be ready for insert. `CalculateDesiredBaySplit` rounds up (it biases towards insert because arriving customers cannot be detected), clamps, and never asks for more insert-ready bays than there are empty trays. `ComputeBayRebalancingActions` first counts bays already moving towards a state (`WILL_BE_*`), then keeps bays already in a wanted state, and only then picks bays to change, in `bay_prioritization` order for insert and reverse order for retrieve. Bays left in an invalid state fall back to ready-for-retrieve.
 
@@ -1829,7 +2094,7 @@ A VECS sits under a parking node of type `TYPE_EV_CHARGE`. Moving a tray off a V
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#14_vrc_floors) · [standalone SVG](figures/14_vrc_floors.svg)</sub>
 
-*Figure 46 — Conceptual VRC connecting two floors, as a side elevation. The Pecos YAML has no VRC; this shows general code-supported behaviour.*
+*Figure 52 — Conceptual VRC connecting two floors, as a side elevation. The Pecos YAML has no VRC; this shows general code-supported behaviour.*
 
 In this package VRCs are handled at the **action** level, after motion planning: `InsertVrcActionsIntoDag` (in `utils.cpp`) walks AGV actions in topological order, simulates the carriage floor per VRC, and inserts a `TYPE_VRC_COMMAND` *approach* when the carriage is on the wrong floor for the AGV's next action, plus a *move* command that replaces each cross-floor AGV action. Each command's duration is door close + carriage transit + door open. Consecutive cross-floor motions are first collapsed into one motion in `CollectAndCollapseTrajectoryMotions`. `VrcTransition` events and their `Apply` live in `planner_core` and were not in the snapshot.
 
@@ -1892,13 +2157,13 @@ Line numbers are those of the files inside `sources/repomix-scheduler.xml`. If y
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#39_call_trace_plan) · [standalone SVG](figures/39_call_trace_plan.svg)</sub>
 
-*Figure 47 — Start-up (rows 1–10) and one `/plan` request with a single RETRIEVE job (rows 11 onward), success path only. `DoTrayAssignments` and `DoAgvAssignments` are collapsed here and expanded in the next figure.*
+*Figure 53 — Start-up (rows 1–10) and one `/plan` request with a single RETRIEVE job (rows 11 onward), success path only. `DoTrayAssignments` and `DoAgvAssignments` are collapsed here and expanded in the next figure.*
 
 ![Call trace: tray and AGV assignment](figures/39_call_trace_assignment.svg)
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#39_call_trace_assignment) · [standalone SVG](figures/39_call_trace_assignment.svg)</sub>
 
-*Figure 48 — Inside `DoTrayAssignments` and `DoAgvAssignments`, with the helpers in the order they are first called.*
+*Figure 54 — Inside `DoTrayAssignments` and `DoAgvAssignments`, with the helpers in the order they are first called.*
 
 ### Where to start: a reading route
 
@@ -1914,6 +2179,7 @@ Read in this order. Each step is small enough for one sitting and builds on the 
 | 6 | AGV assignment | `DoAgvAssignments` `:3475`, then `MoveAgvToTrayPose` `:2414`, `EnsureAgvMovePathsClear` `:3458` | Section 16; the `while` loop at `:3541` is the core |
 | 7 | The last stages | `SanityCheckEvents` `:3841`, `PlanMotions` `:4005`, `ResponseFromTrajectories` `:4069` and its helpers `:28`–`:340` | Sections 17 and 18 |
 | 8 | Utilities | `utils.cpp`: `ValidateBaseState` `:12`, bay rebalancing `:53`–`:305`, `InsertVrcActionsIntoDag` `:366` | Section 19 |
+| 9 | The event classes and the DAG (`planner_core`) | `schedule_events.hpp`: `ScheduleEvent` `:36`, `TrayMove` `:125`; `schedule_events.cpp`: `TrayMove::Apply` `:187`; `event_dag.hpp`: `DagBase` `:28`, `ScheduleEventDag` `:565`; `event_dag.cpp`: `GetTopologicalOrdering` `:50` | Sections 11 and 12; `Reduce` (`event_dag.hpp:318`) and `RemoveVertexHelper` (`:525`) have the comments worth reading |
 
 Where things are in `scheduler.cpp` (4 202 lines):
 
@@ -1935,7 +2201,7 @@ Where things are in `scheduler.cpp` (4 202 lines):
 
 ### Following the calls yourself
 
-- **Use a debugger on a test.** `TEST(SchedulerJobs, RetrieveJob)` (`scheduler_jobs_tests.cpp:769`) runs the same kind of request as Figure 47, through `Plan()`. `TEST(Scheduler, TrayAndAgvAssignments)` (`scheduler_tests.cpp:324`) calls the two assignment stages directly. Put breakpoints on the rows of the figures and step.
+- **Use a debugger on a test.** `TEST(SchedulerJobs, RetrieveJob)` (`scheduler_jobs_tests.cpp:769`) runs the same kind of request as Figure 53, through `Plan()`. `TEST(Scheduler, TrayAndAgvAssignments)` (`scheduler_tests.cpp:324`) calls the two assignment stages directly. Put breakpoints on the rows of the figures and step.
 - **Let the editor jump for you.** Build with `--cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` and point clangd (or your IDE) at `build/compile_commands.json`; "go to definition" then also works into `planner_core` and `motion_planner`.
 - **Search by name.** `rg -n "Scheduler::PlanRetrieveJob\("` finds a definition; `rg -n "PlanReparkTrayJob\(" src` lists every call site.
 - **Turn on the DAG dumps.** The `debug/printdags` service (section 21) prints the event DAG after each stage, which shows what the calls in the second figure built.
@@ -1982,7 +2248,7 @@ It helps to separate three things that are easy to blur: the **DAG** (the constr
 
 <sub>Pan / zoom: [interactive viewer](figures/viewer.html#54_partial_order_parallel) · [standalone SVG](figures/54_partial_order_parallel.svg)</sub>
 
-*Figure 49 — (1) The input is one action DAG; its three lanes are linked by edges. (2) A topological sort lists the same ten actions so that every edge points right; it adds no information about time. (3) The response stores that list as `Schedule.nodes`, and each node keeps the indices of its parents. (4) In execution, every node whose parents are done can start, so Y1, A1 and B1 start together, and B3 waits only for its parent A3.*
+*Figure 55 — (1) The input is one action DAG; its three lanes are linked by edges. (2) A topological sort lists the same ten actions so that every edge points right; it adds no information about time. (3) The response stores that list as `Schedule.nodes`, and each node keeps the indices of its parents. (4) In execution, every node whose parents are done can start, so Y1, A1 and B1 start together, and B3 waits only for its parent A3.*
 
 Read it as a pipeline:
 
@@ -2028,7 +2294,7 @@ The three rules are not the whole story. They only order what the job methods kn
 
 ## 25. Known limitations and reading checkpoint
 
-Limits of this guide: `GarageGraph`, `CollisionTable`, `GarageOccupancyChecker`, the search environments, `BottleneckAssignment`, CHUGG, `DiscreteGarageState` and the event classes live in other packages and were not in the snapshot. Dispatch, AGV firmware and the Pecos garage's real occupancy were not supplied. Do not infer those details from a schematic figure.
+Limits of this guide: `GarageGraph`, `CollisionTable`, `GarageOccupancyChecker`, the search environments, `BottleneckAssignment`, CHUGG and `DiscreteGarageState` live in other packages and were not in the snapshots (the event classes and the event DAG were: `planner_core`). Dispatch, AGV firmware and the Pecos garage's real occupancy were not supplied. Do not infer those details from a schematic figure.
 
 Limits of the code worth remembering: `GetAgvOccupiedDuration` returns zero; failed jobs can leave events in the DAG; any failure after expansion fails all jobs in the request; `Reduce()` placement is load-bearing; `UseEvChargeHeading` contains a hard-coded site rule.
 

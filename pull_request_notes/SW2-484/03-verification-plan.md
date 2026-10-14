@@ -204,4 +204,4 @@ To run one test under a debugger, use the gtest binary in the build tree, for ex
 
 ## 8. Evidence limits
 
-The snapshot contains the `scheduler` package only. `planner_core`, `motion_planner`, `task_planner` and `scheduler_advanced_tests` are referenced but not included, so statements about them come from earlier notes and need checking. Customer-site geometry and AGV dimensions were not supplied; the 2D figures use illustrative coordinates. No timing in this document is a measured value.
+Two snapshots were used: the `scheduler` package (`sources/repomix-scheduler.xml`) and the sources of `planner_core` (`sources/repomix-planner-core.xml`: the event classes and the event DAG, without `test/event_dag_tests.cpp` and `test/schedule_events_tests.cpp`). `motion_planner`, `task_planner`, `common_ros` and `scheduler_advanced_tests` are referenced but not included, so statements about them come from call sites and need checking. Customer-site geometry and AGV dimensions were not supplied; the 2D figures use illustrative coordinates. No timing in this document is a measured value.

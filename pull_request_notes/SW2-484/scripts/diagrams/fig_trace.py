@@ -22,7 +22,7 @@ KIND = {   # fill, stroke, label
     "free": (T.tint(T.sky, 0.6, T.bg), "free function (scheduler.cpp)"),
     "ctx": (T.green, "ScheduleContext (scheduler.hpp)"),
     "utils": (T.violet, "utils.cpp"),
-    "ext": (T.faint, "other package (not in snapshot)"),
+    "ext": (T.faint, "other package (planner_core rows: file:line in that snapshot)"),
 }
 
 
@@ -131,7 +131,7 @@ PART1 = [
          loc="utils.cpp:12", call=f"{S}:412", note="request.base_state -> DiscreteGarageState; failure returns "
          "success = false"),
     dict(depth=2, kind="ext", sig="initial_state.SetAgvDisabled / SetNodeDisabled / SetBayDisabled / "
-         "SetVecsDisabled(...)", loc="planner_core", call=f"{S}:427-438", note="entities used by base_schedule"),
+         "SetVecsDisabled(...)", loc="common_ros (not in snapshot)", call=f"{S}:427-438", note="entities used by base_schedule"),
     dict(depth=2, kind="ctx", sig="ScheduleContext::ScheduleContext(const GuidMsg& reqid, volley::DiscreteGarageState "
          "initial_state, const rclcpp::Time& now)", loc=f"{H}:59", call=f"{S}:443 (make_shared)",
          note="plan_ctx: the per-call context (section 6)"),
@@ -142,7 +142,7 @@ PART1 = [
     dict(depth=3, kind="sched", sig="std::tuple<bool, std::string, bool> Scheduler::PlanRetrieveJob("
          "ScheduleContextSPtr ctx, const GuidMsg& payload_id, size_t job_index) const", loc=f"{S}:783",
          call=f"{S}:468", note="section 13.11"),
-    dict(depth=4, kind="ext", sig="ctx->events.Apply(working_state)", loc="planner_core", call=f"{S}:786",
+    dict(depth=4, kind="ext", sig="ctx->events.Apply(working_state)", loc="event_dag.cpp:8", call=f"{S}:786",
          note="replay the DAG on a copy of initial_state"),
     dict(depth=4, kind="ctx", sig="void ScheduleContext::UpdateLastEntityEvent(const GarageEntityIdMsg& entity_id, "
          "ScheduleEventSPtr new_event)", loc=f"{H}:72", call=f"{S}:893", note="rule A for TRANSITION_TO_RETRIEVE"),
@@ -162,7 +162,7 @@ PART1 = [
          loc=f"{S}:2533", call=f"{S}:580", note="section 15; expanded in the next figure"),
     dict(depth=2, kind="sched", sig="BoolStringPair Scheduler::DoAgvAssignments(ScheduleContextSPtr ctx) const",
          loc=f"{S}:3475", call=f"{S}:594", note="section 16; expanded in the next figure"),
-    dict(depth=2, kind="ext", sig="plan_ctx->events.Reduce()", loc="planner_core", call=f"{S}:608",
+    dict(depth=2, kind="ext", sig="plan_ctx->events.Reduce()", loc="event_dag.hpp:318", call=f"{S}:608",
          note="drop redundant edges (section 17)"),
     dict(depth=2, kind="sched", sig="BoolStringPair Scheduler::SanityCheckEvents(ScheduleContextSPtr ctx) const",
          loc=f"{S}:3841", call=f"{S}:617", note="section 17"),
@@ -206,7 +206,7 @@ PART2 = [
     {"section": "Tray assignment (section 15)"},
     dict(depth=0, kind="sched", sig="BoolStringPair Scheduler::DoTrayAssignments(ScheduleContextSPtr ctx) const",
          loc=f"{S}:2533", call=f"{S}:580"),
-    dict(depth=1, kind="ext", sig="ctx->events.GetTopologicalOrdering()", loc="planner_core", call=f"{S}:2540"),
+    dict(depth=1, kind="ext", sig="ctx->events.GetTopologicalOrdering()", loc="event_dag.cpp:50", call=f"{S}:2540"),
     dict(depth=1, kind="ext", sig="GarageOccupancyChecker<std::shared_ptr<ScheduleEvent>> freeing_moves(table_, gg_)",
          loc="common_ros"),
     dict(depth=1, loop="for each event in topological order"),
@@ -236,7 +236,7 @@ PART2 = [
     dict(depth=2, kind="sched", sig="ResolveBlockingTrays(blocking_tray_id, move->GetJobIndex(), working_state, ...) "
          "const   per blocking tray", loc=f"{S}:1984", call=f"{S}:2728, :2850, :2865",
          note="fallbacks: advance the root tray, then allow parking on the critical path"),
-    dict(depth=2, kind="ext", sig="tray_move->Apply(working_state)", loc="planner_core", call=f"{S}:2833, :2931, :3053"),
+    dict(depth=2, kind="ext", sig="tray_move->Apply(working_state)", loc="schedule_events.cpp:187", call=f"{S}:2833, :2931, :3053"),
     {"section": "AGV assignment (section 16)"},
     dict(depth=0, kind="sched", sig="BoolStringPair Scheduler::DoAgvAssignments(ScheduleContextSPtr ctx) const",
          loc=f"{S}:3475", call=f"{S}:594"),
@@ -270,7 +270,7 @@ PART2 = [
     dict(depth=3, kind="sched", sig="BoolStringPair Scheduler::AppendAgvLiftEvent(uint16_t agv_id, bool raised, "
          "size_t job_index, ScheduleContextSPtr ctx, ...) const", loc=f"{S}:2340", call=f"{S}:3730 (lift)"),
     dict(depth=3, kind="ext", sig="ctx->events.AddDependency(last_agv_event[agv_id], root_event)",
-         loc="planner_core", note="the tray move itself is now this AGV's"),
+         loc="event_dag.hpp:142", note="the tray move itself is now this AGV's"),
     dict(depth=3, kind="sched", sig="AppendAgvLiftEvent(agv_id, false, ...) const", loc=f"{S}:2340",
          call=f"{S}:3779 (lower)"),
     dict(depth=3, kind="sched", sig="void Scheduler::PropagateEventCostToChildren(const "
@@ -286,7 +286,7 @@ PART2 = [
     dict(depth=4, kind="sched", sig="ScheduleEventSPtr Scheduler::FindAgvDepartureFromNode(ScheduleContextSPtr ctx, "
          "const VertexVec& topo, size_t after_idx, uint16_t agv_id, uint32_t node) const", loc=f"{S}:3339",
          call=f"{S}:3424"),
-    dict(depth=1, kind="ext", sig="ctx->events.Reduce()", loc="planner_core", call=f"{S}:3804"),
+    dict(depth=1, kind="ext", sig="ctx->events.Reduce()", loc="event_dag.hpp:318", call=f"{S}:3804"),
     dict(depth=1, kind="sched", sig="void Scheduler::AddDepsAfterAmiga(ScheduleContextSPtr ctx, "
          "std::shared_ptr<ScheduleEvent> event, uint16_t node_id) const", loc=f"{S}:3924", call=f"{S}:3831"),
 ]

@@ -440,9 +440,9 @@ def topological_ordering():
         d.text(hx[3], yy, so_far, size=11.5, family="mono", fill=T.fg2)
         yy += 26
     nt = note(d, 680, y0 + 14, W - 680,
-              "When several events are ready (steps 1 to 4: a and e), any choice gives a valid order. This "
-              "example takes the lower job index. How GetTopologicalOrdering() breaks ties is decided in "
-              "planner_core (not in the snapshot), so scheduler code must work with any valid order.",
+              "When several events are ready (steps 1 to 4: a and e), any choice gives a valid order. "
+              "ScheduleEventDag::GetTopologicalOrdering() takes the lowest job index, exactly as here; among "
+              "events of the same job its heap decides (section 12.5).",
               title="Ties", accent=T.sky)
     # ---- valid / invalid orders ----
     y1 = max(yy, nt.y1) + 34
@@ -462,7 +462,7 @@ def topological_ordering():
     label_pill(d, (p.x1 + q.x0) / 2, p.y1 + 16, "added by mistake", color=T.red, size=10)
     bottom = max(yc, q.y1 + 34)
     cp = code_panel(d, 0, bottom + 10, W, [
-        "// planner_core, as called from the scheduler (see section 12's table)",
+        "// planner_core, as called from the scheduler (see the table in section 12.5)",
         "std::optional<VertexVec> order = ctx->events.GetTopologicalOrdering();  // VertexVec = std::vector<Vertex>",
         "if(!order.has_value()) return {false, \"Failed to get total ordering\"};     // the DAG has a cycle",
         "for(Vertex v : order.value()) { auto event = ctx->events.GetEventFromVertex(v).value(); ... }",
