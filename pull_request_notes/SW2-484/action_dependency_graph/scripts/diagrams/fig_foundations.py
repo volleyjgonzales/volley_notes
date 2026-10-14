@@ -94,13 +94,13 @@ def pipeline():
         ("MAPF solver", T.sky, "e.g. CBS (chapter 02)",
          ["π_3 = W13 W18 W18 W22 W25", "= AGV-3's place at t = 0..4", "assumes everyone is on time"]),
         ("Actions", T.violet, "cut each path into steps",
-         ["A3-1 = ⟨W18, W18, 1, AGV-3⟩  wait", "A3-2 = ⟨W18, W22, 2, AGV-3⟩  move", "⟨start, goal, t, robot⟩"]),
+         ["A3-1 = ⟨W18, W18, 1, 3⟩  wait", "A3-2 = ⟨W18, W22, 2, 3⟩  move", "⟨start, goal, t, AGV⟩"]),
         ("ADG construction", T.teal, "this paper: drop waits + SCP",
-         ["A3-0 " + AR + " A3-2   AGV-3's own order", "A2-2 " + AR + " A3-2   AGV-2 leaves W22", "             before AGV-3 enters"]),
+         ["A3-0 " + AR + " A3-2  same AGV", "A2-2 " + AR + " A3-2  AGV-2 leaves", "W22 before AGV-3 enters"]),
         ("Executor", T.green, "start a step when allowed",
-         ["start A3-2 when A3-0 and", "A2-2 have reported 'done'", "no clock needed"]),
+         ["start A3-2 when A3-0", "and A2-2 report 'done'", "no clock needed"]),
     ]
-    w, h, gap = 222, 158, 30
+    w, h, gap = 250, 158, 28
     boxes = []
     for i, (title, col, sub, lines) in enumerate(cards):
         x = i * (w + gap)
@@ -130,7 +130,7 @@ def pipeline():
                                (2, 3, "POST-PROCESSING  ·  plan → DAG", T.teal),
                                (4, 4, "EXECUTION", T.green)):
         x0, x1 = boxes[i0].x0, boxes[i1].x1
-        d.path(f"AGV-3{x0} {by - 8} AGV-1{x0} {by} AGV-1{x1} {by} AGV-1{x1} {by - 8}", stroke=col, sw=1.3)
+        d.path(f"M{x0} {by - 8} L{x0} {by} L{x1} {by} L{x1} {by - 8}", stroke=col, sw=1.3)
         d.text((x0 + x1) / 2, by + 18, lab, size=11, family="mono", weight=600, fill=col, anchor="middle",
                letter_spacing=0.5)
     note(d, boxes[2].x0, h + 40, 2 * w + gap - 10,
@@ -138,9 +138,9 @@ def pipeline():
     # symbols used in this figure
     rows = [
         ("W13 B21 P23", "places in the garage of figure 1.1 (W waypoint, B bay, P parking stall)", T.fg2),
-        ("AGV-1 AGV-3 AGV-4 AGV-2", "the four AGVs of the example", T.fg2),
+        ("AGV-1 \u2026 AGV-4", "the four AGVs, numbered in the order they pass the junction W22", T.fg2),
         ("π_3", "the path of AGV-3: the place AGV-3 is at, for each time step t = 0, 1, 2, ...", T.fg2),
-        ("⟨s,g,t,R⟩", "an action: robot R goes from place s to place g during step t (s = g: a wait)",
+        ("⟨s,g,t,R⟩", "an action: AGV number R goes from place s to place g during step t (s = g: a wait)",
          T.fg2),
         ("A3-2", "short name for an action: AGV-3's step 2", T.fg2),
         ("A2-2 " + AR + " A3-2", "a dependency: A3-2 may not start until A2-2 has completed", T.teal),
@@ -229,7 +229,7 @@ def conflicts_fig():
         d.text(x0 + 16, 24, title, size=14, weight=600, fill=T.fg)
         d.text(x0 + pw - 16, 24, verdict, size=12, family="mono", weight=600, fill=col, anchor="end")
         for ti in (0, 1):
-            gx0 = x0 + 22 + ti * 150
+            gx0 = x0 + 18 + ti * 172
             d.text(gx0 + 2, 52, f"t = {ti}", size=12, family="mono", weight=600, fill=T.muted)
             G = Garage(d, gx0, 64, 26, xlim=(28.6, 33.4), ylim=(15.9, 23.0))
             G.floor(grid=False)
@@ -250,16 +250,16 @@ def conflicts_fig():
                 if ti == 0:
                     (xa, ya), (xb, yb) = G.P(a), G.P(b)
                     sgn = 1 if yb > ya else -1
-                    connect(d, [(xa + 52 + 8 * i, ya + 6 * sgn), (xb + 52 + 8 * i, yb - 12 * sgn)], kind="flow",
+                    connect(d, [(xa + 86 + 8 * i, ya + 6 * sgn), (xb + 86 + 8 * i, yb - 12 * sgn)], kind="flow",
                             color=ex.COLOR[r], size=7, sw=1.8)
             if k == 0 and ti == 1:
                 x, y = G.P("W18")
                 d.circle(x, y, 32, fill="none", stroke=T.red, sw=2, dash="4 3", layer="top")
             if k == 1 and ti == 0:
                 (xa, ya), (xb, yb) = G.P("W18"), G.P("W22")
-                xm = xa + 72
-                d.path(f"AGV-3{xm - 9} {ya - 14} AGV-1{xm + 9} {yb + 14}", stroke=T.red, sw=2.2, layer="top")
-                d.path(f"AGV-3{xm + 9} {ya - 14} AGV-1{xm - 9} {yb + 14}", stroke=T.red, sw=2.2, layer="top")
+                xm = xa + 90
+                d.path(f"M{xm - 9} {ya - 14} L{xm + 9} {yb + 14}", stroke=T.red, sw=2.2, layer="top")
+                d.path(f"M{xm + 9} {ya - 14} L{xm - 9} {yb + 14}", stroke=T.red, sw=2.2, layer="top")
         lines = wrap(cap, pw - 32, 12, "sans")
         d.text_lines(x0 + 16, 262, lines, size=12, fill=T.fg2, lh=1.45)
     note(d, 0, 352, 3 * pw + 2 * gap,

@@ -161,7 +161,7 @@ def candidate_index():
     assert kk0 == k and c_sel.id == "A3-3"
     # bracket for t <= a.t
     bx1 = x0 + k0 * (cw + 10) - 10
-    d.path(f"AGV-3{x0} {ly + ch + 10} AGV-1{x0} {ly + ch + 18} AGV-1{bx1} {ly + ch + 18} AGV-1{bx1} {ly + ch + 10}",
+    d.path(f"M{x0} {ly + ch + 10} L{x0} {ly + ch + 18} L{bx1} {ly + ch + 18} L{bx1} {ly + ch + 10}",
            stroke=T.fg2, sw=1.2)
     d.text((x0 + bx1) / 2, ly + ch + 34, f"t ≤ {a.t}: eligible by time", size=11.5, fill=T.fg2, anchor="middle")
     # bisect pointer

@@ -36,6 +36,9 @@ def main(argv):
         flag = "" if not ov else f"   !! {len(ov)} text overlaps: {ov[:4]}"
         problems += len(ov)
         c = doc.canvas
+        if c.x0 < -200 or c.y0 < -400 or c.w > 3000 or c.h > 3000:   # something was drawn far outside the figure
+            flag += f"   !! suspicious canvas {c.x0:.0f},{c.y0:.0f} {c.w:.0f}x{c.h:.0f}"
+            problems += 1
         print(f"{fig.name:34s} {c.w:5.0f} x {c.h:5.0f}  {len(svg) / 1024:6.1f} KB{flag}")
     if not argv:
         viewer.build(OUT, FIGURES)
