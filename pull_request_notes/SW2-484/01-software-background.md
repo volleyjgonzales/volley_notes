@@ -782,6 +782,18 @@ BoolStringPair PlanReparkTrayJob(ScheduleContextSPtr ctx, std::optional<uint16_t
     bool allow_recip, std::optional<GaragePoseMsg> dest = std::nullopt) const;
 ```
 
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (+1 `TrayMove`, maybe a stop-charging `VecsTransition`) and `last_entity_event` | job 0 adds T19: P19 → P24 |
+| in | `tray_id` | `std::optional<uint16_t>` | Tray to move; `std::nullopt` means "any empty tray" (only from internal callers) | `19` |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0` and `1` |
+| in | `allow_recip` | `bool` | Allow keeping the tray's current heading when the requested one is the same or opposite (parking nodes only) | `true` (job 0), `false` (job 1) |
+| in | `dest` | `std::optional<GaragePoseMsg>` (default `std::nullopt`) | Target node and heading; empty means "anywhere, chosen by tray assignment". Always set when called from `Plan()` | `{24, 90}`, then `{23, 90}` |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}` for both |
+
 **When Dispatch sends it:** to move a specific tray to a specific node (an operator request, or Dispatch tidying up). Both job types call the same method with `job.tray_id`, `job.allow_reciprocal` and `job.destination`.
 
 ![Repark tray job](figures/41_job_repark_tray.svg)
@@ -803,6 +815,18 @@ BoolStringPair PlanAgvMoveJob(ScheduleContextSPtr ctx, std::optional<uint16_t> a
     bool allow_recip, size_t job_index) const;
 ```
 
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (+1 `AgvMove` or `TrayMove`) and `last_entity_event` | two jobs, one event each |
+| in | `agv_id` | `std::optional<uint16_t>` | AGV to move; empty is rejected ("not yet supported") | `A`, `B` |
+| in | `dest` | `GaragePoseMsg` (by value; may be edited locally) | Target pose in AGV heading | `W13@90`, `P24@90` |
+| in | `allow_recip` | `bool` | Keep the current pose if the heading is the same or opposite. `Plan()` and `PlanAgvChargeJob` pass `false` | `false` |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0`, `1` |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}` for both |
+
 **When Dispatch sends it:** to drive a named AGV somewhere, for example out of the way for maintenance. `PlanAgvChargeJob` also uses it.
 
 ![Move AGV job](figures/40_job_move_agv.svg)
@@ -820,6 +844,17 @@ BoolStringPair PlanBayTransitionJob(ScheduleContextSPtr ctx, uint16_t bay_id, ui
     size_t job_index) const;   // command_type = BayCommandMsg::COMMAND_TYPE_TRANSITION_TO_{INSERT,RETRIEVE}
 ```
 
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (+1 `BayTransition`) and `last_entity_event` | job 0 adds one event; job 1 none |
+| in | `bay_id` | `uint16_t` | Bay node id | `21`, `7` |
+| in | `command_type` | `uint8_t`: `BayCommandMsg::COMMAND_TYPE_TRANSITION_TO_INSERT` or `..._TO_RETRIEVE` | Which mode to switch to; anything else fails | `TO_RETRIEVE`, `TO_INSERT` |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0`, `1` |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | job 0 `{true, ""}`; job 1 `{false, "... the ODP's area is occupied."}` |
+
 **When Dispatch sends it:** to switch one bay's mode explicitly. Seen from the code, a bay has two working modes: **insert** (`READY_TO_INSERT`: an empty tray is inside and a customer can drive onto it) and **retrieve** (`READY_TO_RETRIEVE`: trays can be planned into and out of the bay, and a car can be handed over with `PROCESS_RETRIEVE`).
 
 ![Bay transition job](figures/49_job_bay_transition.svg)
@@ -835,6 +870,16 @@ In words: validate (bay exists, enabled, its `BAY_ODP` area is clear, the bay is
 ```cpp
 BoolStringPair PlanChargePayloadJob(ScheduleContextSPtr ctx, const GuidMsg& payload_id, size_t job_index) const;
 ```
+
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (+ a `TrayMove` through `PlanReparkTrayJob`, + 1 `VecsTransition`) and `last_entity_event` | 2 events |
+| in | `payload_id` | `const GuidMsg&` | The car to charge | car on T20 |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0` |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}` |
 
 **When it runs:** when Dispatch asks for a car to be charged, and inside READY_FOR_INSERT / READY_FOR_RETRIEVE when the car in the bay has `payload.ev_charge_requested`. A VECS is the EV-charging unit at a `TYPE_EV_CHARGE` node; its states include `READY_TO_CHARGE` and `CHARGING`.
 
@@ -852,6 +897,16 @@ In words: if the tray is not already on a ready VECS, borrow the open-space sear
 std::tuple<bool, std::string, bool> PlanRetrieveJob(ScheduleContextSPtr ctx, const GuidMsg& payload_id,
     size_t job_index) const;   // {success, message, retain_job}
 ```
+
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (+2 `BayTransition`s, +1–2 `TrayMove`s through `PlanReparkTrayJob`, maybe a `VecsTransition`) and `last_entity_event` | 4 events, 5 edges |
+| in | `payload_id` | `const GuidMsg&` | The car to retrieve | car on T17 |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0` |
+| out | return | `std::tuple<bool, std::string, bool>` | `{success, message, retain_job}`. `retain_job = true` asks Dispatch to keep a failed job and retry later | `{true, "", false}` |
 
 **When Dispatch sends it:** a customer wants their car. This is the most important job and the richest method.
 
@@ -875,6 +930,17 @@ In words, five decisions in order:
 BoolStringPair PlanInsertJob(ScheduleContextSPtr ctx, uint16_t bay_id, size_t job_index) const;
 ```
 
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (+1 `BayTransition`, +1 `TrayMove`) and `last_entity_event` | 2 events |
+| in | `bay_id` | `uint16_t` | Bay where the customer left the car | `21` |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0` |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}` |
+| side effect | `reset_bay_state_request_fn_` | `std::function<void(uint16_t, uint16_t)>` (member) | Asynchronous request to Dispatch for a READY_FOR_INSERT job on this bay | called with `(21, STATE_READY_TO_INSERT)` |
+
 **When Dispatch sends it:** a customer has parked on the tray in a bay that was in insert mode. The car now has to go into storage.
 
 ![Insert job](figures/43_job_insert.svg)
@@ -890,6 +956,16 @@ In words: check that the bay holds a loaded tray and is `VEHICLE_INSERTED` or `R
 ```cpp
 BoolStringPair PlanReadyForInsertJob(ScheduleContextSPtr ctx, uint16_t bay_id, size_t job_index) const;
 ```
+
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (+ a `TrayMove` through `PlanReparkTrayJob`, maybe a charge-payload recipe, +1 `BayTransition`), `last_entity_event`, and the tray id of its own new `TrayMove` (fill pass) | 2 events; tray T23 filled in early |
+| in | `bay_id` | `uint16_t` | Bay to prepare for the next customer | `21` |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0` |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}` |
 
 **When it runs:** to get a bay ready for the next customer: it needs an empty tray inside and insert mode. Sent by Dispatch, and used for each bay that REBALANCE_GARAGE wants in insert mode.
 
@@ -909,6 +985,16 @@ This is the only job method that **fills a blank itself**. It replays the DAG on
 BoolStringPair PlanReadyForRetrieveJob(ScheduleContextSPtr ctx, uint16_t bay_id, size_t job_index) const;
 ```
 
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (maybe a `BayTransition`, a `TrayMove` or a charge-payload recipe) and `last_entity_event` | 2 events |
+| in | `bay_id` | `uint16_t` | Bay to put into retrieve mode | `21` |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0` |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}` |
+
 **When it runs:** to put a bay into retrieve mode ahead of time, so a later retrieve does not wait for the transition. Used mostly by REBALANCE_GARAGE.
 
 ![Ready for retrieve job](figures/45_job_ready_for_retrieve.svg)
@@ -924,6 +1010,16 @@ In words: the bay must be in insert or retrieve mode. If in insert mode, open it
 ```cpp
 BoolStringPair PlanAgvChargeJob(ScheduleContextSPtr ctx, uint16_t agv_id, size_t job_index) const;
 ```
+
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (maybe 2 `BayTransition`s, +1 `AgvMove` through `PlanAgvMoveJob`) and `last_entity_event` | 3 events |
+| in | `agv_id` | `uint16_t` | AGV whose battery is low | `A` |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0` |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}`; with no free charger `{false, "Caution: No available charge nodes ..."}` |
 
 **When Dispatch sends it:** an AGV's battery is low.
 
@@ -941,6 +1037,15 @@ In words: free the AGV if a bay in insert mode traps it, cost every `TYPE_AGV_CH
 BoolStringPair PlanCleanGarageJob(ScheduleContextSPtr ctx, size_t job_index) const;
 ```
 
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (+1 `AgvMove` per AGV to hide when `job_index == 0`, +1 `TrayMove` per waypoint-stashed tray) and `last_entity_event` | 3 events |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0`, which enables hiding |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}`; fails only if hiding (or the initial replay) fails |
+
 **When it is requested:** Dispatch decides (the comment in `PlanInsertJob` says it can be deferred until inserts and retrieves are done), and `Plan()` asks for one through `clean_garage_request_fn_()` after a failed INSERT.
 
 ![Clean garage job](figures/46_job_clean_garage.svg)
@@ -956,6 +1061,15 @@ In words: if this is `job_index` 0, ask `volley::HideAgvs` (from another package
 ```cpp
 BoolStringPair PlanRebalanceGarageJob(ScheduleContextSPtr ctx, size_t job_index) const;
 ```
+
+**API** (*Dir*: `in` is read only, `changed` is modified in place through `ctx`, `out` is returned):
+
+| Dir | Name | Type | Meaning | In the example below |
+|---|---|---|---|---|
+| in | `this` | `const Scheduler*` | Fixed planner data, read only: `layout_`, `gg_`, `table_`, `cost_model_`, `bay_readiness_ratio_` | Pecos layout |
+| in / **changed** | `ctx` | `ScheduleContextSPtr` (`std::shared_ptr<ScheduleContext>`) | The per-`Plan()` context, shared with the caller. Read: `initial_state`, `events`, `disabledness_filters`. Changed: `events` (the READY_FOR_INSERT / READY_FOR_RETRIEVE recipes for each chosen bay) and `last_entity_event` | 4 events for 2 bays |
+| in | `job_index` | `size_t` (by value) | Position the job will take in `ctx->scheduled_jobs` (when called from another job method, that job's index); stored in every event created | `0`, shared by every bay's recipe |
+| out | return | `BoolStringPair` = `std::pair<bool, std::string>` | `{true, ""}` on success, `{false, reason}` on failure | `{true, ""}`; per-bay failures are only logged |
 
 **When it is requested:** when the `set_bay_readiness_ratio` service changes `bay_readiness_ratio_`, `SchedulerRos` calls `rebalance_garage_request_fn_()` to ask Dispatch for this job; Dispatch can also send it on its own. Section 18 explains the ratio and how bays are classified.
 

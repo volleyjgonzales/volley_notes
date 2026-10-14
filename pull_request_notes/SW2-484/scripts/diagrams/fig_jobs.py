@@ -184,42 +184,183 @@ def event_column(d: Doc, x, y, events, edges, *, bw=290, gap=40, lane_x0=None):
 # step table
 # --------------------------------------------------------------------------------------
 
+REPLAY = ("Make a scratch copy of the request's garage and apply every event already in the DAG, so the method "
+          "sees the garage as earlier jobs will leave it.")
+GENERAL = {
+"40_job_move_agv": [
+    REPLAY,
+    "Refuse jobs that do not name an AGV. Choosing an AGV for the caller is not implemented (a TODO).",
+    "Look the AGV up in the scratch garage; a missing or disabled AGV cannot be moved.",
+    "If the AGV already stands at the destination pose, succeed without adding anything.",
+    "Describe the move as current pose -> destination, then check the destination exists in the graph and is "
+    "not disabled for an AGV in this state (empty or carrying a tray).",
+    "Optional shortcut: if the caller allows the reverse heading and the headings are the same or opposite, keep "
+    "the AGV where it is.",
+    "An AGV without a tray gets one AgvMove, chained after the AGV's previous event (rule A).",
+    "An AGV carrying a tray moves the tray with it: create a TrayMove with this AGV already assigned, convert the "
+    "destination to the tray's heading and apply the parking-heading policy; chain after the tray's last event.",
+    "Make the new event wait for any earlier events of the same job (rule B).",
+],
+"41_job_repark_tray": [
+    "A repark needs at least a tray or a destination; with neither there is nothing to plan.",
+    REPLAY,
+    "Create the TrayMove object now (tagged with job_index) and fill it in step by step; it joins the DAG later.",
+    "Look the tray up and reject unknown or disabled trays. Note: this reads the request snapshot, not the scratch "
+    "garage.",
+    "A tray on a VECS that is charging must stop charging first; any other non-ready VECS state blocks the job.",
+    "Choose the parking heading: an empty tray keeps its heading if that fits; a loaded tray faces the node's "
+    "retrieval heading so a later retrieve is fast.",
+    "If the tray is already at the destination pose, succeed without a move.",
+    "Reject destinations that are a VECS not ready to charge, not in the graph, disabled for this tray, or a "
+    "disabled bay.",
+    "Apply the heading policy again for every known tray (EV-charge exception, then retrieval heading), then "
+    "store the destination.",
+    "Add the TrayMove to the DAG and chain it after this tray's previous event (rule A).",
+    "If the destination is a bay or VECS, also wait for that resource's last event (rule C).",
+    "Make the move wait for earlier events of the same job (rule B).",
+],
+"42_job_retrieve": [
+    REPLAY,
+    "Find the car. A car that does not exist cannot be retrieved.",
+    "The car's node must not be disabled for its size.",
+    "A car on a charging VECS must stop charging first; a VECS in another busy state means 'try later' "
+    "(retain_job).",
+    "Choose a bay: walk the layout's bay list from the back, skip unusable bays, take the first one already in "
+    "retrieve mode, else remember the first one in insert mode or with a car inserted.",
+    "No usable bay: fail and ask Dispatch to keep the job for later.",
+    "If the chosen bay is not in retrieve mode yet, add the transition that switches it (chained to the bay, "
+    "rule A).",
+    "If a tray already occupies the bay, plan it out of the bay; its destination is left for tray assignment.",
+    "Plan the car's tray into the bay, turned so the car faces the right way.",
+    "Add the hand-over: the bay processes the retrieve once the tray is in.",
+    "Report success; retain_job is false.",
+],
+"43_job_insert": [
+    REPLAY,
+    "The bay must exist and be enabled.",
+    "There must be a tray in the bay, and it must carry a car: that is what is being inserted.",
+    "Only these two bay states are accepted; anything else needs a different transition first.",
+    "Make the tray reachable from the garage side: add a retrieve-mode transition for the bay on its first "
+    "system floor.",
+    "Plan the loaded tray out of the bay; where it parks is decided by tray assignment.",
+    "Ask Dispatch (asynchronously) for a separate job that puts an empty tray back into this bay.",
+    "Report success.",
+    "Context, not this method: if the insert fails, Plan() asks Dispatch to clean the garage.",
+],
+"44_job_ready_for_insert": [
+    REPLAY,
+    "Only a bay in retrieve mode can be prepared for the next insert.",
+    "Work out the bay's inbound pose and whether a tray is already inside.",
+    "Empty bay: plan 'any empty tray -> this bay'. The tray is left blank for now.",
+    "Bay holds a car: send it to a VECS first if it asked for charging, then plan an empty tray in. A car that "
+    "did not ask for charging is moved later as a blocking tray.",
+    "Bay already holds an empty tray: nothing to move.",
+    "Try to fill the blank early: replay the DAG again and pick the nearest empty tray for this job's "
+    "'? -> bay' moves. If none is found, leave it for tray assignment.",
+    "Switch the bay to insert mode after the tray is in.",
+    "Report success.",
+],
+"45_job_ready_for_retrieve": [
+    REPLAY,
+    "Only a bay in insert or retrieve mode can be prepared for retrieval.",
+    "A bay in insert mode is switched to retrieve mode first.",
+    "Check whether a tray sits in the bay.",
+    "A car in the bay that asked for charging goes to a VECS.",
+    "Any other tray is moved out of the bay, destination left for tray assignment.",
+    "Report success. No final transition: the bay stays in retrieve mode.",
+],
+"46_job_clean_garage": [
+    REPLAY,
+    "Only the first successful job of a request hides AGVs: ask HideAgvs (another package) for one hiding pose "
+    "per AGV.",
+    "If no hiding assignment exists, the job fails.",
+    "Add one AgvMove per AGV that is not already hidden, chained per AGV (and per bay when hiding in a bay).",
+    "Find trays left standing on waypoints by an earlier tier-2 stash.",
+    "Plan each of them back into parking; destination left for tray assignment. Failures are only logged.",
+    "Report success.",
+],
+"47_job_rebalance_garage": [
+    REPLAY,
+    "Ask which bays should switch to insert mode and which to retrieve mode, given the readiness ratio "
+    "(section 18).",
+    "Run the READY_FOR_INSERT recipe for each bay that should accept cars, under this job's index.",
+    "Run the READY_FOR_RETRIEVE recipe for each bay that should hand cars out, under this job's index.",
+    "Report success; failures of individual bays are only logged.",
+],
+"48_job_charge_agv": [
+    REPLAY,
+    "The AGV must exist and be enabled.",
+    "An AGV already on a charger, facing the charger's inbound heading, needs nothing.",
+    "An AGV in a bay that is in insert mode is trapped: switch the bay to retrieve mode first. Any bay state "
+    "other than these two fails the job.",
+    "Cost every charger with no AGV on it by travel time, using a path search that avoids current obstacles; keep "
+    "the cheapest.",
+    "No reachable free charger: fail with a warning about the battery.",
+    "Drive the AGV to the chosen charger (reuses PlanAgvMoveJob).",
+    "If the AGV was trapped, put the bay back into insert mode (reuses PlanBayTransitionJob).",
+],
+"49_job_bay_transition": [
+    REPLAY,
+    "The bay must exist and be enabled.",
+    "The bay's ODP collision area must be clear of AGVs and trays in the scratch garage.",
+    "Insert mode can only be entered from retrieve mode.",
+    "Retrieve mode needs a floor (the bay's first system floor) and starts from insert mode or a car inserted.",
+    "Any other command is rejected.",
+    "Add the bay transition, chained after the bay's previous event (rule A) and earlier events of the job "
+    "(rule B).",
+],
+"50_job_charge_payload": [
+    REPLAY,
+    "Find the car and the tray it is on.",
+    "If the tray already sits on an EV charging node whose VECS is ready, no move is needed.",
+    "Otherwise search for a reachable VECS spot, reusing the open-space search of ResolveBlockingTrays.",
+    "The search must have found a node, and that node must have a VECS.",
+    "Plan the tray onto the VECS (reuses PlanReparkTrayJob).",
+    "Start charging once the tray is there.",
+],
+}
+
+
 TAG_COL = {"ok": T.green, "skip": T.faint, "fail": T.red, "event": T.sky, "edge": T.fg2, "call": T.teal,
            "note": T.amber}
 
 
 def step_table(d: Doc, x, y, w, steps, *, title="The method, step by step"):
-    """steps: (code, scenario, tag_text, tag_kind). Returns bottom y."""
-    c0, c3 = 34, 150
-    c1 = 0.47 * (w - c0 - c3)
-    c2 = w - c0 - c1 - c3
+    """steps: (code, general, scenario, tag_text, tag_kind). Returns bottom y."""
+    c0, c4 = 34, 132
+    rest = w - c0 - c4
+    c1, c2 = 0.36 * rest, 0.34 * rest
+    c3 = rest - c1 - c2
     d.text(x, y, title, size=13.5, weight=600, fill=T.fg)
     hy = y + 24
-    for cx, lab in ((x + c0, "code (Scheduler::...)"), (x + c0 + c1 + 10, "in this example"),
-                    (x + c0 + c1 + c2 + 10, "result")):
+    xs = [x + c0, x + c0 + c1 + 10, x + c0 + c1 + c2 + 16, x + c0 + c1 + c2 + c3 + 12]
+    for cx, lab in zip(xs, ["code (Scheduler::...)", "what the step does, in general", "in this example",
+                            "result"]):
         d.text(cx, hy, lab, size=10.5, family="mono", weight=600, fill=T.muted, letter_spacing=0.4)
     yy = hy + 14
-    for r, (code, scen, tag, kind) in enumerate(steps):
+    for r, (code, gen, scen, tag, kind) in enumerate(steps):
         cl = []
         for part in code.split("\n"):
-            cl += wrap(part, c1 - 16, 11, "mono")
-        sl = wrap(scen, c2 - 20, 11.5, "sans")
-        tl = wrap(tag, c3 - 22, 10.5, "mono") if tag else []
-        n = max(len(cl), len(sl), len(tl), 1)
-        h = 12 + n * 16
+            cl += wrap(part, c1 - 12, 10.5, "mono")
+        gl = wrap(gen, c2 - 14, 11, "sans")
+        sl = wrap(scen, c3 - 14, 11, "sans")
+        tl = wrap(tag, c4 - 20, 10.5, "mono") if tag else []
+        n = max(len(cl), len(gl), len(sl), len(tl), 1)
+        h = 12 + n * 15.5
         if r % 2 == 0:
             d.rect(x, yy, w, h, rx=5, fill=T.tint(T.card, 0.55, T.bg), layer="bg")
         num_badge(d, x + 15, yy + 14, r + 1, T.tint(T.fg2, 0.85, T.bg), r=10)
         for j, ln in enumerate(cl):
-            d.text(x + c0, yy + 14 + j * 16, ln, size=11, family="mono", fill=T.fg2)
+            d.text(xs[0], yy + 14 + j * 15.5, ln, size=10.5, family="mono", fill=T.fg2)
+        for j, ln in enumerate(gl):
+            d.text(xs[1], yy + 14 + j * 15.5, ln, size=11, fill=T.fg2)
         for j, ln in enumerate(sl):
-            d.text(x + c0 + c1 + 10, yy + 14 + j * 16, ln, size=11.5, fill=T.fg if kind != "skip" else T.muted)
+            d.text(xs[2], yy + 14 + j * 15.5, ln, size=11, fill=T.fg if kind != "skip" else T.muted)
         if tag:
             col = TAG_COL.get(kind, T.fg2)
-            tx = x + c0 + c1 + c2 + 10
             for j, ln in enumerate(tl):
-                bb = label_pill(d, tx, yy + 14 + j * 18, ln, color=col, size=10.5, anchor="start",
-                                bg=T.tint(col, 0.12, T.bg), border=T.tint(col, 0.6, T.bg))
+                label_pill(d, xs[3], yy + 14 + j * 18, ln, color=col, size=10.5, anchor="start",
+                           bg=T.tint(col, 0.12, T.bg), border=T.tint(col, 0.6, T.bg))
         yy += h + 2
     return yy
 
@@ -263,6 +404,9 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
     else:
         yr = y2 + 50
     y = max(yl_, yr) + 46
+    gens = GENERAL.get(name, [""] * len(steps))
+    assert len(gens) == len(steps), (name, len(gens), len(steps))
+    steps = [(c, g, sc, t, k) for (c, sc, t, k), g in zip(steps, gens)]
     y = step_table(d, 0, y, W, steps)
     if notes:
         y = notes_row(d, 0, y + 22, W, notes)
@@ -742,8 +886,8 @@ def job_repark():
              "tray's collision entity; dest bay disabled -> fail", "P24 and P23 are plain, enabled parking.",
              "passes", "ok"),
             ("UsePreferredHeading(dst, payload, tray); SetDest",
-             "Runs for every known tray and any destination: the 576_eccles EV-charge exception, then the retrieval "
-             "heading for loaded trays if the node has a feasible one.",
+             "T19 is loaded, so the retrieval heading of P24 (job 0) or P23 (job 1) is used if that node has a feasible "
+             "one; Pecos is not 576_eccles, so the EV exception does nothing.",
              "dest set", "ok"),
             ("ctx->events.AddEvent(tray_move);\nUpdateLastEntityEvent(tray)  // rule A",
              "Job 0: T19 has no earlier event. Job 1: T19's last event is 1, so edge 1 -> 2.", "adds 1, 2 · A", "event"),
