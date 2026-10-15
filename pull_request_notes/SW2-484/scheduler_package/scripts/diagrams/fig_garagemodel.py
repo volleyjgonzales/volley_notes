@@ -11,7 +11,7 @@ import math
 
 import yaml
 
-from components import code_panel, connect, frame, label_pill, note, uml_class
+from components import class_size, code_panel, connect, frame, label_pill, note, uml_class
 from facility import Map
 from fig_concepts import _arrow_glyph
 from registry import figure
@@ -171,7 +171,53 @@ def garage_model_classes():
             color=GG, label="built from (constructor only)", label_at=((gg.cx + pg.cx) / 2 + 40, gy - 46))
     connect(d, [(ct.x0, ct.y0 + 70), (gg.x1, ct.y0 + 70)], kind="assoc", color=CT, label="gg_ (reference)",
             label_at=((ct.x0 + gg.x1) / 2, ct.y0 + 56))
-    yb = max(gg.y1, ct.y1) + 30
+    # ---- the value types the four classes are made of ----
+    VT = T.violet
+    vy = max(gg.y1, ct.y1) + 64
+    d.text(0, vy - 24, "The value types inside them", size=14, weight=600, fill=T.fg)
+    d.text(260, vy - 24, "ROS messages (interfaces/msg, alias ...Msg) and plain C++ types; 'in:' names the members that hold them",
+           size=11, fill=T.muted)
+    vts = [
+        ("GaragePoseMsg", "msg · a pose: in poses_, pose_to_vertex_, table keys", T.green, [
+            "+ node_id: uint32", "+ heading: int16   // degrees, 0 = +y, CCW+, 90 = west"]),
+        ("GarageNodeMsg", "msg · a place: in Layout::nodes_", LAY, [
+            "+ id: uint32", "+ x, y: float          // metres", "+ floor", "+ type: TYPE_PARKING | WAYPOINT | BAY",
+            "        | BLIFT | AGV_CHARGE | EV_CHARGE | LIFT", "+ headings: uint16[]   // 0..179, sorted",
+            "+ rotation_allowed, faces_reciprocal: bool", "+ max_resource_size: string",
+            "+ max_resource_size_index", "+ insert_floor, system_floors[]   // bays"]),
+        ("GeometricPoseMsg", "msg · metres + radians: GetGeometricPoseAtPose", T.sky, [
+            "+ x, y: float32   // metres", "+ yaw: float32     // radians = heading x pi/180"]),
+        ("SizedPoseMsg", "msg · pose + footprint size: overlapping_sized_poses_", PG, [
+            "+ pose: GaragePose", "+ resource_size_index   // into resource_windows_"]),
+        ("ParkingWindowMsg", "msg · a size class: Layout::resource_windows_", LAY, [
+            "+ name: string   // COMPACT, ..., XL, TRAY", "+ length_m, width_m, height_m: float"]),
+        ("GarageFloorMsg", "msg · Layout::floors_", LAY, ["+ id", "+ z: float   // metres"]),
+        ("Vrc", "struct (layout.hpp) · Layout::vrcs_", LAY, [
+            "+ id, root_node_id: uint32", "+ nodes: vector<GarageNodeMsg>   // by floor"]),
+        ("Transition", "struct (garage_graph.hpp) · every gg_ edge", GG, [
+            "+ length: double   // m, rad, or floor height", "+ type: TransitionType",
+            "  LOCOMOTE | STRAFE | ROTATION | VRC_TRANSITION"]),
+        ("PoseNeighbor", "enum (pose_graph.hpp) · slot in pose_neighbors_", PG, [
+            "FORWARD, RIGHT, BACK, LEFT,", "ROT_RIGHT, ROT_LEFT, VRC_UP, VRC_DOWN"]),
+        ("GarageGraph::Vertex / Edge", "aliases · Boost descriptors", GG, [
+            "Vertex = std::size_t   // index of a pose", "Edge = {m_source, m_target, property*}"]),
+        ("CollisionTable::Pose / Edge", "aliases · table keys", CT, [
+            "Pose = GaragePoseMsg", "Edge = std::array<Pose, 2>   // a move",
+            "PoseOrEdge = std::variant<Pose, Edge>"]),
+        ("CollisionEntityId", "enum (collision_geometry.hpp) · table ids", CT, [
+            "BAY_ODP = 0, TRAY_LEGS, TRAY, AGV,", "PAYLOAD (+ window index)"]),
+    ]
+    total_w = ct.x1
+    gap = 22
+    ncol = 3
+    colw = (total_w - gap * (ncol - 1)) / ncol
+    tops = [vy] * ncol
+    for name, st, col, attrs in vts:
+        c = min(range(ncol), key=lambda k: tops[k])
+        b = uml_class(d, c * (colw + gap), tops[c], name, accent=col, stereo=st, attrs=attrs, size=10.5,
+                      name_size=13, compact=True, w=colw)
+        tops[c] = b.y1 + gap
+    yb = max(tops) + 10
     note(d, 0, yb, ct.x1, "Scheduler::Scheduler builds them in this order and never changes them afterwards: "
          "layout_(make_shared<Layout>(file)), pg_(layout_), gg_(pg_), table_(gg_, logger). The only later write is "
          "gg_.SetRetrievalHeading(...) from InitRetrievalHeadings(), still inside the constructor. GarageGraph keeps "
@@ -183,9 +229,10 @@ def garage_model_classes():
                    "precomputes which footprints conflict at which poses and edges. Members abridged.",
           badge_key="as-built",
           legend=[("box", LAY, "places"), ("box", PG, "poses"), ("box", GG, "motion graph"),
-                  ("box", CT, "space"), ("assoc", T.fg2, "holds"), ("dep", T.fg2, "built from")],
+                  ("box", CT, "space"), ("box", T.sky, "geometry"), ("assoc", T.fg2, "holds"), ("dep", T.fg2, "built from")],
           footnote="From sources/repomix-common-ros.xml: layout.hpp, pose_graph.hpp, garage_graph.hpp, "
-                   "collision_geometry.hpp. Private members abridged; types as declared.")
+                   "collision_geometry.hpp. Private members abridged. The .msg files are not in the snapshots: message "
+                   "field names are those common_ros reads and writes; types without a width follow that code.")
     return d
 
 
@@ -381,4 +428,178 @@ def collision_table_storage():
           legend=[("box", CT, "map level"), ("box", T.red, "answer")],
           footnote="From collision_geometry.hpp/.cpp. The lookup example shows the path through the maps; whether "
                    "that particular pair conflicts depends on the footprint sizes in `common`, not in the snapshots.")
+    return d
+
+
+# ======================================================================================
+# 78 — heading convention
+# ======================================================================================
+
+def _rect_at(d, cx, cy, h, L, Wd, color, *, fill_alpha=0.12, label=None):
+    """Footprint rectangle centred at (cx, cy), long side along heading h (0 = up, CCW+)."""
+    a = math.radians(h)
+    fx, fy = -math.sin(a), -math.cos(a)        # forward in SVG space
+    sx, sy = -fy, fx                            # sideways
+    pts = []
+    for u, v in ((1, 1), (1, -1), (-1, -1), (-1, 1)):
+        pts.append((cx + fx * L / 2 * u + sx * Wd / 2 * v, cy + fy * L / 2 * u + sy * Wd / 2 * v))
+    path = "M" + " L".join(f"{x:.1f} {y:.1f}" for x, y in pts) + " Z"
+    d.path(path, fill=T.tint(color, fill_alpha, T.bg), stroke=color, sw=1.6)
+    tip = (cx + fx * L * 0.42, cy + fy * L * 0.42)
+    d.line(cx, cy, tip[0] - fx * 6, tip[1] - fy * 6, stroke=color, sw=2.4, layer="top")
+    d.arrowhead(tip, (cx, cy), kind="filled", color=color, size=9, layer="top")
+    if label:
+        d.text(cx, cy + 2, label, size=11, family="mono", weight=700, fill=T.fg, anchor="middle", halo=T.bg, halo_w=3,
+               layer="top")
+
+
+@figure("78_heading_convention", "Headings: what the number means", DOC1)
+def heading_convention():
+    d = Doc("78_heading_convention", "Headings: what the number means",
+            "GaragePose.heading is an integer in degrees, 0 along +y, counter-clockwise positive, so 90 points to -x. "
+            "A YAML node lists headings in 0..179; each also allows its reciprocal, which covers the same footprint.")
+    # ---- compass ----
+    cx, cy, R = 190, 210, 130
+    d.circle(cx, cy, R, fill=T.bg_deep, stroke=T.border_soft, sw=1)
+    d.line(cx - R - 26, cy, cx + R + 26, cy, stroke=T.faint, sw=1)
+    d.line(cx, cy + R + 26, cx, cy - R - 26, stroke=T.faint, sw=1)
+    d.arrowhead((cx + R + 30, cy), (cx, cy), kind="filled", color=T.faint, size=8)
+    d.arrowhead((cx, cy - R - 30), (cx, cy), kind="filled", color=T.faint, size=8)
+    d.text(cx + R + 36, cy, "+x", size=12, family="mono", fill=T.muted)
+    d.text(cx + 8, cy - R - 34, "+y", size=12, family="mono", fill=T.muted)
+    for h, lab in ((0, "0"), (90, "90"), (180, "180"), (270, "270")):
+        a = math.radians(h)
+        fx, fy = -math.sin(a), -math.cos(a)
+        tip = (cx + fx * (R - 14), cy + fy * (R - 14))
+        d.line(cx, cy, tip[0] - fx * 8, tip[1] - fy * 8, stroke=T.green, sw=2.4)
+        d.arrowhead(tip, (cx, cy), kind="filled", color=T.green, size=10)
+        lx, ly = cx + fx * (R + 0) + (-18 if h == 90 else 18 if h == 270 else 14), cy + fy * (R - 2) + (16 if h == 180 else -6 if h == 0 else 14)
+        d.text(lx, ly, lab, size=13, family="mono", weight=700, fill=T.fg, anchor="middle", halo=T.bg, halo_w=3)
+    d.path(f"M{cx + 46:.1f} {cy - 38:.1f} A 60 60 0 0 0 {cx - 38:.1f} {cy - 46:.1f}", stroke=T.pink, sw=1.8)
+    d.arrowhead((cx - 40, cy - 45), (cx - 20, cy - 58), kind="filled", color=T.pink, size=8)
+    d.text(cx + 50, cy - 64, "CCW +", size=11, family="mono", fill=T.pink)
+    d.text(cx, cy + R + 52, "GaragePoseMsg.heading: int16, degrees", size=12, family="mono", fill=T.fg2, anchor="middle")
+    d.text(cx, cy + R + 70, "GeometricPoseMsg.yaw = heading x pi / 180 (same zero)", size=11, family="mono",
+           fill=T.muted, anchor="middle")
+
+    # ---- reciprocal: same footprint ----
+    px = 470
+    d.text(px, 40, "h and h + 180: same footprint, opposite facing", size=14, weight=600, fill=T.fg)
+    for i, (h, col) in enumerate(((90, T.amber), (270, T.amber))):
+        bx = px + 40 + i * 230
+        d.rect(bx - 90, 70, 180, 150, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
+        d.circle(bx, 145, 3, fill=T.fg2)
+        _rect_at(d, bx, 145, h, 124, 52, col)
+        d.text(bx, 240, f"tray at {{22, {h}}}", size=12, family="mono", fill=T.fg2, anchor="middle")
+        d.text(bx, 258, "faces -x" if h == 90 else "faces +x", size=11, fill=T.muted, anchor="middle")
+    d.text(px, 290, "The long side lies along the heading. A centred rectangle covers the same floor at h and h + 180,",
+           size=11.5, fill=T.fg2)
+    d.text(px, 308, "so every allowed heading comes with its reciprocal; only the facing differs (which way a car",
+           size=11.5, fill=T.fg2)
+    d.text(px, 326, "on the tray points, and where the AGV's front is).", size=11.5, fill=T.fg2)
+
+    # ---- from YAML headings to poses ----
+    ty = 370
+    d.text(px, ty, "From the YAML to poses (GetAllowedHeadings)", size=14, weight=600, fill=T.fg)
+    rows = [("W22", "headings: [0, 90]", "0, 90, 180, 270", "4 poses, rotation_allowed: true"),
+            ("P23", "headings: [90]", "90, 270", "2 poses, no rotation"),
+            ("B21", "headings: [90]", "90, 270", "2 poses; inbound heading 90 (faces_reciprocal: false)")]
+    for i, (n, yml, poses, note_) in enumerate(rows):
+        y = ty + 30 + i * 30
+        d.rect(px, y - 13, 760, 26, rx=4, fill=T.card if i % 2 else T.tint(T.card, 0.6, T.bg))
+        d.text(px + 10, y, n, size=12, family="mono", weight=700, fill=LAY)
+        d.text(px + 70, y, yml, size=12, family="mono", fill=T.fg2)
+        d.text(px + 250, y, "->", size=12, family="mono", fill=T.faint)
+        d.text(px + 285, y, poses, size=12, family="mono", fill=T.green)
+        d.text(px + 450, y, note_, size=11.5, fill=T.muted)
+    frame(d, title="Headings: what the number means",
+          subtitle="A heading is the direction a pose faces, in whole degrees: 0 along +y, counter-clockwise positive, "
+                   "so 90 faces -x (west on the Pecos drawings) and 270 faces +x. It is an int16 in GaragePoseMsg; "
+                   "GeometricPoseMsg carries the same angle as yaw in radians.",
+          badge_key="as-built",
+          legend=[("box", T.green, "heading arrow"), ("box", T.amber, "tray footprint"), ("box", LAY, "YAML node")],
+          footnote="Convention from GaragePose.msg's comment and LocomoteOrStrafe in garage_graph.cpp; yaw from "
+                   "Layout::GetGeometricPoseAtPose. Headings written 0-359 here; volley::Wrap's range is in `common`.")
+    return d
+
+
+# ======================================================================================
+# 79 — node, pose, vertex: one place, four names
+# ======================================================================================
+
+@figure("79_node_pose_vertex", "Node, pose, vertex", DOC1)
+def node_pose_vertex():
+    d = Doc("79_node_pose_vertex", "Node, pose, vertex: one place, several names",
+            "W22 as a Layout node, as four poses, as four GarageGraph vertices, and as the keys other structures use.")
+    cols = [("node", "a place", "GarageNodeMsg  (Layout::nodes_)", LAY),
+            ("pose", "a place + a heading", "GaragePoseMsg  {node_id, heading}", PG),
+            ("vertex", "a pose's index in gg_", "GarageGraph::Vertex  (std::size_t)", GG)]
+    cw, gap = 330, 70
+    top = 0
+    for i, (word, what, typ, col) in enumerate(cols):
+        x = i * (cw + gap)
+        d.rect(x, top, cw, 70, rx=10, fill=T.tint(col, 0.10, T.bg), stroke=col, sw=1.5)
+        d.text(x + 16, top + 24, word, size=18, weight=600, fill=col)
+        d.text(x + 16 + text_width(word, 18, "sans", 600) + 10, top + 24, f"= {what}", size=13, fill=T.fg2)
+        d.text(x + 16, top + 50, typ, size=11.5, family="mono", fill=T.fg2)
+        if i:
+            connect(d, [(x - gap, top + 35), (x, top + 35)], kind="flow", color=T.faint, size=9)
+    d.text(cw + gap / 2, top + 88, "x allowed headings", size=10.5, family="mono", fill=T.muted, anchor="middle")
+    d.text(2 * cw + 1.5 * gap, top + 88, "pose_to_vertex_", size=10.5, family="mono", fill=T.muted, anchor="middle")
+    # pictures
+    py = top + 120
+    # node
+    x0 = 0
+    d.rect(x0, py, cw, 230, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
+    ncx, ncy = x0 + cw / 2, py + 100
+    d.circle(ncx, ncy, 9, fill=LAY)
+    d.text(ncx, ncy + 26, "W22", size=13, family="mono", weight=700, fill=LAY, anchor="middle")
+    for ln_i, ln in enumerate(["id 22, x 30.88 m, y 21.74 m", "type Waypoint, headings [0, 90]",
+                                "rotation_allowed: true"]):
+        d.text(ncx, py + 160 + ln_i * 18, ln, size=11, family="mono", fill=T.fg2, anchor="middle")
+    # poses
+    x1 = cw + gap
+    d.rect(x1, py, cw, 230, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
+    pcx, pcy = x1 + cw / 2, py + 100
+    d.circle(pcx, pcy, 4, fill=T.faint)
+    for h in (0, 90, 180, 270):
+        a = math.radians(h)
+        fx, fy = -math.sin(a), -math.cos(a)
+        qx, qy = pcx + fx * 52, pcy + fy * 52
+        d.circle(qx, qy, 13, fill=T.card, stroke=PG, sw=1.6)
+        _arrow_glyph(d, qx, qy, h, PG, r=9)
+        lx, ly = pcx + fx * 112, pcy + fy * 84
+        d.text(lx, ly, f"{{22, {h}}}", size=11, family="mono", fill=T.fg2, anchor="middle", halo=T.bg_deep, halo_w=3)
+    d.text(pcx, py + 214, "same place, four headings", size=11, fill=T.muted, anchor="middle")
+    # vertices
+    x2 = 2 * (cw + gap)
+    d.rect(x2, py, cw, 230, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
+    for k, h in enumerate((0, 90, 180, 270)):
+        yy = py + 30 + k * 40
+        d.rect(x2 + 40, yy, 60, 30, rx=4, fill=T.tint(GG, 0.16, T.bg), stroke=GG, sw=1.2)
+        d.text(x2 + 70, yy + 15, str(VERT[(22, h)]), size=14, family="mono", weight=700, fill=T.fg, anchor="middle")
+        d.text(x2 + 116, yy + 15, f"base_graph_[{VERT[(22, h)]}] = {{22, {h}}}", size=11, family="mono", fill=T.fg2)
+    d.text(x2 + cw / 2, py + 214, "four numbers; nothing else stored here", size=11, fill=T.muted, anchor="middle")
+    # other names for the same place
+    oy = py + 270
+    d.text(0, oy, "The same place under other names", size=14, weight=600, fill=T.fg)
+    others = [("GeometricPoseMsg", "{x 30.88, y 21.74, yaw 1.571}", "metres and radians, for geometry and motion", T.sky),
+              ("SizedPoseMsg", "{pose {22, 90}, resource_size_index 4}", "a pose plus a footprint size", PG),
+              ("CollisionTable location", "Pose {22, 90}  or  Edge {{22, 90}, {18, 90}}", "a pose, or a move between two", CT),
+              ("layout graph_ vertex", "20  (W22's position in Layout::nodes_)", "not the node id and not a gg_ vertex", LAY),
+              ("pose index", "PoseGraph::GetPoseIndex({22, 90}) = 43", "equals the gg_ Vertex by construction", PG)]
+    for i, (name, ex, what, col) in enumerate(others):
+        y = oy + 30 + i * 28
+        d.rect(0, y - 13, x2 + cw, 26, rx=4, fill=T.card if i % 2 else T.tint(T.card, 0.6, T.bg))
+        d.text(12, y, name, size=12, family="mono", weight=600, fill=col)
+        d.text(250, y, ex, size=12, family="mono", fill=T.fg2)
+        d.text(660, y, what, size=11.5, fill=T.muted)
+    frame(d, title="Node, pose, vertex: one place, several names",
+          subtitle="A node is a place in the layout. A pose is that place plus a heading. A vertex is the number gg_ "
+                   "gives one pose. W22 is one node, four poses and four vertices; the arrows are the only conversions "
+                   "the code performs (GetAllowedHeadings, then GetVertexFromPose).",
+          badge_key="yaml",
+          legend=[("box", LAY, "Layout"), ("box", PG, "pose"), ("box", GG, "GarageGraph"), ("box", CT, "CollisionTable")],
+          footnote="Values from the Pecos YAML; vertex numbers recomputed with the PoseGraph rules. Size index 4 = XL: "
+                   "windows sorted by area are TRAY, COMPACT, STANDARD, LARGE, XL.")
     return d

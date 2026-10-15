@@ -217,7 +217,90 @@ float32 x       # metres        uint32 node_id
 float32 y       # metres        int16 heading   # degrees, +CCW from local north; 90 = west
 float32 yaw     # radians
 </code></pre>
-<p>The planner works on <strong>poses</strong>. A pose is a vertex of <code>gg_</code> only if the node allows that heading: each heading listed in the YAML and its reciprocal (±180°). <code>gg_.GetVertexFromPose(pose)</code> returns <code>std::optional&lt;Vertex></code>; an empty optional (an unknown node, a heading the node does not allow, or a heading written in a different form) is the usual cause of “does not exist in garage graph” errors. A <code>Vertex</code> is just the pose's index in the graph; <a class="ref" href="#bg-garagegraph-and-its-vertex">section 6.4</a> explains what it stores.</p>
+<h3 id="bg-node-heading-pose-vertex-the-words-for-places">Node, heading, pose, vertex: the words for places</h3>
+<p>Four words name a place in this code, and they are easy to mix up because they nest. Each has one type and one owner:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Word</th>
+      <th>What it is</th>
+      <th>C++ type (owner)</th>
+      <th>W22 on Pecos</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td id="bg-term-node"><strong>node</strong></td>
+      <td>A place in the layout: a point on the floor with an id, a type and the headings it allows. Edges between nodes say which places are adjacent</td>
+      <td><code>GarageNodeMsg</code>, stored in <code>Layout::nodes_</code> (<a class="ref" href="#bg-layout-places-in-sorted-vectors-and-ordered-maps">section 6.1</a>)</td>
+      <td>node 22: x 30.88 m, y 21.74 m, Waypoint, <code>headings: [0, 90]</code></td>
+    </tr>
+    <tr>
+      <td id="bg-term-heading"><strong>heading</strong></td>
+      <td>The direction something at a node faces, in whole degrees: 0 along +y, counter-clockwise positive (<a class="ref" href="#bg-fig-78_heading_convention">Figure 4</a>)</td>
+      <td><code>int16</code> field of <code>GaragePoseMsg</code>; the YAML lists 0–179 and each also allows <span class="math">h+180</span></td>
+      <td>0, 90, 180, 270</td>
+    </tr>
+    <tr>
+      <td id="bg-term-pose"><strong>pose</strong></td>
+      <td>A node plus a heading: where something is <em>and</em> which way it faces. Almost every API in the planner takes poses, not nodes</td>
+      <td><code>GaragePoseMsg {node_id, heading}</code>; listed by <code>PoseGraph::poses_</code> (<a class="ref" href="#bg-posegraph-from-nodes-to-poses">section 6.2</a>)</td>
+      <td><code>{22, 0}</code>, <code>{22, 90}</code>, <code>{22, 180}</code>, <code>{22, 270}</code></td>
+    </tr>
+    <tr>
+      <td id="bg-term-vertex"><strong>vertex</strong></td>
+      <td>The number the search graph <code>gg_</code> gives one pose. It stores nothing but that pose and its edges</td>
+      <td><code>GarageGraph::Vertex</code> = <code>std::size_t</code>, in <code>gg_</code>, a <code>volley::GarageGraph</code> (<a class="ref" href="#bg-garagegraph-and-its-vertex">section 6.3</a>)</td>
+      <td>42, 43, 44, 45</td>
+    </tr>
+  </tbody>
+</table>
+<figure id="bg-fig-78_heading_convention">
+  <img src="figures/78_heading_convention.svg" alt="Headings: what the number means">
+  <figcaption>The heading convention. Left: 0 points along +y and angles grow counter-clockwise, so 90 faces −x and 270 faces +x. <code>GeometricPoseMsg.yaw</code> is the same angle in radians. Middle: a tray (or AGV) footprint is a centred rectangle with its long side along the heading, so <span class="math">h</span> and <span class="math">h+180</span> cover the same floor; only the facing differs. Right: how YAML headings become poses.</figcaption>
+</figure>
+<figure id="bg-fig-79_node_pose_vertex">
+  <img src="figures/79_node_pose_vertex.svg" alt="Node, pose, vertex">
+  <figcaption>One place, several names. W22 is one node, four poses (one per allowed heading) and four vertices (42–45). The two arrows are the only conversions the code makes: <code>GetAllowedHeadings</code> (node → poses) and <code>gg_.GetVertexFromPose</code> (pose → vertex). The table lists the other structures that name the same place.</figcaption>
+</figure>
+<p>The rule of thumb: <strong>the layout talks in nodes, the planner in poses, the search graph in vertices.</strong> Converting is one-way and lossy in one place only: from a vertex you can always get its pose (<code>gg_.GetPoseFromVertex</code>) and its node (<code>gg_.GarageNodeFromVertex</code>); from a node you get several poses; from a pose you get a vertex only if the node allows that heading. <code>gg_.GetVertexFromPose(pose)</code> returns <code>std::optional&lt;Vertex></code>; an empty optional (an unknown node, a heading the node does not allow, or a heading written in a different form) is the usual cause of “does not exist in garage graph” errors.</p>
+<p>The same words also mean other things in this code base. When you read one, check which structure it belongs to:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Word</th>
+      <th>Meaning here</th>
+      <th>Other meanings you will meet</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>node</td>
+      <td>A layout place (<code>GarageNodeMsg</code>)</td>
+      <td>a ROS node (<code>SchedulerRos</code>'s process, <a class="ref" href="#bg-where-the-scheduler-runs-the-node-and-its-interfaces">section 2</a>); an <code>ActionNode</code>, one command in the output schedule (<a class="ref" href="#bg-ros-messages-and-services">section 7</a>)</td>
+    </tr>
+    <tr>
+      <td>vertex</td>
+      <td>A pose's index in <code>gg_</code> (<code>GarageGraph::Vertex</code>)</td>
+      <td>an event's index in the event DAG (<code>ScheduleEventDag::Vertex</code>, <a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">section 12.4</a>); a node's index in <code>Layout::graph_</code> (its position in <code>nodes_</code>, not its id)</td>
+    </tr>
+    <tr>
+      <td>edge</td>
+      <td>A move between two poses in <code>gg_</code>, with a <code>Transition</code></td>
+      <td>an undirected link between two node ids in the YAML; <code>CollisionTable::Edge</code>, a pair of poses used as a table key; a dependency "u before v" in the event DAG</td>
+    </tr>
+    <tr>
+      <td>heading</td>
+      <td>An integer angle in a <code>GaragePoseMsg</code></td>
+      <td><code>yaw</code>, the same angle in radians in <code>GeometricPoseMsg</code>; a bay's <em>inbound heading</em>, the heading a car faces when it enters (<code>GetInboundHeading</code>)</td>
+    </tr>
+    <tr>
+      <td>pose</td>
+      <td>A <code>GaragePoseMsg</code> (node + heading)</td>
+      <td>a <code>GeometricPoseMsg</code> (metres + radians); a <code>SizedPoseMsg</code> (a pose plus a footprint size)</td>
+    </tr>
+  </tbody>
+</table>
 <h3 id="bg-layout-garagegraph-and-collisiontable-three-views-of-the-same-garage">Layout, GarageGraph and CollisionTable: three views of the same garage</h3>
 <p>The scheduler builds three static objects from the layout file, once, in its constructor, and uses them for every plan:</p>
 <pre><code class="language-cpp">// src/scheduler.cpp — Scheduler::Scheduler(std::string layout_filepath, rclcpp::Logger logger,
@@ -267,9 +350,14 @@ table_(gg_, logger),                                  // volley::CollisionTable,
       <td>A snapshot, not a trajectory</td>
     </tr>
     <tr>
-      <td>pose, <code>Vertex</code></td>
-      <td>A pose is a node plus a heading (<code>GaragePoseMsg</code>); a <code>Vertex</code> is that pose's index in <code>gg_</code></td>
-      <td>A <code>Vertex</code> is a <code>std::size_t</code>, not a node: W22 is four vertices (<a class="ref" href="#bg-garagegraph-and-its-vertex">section 6.3</a>)</td>
+      <td><a href="#bg-term-node">node</a>, <a href="#bg-term-heading">heading</a></td>
+      <td>A node is a place in the layout (<code>GarageNodeMsg</code>); a heading is the direction something there faces, in degrees (<a class="ref" href="#bg-fig-78_heading_convention">Figure 4</a>)</td>
+      <td>A node lists its headings in the YAML; each also allows its reciprocal (<span class="math">h+180</span>)</td>
+    </tr>
+    <tr>
+      <td><a href="#bg-term-pose">pose</a>, <a href="#bg-term-vertex"><code>Vertex</code></a></td>
+      <td>A pose is a node plus a heading (<code>GaragePoseMsg</code>); a <code>Vertex</code> is that pose's index in <code>gg_</code>, the search graph, a <code>volley::GarageGraph</code> (<a class="ref" href="#bg-garagegraph-and-its-vertex">section 6.3</a>)</td>
+      <td>A <code>Vertex</code> is a <code>std::size_t</code>, not a node: W22 is one node, four poses and four vertices (<a href="#bg-node-heading-pose-vertex-the-words-for-places">the words for places</a>)</td>
     </tr>
     <tr>
       <td><code>ScheduleEvent</code></td>
@@ -359,7 +447,7 @@ table_(gg_, logger),                                  // volley::CollisionTable,
 <p><a class="ref" href="#bg-the-physical-garage-and-its-coordinate-system">Section 3</a> introduced three views of the garage. This section opens them up: what each class stores, in which container, how each query is answered and what it costs. All four classes are in <code>common_ros</code> (<code>sources/repomix-common-ros.xml</code>). The <code>Scheduler</code> constructor builds them once, in a chain, and nothing changes them afterwards, so every call below is a read of a fixed structure. A plan never pays to build them.</p>
 <figure id="bg-fig-75_garage_model_classes">
   <img src="figures/75_garage_model_classes.svg" alt="The static garage model: four classes">
-  <figcaption>The four classes with their real members (abridged). <code>Layout</code> stores places; <code>PoseGraph</code> expands every node into poses and works out each pose's neighbours; <code>GarageGraph</code> copies that into a Boost graph that every search runs on; <code>CollisionTable</code> holds precomputed conflict sets. Solid arrows are members that point at another object; the dashed arrow is "built from" (the <code>GarageGraph</code> constructor reads the <code>PoseGraph</code> and keeps no pointer to it).</figcaption>
+  <figcaption>The four classes with their real members (abridged). <code>Layout</code> stores places; <code>PoseGraph</code> expands every node into poses and works out each pose's neighbours; <code>GarageGraph</code> copies that into a Boost graph that every search runs on; <code>CollisionTable</code> holds precomputed conflict sets. Solid arrows are members that point at another object; the dashed arrow is "built from" (the <code>GarageGraph</code> constructor reads the <code>PoseGraph</code> and keeps no pointer to it). Below them are the value types the four classes are made of: the ROS messages <code>GaragePoseMsg</code>, <code>GarageNodeMsg</code>, <code>GeometricPoseMsg</code>, <code>SizedPoseMsg</code>, <code>ParkingWindowMsg</code> and <code>GarageFloorMsg</code>, and the C++ types <code>Vrc</code>, <code>Transition</code>, <code>PoseNeighbor</code>, <code>Vertex</code>/<code>Edge</code>, the <code>CollisionTable</code> key aliases and <code>CollisionEntityId</code>. Each box says which member holds it. The <code>.msg</code> files are not in the snapshots: message fields are the ones <code>common_ros</code> reads and writes.</figcaption>
 </figure>
 <pre><code class="language-cpp">// src/scheduler.cpp — Scheduler::Scheduler(...): one chain, built once
 layout_(std::make_shared&lt;Layout>(layout_filepath)),  // parse the YAML

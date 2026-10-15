@@ -131,6 +131,11 @@
   to: bg-ros-messages-and-services
   def: One executable command with parent indices into Schedule.nodes; the only thing Dispatch executes.
 
+- term: node, heading, pose
+  code: [GarageNodeMsg, GaragePoseMsg, GaragePose, GeometricPoseMsg, GeometricPose, SizedPoseMsg, heading, node_id]
+  to: bg-node-heading-pose-vertex-the-words-for-places
+  def: A node is a layout place; a heading is the direction faced (degrees, 0 = +y, CCW+); a pose is node + heading.
+
 - term: Layout
   code: [Layout, layout_, LayoutSPtr, GetNodeById, "layout_->GetNodeById"]
   to: bg-layout-places-in-sorted-vectors-and-ordered-maps

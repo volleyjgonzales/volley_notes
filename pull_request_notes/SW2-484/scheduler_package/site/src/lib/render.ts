@@ -101,6 +101,9 @@ interface Parsed {
   figures: number;
 }
 
+/** every element id in every document (headings, figures, table cells, ...) */
+const ALL_IDS = new Set<string>();
+
 function parse(config: DocConfig, targets: Map<string, Target>): Parsed {
   const source = fs.readFileSync(path.join(SITE_ROOT, config.file), 'utf8');
   const tree = fromHtml(source, { fragment: true }) as Root;
@@ -118,6 +121,11 @@ function parse(config: DocConfig, targets: Map<string, Target>): Parsed {
   let figs = 0;
   const seen = new Set<string>();
   visit(tree, 'element', (node) => {
+    if (node.properties?.id) {
+      const anyId = String(node.properties.id);
+      if (ALL_IDS.has(anyId)) throw new BuildError(`${config.file}: duplicate id ${anyId}`);
+      ALL_IDS.add(anyId);
+    }
     const m = /^h([2-4])$/.exec(node.tagName);
     if (m) {
       const id = String(node.properties.id ?? '');
@@ -166,7 +174,11 @@ function resolveRefs(p: Parsed, targets: Map<string, Target>) {
       return;
     }
     const t = targets.get(id);
-    if (!t) throw new BuildError(`${p.config.file}: link to missing id ${href} ("${toString(node)}")`);
+    if (!t) {
+      if (!ALL_IDS.has(id) || isRef) throw new BuildError(`${p.config.file}: link to missing id ${href} ("${toString(node)}")`);
+      node.properties.className = [...cls(node), 'xref'];
+      return;
+    }
     if (isRef) {
       // keep the lead word the author wrote ("section", "Sections", "Figure"), replace the number
       const old = toString(node);
