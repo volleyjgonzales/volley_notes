@@ -1,0 +1,130 @@
+# Type definitions shown in the hover window over a type name.
+#
+# ROS messages need no entry: every interfaces/msg/X.msg in sources/repomix-interfaces.xml is picked
+# up automatically for the inline-code spellings `XMsg` and `XMsg[]`, and for the bare spelling `X`
+# when X is listed under `bare_msgs` below (bare names such as Edge or Payload are ambiguous).
+#
+# C++ entries are extracted from the snapshots at build time, so they cannot drift from the source:
+#   names:  inline-code spellings that show this definition (exact text of a `code` span)
+#   from:   snapshot (sources/repomix-<from>.xml)
+#   file:   path inside the snapshot
+#   parts:  one or more line prefixes (leading spaces ignored). Each extract starts at the first line
+#           with that prefix (plus the comment / template lines directly above it) and ends at the
+#           first ';' outside braces. Parts are joined with a blank line.
+# The build fails if a file or prefix is missing.
+
+bare_msgs: [GaragePose, GarageNode, GeometricPose, SizedPose, Guid, ActionNode, ScheduledJobData,
+  SchedulerJob, PlanRequest, PlanResponse, GarageEntityId, ParkingWindow, DiscreteBayState]
+
+cpp:
+  # ---- common_ros: the garage model
+  - names: [Transition]
+    from: common-ros
+    file: include/common_ros/garage_graph.hpp
+    parts: ["struct Transition {", "enum class TransitionType"]
+  - names: [TransitionType, LOCOMOTE, STRAFE, ROTATION, VRC_TRANSITION, "TransitionType::VRC_TRANSITION"]
+    from: common-ros
+    file: include/common_ros/garage_graph.hpp
+    parts: ["enum class TransitionType"]
+  - names: [BoostPoseGraph]
+    from: common-ros
+    file: include/common_ros/garage_graph.hpp
+    parts: ["using BoostPoseGraph", "struct Transition {"]
+  # inside the DAG section, `Vertex` is DagBase's vertex, not GarageGraph's
+  - names: [Vertex, Edge]
+    only_h2: [bg-directed-acyclic-graphs-then-scheduleeventdag]
+    title: "DagBase<T>::Vertex"
+    from: planner-core
+    file: include/planner_core/event_dag.hpp
+    parts: ["using DagT = ", "using Vertex = typename DagT", "using Edge = typename DagT"]
+  - names: [Vertex, "GarageGraph::Vertex", "std::optional<Vertex>", "GarageGraph::Edge"]
+    title: "GarageGraph::Vertex"
+    from: common-ros
+    file: include/common_ros/garage_graph.hpp
+    parts: ["using Vertex = ", "using Edge = ", "using BoostPoseGraph"]
+  - names: [GarageGraph, "volley::GarageGraph"]
+    from: common-ros
+    file: include/common_ros/garage_graph.hpp
+    parts: ["class GarageGraph {"]
+  - names: [Layout]
+    from: common-ros
+    file: include/common_ros/layout.hpp
+    parts: ["class Layout {"]
+  - names: [LayoutSPtr]
+    from: common-ros
+    file: include/common_ros/layout.hpp
+    parts: ["using LayoutSPtr = "]
+  - names: [Vrc]
+    from: common-ros
+    file: include/common_ros/layout.hpp
+    parts: ["struct Vrc {"]
+  - names: [PoseGraph]
+    from: common-ros
+    file: include/common_ros/pose_graph.hpp
+    parts: ["class PoseGraph {"]
+  - names: [PoseNeighbor]
+    from: common-ros
+    file: include/common_ros/pose_graph.hpp
+    parts: ["enum class PoseNeighbor"]
+  - names: [CollisionTable, "volley::CollisionTable"]
+    from: common-ros
+    file: include/common_ros/collision_geometry.hpp
+    parts: ["class CollisionTable {"]
+  - names: [CollisionEntityId, CollisionEntityId_t, "volley::CollisionEntityId_t", VertexCollisionIdMap, BAY_ODP, TRAY_LEGS]
+    from: common-ros
+    file: include/common_ros/collision_geometry.hpp
+    parts: ["using CollisionEntityId_t", "enum class CollisionEntityId", "using VertexCollisionIdMap"]
+  - names: [DiscreteGarageState, "volley::DiscreteGarageState"]
+    from: common-ros
+    file: include/common_ros/discrete_garage_state.hpp
+    parts: ["class DiscreteGarageState {"]
+  - names: [GarageOccupancyChecker, "GarageOccupancyChecker<T>"]
+    from: common-ros
+    file: include/common_ros/garage_occupancy_checker.hpp
+    parts: ["class GarageOccupancyChecker {"]
+  # ---- planner_core: events and the DAG
+  - names: [ScheduleEvent, ScheduleEventSPtr, "std::shared_ptr<ScheduleEvent>", "std::shared_ptr<volley::ScheduleEvent>"]
+    from: planner-core
+    file: include/planner_core/schedule_events.hpp
+    parts: ["class ScheduleEvent {", "using ScheduleEventSPtr"]
+  - names: [AgvMove]
+    from: planner-core
+    file: include/planner_core/schedule_events.hpp
+    parts: ["class AgvMove : public ScheduleEvent"]
+  - names: [TrayMove, "volley::TrayMove"]
+    from: planner-core
+    file: include/planner_core/schedule_events.hpp
+    parts: ["class TrayMove : public ScheduleEvent"]
+  - names: [BayTransition]
+    from: planner-core
+    file: include/planner_core/schedule_events.hpp
+    parts: ["class BayTransition : public ScheduleEvent"]
+  - names: [VecsTransition]
+    from: planner-core
+    file: include/planner_core/schedule_events.hpp
+    parts: ["class VecsTransition : public ScheduleEvent"]
+  - names: [VrcTransition]
+    from: planner-core
+    file: include/planner_core/schedule_events.hpp
+    parts: ["class VrcTransition : public ScheduleEvent"]
+  - names: [DagBase, "DagBase<T>"]
+    from: planner-core
+    file: include/planner_core/event_dag.hpp
+    parts: ["class DagBase {"]
+  - names: [ScheduleEventDag, "volley::ScheduleEventDag", "ScheduleEventDag&"]
+    from: planner-core
+    file: include/planner_core/event_dag.hpp
+    parts: ["class ScheduleEventDag : public DagBase<ScheduleEvent>"]
+  # ---- scheduler
+  - names: [ScheduleContext, ScheduleContextSPtr, "std::shared_ptr<ScheduleContext>"]
+    from: scheduler
+    file: include/scheduler/scheduler.hpp
+    parts: ["class ScheduleContext {", "using ScheduleContextSPtr"]
+  - names: [SchedulerParams]
+    from: scheduler
+    file: include/scheduler/scheduler.hpp
+    parts: ["struct SchedulerParams {"]
+  - names: [Scheduler]
+    from: scheduler
+    file: include/scheduler/scheduler.hpp
+    parts: ["class Scheduler {"]

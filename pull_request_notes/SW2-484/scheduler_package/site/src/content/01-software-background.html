@@ -695,14 +695,105 @@ private:
   std::unordered_map&lt;uint32_t, int16_t> node_retrieval_heading_;     // InitRetrievalHeadings()
 };
 </code></pre>
+<h4 id="bg-reading-the-boost-adjacency-list-type">Reading the <code>boost::adjacency_list</code> type</h4>
+<p><code>boost::adjacency_list</code> is a class template from the Boost Graph Library (BGL) with seven template parameters. <code>BoostPoseGraph</code> passes the first five and takes Boost's defaults for the last two. The names in the first column are Boost's own; they are worth learning because Boost's documentation and error messages use them.</p>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Parameter (Boost's name)</th>
+      <th><code>BoostPoseGraph</code> passes</th>
+      <th>What it decides</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>OutEdgeList</td>
+      <td><code>boost::vecS</code></td>
+      <td>The container for each vertex's list of out-edges: a <code>std::vector</code>.</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>VertexList</td>
+      <td><code>boost::vecS</code></td>
+      <td>The container for the vertices: a <code>std::vector</code>. This choice is what makes <code>vertex_descriptor</code>, and so <code>Vertex</code>, a <code>std::size_t</code> index. With <code>listS</code> it would be an opaque pointer instead.</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Directed</td>
+      <td><code>boost::bidirectionalS</code></td>
+      <td>Edges are one-way, and each vertex keeps an in-edge list as well as an out-edge list, so <code>in_edges</code> and <code>in_degree</code> are cheap. <code>directedS</code> would keep only out-edges; <code>undirectedS</code> would make every edge two-way.</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>VertexProperties</td>
+      <td><code>GaragePoseMsg</code></td>
+      <td>The data stored <em>with</em> each vertex (Boost calls it the bundled vertex property), read with <code>base_graph_[v]</code>. It is the vertex's payload, not the vertex.</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>EdgeProperties</td>
+      <td><code>boost::property&lt;boost::edge_index_t, std::size_t, Transition></code></td>
+      <td>The data stored with each edge: an edge index and a <code>Transition</code>. Explained below.</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>GraphProperties</td>
+      <td>not passed: <code>boost::no_property</code></td>
+      <td>Data stored once for the whole graph: none.</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>EdgeList</td>
+      <td>not passed: <code>boost::listS</code></td>
+      <td>The container for the graph-wide edge list: a <code>std::list</code>. In a bidirectional graph each edge, with its properties, is stored here once; a vertex's out- and in-edge lists hold iterators into it.</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Why the vertex is not a <code>GaragePoseMsg</code>.</strong> It is natural to read the fourth argument as "the vertex type", but Boost's name for it is <em>VertexProperties</em>: data attached to each vertex. The vertex itself is always <code>vertex_descriptor</code>, and Boost derives that from parameter 2, not from parameter 4. This is how BGL works for every graph, not a Volley choice, and it has three practical consequences:</p>
+<ul>
+  <li><strong>Algorithms take descriptors.</strong> <code>breadth_first_search</code>, <code>dijkstra_shortest_paths</code> and <code>topological_sort</code> are written against descriptors and keep their working data (distance, colour, predecessor) per vertex. With <code>vecS</code> the descriptor is an index, so that data is a plain vector: <code>dist[v]</code>. <code>MakeVertexVectorPropertyMap&lt;T>()</code> builds exactly that.</li>
+  <li><strong>An index is cheap; a pose needs a hash.</strong> A <code>Vertex</code> is 8 bytes, copied and compared in one instruction. Finding the vertex for a pose needs a lookup, which is why <code>GarageGraph</code> adds <code>pose_to_vertex_</code>: Boost keeps no index from payload to vertex.</li>
+  <li><strong>The same shape carries any payload.</strong> <code>DagBase&lt;T></code> uses <code>adjacency_list&lt;vecS, vecS, bidirectionalS, std::shared_ptr&lt;T>></code>: its fourth argument is the event pointer, and its <code>Vertex</code> is also a <code>std::size_t</code> (<a class="ref" href="#bg-the-class-dagbaset-and-scheduleeventdag">section 12.3</a>).</li>
+</ul>
+<p><strong>The edge argument.</strong> <code>boost::property&lt;Tag, T, Base></code> is Boost's older way to attach <em>named</em> properties. It is a short chain, read left to right:</p>
+<ul>
+  <li><code>Tag = boost::edge_index_t</code>: the property's name, a tag type Boost predefines to mean "edge index";</li>
+  <li><code>T = std::size_t</code>: the type of the value stored under that name;</li>
+  <li><code>Base = Transition</code>: the rest of the chain. When the last link is a plain struct rather than another <code>property&lt;...></code>, Boost treats it as the bundled edge property, so <code>base_graph_[e]</code> returns a <code>Transition&amp;</code>.</li>
+</ul>
+<p>In memory each edge therefore carries roughly <code>{m_value: std::size_t, m_base: Transition}</code>, and the two parts are read in two different ways:</p>
+<pre><code class="language-cpp">// common_ros/src/garage_graph.cpp, GarageGraph::AddEdge (abridged)
+size_t next_edge_index = boost::num_edges(base_graph_);   // edges are numbered 0, 1, 2, ... as they are added
+std::tie(e, added) = boost::add_edge(pose_to_vertex_[src], pose_to_vertex_[dst],
+                                     {next_edge_index, transition},    // {m_value, m_base}
+                                     base_graph_);
+boost::put(edge_index_, e, next_edge_index);              // writes the same index again
+
+// reading an edge e
+std::size_t i = edge_index_[e];           // the named part: edge_index_ = boost::get(boost::edge_index, base_graph_)
+Transition&amp; t = base_graph_[e];          // the bundled part; for edge 44 -> 59: {type: LOCOMOTE, length: 2.857}
+</code></pre>
+<p><strong>Why an edge index at all.</strong> With <code>vecS</code> vertices Boost numbers vertices for free, but it does not number edges. An <code>edge_descriptor</code> (the <code>Edge</code> alias) is a small struct, <code>{m_source, m_target, m_eproperty}</code>: the two vertex numbers and a pointer to the edge's stored properties. That is enough to read the edge, but it cannot index a vector. <code>AddEdge</code> therefore stores <code>num_edges()</code> at insertion time as the edge's index, so edges are numbered 0 to <span class="math">E-1</span> in the order they were added. <code>MakeEdgeVectorPropertyMap&lt;T>()</code> and <code>edge_index_to_vertices_</code> use that number to keep per-edge data in plain vectors, the same pattern as for vertices.</p>
+<figure id="bg-fig-81_boost_pose_graph">
+  <img src="figures/81_boost_pose_graph.svg" alt="Inside BoostPoseGraph: template parameters and storage">
+  <figcaption>Inside <code>BoostPoseGraph</code>. Top: the seven template parameters, with Boost's names and what <code>BoostPoseGraph</code> passes; 6 and 7 are defaults. Middle: what Boost stores for Vertex 44 (<code>{node_id: 22, heading: 90}</code>). <code>m_vertices[44]</code> holds the pose and two lists of edge iterators. The edge 44 → 59 (to <code>{node_id: 41, heading: 90}</code>) is one node in the graph-wide <code>m_edges</code> list, holding the edge index and the <code>Transition</code>. Vertex 44's out-edge list and Vertex 59's in-edge list both point at that node. Bottom: the public calls that read each part. Boost member names are simplified.</figcaption>
+</figure>
 <figure id="bg-fig-76_garage_graph_vertex">
   <img src="figures/76_garage_graph_vertex.svg" alt="What a GarageGraph Vertex is">
-  <figcaption>What a <code>Vertex</code> is, on Pecos around W22. Top: the type definitions and the poses around W22, each ring one vertex, labelled with its <code>Vertex</code> value (<code>v44</code> = Vertex 44). Bottom, left to right: <code>pose_to_vertex_</code> turns <code>{node_id: 22, heading: 90}</code> into 44; entry 44 of the Boost vertex vector holds the pose and the out- and in-edge lists; each out-edge carries a <code>Transition</code>. Moves along a row (W22 to W41, W22 to P23) are <code>LOCOMOTE</code>, because heading 90 faces −x; moves between rows are <code>STRAFE</code>; turns in place are <code>ROTATION</code>.</figcaption>
+  <figcaption>What a <code>Vertex</code> is, on Pecos around W22. Top: the type definitions and the poses around W22, each ring one vertex, labelled with its <code>Vertex</code> value (<code>v44</code> = Vertex 44). Bottom, left to right: <code>pose_to_vertex_</code> turns <code>{node_id: 22, heading: 90}</code> into 44; entry 44 of the Boost vertex vector holds the pose and the out- and in-edge lists; each out-edge carries a <code>Transition</code> (how Boost stores these is in <a class="ref" href="#bg-fig-81_boost_pose_graph">Figure 12</a>). Moves along a row (W22 to W41, W22 to P23) are <code>LOCOMOTE</code>, because heading 90 faces −x; moves between rows are <code>STRAFE</code>; turns in place are <code>ROTATION</code>.</figcaption>
 </figure>
 <p><strong>What a vertex actually is:</strong></p>
 <ul>
   <li><strong>A number.</strong> With <code>vecS</code> as the vertex container, a Boost <code>vertex_descriptor</code> is a <code>std::size_t</code> index into the graph's internal vector of vertices. A <code>Vertex</code> is valid when it is less than <code>NumVertices()</code>; that is all <code>HasVertex</code> checks.</li>
-  <li><strong>What is stored at that index:</strong> the bundled <code>GaragePoseMsg</code> (<code>base_graph_[v]</code>) and, because the graph is <code>bidirectionalS</code>, two edge lists, out-edges and in-edges. Nothing else. There is no node type, no position and no occupancy at a vertex. Node facts come from the <code>Layout</code> (<code>GarageNodeFromVertex</code> looks the node up and copies it), and occupancy comes from <code>DiscreteGarageState</code>.</li>
+  <li><strong>What is stored at that index:</strong> one entry of Boost's vertex vector (<code>m_vertices[v]</code>, <a class="ref" href="#bg-fig-81_boost_pose_graph">Figure 12</a>) with three members:
+    <ul>
+      <li>the bundled <code>GaragePoseMsg</code>, read with <code>base_graph_[v]</code> (template parameter 4);</li>
+      <li>the out-edge list, a <code>std::vector</code> (parameter 1);</li>
+      <li>the in-edge list, present because the graph is <code>bidirectionalS</code> (parameter 3).</li>
+    </ul>
+    The edge lists hold the target vertex and an iterator into the graph-wide edge list; each edge's index and <code>Transition</code> are stored there once, not in the vertex. Nothing else is stored: there is no node type, no position and no occupancy at a vertex. Node facts come from the <code>Layout</code> (<code>GarageNodeFromVertex</code> looks the node up and copies it), and occupancy comes from <code>DiscreteGarageState</code>.</li>
   <li><strong>The numbering is the <code>PoseGraph</code> order:</strong> vertex <em>i</em> is pose index <em>i</em>, that is, node id ascending, then heading ascending. On Pecos, W22's poses <code>{node_id: 22, heading: -90}</code>, <code>{node_id: 22, heading: 0}</code>, <code>{node_id: 22, heading: 90}</code> and <code>{node_id: 22, heading: 180}</code> are vertices 42, 43, 44 and 45.</li>
   <li><strong>Numbers are stable.</strong> Nothing adds or removes vertices after construction, so a <code>Vertex</code> stays valid for the scheduler's lifetime. Compare <code>ScheduleEventDag</code>, where <code>Remove</code> renumbers later vertices (<a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">section 12.4</a>). A <code>Vertex</code> means nothing outside one layout: never store one, or compare one across layouts or builds.</li>
   <li><strong>Per-vertex data lives outside the graph.</strong> <code>MakeVertexVectorPropertyMap&lt;T>()</code> returns a vector indexed by <code>Vertex</code>, and <code>MakeEdgeVectorPropertyMap&lt;T>()</code> a vector indexed by edge index. That is the pattern for anything a search needs per vertex or per edge. <code>GraphFilterProperties::IsEnabled(vertex)</code> and <code>IsEnabled(edge)</code> are in <code>motion_planner</code>, which is not in the snapshots, so how they store their flags is not confirmed.</li>

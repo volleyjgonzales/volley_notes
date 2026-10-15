@@ -256,11 +256,12 @@ def garage_graph_vertex():
     code = code_panel(d, 0, 0, 760, [
         "// common_ros/garage_graph.hpp",
         "using BoostPoseGraph = boost::adjacency_list<",
-        "    boost::vecS,             // each vertex's out-edges: a std::vector",
-        "    boost::vecS,             // the vertices: a std::vector  -> Vertex is an index",
-        "    boost::bidirectionalS,   // also keep in-edges (GetInEdges)",
-        "    GaragePoseMsg,           // bundled vertex property: the pose",
-        "    boost::property<boost::edge_index_t, std::size_t, Transition>>;  // edge: index + Transition",
+        "    boost::vecS,            // 1 OutEdgeList: each vertex's out-edges in a std::vector",
+        "    boost::vecS,            // 2 VertexList: vertices in a std::vector -> Vertex = index",
+        "    boost::bidirectionalS,  // 3 Directed: also keep in-edges (GetInEdges)",
+        "    GaragePoseMsg,          // 4 VertexProperties: data stored WITH each vertex",
+        "    boost::property<boost::edge_index_t, std::size_t, Transition>>;",
+        "                            // 5 EdgeProperties: edge index, then the Transition bundle",
         "",
         "class GarageGraph {",
         "  using Vertex = BoostPoseGraph::vertex_descriptor;  // std::size_t, 0 .. NumVertices()-1",
@@ -269,7 +270,7 @@ def garage_graph_vertex():
         "  std::unordered_map<GaragePoseMsg, Vertex> pose_to_vertex_;  // hash of (node_id, heading)",
         "};",
         "struct Transition { double length;  TransitionType type; };  // LOCOMOTE, STRAFE, ROTATION, VRC_TRANSITION",
-    ], title="The definition", size=11.5)
+    ], title="The definition (parameters 6 and 7 are Boost's defaults: no_property, listS)", size=11.5)
     # ---- right: mini map of W22's neighbourhood with vertex numbers ----
     xlim, ylim = (26.6, 39.2), (18.3, 25.2)
     s = 44
@@ -354,6 +355,202 @@ def garage_graph_vertex():
                    "(nodes by id, headings ascending, h and h+180). Out-edge order inside Boost is insertion order, "
                    "which follows the neighbour slots; the lists here are sorted. Headings are int16 in [-179, 180] "
                    "(GaragePose.msg), so the reciprocal of 90 is -90 and it sorts first.")
+    return d
+
+
+# ======================================================================================
+# 81 — reading BoostPoseGraph: the seven template parameters and what Boost stores
+# ======================================================================================
+
+def _wrap_words(s, width, size, family="sans", weight=400):
+    out, cur = [], ""
+    for w in s.split():
+        t = (cur + " " + w).strip()
+        if cur and text_width(t, size, family, weight) > width:
+            out.append(cur)
+            cur = w
+        else:
+            cur = t
+    if cur:
+        out.append(cur)
+    return out
+
+
+@figure("81_boost_pose_graph", "Inside BoostPoseGraph", DOC1)
+def boost_pose_graph():
+    d = Doc("81_boost_pose_graph", "Inside BoostPoseGraph",
+            "The seven template parameters of boost::adjacency_list as BoostPoseGraph fills them, and what Boost "
+            "stores for Vertex 44: a vector entry holding the pose and two edge lists that point into one "
+            "graph-wide edge list, where each edge's index and Transition are stored once.")
+    W = 1580
+    EV, VX, DR, GR = T.violet, GG, T.sky, T.faint
+    # ---------------- 1. the seven parameters ----------------
+    d.text(0, 0, "1  The type: boost::adjacency_list has seven template parameters", size=15, weight=600, fill=T.fg)
+    d.text(0, 22, "Boost's parameter names (top) and what BoostPoseGraph passes (mono). The last two are not passed, "
+                  "so they take Boost's defaults.", size=12, fill=T.muted)
+    params = [
+        ("OutEdgeList", ["boost::vecS"], EV, False,
+         "container for each vertex's out-edge list: a std::vector"),
+        ("VertexList", ["boost::vecS"], VX, False,
+         "container for the vertices: a std::vector, so a vertex is named by its index (std::size_t)"),
+        ("Directed", ["boost::bidirectionalS"], DR, False,
+         "edges are one-way; each vertex also keeps an in-edge list (GetInEdges)"),
+        ("VertexProperties", ["GaragePoseMsg"], VX, False,
+         "data stored WITH each vertex (the bundle), read as base_graph_[v]. Not the vertex itself"),
+        ("EdgeProperties", ["property<edge_index_t,", "  std::size_t, Transition>"], EV, False,
+         "data stored with each edge: an edge index, then the Transition bundle, read as base_graph_[e]"),
+        ("GraphProperties", ["no_property"], GR, True,
+         "default: nothing is stored for the graph as a whole"),
+        ("EdgeList", ["listS"], EV, True,
+         "default: every edge sits once in a graph-wide std::list; vertex edge lists point into it"),
+    ]
+    gap = 12
+    cw = (W - gap * 6) / 7
+    ch = 150
+    y0 = 44
+    for k, (name, arg, col, dflt, what) in enumerate(params):
+        x = k * (cw + gap)
+        d.rect(x, y0, cw, ch, rx=10, fill=T.card, stroke=col, sw=1.5, dash="6 4" if dflt else None)
+        num_badge_x = x + 20
+        d.circle(num_badge_x, y0 + 20, 11, fill=col)
+        d.text(num_badge_x, y0 + 20.5, str(k + 1), size=12, family="mono", weight=700, fill=T.bg, anchor="middle")
+        d.text(x + 38, y0 + 20, name, size=13, weight=600, fill=T.fg)
+        yy = y0 + 46
+        for ln in arg:
+            d.text(x + 14, yy, ln, size=11.5, family="mono", weight=600, fill=col)
+            yy += 17
+        yy += 6
+        for ln in _wrap_words(what, cw - 28, 11.5):
+            d.text(x + 14, yy, ln, size=11.5, fill=T.fg2)
+            yy += 16
+        if dflt:
+            d.text(x + 14, y0 + ch - 14, "(default)", size=11, family="mono", fill=T.faint)
+    # ---------------- 2. what is stored ----------------
+    y1 = y0 + ch + 56
+    d.text(0, y1, "2  What base_graph_ stores for Vertex 44 = {node_id: 22, heading: 90}", size=15, weight=600, fill=T.fg)
+    d.text(0, y1 + 22, "Boost internals, simplified (names from boost/graph/detail/adjacency_list.hpp; members are private to "
+                       "Boost: the code only uses the public calls in part 3).", size=12, fill=T.muted)
+    # the vertex number
+    vy = y1 + 82
+    chip_bb = label_pill(d, 0, vy, "Vertex v = 44", color=VX, size=13, weight=700)
+    d.text(0, vy + 26, "std::size_t", size=11.5, family="mono", fill=T.muted)
+    d.text(0, vy + 42, "just a number", size=11.5, fill=T.muted)
+    # the vertex vector
+    vx0 = 200
+    cellw = 92
+    d.text(vx0, vy - 34, "m_vertices : std::vector<stored_vertex>", size=12, family="mono", weight=600, fill=VX)
+    cells = ["...", "[42]", "[43]", "[44]", "[45]", "..."]
+    for i, c in enumerate(cells):
+        cx = vx0 + i * cellw
+        hl = c == "[44]"
+        d.rect(cx, vy - 18, cellw, 36, fill=T.tint(VX, 0.18, T.bg) if hl else T.card,
+               stroke=VX if hl else T.border_soft, sw=1.6 if hl else 1)
+        d.text(cx + cellw / 2, vy, c, size=12, family="mono", weight=700 if hl else 400,
+               fill=T.fg if hl else T.muted, anchor="middle")
+    connect(d, [(chip_bb.x1 + 6, vy), (vx0 - 2, vy)], kind="flow", color=VX, size=8)
+    c44 = vx0 + 3 * cellw
+    # the stored_vertex record
+    sx, sy, sw_ = vx0, vy + 60, 640
+    outs = out_edges((22, 90))
+    ins = [q for q in POSES if any(t == (22, 90) for t, _ in out_edges(q))]
+    rows = [
+        ("m_property", "GaragePoseMsg", "{node_id: 22, heading: 90}"),
+        ("m_out_edges", "std::vector<stored_edge_iter>", "  ".join(f"->{VERT[t]}" for t, _ in outs)),
+        ("m_in_edges", "std::vector<stored_edge_iter>", "  ".join(f"<-{VERT[q]}" for q in ins)),
+    ]
+    rh = 46
+    d.rect(sx, sy, sw_, 30 + rh * len(rows), rx=8, fill=T.card, stroke=VX, sw=1.5)
+    d.rect(sx, sy, sw_, 28, rx=8, fill=T.tint(VX, 0.16, T.bg))
+    d.text(sx + 12, sy + 14, "stored_vertex  (m_vertices[44])", size=12.5, family="mono", weight=600, fill=T.fg)
+    for i, (mem, typ, val) in enumerate(rows):
+        ry = sy + 30 + i * rh
+        if i:
+            d.line(sx, ry, sx + sw_, ry, stroke=T.border_soft)
+        d.text(sx + 12, ry + 15, mem, size=12, family="mono", weight=600, fill=VX if i == 0 else EV)
+        d.text(sx + 130, ry + 15, typ, size=11.5, family="mono", fill=T.muted)
+        d.text(sx + 12, ry + 33, val, size=12, family="mono", fill=T.fg)
+    connect(d, [(c44 + cellw / 2, vy + 18), (c44 + cellw / 2, sy)], kind="flow", color=VX, size=8)
+    out_row_y = sy + 30 + rh + 33
+    in_row_y = sy + 30 + 2 * rh + 33
+    # position of the "->59" token inside the out-edge row
+    toks = [f"->{VERT[t]}" for t, _ in outs]
+    k59 = [t for t, _ in outs].index((41, 90))
+    pre = "  ".join(toks[:k59]) + ("  " if k59 else "")
+    t59x = sx + 12 + text_width(pre, 12, "mono") + text_width(toks[k59], 12, "mono") / 2
+    d.rect(t59x - text_width(toks[k59], 12, "mono") / 2 - 4, out_row_y - 10, text_width(toks[k59], 12, "mono") + 8, 20,
+           rx=4, fill="none", stroke=EV, sw=1.4)
+    # the global edge list
+    ex = sx + sw_ + 90
+    ew = W - ex
+    d.text(ex, vy - 34, "m_edges : std::list<list_edge>   (EdgeList = listS)", size=12, family="mono", weight=600, fill=EV)
+    kind, length = transition((22, 90), (41, 90))
+    ny = vy - 18
+    d.rect(ex, ny, ew, 34, rx=6, fill=T.card, stroke=T.border_soft, dash="4 4")
+    d.text(ex + ew / 2, ny + 17, "... one node per directed edge (E nodes) ...", size=11.5, fill=T.muted, anchor="middle")
+    ly = ny + 50
+    lines = [
+        ("list_edge", T.fg, 600),
+        ("  m_source   : 44", T.fg2, 400),
+        (f"  m_target   : {VERT[(41, 90)]}            // {{node_id: 41, heading: 90}}", T.fg2, 400),
+        ("  m_property : property<edge_index_t, size_t, Transition>", T.fg2, 400),
+        ("    m_value  : i                 // edge index = num_edges() when AddEdge ran", T.fg2, 400),
+        (f"    m_base   : Transition {{type: {kind}, length: {length.split()[0]}}}   // metres", T.fg2, 400),
+    ]
+    lh = 19
+    lhgt = 16 + lh * len(lines)
+    d.rect(ex, ly, ew, lhgt, rx=8, fill=T.tint(EV, 0.10, T.bg), stroke=EV, sw=1.5)
+    for i, (s, col, wgt) in enumerate(lines):
+        if "//" in s:
+            j = s.index("//")
+            d.rich(ex + 12, ly + 18 + i * lh, [(s[:j], "mono", wgt, col), (s[j:], "mono", 400, T.faint)], size=11.5)
+        else:
+            d.text(ex + 12, ly + 18 + i * lh, s, size=11.5, family="mono", weight=wgt, fill=col)
+    # arrows: out-edge entry of 44 and in-edge entry of 59 both point at the same list node
+    connect(d, [(t59x, out_row_y + 10), (t59x, out_row_y + 13), (ex - 40, out_row_y + 13), (ex - 40, ly + 30),
+                (ex, ly + 30)], kind="flow", color=EV, size=8)
+    in59 = ly + lhgt + 56
+    d.text(ex, in59, f"m_vertices[{VERT[(41, 90)]}].m_in_edges  =  [ ...  <-44  ... ]", size=12, family="mono",
+           fill=T.fg2)
+    in_pre = f"m_vertices[{VERT[(41, 90)]}].m_in_edges  =  [ ...  "
+    t44x = ex + text_width(in_pre, 12, "mono") + text_width("<-44", 12, "mono") / 2
+    d.rect(t44x - text_width("<-44", 12, "mono") / 2 - 4, in59 - 10, text_width("<-44", 12, "mono") + 8, 20, rx=4,
+           fill="none", stroke=EV, sw=1.4)
+    connect(d, [(t44x, in59 - 10), (t44x, ly + lhgt)], kind="flow", color=EV, size=8)
+    d.text(t44x + 12, in59 - 26, "the same list node: each edge is stored once", size=11.5, fill=EV)
+    d.text(sx, sy + 30 + rh * len(rows) + 20, "stored_edge_iter = {m_target, iterator into m_edges}: the edge's data "
+           "is not copied into the vertex", size=11.5, fill=T.muted)
+    # ---------------- 3. reading it ----------------
+    y3 = max(sy + 30 + rh * len(rows) + 20, in59) + 60
+    d.text(0, y3, "3  Reading it through the public API", size=15, weight=600, fill=T.fg)
+    code = code_panel(d, 0, y3 + 20, 880, [
+        "// a vertex is a number; the pose is its bundle",
+        "GaragePoseMsg& p = base_graph_[44];              // {node_id: 22, heading: 90}",
+        "auto [it, end] = boost::out_edges(44, base_graph_);   // walks m_out_edges",
+        "",
+        "// an edge is a descriptor, not a number:",
+        "// Edge e = {m_source: 44, m_target: 59, m_eproperty: pointer to the list node's property}",
+        "Edge e = boost::edge(44, 59, base_graph_).first;  // scans 44's out-edges",
+        f"Transition& t = base_graph_[e];                   // {{type: {kind}, length: {length.split()[0]}}}",
+        "std::size_t i = edge_index_[e];                   // = boost::get(boost::edge_index, base_graph_)[e]",
+    ], title="garage_graph.cpp style", size=12)
+    note(d, code.x1 + 30, y3 + 20, W - code.x1 - 30,
+         "Parameter 4 is named VertexProperties: data Boost keeps next to each vertex. The vertex itself is "
+         "always vertex_descriptor, which Boost derives from parameter 2: with vecS it is the vector index. "
+         "That index is what every Boost algorithm takes, and it makes per-vertex arrays plain vectors "
+         "(dist[v], MakeVertexVectorPropertyMap<T>). Finding a vertex from a pose needs a hash, so GarageGraph "
+         "adds pose_to_vertex_. DagBase<T> uses the same shape with std::shared_ptr<T> as its bundle.",
+         title="Why Vertex is not a GaragePoseMsg", accent=VX, size=12)
+    frame(d, title="Inside BoostPoseGraph: template parameters and storage",
+          subtitle="using BoostPoseGraph = boost::adjacency_list<vecS, vecS, bidirectionalS, GaragePoseMsg, "
+                   "boost::property<boost::edge_index_t, std::size_t, Transition>>. Vertex 44 is an index; the pose "
+                   "is stored in that vector entry; each edge's index and Transition are stored once in the edge list.",
+          badge_key="as-built",
+          legend=[("box", VX, "vertex storage"), ("box", EV, "edge storage"), ("box", DR, "direction"),
+                  ("dashbox", GR, "default (not passed)"), ("arrow", T.fg2, "points to")],
+          footnote="Template parameters and Boost member names: boost/graph/adjacency_list.hpp and "
+                   "boost/graph/detail/adjacency_list.hpp (BGL), simplified. BoostPoseGraph, AddEdge and edge_index_ "
+                   "from sources/repomix-common-ros.xml (garage_graph.hpp/.cpp). Vertex numbers and the Transition "
+                   "recomputed from the Pecos YAML; the edge index i is the insertion order and is not computed here.")
     return d
 
 

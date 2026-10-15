@@ -49,6 +49,8 @@ interface GlossaryEntry {
   text?: string[];
   to: string;
   def: string;
+  /** spelling in definitions.yaml / interfaces whose definition the hover window shows */
+  decl?: string;
 }
 
 export interface ResolvedTerm extends GlossaryEntry {
@@ -284,7 +286,7 @@ function replaceInText(
 }
 
 function linkDocMentions(p: Parsed) {
-  replaceInText(p.tree, /\b[Dd]oc (0[123])\b/g, (m) => {
+  replaceInText(p.tree, /\b[Dd]oc (0[1-4])\b/g, (m) => {
     const d = docByNum(m[1]);
     if (!d || d.num === p.config.num) return null;
     return [h('a.xref.docref', { href: `#doc-${d.key}` }, m[0])];
@@ -295,7 +297,154 @@ function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function linkKeywords(p: Parsed, terms: ResolvedTerm[]) {
+// ---------------------------------------------------------------------------------------------
+// type definitions for the hover window (src/data/definitions.yaml + the source snapshots)
+
+interface DeclEntry {
+  names: string[];
+  from: string;
+  file: string;
+  parts: string[];
+  title?: string;
+  only_h2?: string[];
+}
+export interface Decl {
+  id: string;
+  title: string;
+  src: string;
+  lang: 'cpp' | 'msg';
+  code: string;
+  lines: number;
+}
+interface DeclRule {
+  decl: Decl;
+  only?: Set<string>;
+}
+export type DeclIndex = Map<string, DeclRule[]>;
+
+const DECL_MAX_LINES = 160;
+const snapshots = new Map<string, string>();
+
+function snapshotFile(from: string, file: string): string {
+  let s = snapshots.get(from);
+  if (s === undefined) {
+    const f = path.join(REPO_ROOT, 'sources', `repomix-${from}.xml`);
+    if (!fs.existsSync(f)) throw new BuildError(`definitions: snapshot ${f} not found`);
+    s = fs.readFileSync(f, 'utf8');
+    snapshots.set(from, s);
+  }
+  const head = `<file path="${file}">\n`;
+  const a = s.indexOf(head);
+  if (a < 0) throw new BuildError(`definitions: ${file} is not in repomix-${from}.xml`);
+  return s.slice(a + head.length, s.indexOf('\n</file>', a));
+}
+
+/** One declaration: from the line starting with `prefix` (plus the comments/template line above it)
+ *  to the first ';' outside braces. */
+function extractDecl(src: string, prefix: string, where: string): string[] {
+  const lines = src.split('\n');
+  const i = lines.findIndex((l) => l.trimStart().startsWith(prefix));
+  if (i < 0) throw new BuildError(`definitions: "${prefix}" not found in ${where}`);
+  let a = i;
+  while (a > 0 && /^\s*(\/\/|template\s*<)/.test(lines[a - 1])) a--;
+  let depth = 0;
+  let j = i;
+  for (; j < lines.length; j++) {
+    const code = lines[j].replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/\/\/.*$/, '');
+    for (const ch of code) {
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+    }
+    if (depth === 0 && code.includes(';')) break;
+  }
+  const block = lines.slice(a, j + 1);
+  const ind = Math.min(...block.filter((l) => l.trim()).map((l) => /^ */.exec(l)![0].length));
+  return block.map((l) => l.slice(ind));
+}
+
+const declId = (title: string) => 'decl-' + title.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+function loadDecls(): DeclIndex {
+  const cfg = YAML.parse(fs.readFileSync(path.join(SITE_ROOT, 'src/data/definitions.yaml'), 'utf8')) as {
+    bare_msgs: string[];
+    cpp: DeclEntry[];
+  };
+  const index: DeclIndex = new Map();
+  const add = (name: string, rule: DeclRule) => {
+    const list = index.get(name) ?? [];
+    list.push(rule);
+    index.set(name, list);
+  };
+  for (const e of cfg.cpp) {
+    const src = snapshotFile(e.from, e.file);
+    const blocks = e.parts.map((pfx) => extractDecl(src, pfx, `${e.from}:${e.file}`));
+    let lines = blocks.flatMap((b, k) => (k ? ['', ...b] : b));
+    const total = lines.length;
+    if (total > DECL_MAX_LINES) {
+      lines = [...lines.slice(0, DECL_MAX_LINES), `// ... ${total - DECL_MAX_LINES} more lines in ${e.file}`];
+    }
+    const title = e.title ?? e.names[0];
+    const decl: Decl = { id: declId(title), title, src: e.file, lang: 'cpp', code: lines.join('\n'), lines: total };
+    const rule: DeclRule = { decl, only: e.only_h2 ? new Set(e.only_h2) : undefined };
+    for (const n of e.names) add(n, rule);
+  }
+  const all = (() => {
+    snapshotFile('interfaces', 'interfaces/msg/GaragePose.msg');
+    return snapshots.get('interfaces')!;
+  })();
+  const bare = new Set(cfg.bare_msgs);
+  for (const m of all.matchAll(/<file path="(interfaces\/msg\/(\w+)\.msg)">\n([\s\S]*?)\n<\/file>/g)) {
+    const [, file, name, body] = m;
+    const code = body.replace(/\s+$/, '');
+    const decl: Decl = { id: declId(name + 'Msg'), title: `${name}Msg`, src: file, lang: 'msg', code, lines: code.split('\n').length };
+    const rule: DeclRule = { decl };
+    for (const n of [`${name}Msg`, `${name}Msg[]`, ...(bare.has(name) ? [name, `${name}[]`] : [])]) add(n, rule);
+  }
+  for (const b of bare) if (!index.has(b)) throw new BuildError(`definitions: bare_msgs ${b} has no interfaces/msg/${b}.msg`);
+  return index;
+}
+
+function declFor(index: DeclIndex, name: string, h2: string): DeclRule | undefined {
+  return index.get(name)?.find((r) => !r.only || r.only.has(h2));
+}
+
+/** ROS .msg highlighting: field types and comments (Shiki has no grammar for it). */
+function msgCode(code: string): ElementContent[] {
+  const out: ElementContent[] = [];
+  code.split('\n').forEach((line, k) => {
+    if (k) out.push(text('\n'));
+    const hash = line.indexOf('#');
+    const body = hash >= 0 ? line.slice(0, hash) : line;
+    const cm = hash >= 0 ? line.slice(hash) : '';
+    const m = /^(\s*)(\S+)(.*)$/.exec(body);
+    if (m) out.push(text(m[1]), h('span.m-t', m[2]), text(m[3]));
+    else out.push(text(body));
+    if (cm) out.push(h('span.m-c', cm));
+  });
+  return out;
+}
+
+const DECL_OPEN_LINES = 24;
+
+function declTree(decls: Decl[]): Root {
+  return {
+    type: 'root',
+    children: decls.map((d) => {
+      const pre =
+        d.lang === 'msg'
+          ? h('pre.decl-msg', [h('code', msgCode(d.code))])
+          : h('pre', [h('code.language-cpp', d.code)]);
+      const head = h('div.decl-head', [h('code', d.title), h('span', d.src)]);
+      const body =
+        d.lines > DECL_OPEN_LINES
+          ? h('details.decl-more', [h('summary', `Show definition (${d.lines} lines)`), pre])
+          : pre;
+      return h('div.decl', { 'data-decl': d.id }, [head, body]);
+    }),
+  };
+}
+
+function linkKeywords(p: Parsed, terms: ResolvedTerm[], decls: DeclIndex, usedDecls: Map<string, Decl>) {
   const byCode = new Map<string, ResolvedTerm>();
   const phrases: { phrase: string; term: ResolvedTerm }[] = [];
   for (const t of terms) {
@@ -311,8 +460,23 @@ function linkKeywords(p: Parsed, terms: ResolvedTerm[]) {
   let h2 = '';
   let h3 = '';
   let used = new Set<string>();
-  const kwLink = (t: ResolvedTerm, children: ElementContent[]) =>
-    h('a.kw', { href: `#${t.id}`, 'data-term': t.term, 'data-def': t.def, 'data-target': t.targetTitle }, children);
+  const useDecl = (r?: DeclRule) => {
+    if (!r) return undefined;
+    usedDecls.set(r.decl.id, r.decl);
+    return r.decl.id;
+  };
+  const kwLink = (t: ResolvedTerm, children: ElementContent[], rule?: DeclRule) =>
+    h(
+      'a.kw',
+      {
+        href: `#${t.id}`,
+        'data-term': t.term,
+        'data-def': t.def,
+        'data-target': t.targetTitle,
+        'data-decl': useDecl(rule ?? (t.decl ? declFor(decls, t.decl, h2) : undefined)),
+      },
+      children,
+    );
   const inTarget = (t: ResolvedTerm) => t.id === h2 || t.id === h3;
 
   for (const block of p.tree.children) {
@@ -327,12 +491,18 @@ function linkKeywords(p: Parsed, terms: ResolvedTerm[]) {
     }
     if (!isEl(block)) continue;
     visit(block, 'element', (node, index, parent) => {
-      if (node.tagName === 'pre' || node.tagName === 'a' || /^h\d$/.test(node.tagName)) return SKIP;
+      if (['pre', 'a', 'summary'].includes(node.tagName) || /^h\d$/.test(node.tagName)) return SKIP;
       if (node.tagName !== 'code' || !parent || index === undefined) return;
-      const t = byCode.get(toString(node).trim());
-      if (!t || used.has(t.term) || inTarget(t)) return SKIP;
-      used.add(t.term);
-      (parent as Element).children[index] = kwLink(t, [node]);
+      const spelling = toString(node).trim();
+      const rule = declFor(decls, spelling, h2);
+      // a section-specific definition (e.g. DagBase's Vertex) also turns off the glossary link
+      const t = rule?.only ? undefined : byCode.get(spelling);
+      if (t && !used.has(t.term) && !inTarget(t)) {
+        used.add(t.term);
+        (parent as Element).children[index] = kwLink(t, [node], rule);
+      } else if (rule) {
+        (parent as Element).children[index] = h('span.ty', { tabindex: 0, 'data-decl': useDecl(rule) }, [node]);
+      }
       return SKIP;
     });
     if (phraseRe) {
@@ -395,9 +565,9 @@ function insertPartDividers(p: Parsed) {
 // ---------------------------------------------------------------------------------------------
 // public
 
-let cache: { docs: RenderedDoc[]; terms: ResolvedTerm[] } | undefined;
+let cache: { docs: RenderedDoc[]; terms: ResolvedTerm[]; decls: string } | undefined;
 
-export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: ResolvedTerm[] }> {
+export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: ResolvedTerm[]; decls: string }> {
   if (cache) return cache;
   const targets = new Map<string, Target>();
   const parsed = DOCS.map((d) => parse(d, targets));
@@ -409,6 +579,12 @@ export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: Resolve
     return { ...g, id: g.to, doc: t.doc, targetTitle: (t.num ? `${t.num} ` : '') + t.title };
   });
 
+  const declIndex = loadDecls();
+  for (const g of glossary) {
+    if (g.decl && !declIndex.has(g.decl)) throw new BuildError(`glossary: "${g.term}" decl ${g.decl} has no definition`);
+  }
+  const usedDecls = new Map<string, Decl>();
+
   const out: RenderedDoc[] = [];
   for (const p of parsed) {
     resolveRefs(p, targets);
@@ -416,7 +592,7 @@ export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: Resolve
     renderMath(p);
     frameFigures(p);
     linkDocMentions(p);
-    linkKeywords(p, terms);
+    linkKeywords(p, terms, declIndex, usedDecls);
     wrapTables(p);
     decorateHeadings(p);
     insertPartDividers(p);
@@ -430,7 +606,15 @@ export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: Resolve
     const tree = (await proc.run(p.tree)) as Root;
     out.push({ config: p.config, title: p.title, html: proc.stringify(tree), headings: p.headings, figureCount: p.figures });
   }
-  cache = { docs: out, terms };
+  const shiki = unified()
+    .use(rehypeShiki, {
+      themes: { dark: 'github-dark-default', light: 'github-light-default' },
+      defaultColor: false,
+      fallbackLanguage: 'text',
+    })
+    .use(rehypeStringify);
+  const dtree = (await shiki.run(declTree([...usedDecls.values()]))) as Root;
+  cache = { docs: out, terms, decls: shiki.stringify(dtree) };
   return cache;
 }
 

@@ -5,10 +5,13 @@
 #   text:  plain-text phrases that link (whole words, case-sensitive)
 #   to:    id of the heading that explains the term (ids are in src/content/*.html; the build fails if it is missing)
 #   def:   one-line definition shown on hover and in search
+#   decl:  optional spelling from src/data/definitions.yaml (or an interfaces message, e.g. GaragePoseMsg)
+#          whose source definition the hover window also shows when the link is a plain-text phrase
 #
 # A term is not linked inside the section it points to.
 
 - term: ScheduleContext
+  decl: "ScheduleContext"
   code: [ScheduleContext, ScheduleContextSPtr, plan_ctx]
   to: bg-schedulecontext-the-per-call-workspace
   def: All mutable data for one Plan() call; created at the start of Plan() and freed when it returns.
@@ -34,6 +37,7 @@
   def: Position of a job in ctx->scheduled_jobs, stamped on every event the job creates.
 
 - term: ScheduledJobData
+  decl: "ScheduledJobDataMsg"
   code: [ScheduledJobDataMsg, ScheduledJobData, "ScheduledJobData[]", node_indices, bay_arrival_node_guid]
   to: bg-scheduledjobdatamsg-what-one-entry-holds
   def: One per pending job in the response - the job with its status, its action indices, and for a retrieve the bay-arrival action.
@@ -64,6 +68,7 @@
   def: The three ways job expansion adds DAG edges - same entity (A), same job's leaves (B), repark-specific (C).
 
 - term: DiscreteGarageState
+  decl: "DiscreteGarageState"
   code: [DiscreteGarageState, DGS]
   text: [DGS]
   to: bg-discretegaragestate-the-bridge-between-the-garage-and-the-planner
@@ -76,16 +81,19 @@
   def: A scratch copy of initial_state advanced by replaying events; recomputed many times, never stored.
 
 - term: ScheduleEvent
+  decl: "ScheduleEvent"
   code: [ScheduleEvent, ScheduleEventSPtr, "std::shared_ptr<ScheduleEvent>"]
   to: bg-event-types-and-polymorphism
   def: Abstract base class for one discrete state change that can be replayed against a DiscreteGarageState.
 
 - term: Event subclasses
+  decl: "ScheduleEvent"
   code: [TrayMove, AgvMove, BayTransition, VecsTransition, VrcTransition, "TrayMove::Apply", "volley::TrayMove"]
   to: bg-the-subclasses-and-what-apply-does
   def: The concrete ScheduleEvent types and what each one's Apply does.
 
 - term: ScheduleEventDag
+  decl: "ScheduleEventDag"
   code: [ScheduleEventDag, "volley::ScheduleEventDag", "DagBase<T>", DagBase, ctx->events, plan_ctx->events]
   to: bg-the-class-dagbaset-and-scheduleeventdag
   def: The event DAG - a Boost graph of shared_ptr<ScheduleEvent>; an edge u -> v means u finishes first.
@@ -117,52 +125,62 @@
   def: The Plan*Job methods - each turns one SchedulerJob into events and edges in ctx->events.
 
 - term: SchedulerJob
+  decl: "SchedulerJobMsg"
   code: [SchedulerJob, SchedulerJobMsg, pending_jobs, request_data.pending_jobs]
   to: bg-ros-messages-and-services
   def: A requested outcome such as TYPE_RETRIEVE; arrives in PlanRequest.pending_jobs.
 
 - term: PlanRequest / PlanResponse
+  decl: "PlanRequestMsg"
   code: [PlanRequest, PlanResponse, PlanRequestMsg, PlanResponseMsg, request_data, base_schedule]
   to: bg-ros-messages-and-services
   def: The Plan service's request and response messages.
 
 - term: ActionNode
+  decl: "ActionNodeMsg"
   code: [ActionNode, ActionNodeMsg, "ActionNode[]", Schedule.nodes]
   to: bg-ros-messages-and-services
   def: One executable command with parent indices into Schedule.nodes; the only thing Dispatch executes.
 
 - term: node, heading, pose
+  decl: "GaragePoseMsg"
   code: [GarageNodeMsg, GaragePoseMsg, GaragePose, GeometricPoseMsg, GeometricPose, SizedPoseMsg, heading, node_id]
   to: bg-node-heading-pose-vertex-the-words-for-places
   def: A node is a layout place; a heading is the direction faced (degrees, 0 = +y, CCW+); a pose is node + heading.
 
 - term: asset type
+  decl: "GarageEntityIdMsg"
   text: [asset type, asset types]
   code: [GarageEntityId, GarageEntityIdMsg, entity_type]
   to: bg-asset-types-and-the-other-kinds-of-type
   def: "The kind of physical thing: AGV ('a'), tray ('t'), bay ('b'), VECS ('v'), VRC ('r'); payloads use a Guid."
 
 - term: footprint type
+  decl: "CollisionEntityId"
   text: [footprint type, footprint types]
   to: bg-asset-types-and-the-other-kinds-of-type
   def: "CollisionEntityId, the shape the collision table checks: BAY_ODP 0, TRAY_LEGS 1, TRAY 2, AGV 3, PAYLOAD 4 + window."
 
 - term: Layout
+  decl: "Layout"
   code: [Layout, layout_, LayoutSPtr, GetNodeById, "layout_->GetNodeById"]
   to: bg-layout-places-in-sorted-vectors-and-ordered-maps
   def: The parsed layout YAML - nodes in a vector sorted by id, maps from id to index and type to ids, an undirected node graph.
 
 - term: PoseGraph
+  decl: "PoseGraph"
   code: [PoseGraph, pg_, GetAllowedHeadings, pose_neighbors_, PoseNeighbor]
   to: bg-posegraph-from-nodes-to-poses
   def: Expands each node into poses (every YAML heading and its reciprocal) and finds each pose's up to 8 neighbours.
 
 - term: GarageGraph and Vertex
+  decl: "GarageGraph::Vertex"
   code: [GarageGraph, gg_, "volley::GarageGraph", Vertex, "GarageGraph::Vertex", GetVertexFromPose, GetPoseFromVertex, GarageNodeFromVertex, BoostPoseGraph, pose_to_vertex_]
   to: bg-garagegraph-and-its-vertex
   def: The search graph. A Vertex is a std::size_t index into a Boost vertex vector; each entry holds one pose and its edge lists.
 
 - term: CollisionTable
+  decl: "CollisionTable"
   code: [CollisionTable, table_, "volley::CollisionTable", "table_.Query", ppmap_, CollisionEntityId]
   to: bg-collisiontable-precomputed-conflict-sets
   def: Precomputed conflict sets - for an entity type at a pose or edge, where another entity type may not be. Cached on disk.

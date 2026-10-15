@@ -5,7 +5,7 @@ import Rail from '../components/Rail.astro';
 import css from '../styles/site.css?raw';
 import appJs from '../scripts/app.js?raw';
 
-const { docs, terms } = await renderAll();
+const { docs, terms, decls } = await renderAll();
 
 // search index: every heading plus every glossary term
 const index = [
@@ -128,19 +128,20 @@ const built = new Date().toISOString().slice(0, 10);
             </article>
           ))
         }
-        <p class="built">Built {built} from the Markdown sources in the repository.</p>
+        <p class="built">Built {built} from the HTML sources in the repository.</p>
       </main>
       <Rail docs={docs} />
     </div>
 
     <div class="kw-tip" id="kw-tip" role="tooltip" hidden></div>
+    <div id="decls" hidden set:html={decls} />
 
     <dialog class="palette" id="palette" aria-label="Search">
       <div class="palette-box">
         <label class="palette-input">
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z" fill="currentColor"/></svg>
           <span class="sr-only">Search sections and terms</span>
-          <input id="palette-q" type="search" placeholder="Search sections and terms in all three documents" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palette-list" />
+          <input id="palette-q" type="search" placeholder="Search sections and terms in all four documents" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palette-list" />
           <kbd>Esc</kbd>
         </label>
         <ul id="palette-list" class="palette-list" role="listbox"></ul>

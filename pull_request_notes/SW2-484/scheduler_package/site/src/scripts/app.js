@@ -257,42 +257,82 @@
   });
 
   // ---------------------------------------------------------------- keyword tooltip
+  // a.kw = glossary link (definition text, and the type definition when it has one);
+  // span.ty = any other mention of a type that has a definition. The window is interactive so a
+  // long definition can be expanded and scrolled: it stays open while the pointer is over it.
   const tip = $('#kw-tip');
+  const TRIGGER = 'a.kw, .ty';
   let tipFor = null;
-  function showTip(a) {
-    tipFor = a;
-    tip.innerHTML = '';
-    const b = document.createElement('b');
-    b.textContent = a.dataset.term;
-    const p = document.createElement('span');
-    p.textContent = a.dataset.def;
-    const s = document.createElement('small');
-    s.textContent = '→ ' + a.dataset.target;
-    tip.append(b, p, s);
-    tip.hidden = false;
-    const r = a.getBoundingClientRect();
+  let hideTimer = 0;
+  function place() {
+    if (!tipFor) return;
+    const r = tipFor.getBoundingClientRect();
     const w = tip.offsetWidth;
     const hgt = tip.offsetHeight;
-    let x = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
-    let y = r.bottom + 8;
-    if (y + hgt > window.innerHeight - 8) y = r.top - hgt - 8;
+    const x = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    let y = r.bottom + 6;
+    if (y + hgt > window.innerHeight - 8) y = Math.max(8, r.top - hgt - 6);
     tip.style.left = x + 'px';
     tip.style.top = y + 'px';
   }
+  // opening a long definition keeps the window where it is (so the pointer stays on it) and lets it
+  // grow down to the bottom of the viewport, scrolling inside
+  function grow() {
+    const top = tip.getBoundingClientRect().top;
+    tip.style.maxHeight = Math.max(160, window.innerHeight - top - 8) + 'px';
+  }
+  function showTip(a) {
+    clearTimeout(hideTimer);
+    if (a === tipFor) return;
+    tipFor = a;
+    tip.innerHTML = '';
+    if (a.dataset.term) {
+      const b = document.createElement('b');
+      b.textContent = a.dataset.term;
+      const p = document.createElement('span');
+      p.textContent = a.dataset.def;
+      const s = document.createElement('small');
+      s.textContent = '→ ' + a.dataset.target;
+      tip.append(b, p, s);
+    }
+    const decl = a.dataset.decl && document.querySelector(`#decls [data-decl="${a.dataset.decl}"]`);
+    tip.classList.toggle('has-decl', !!decl);
+    if (decl) tip.append(decl.cloneNode(true));
+    tip.style.maxHeight = '';
+    tip.hidden = false;
+    tip.scrollTop = 0;
+    place();
+  }
   function hideTip() {
+    clearTimeout(hideTimer);
     tipFor = null;
     tip.hidden = true;
   }
-  document.addEventListener('mouseover', (e) => {
-    const a = e.target.closest('a.kw');
-    if (a && a !== tipFor) showTip(a);
-    else if (!a && tipFor) hideTip();
+  const hideSoon = () => {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideTip, 220);
+  };
+  tip.addEventListener('toggle', grow, true); // <details> opened or closed
+  // hover only for a real mouse; on touch screens a tap opens the window and a tap elsewhere closes it
+  document.addEventListener('pointerover', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const a = e.target.closest(TRIGGER);
+    if (a) showTip(a);
+    else if (tip.contains(e.target)) clearTimeout(hideTimer);
+    else if (tipFor) hideSoon();
   });
   document.addEventListener('focusin', (e) => {
-    const a = e.target.closest && e.target.closest('a.kw');
+    const a = e.target.closest && e.target.closest(TRIGGER);
     if (a) showTip(a);
-    else hideTip();
+    else if (!tip.contains(e.target)) hideTip();
   });
+  // touch: a tap on a type mention opens its definition (glossary links still navigate)
+  document.addEventListener('click', (e) => {
+    const ty = e.target.closest('.ty');
+    if (ty) showTip(ty);
+    else if (tipFor && !tip.contains(e.target)) hideTip();
+  });
+  document.addEventListener('keydown', (e) => e.key === 'Escape' && tipFor && hideTip());
   window.addEventListener('scroll', () => tipFor && hideTip(), { passive: true });
 
   // ---------------------------------------------------------------- code copy buttons
