@@ -232,3 +232,543 @@ def schedule_context_lifecycle():
                    "the stage whose function contains them. Stage 6 reads disabledness_filters through "
                    "IsMovePossible, called by SanityCheckEvents.")
     return d
+
+
+# --------------------------------------------------------------------------------------
+# 69 — scheduled_jobs through one Plan() call
+# --------------------------------------------------------------------------------------
+
+def _cells(d: Doc, x, y, items, *, w=40, h=26, gap=4):
+    """Draw a vector as a row of cells. items: list of (text, color)."""
+    if not items:
+        d.text(x, y + h / 2, "[ ]", size=12, family="mono", fill=T.faint)
+        return x + 24
+    for txt, col in items:
+        cw = max(w, text_width(txt, 11.5, "mono", 600) + 14)
+        d.rect(x, y, cw, h, rx=5, fill=T.tint(col, 0.16, T.bg), stroke=T.tint(col, 0.7, T.bg), sw=1)
+        d.text(x + cw / 2, y + h / 2, txt, size=11.5, family="mono", weight=600, fill=col, anchor="middle")
+        x += cw + gap
+    return x
+
+
+@figure("69_scheduled_jobs", "scheduled_jobs through one Plan() call", DOC1)
+def scheduled_jobs_flow():
+    d = Doc("69_scheduled_jobs", "How scheduled_jobs is built, used and rebuilt",
+            "Plan() routes each pending job either into plan_ctx->scheduled_jobs (planned) or straight into "
+            "result.scheduled_jobs (failed); at the end the planned ones are labelled, rebuilt and appended to result.")
+    OK, BAD, IDX = T.green, T.red, T.amber
+    W = 1340
+    # ---- the three objects involved ----
+    objs = [
+        ("request_data", "const PlanRequestMsg&  (Plan's parameter)", T.sky,
+         ["pending_jobs: SchedulerJob[]   <- what to plan", "(also id, base_state, base_schedule, ...)"]),
+        ("plan_ctx", "ScheduleContextSPtr = std::shared_ptr<ScheduleContext>", T.violet,
+         ["scheduled_jobs: vector<ScheduledJobDataMsg>", "events: ScheduleEventDag   (every event has a job_index)"]),
+        ("result", "PlanResponseMsg  (local in Plan(), returned at the end)", OK,
+         ["scheduled_jobs: ScheduledJobData[]  <- sent to Dispatch", "(also success, message, id, schedule)"]),
+    ]
+    ow = (W - 2 * 30) / 3
+    ob = []
+    for i, (nm, ty, col, lines) in enumerate(objs):
+        x = i * (ow + 30)
+        d.rect(x, 0, ow, 96, rx=10, fill=T.card, stroke=col, sw=1.5)
+        d.text(x + 14, 20, nm, size=14, family="mono", weight=700, fill=col)
+        d.text(x + 14, 40, ty, size=11, family="mono", fill=T.fg2)
+        for j, ln in enumerate(lines):
+            d.text(x + 14, 62 + j * 18, ln, size=11, family="mono", fill=T.muted if ln.startswith("(") else T.fg)
+        ob.append(BBox(x, 0, x + ow, 96))
+    d.text(0, 122, "Created at the top of Plan():  PlanResponseMsg result;  ...  plan_ctx = "
+                   "std::make_shared<ScheduleContext>(request_data.id, std::move(initial_state), now);",
+           size=11, family="mono", fill=T.muted)
+    # ---- the job loop ----
+    y0 = 160
+    d.text(0, y0, "The job loop:  for(const SchedulerJobMsg& job : request_data.pending_jobs) switch(job.type) { ... }",
+           size=13, weight=600, fill=T.fg)
+    cols = [(0, "request_data.pending_jobs[i]", "SchedulerJobMsg"),
+            (225, "job_index passed", "= plan_ctx->scheduled_jobs.size()"),
+            (470, "job method call (\"expansion\")", "Plan<Type>Job(plan_ctx, ..., job_index)"),
+            (760, "then", "which list gets the job"),
+            (985, "plan_ctx->scheduled_jobs", "after this step"),
+            (1175, "result.scheduled_jobs", "after this step")]
+    hy = y0 + 22
+    d.rect(-8, hy - 4, W + 16, 42, rx=6, fill=T.muted_bg, layer="under")
+    for x, h, sub in cols:
+        d.text(x, hy + 9, h, size=11, family="mono", weight=600, fill=T.fg2)
+        if sub:
+            d.text(x, hy + 26, sub, size=10, family="mono", fill=T.muted)
+    rows = [("A  RETRIEVE", "0", True, "PlanRetrieveJob: adds its events (bay", "transitions, tray moves), all job_index 0",
+             "plan_ctx->PushBackScheduledJob(job)", [("A", OK)], []),
+            ("B  INSERT", "1", False, "PlanInsertJob: adds 2 events (idx 1),", "then fails: returns {false, msg}",
+             "result.scheduled_jobs.push_back(\n  FailJob(job, msg))", [("A", OK)], [("B", BAD)]),
+            ("C  REPARK_TRAY", "1", True, "PlanReparkTrayJob: adds 1 event (idx 1);", "B's 2 leftovers now look like C's",
+             "plan_ctx->PushBackScheduledJob(job)", [("A", OK), ("C", OK)], [("B", BAD)]),
+            ("D  MOVE_AGV", "2", True, "PlanAgvMoveJob: adds 1 event (idx 2)", "returns success",
+             "plan_ctx->PushBackScheduledJob(job)", [("A", OK), ("C", OK), ("D", OK)], [("B", BAD)])]
+    y = hy + 50
+    for i, (job, idx, ok, m1, m2, act, sj, res) in enumerate(rows):
+        if i % 2 == 0:
+            d.rect(-8, y - 6, W + 16, 56, rx=6, fill=T.tint(T.card, 0.6, T.bg), layer="under")
+        d.text(0, y + 10, job, size=12, family="mono", weight=600, fill=T.fg)
+        d.text(225, y + 10, idx, size=13, family="mono", weight=700, fill=IDX)
+        chip(d, 470, y + 10, "success" if ok else "failure", OK if ok else BAD, size=10.5)
+        d.text(550, y + 10, m1, size=10.5, fill=T.fg2)
+        d.text(470, y + 32, m2, size=10.5, fill=T.fg2 if ok else BAD)
+        for j, ln in enumerate(act.split("\n")):
+            d.text(760, y + 10 + j * 16, ln, size=10.5, family="mono", fill=OK if ok else BAD)
+        _cells(d, 985, y - 2, sj)
+        _cells(d, 1175, y - 2, res)
+        y += 56
+    # ---- end of Plan() ----
+    y2 = y + 30
+    d.text(0, y2, "After the loop: tray and AGV assignment, motion planning, then the response is built", size=13,
+           weight=600, fill=T.fg)
+    steps = [
+        ("BuildActionDagFromMotions", "for each motion: action.job_id = plan_ctx->scheduled_jobs[event->GetJobIndex()]"
+         ".job.guid", [("A", OK), ("C", OK), ("D", OK)], ""),
+        ("BuildScheduledActionsArray", "copy into unordered_map<guid, ...>, append each action's position to its job's "
+         "node_indices, clear + refill the vector", [("C", OK), ("A", OK), ("D", OK)], "plan_ctx->scheduled_jobs"),
+        ("final loop in Plan()", "for each entry of plan_ctx->scheduled_jobs: job.state = STATE_EXECUTING; "
+         "RETRIEVE: bay_id, bay_arrival_node_guid; result.scheduled_jobs.push_back(entry)", None, ""),
+        ("SchedulerRos (plan service)", "after Plan() returns: job_data.job.time_planned = now for every entry",
+         None, ""),
+    ]
+    yy = y2 + 24
+    for nm, what, cells, tag in steps:
+        d.text(0, yy + 13, nm, size=11.5, family="mono", weight=600, fill=T.sky)
+        d.text(230, yy + 13, what, size=10.5, fill=T.fg2)
+        if cells:
+            _cells(d, 1175, yy, cells)
+        yy += 36
+    d.rect(-8, yy + 2, W + 16, 40, rx=8, fill=T.tint(OK, 0.06, T.bg), stroke=T.tint(OK, 0.5, T.bg), sw=1)
+    d.text(6, yy + 22, "result.scheduled_jobs  (what Dispatch receives)  =", size=12, family="mono", weight=600,
+           fill=T.fg)
+    _cells(d, 420, yy + 9, [("B  STATE_ERROR", BAD), ("C  EXECUTING", OK), ("A  EXECUTING", OK), ("D  EXECUTING", OK)])
+    d.text(940, yy + 22, "failures first, then planned jobs in hash-map order", size=11, fill=T.muted)
+    frame(d, title="How scheduled_jobs is built, used and rebuilt",
+          subtitle="Each pending job goes to exactly one list during the loop: plan_ctx->scheduled_jobs if its job "
+                   "method succeeds, result.scheduled_jobs (as a FailJob entry) if it fails. Planned jobs reach result "
+                   "only at the very end.",
+          badge_key="as-built",
+          legend=[("box", OK, "planned job"), ("box", BAD, "failed job"), ("box", IDX, "job_index"),
+                  ("box", T.violet, "plan_ctx (ScheduleContext)"), ("box", T.sky, "request_data")],
+          footnote="Event counts and the rebuild order are illustrative. If a later stage (tray or AGV assignment, "
+                   "CHUGG) fails, Plan() instead returns early and appends a FailJob entry for every pending job.")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 70 — last_entity_event during job expansion
+# --------------------------------------------------------------------------------------
+
+RULE_COL = {"A": T.green, "B": T.amber, "C": T.violet}
+
+
+@figure("70_last_entity_event", "last_entity_event during job expansion", DOC1)
+def last_entity_event_flow():
+    from fig_eventdag import _node, POS
+    d = Doc("70_last_entity_event", "last_entity_event while jobs are expanded",
+            "Six events are added in order. For each, the table shows the map lookup (rule A), the leaf edges "
+            "(rule B), the bay edge (rule C) and the map afterwards; the DAG on the right colours each edge by "
+            "the rule that added it.")
+    hx = [0, 36, 270, 430, 560, 670]
+    for x, h in zip(hx, ["#", "event added (job)", "rule A: key -> edge", "rule B", "rule C",
+                         "last_entity_event after"]):
+        d.text(x, 0, h, size=11, family="mono", weight=600, fill=T.muted)
+    rows = [
+        ("a", "BayTransition B21 (0)", "Bay 21: none", "-", "-", ["Bay21:a"]),
+        ("b", "TrayMove T21 -> ? (0)", "Tray 21: none", "a -> b", "-", ["Bay21:a", "Tray21:b"]),
+        ("c", "TrayMove T17 -> B21 (0)", "Tray 17: none", "b -> c", "a -> c", ["Bay21:a", "Tray21:b", "Tray17:c"]),
+        ("d", "BayTransition B21 (0)", "Bay 21: a -> d", "c -> d", "-", ["Bay21:d", "Tray21:b", "Tray17:c"]),
+        ("e", "TrayMove T19 -> P24 (1)", "Tray 19: none", "-", "-", ["... ", "Tray19:e"]),
+        ("f", "TrayMove T19 -> P23 (2)", "Tray 19: e -> f", "-", "-", ["... ", "Tray19:f"]),
+    ]
+    y = 22
+    for i, (k, ev, ra, rb, rc, mp) in enumerate(rows):
+        if i % 2 == 0:
+            d.rect(-8, y - 6, 1030, 34, rx=6, fill=T.tint(T.card, 0.6, T.bg), layer="under")
+        d.text(hx[0], y + 11, k, size=12.5, family="mono", weight=700, fill=T.fg)
+        d.text(hx[1], y + 11, ev, size=11.5, family="mono", fill=T.fg2)
+        d.text(hx[2], y + 11, ra, size=11.5, family="mono", fill=RULE_COL["A"] if "->" in ra else T.muted)
+        d.text(hx[3], y + 11, rb, size=11.5, family="mono", fill=RULE_COL["B"] if "->" in rb else T.faint)
+        d.text(hx[4], y + 11, rc, size=11.5, family="mono", fill=RULE_COL["C"] if "->" in rc else T.faint)
+        x = hx[5]
+        for m in mp:
+            changed = m.endswith(":" + k)
+            b = chip(d, x, y + 11, m, T.green if changed else T.fg2, size=10.5)
+            x = b.x1 + 4
+        y += 34
+    # DAG with coloured edges
+    gx0, gy0 = 0, y + 76
+    d.text(0, gy0 - 52, "The resulting DAG, edges coloured by rule", size=13, weight=600, fill=T.fg)
+    gxs, gys = 110, 70
+    boxes = {}
+    for k, (c, r) in POS.items():
+        boxes[k] = _node(d, gx0 + c * gxs, gy0 + r * gys, k)
+    edges = [("a", "b", "B"), ("b", "c", "B"), ("c", "d", "B"), ("a", "c", "C"), ("a", "d", "A"), ("e", "f", "A")]
+    for u, v, r in edges:
+        a, b = boxes[u], boxes[v]
+        col = RULE_COL[r]
+        if abs(a.cy - b.cy) < 1 and b.x0 - a.x1 < gxs:
+            pts = [(a.x1, a.cy), (b.x0, b.cy)]
+        else:
+            lift = 16 if v == "c" else 30
+            pts = [(a.cx + 8, a.y0), (a.cx + 8, a.y0 - lift), (b.cx - 8, a.y0 - lift), (b.cx - 8, b.y0)]
+        connect(d, pts, kind="flow", color=col, size=7, sw=1.8, radius=5)
+    note(d, 520, gy0 - 30, 500,
+         "Rule A links events of the same entity across jobs (e -> f). Rule B only links events of one job. "
+         "Rule C reads last_entity_event for a bay or VECS but never writes it. After job expansion nothing "
+         "updates the map again, so later stages keep their own (last_tray_event, last_agv_event).",
+         title="What the map is for", accent=T.green)
+    frame(d, title="last_entity_event while jobs are expanded",
+          subtitle="The map holds, for each AGV, tray, bay and VECS, the last event that touched it. "
+                   "UpdateLastEntityEvent(key, e) adds last[key] -> e if there is an entry, then sets last[key] = e.",
+          badge_key="illustrative",
+          legend=[("arrow", RULE_COL["A"], "rule A (last_entity_event)"), ("arrow", RULE_COL["B"], "rule B (leaves of the job)"),
+                  ("arrow", RULE_COL["C"], "rule C (into a bay / VECS)"), ("box", T.green, "map entry changed by this event")],
+          footnote="Same six events as the topological-ordering figure. Keys are GarageEntityIdMsg values built with "
+                   "AgvId / TrayId / BayId / VecsId; a TrayMove with no tray has no key and skips rule A.")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 71 — first_tray_event: filled by tray assignment, read by AGV assignment
+# --------------------------------------------------------------------------------------
+
+@figure("71_first_tray_event", "first_tray_event: why the first move", DOC1)
+def first_tray_event_flow():
+    d = Doc("71_first_tray_event", "first_tray_event: written by tray assignment, read by AGV assignment",
+            "Left: tray assignment fills the map with the first move of each tray. Right: AGV assignment uses it "
+            "so an AGV does not drive through a tray's starting node before the tray has left; using the last "
+            "move would close a cycle.")
+    # ---- left: filling ----
+    d.text(0, 0, "1  Tray assignment fills it (DoTrayAssignments)", size=13, weight=600, fill=T.fg)
+    hx = [0, 40, 270, 470]
+    for x, h in zip(hx, ["#", "TrayMove processed", "last_tray_event", "first_tray_event"]):
+        d.text(x, 26, h, size=11, family="mono", weight=600, fill=T.muted)
+    rows = [("m1", "T15: P15 -> P19 (blocker)", "15: m1", ["15: m1"], True),
+            ("m2", "T17: P17 -> B21", "17: m2", ["15: m1", "17: m2"], True),
+            ("m3", "T15: P19 -> P24", "15: m3  (+ edge m1 -> m3)", ["15: m1", "17: m2"], False)]
+    y = 46
+    for i, (k, mv, lte, fte, new) in enumerate(rows):
+        if i % 2 == 0:
+            d.rect(-8, y - 6, 640, 32, rx=6, fill=T.tint(T.card, 0.6, T.bg), layer="under")
+        d.text(hx[0], y + 10, k, size=12, family="mono", weight=700, fill=T.amber)
+        d.text(hx[1], y + 10, mv, size=11.5, family="mono", fill=T.fg2)
+        d.text(hx[2], y + 10, lte, size=11.5, family="mono", fill=T.fg2)
+        x = hx[3]
+        for j, m in enumerate(fte):
+            changed = new and j == len(fte) - 1
+            b = chip(d, x, y + 10, m, T.green if changed else T.fg2, size=10.5)
+            x = b.x1 + 4
+        y += 32
+    code = ["if(last_tray_event.contains(tray))", "  AddDependency(last_tray_event[tray], move);",
+            "else", "  ctx->first_tray_event[tray] = move;   // first time this tray moves",
+            "last_tray_event[tray] = move;"]
+    from components import code_panel
+    cp = code_panel(d, 0, y + 10, 520, code, title="same pattern in the main loop and AssignDestForUntargetedMove",
+                    size=11.5)
+    # ---- right: using ----
+    rx = 700
+    d.text(rx, 0, "2  AGV assignment reads it (MoveAgvToTrayPose)", size=13, weight=600, fill=T.fg)
+    d.text(rx, 24, "AGV A's chain: moves T15 out, then fetches X via P15, later moves T15 again",
+           size=S.small, fill=T.muted)
+    nodes = [("m1", "A carries T15 out (m1)", T.amber), ("ap", "A approaches X via P15", T.green),
+             ("cx", "A carries X", T.amber), ("m3", "A carries T15 again (m3)", T.amber)]
+    bx = {}
+    yy = 52
+    for k, txt, col in nodes:
+        d.rect(rx, yy, 300, 36, rx=8, fill=T.card, stroke=col, sw=1.4)
+        d.text(rx + 14, yy + 18, txt, size=11.5, family="mono", fill=T.fg)
+        bx[k] = BBox(rx, yy, rx + 300, yy + 36)
+        yy += 64
+    for a, b in (("m1", "ap"), ("ap", "cx"), ("cx", "m3")):
+        connect(d, [(bx[a].cx, bx[a].y1), (bx[b].cx, bx[b].y0)], kind="flow", color=T.fg2, size=7)
+    label_pill(d, bx["m1"].cx + 70, (bx["m1"].y1 + bx["ap"].y0) / 2, "A's own chain", color=T.muted)
+    # good edge first -> approach
+    connect(d, [(bx["m1"].x1, bx["m1"].cy), (bx["m1"].x1 + 40, bx["m1"].cy), (bx["m1"].x1 + 40, bx["ap"].cy),
+                (bx["ap"].x1, bx["ap"].cy)], kind="flow", color=T.green, size=7, sw=1.8,
+            label="first_tray_event[15] -> approach", label_at=(bx["m1"].x1 + 40, (bx["m1"].cy + bx["ap"].cy) / 2),
+            label_anchor="start")
+    # bad edge last -> approach
+    connect(d, [(bx["m3"].x0, bx["m3"].cy), (bx["m3"].x0 - 40, bx["m3"].cy), (bx["m3"].x0 - 40, bx["ap"].cy),
+                (bx["ap"].x0, bx["ap"].cy)], kind="flow", color=T.red, size=7, sw=1.8, dash="5 4",
+            label="last move -> approach", label_at=(bx["m3"].x0 - 40, (bx["m3"].cy + bx["ap"].cy) / 2),
+            label_anchor="end")
+    d.text(rx, yy + 8, "green: what the code adds (T15 has left P15 before A drives through it)",
+           size=S.small, fill=T.green)
+    d.text(rx, yy + 26, "red: with the LAST move, approach -> ... -> m3 -> approach is a cycle",
+           size=S.small, fill=T.red)
+    note(d, rx, yy + 46, 360,
+         "For each node on the AGV's path to the tray it is fetching (except the destination), look up the tray "
+         "that started there in ctx->initial_state, then add first_tray_event[tray] -> move_to_tray unless "
+         "WouldCreateCycle(first, root_event) says it would loop. A tray that never moves has no entry, so no edge.",
+         title="The rule in MoveAgvToTrayPose", accent=T.sky)
+    frame(d, title="first_tray_event: written by tray assignment, read by AGV assignment",
+          subtitle="The map answers one question: when has this tray left the node it started on? The first move "
+                   "is the answer, and the only safe one: later moves of the same tray may come after the very AGV "
+                   "move that has to wait.",
+          badge_key="illustrative",
+          legend=[("box", T.green, "map entry written by this move"), ("arrow", T.green, "edge the code adds"),
+                  ("dasharrow", T.red, "edge it must not add (cycle)")],
+          footnote="Tray ids, nodes and the AGV chain are illustrative. The rule and the reason are from "
+                   "scheduler.cpp (MoveAgvToTrayPose) and the comment on first_tray_event in scheduler.hpp.")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 72 — CHUGG: inputs, what is known inside, outputs
+# --------------------------------------------------------------------------------------
+
+@figure("72_chugg_io", "CHUGG inputs and outputs", DOC1)
+def chugg_io():
+    d = Doc("72_chugg_io", "CHUGG: what goes in, what comes out",
+            "PlanMotions builds seven inputs, constructs volley::Chugg and calls SolveSequential; the result is a "
+            "ContinuousState of per-entity trajectories that ResponseFromTrajectories turns into ActionNodes.")
+    ins = [("gg_", "GarageGraph: poses and moves"), ("table_", "CollisionTable: footprint conflicts"),
+           ("ctx->events", "the reduced event DAG (what, in which order)"),
+           ("initial_trajectories", "ContinuousState(initial_state, table_, layout, start_time)"),
+           ("edge_durations", "GetEdgeDurations(gg_, cost_model_): trapezoid profile"),
+           ("heuristics", "GetAllPairsMinCost(gg_, edge_durations, ...): A* heuristic"),
+           ("cost_model_", "MotionCostModel: speeds, lift times, ...")]
+    y = 0
+    ib = []
+    for nm, desc in ins:
+        d.rect(0, y, 380, 40, rx=8, fill=T.card, stroke=T.sky, sw=1.2)
+        d.text(14, y + 13, nm, size=12, family="mono", weight=700, fill=T.sky)
+        d.text(14, y + 29, desc, size=10.5, fill=T.fg2)
+        ib.append(BBox(0, y, 380, y + 40))
+        y += 48
+    # CHUGG box
+    cx0, cy0, cw, ch = 470, 0, 480, max(y - 8, 360)
+    d.rect(cx0, cy0, cw, ch, rx=12, fill=T.tint(T.amber, 0.06, T.bg), stroke=T.amber, sw=1.6)
+    d.text(cx0 + 16, cy0 + 22, "volley::Chugg  (motion_planner/chugg.hpp)", size=13, family="mono", weight=700,
+           fill=T.amber)
+    d.text(cx0 + 16, cy0 + 42, "\"This is CHUGG v0.1\"  ·  SolveSequential(audit_ptr)", size=11, family="mono",
+           fill=T.fg2)
+    d.rect(cx0 + 16, cy0 + 60, cw - 32, ch - 120, rx=8, fill="none", stroke=T.faint, sw=1.1, dash="5 4")
+    d.text(cx0 + 28, cy0 + 78, "inside: not in the snapshots; from comments only", size=11, fill=T.muted)
+    inside = ["InitializeEventOrder: a topological order of the", "  events; per-AGV chains can interleave",
+              "SippEnvironment: safe-interval path planning", "  per motion, against already-planned ones",
+              "A* with the all-pairs heuristic (inadmissible", "  under the run-extension cost: fast, maybe",
+              "  suboptimal paths)",
+              "GetDependencyCompletionTime: when each", "  event's prerequisites are done"]
+    for i, ln in enumerate(inside):
+        d.text(cx0 + 28, cy0 + 102 + i * 18, ln, size=11, family="mono", fill=T.fg2)
+    d.text(cx0 + 16, cy0 + ch - 44, "nullopt -> every job fails:", size=11, fill=T.red)
+    d.text(cx0 + 16, cy0 + ch - 26, "\"CHUGG failed to find a solution, event dag may be infeasible\"", size=10.5,
+           family="mono", fill=T.red)
+    for b in ib:
+        connect(d, [(b.x1, b.cy), (cx0 - 30, b.cy), (cx0 - 30, cy0 + ch / 2), (cx0, cy0 + ch / 2)], kind="flow",
+                color=T.sky, size=7, sw=1.1)
+    # outputs
+    ox = cx0 + cw + 80
+    d.rect(ox, cy0, 380, 230, rx=10, fill=T.card, stroke=T.green, sw=1.5)
+    d.text(ox + 14, cy0 + 20, "ContinuousState", size=13, family="mono", weight=700, fill=T.green)
+    d.text(ox + 14, cy0 + 38, "GetTrajectories(): entity -> list of Motion", size=11, family="mono", fill=T.fg2)
+    mlines = ["Motion", "  GetEntityId()    which AGV / bay / VECS ...", "  GetInterval()    [start, end] time",
+              "  GetCollisionId() footprint (AGV, AGV+tray, ...)", "  GetActionId()    = event vertex in ctx->events",
+              "  GetSourcePose(), GetLocation()", "  GetDelta()       discrete change, if any", "  IsIdle()"]
+    for i, ln in enumerate(mlines):
+        d.text(ox + 14, cy0 + 66 + i * 19, ln, size=11, family="mono", fill=T.fg if i == 0 else T.fg2)
+    connect(d, [(cx0 + cw, cy0 + 110), (ox, cy0 + 110)], kind="flow", color=T.green, size=8, label="optional",
+            label_at=((cx0 + cw + ox) / 2, cy0 + 96))
+    rb = BBox(ox, cy0 + 270, ox + 380, cy0 + 360)
+    d.rect(rb.x0, rb.y0, rb.w, rb.h, rx=10, fill=T.card, stroke=T.violet, sw=1.4)
+    d.text(ox + 14, rb.y0 + 20, "ResponseFromTrajectories", size=12.5, family="mono", weight=700, fill=T.violet)
+    d.text(ox + 14, rb.y0 + 42, "one ActionNode per motion with a delta;", size=11, fill=T.fg2)
+    d.text(ox + 14, rb.y0 + 60, "action id -> event -> job guid (section 6)", size=11, fill=T.fg2)
+    connect(d, [(ox + 190, cy0 + 230), (ox + 190, rb.y0)], kind="flow", color=T.violet, size=8)
+    frame(d, title="CHUGG: what goes in, what comes out",
+          subtitle="The scheduler decides WHAT happens and in which order (the event DAG). CHUGG decides WHEN and "
+                   "WHERE along the graph, so that bodies never collide: it returns timed trajectories for every entity.",
+          badge_key="concept",
+          legend=[("box", T.sky, "inputs built in PlanMotions"), ("box", T.amber, "volley::Chugg"),
+                  ("box", T.green, "output"), ("dashbox", T.faint, "internals known only from comments")],
+          footnote="Inputs, the call, the output type and the Motion accessors are from scheduler.cpp (PlanMotions, "
+                   "CollectAndCollapseTrajectoryMotions, BuildActionDagFromMotions). motion_planner itself is not in "
+                   "the snapshots, so everything in the dashed box is from comments and names.")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 73 — ScheduledJobData: complete UML with who writes what
+# --------------------------------------------------------------------------------------
+
+@figure("73_scheduled_job_data_uml", "ScheduledJobData and the messages around it", DOC1)
+def scheduled_job_data_uml():
+    d = Doc("73_scheduled_job_data_uml", "ScheduledJobData: what one entry holds",
+            "UML of the ROS messages around ScheduledJobData: PlanResponse holds the Schedule and the "
+            "ScheduledJobData array; each entry holds a full SchedulerJob plus links into Schedule.nodes.")
+    M = 11.5
+    RESP, REQ, LINK = T.green, T.sky, T.amber
+    resp = uml_class(d, 0, 0, "PlanResponse", accent=RESP, stereo="interfaces/msg", size=M,
+                     attrs=["+ success: bool", "+ message: string", "+ id: Guid", "+ schedule: Schedule",
+                            "+ scheduled_jobs: ScheduledJobData[]"])
+    sjd = uml_class(d, 0, resp.y1 + 80, "ScheduledJobData", accent=RESP, stereo="interfaces/msg · one per job",
+                    size=M,
+                    attrs=["+ job: SchedulerJob",
+                           "    // copied from the request; state etc. filled in",
+                           "+ node_indices: uint32[]",
+                           "    // positions in PlanResponse.schedule.nodes",
+                           "    // written by BuildScheduledActionsArray",
+                           "+ bay_id: uint16",
+                           "    // RETRIEVE only: bay of the PROCESS_RETRIEVE action",
+                           "+ bay_arrival_node_guid: Guid",
+                           "    // RETRIEVE only: guid of that action"])
+    job = uml_class(d, sjd.x1 + 120, 0, "SchedulerJob", accent=REQ, stereo="interfaces/msg · the request's job",
+                    size=M,
+                    attrs=["// what to do (from the request; never changed)",
+                           "+ guid: Guid",
+                           "+ type: uint8,  type_name: string   // TYPE_RETRIEVE, ...",
+                           "+ agv_id, bay_id, tray_id: uint16",
+                           "+ payload_id: Guid",
+                           "+ destination: GaragePose",
+                           "+ allow_reciprocal: bool",
+                           "// status (filled in by the scheduler)",
+                           "+ state: uint8,  state_name: string",
+                           "    // in: STATE_UNPLANNED; out: STATE_EXECUTING or STATE_ERROR",
+                           "+ note: string        // FailJob: the failure message",
+                           "+ retain_job: bool    // FailJob: ask Dispatch to keep and retry",
+                           "+ time_planned: Time  // SchedulerRos, after Plan()",
+                           "// not read or written by the scheduler package",
+                           "+ seconds_to_bay_arrival: float32",
+                           "+ needs_bay_in_retrieve: bool"])
+    sch = uml_class(d, job.x0, job.y1 + 60, "Schedule", accent=RESP, stereo="interfaces/msg", size=M,
+                    attrs=["+ header: std_msgs/Header", "+ nodes: ActionNode[]   // topological order"])
+    an = uml_class(d, job.x0, sch.y1 + 50, "ActionNode", accent=RESP, stereo="interfaces/msg · abridged", size=M,
+                   attrs=["+ guid: Guid", "+ job_id: Guid      // = SchedulerJob.guid of its job",
+                          "+ type: uint8         // AGV / BAY / VECS / VRC command",
+                          "+ parents: uint32[]   // indices into Schedule.nodes",
+                          "+ bay_id: uint32,  bay_command: BayCommand", "+ agv_id, agv_command, ..."])
+    # composition
+    connect(d, [(resp.cx, resp.y1), (resp.cx, sjd.y0)], kind="comp", color=RESP, mult_end="0..*",
+            label="scheduled_jobs", label_at=(resp.cx, (resp.y1 + sjd.y0) / 2))
+    jy = sjd.y0 + 34
+    connect(d, [(sjd.x1, jy), (job.x0, jy)],
+            kind="comp", color=REQ, mult_end="1", label="job", label_at=((sjd.x1 + job.x0) / 2, jy - 12))
+    connect(d, [(resp.x1 - 40, resp.y0), (resp.x1 - 40, -28), (job.x1 + 28, -28), (job.x1 + 28, sch.cy), (sch.x1, sch.cy)],
+            kind="comp", color=RESP, mult_end="1", label="schedule", label_at=((resp.x1 + job.x1) / 2, -40))
+    connect(d, [(sch.cx, sch.y1), (sch.cx, an.y0)], kind="comp", color=RESP, mult_end="0..*", label="nodes",
+            label_at=(sch.cx + 10, (sch.y1 + an.y0) / 2 - 6), label_anchor="start")
+    # links by value
+    yl = sjd.y0 + 104
+    connect(d, [(sjd.x1, yl), (sjd.x1 + 90, yl), (sjd.x1 + 90, an.y0 + 40), (an.x0, an.y0 + 40)], kind="dep",
+            color=LINK, label="node_indices[i] = index into nodes", label_at=(sjd.x1 + 90, an.y0 + 10),
+            label_anchor="end")
+    yb = max(an.y1, sjd.y1) + 40
+    bx = sjd.x0 + sjd.w * 0.4
+    connect(d, [(bx, sjd.y1), (bx, yb), (an.cx, yb), (an.cx, an.y1)], kind="dep",
+            color=LINK, label="bay_arrival_node_guid = guid of the PROCESS_RETRIEVE node",
+            label_at=((bx + an.cx) / 2, yb + 16))
+    note(d, 0, yb + 44, sjd.w,
+         "Inside Plan(), entries are ScheduledJobDataMsg (the C++ alias). plan_ctx->scheduled_jobs holds the "
+         "planned jobs; result.scheduled_jobs (PlanResponse) ends up with every pending job: failures from FailJob, "
+         "then the planned entries.", title="Where entries live", accent=RESP)
+    frame(d, title="ScheduledJobData: what one entry holds",
+          subtitle="One ScheduledJobData per pending job in the response. It wraps the request's SchedulerJob (with "
+                   "its status filled in) and points into the response's Schedule: which actions belong to this job, "
+                   "and for a retrieve, which action is the car's arrival at the bay.",
+          badge_key="as-built",
+          legend=[("box", REQ, "request side (SchedulerJob)"), ("box", RESP, "response side"),
+                  ("comp", T.fg2, "contains"), ("dep", LINK, "refers to (by index or guid)")],
+          footnote="Field names are confirmed by the scheduler code that reads or writes them; types follow the "
+                   "interfaces .msg files as summarised in the ROS-message figure (the .msg files themselves are not "
+                   "in the snapshots).")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 74 — ScheduledJobData on the Pecos map: what node_indices points at
+# --------------------------------------------------------------------------------------
+
+@figure("74_scheduled_job_data_map", "ScheduledJobData on a 2D example", DOC1)
+def scheduled_job_data_map():
+    from facility import Map
+    d = Doc("74_scheduled_job_data_map", "ScheduledJobData on the Pecos map",
+            "A RETRIEVE (car on T17 to bay B21) and a MOVE_AGV planned together. The map numbers each action by its "
+            "index in Schedule.nodes; the ScheduledJobData cards show which indices belong to which job.")
+    QA_X, QA_Y = (20.4, 46.4), (15.3, 25.2)
+    s = 24
+    m = Map(d, 0, 0, s, QA_X, QA_Y)
+    m.base(labels=True, zones=False, axes=False)
+    m.tray(17, "T17", payload=True, chip_pos="bl")
+    m.agv(13, "A", heading=90, label_side="below")
+    m.agv(26, "B", heading=90, label_side="above")
+    JA, JB = T.amber, T.sky
+    m.route([13, 15, 17], T.green, sw=3, offset=(0, -6))
+    m.route([17, 15, 13, 18, 22, 41, 21], JA, sw=4, offset=(0, 6))
+    m.route([26, 25], JB, sw=3)
+    from components import num_badge
+    marks = [(0, (34.0, 17.2), -16, T.green), (1, (40.1, 17.2), -16, T.green), (2, (43.0, 17.2), -22, JA),
+             (4, (40.1, 17.2), 18, JA), (5, (34.0, 17.2), 18, JA), (6, (30.9, 18.35), 0, JA),
+             (7, (30.9, 20.6), 0, JA), (8, (29.45, 21.7), -16, JA), (9, (25.5, 21.7), -16, JA),
+             (10, (23.1, 21.7), 16, JA), (11, (23.1, 21.7), -24, T.violet), (3, (34.0, 24.0), -16, JB)]
+    for n, xy, dy, col in marks:
+        x, y = m.P(xy)
+        if xy == (30.9, 18.35) or xy == (30.9, 20.6):
+            x += 16
+        if n == 10:
+            x += 28
+        num_badge(d, x, y + dy, n, col, r=10)
+    mb = m.box
+    # ---- Schedule.nodes strip ----
+    sx = mb.x1 + 50
+    d.text(sx, 0, "PlanResponse.schedule.nodes  (ActionNode[] in topological order)", size=12.5, weight=600,
+           fill=T.fg)
+    acts = [("A 13->15", JA), ("A 15->17", JA), ("A lift", JA), ("B 26->25", JB), ("A 17->15 L", JA),
+            ("A 15->13 L", JA), ("A 13->18 L", JA), ("A 18->22 L", JA), ("A 22->41 L", JA), ("A 41->21 L", JA),
+            ("A lower", JA), ("B21 PROCESS_RETRIEVE", T.violet)]
+    cy = 22
+    cells = {}
+    for i, (lab, col) in enumerate(acts):
+        y = cy + i * 26
+        d.rect(sx, y, 34, 22, rx=4, fill=T.muted_bg)
+        d.text(sx + 17, y + 11, str(i), size=11, family="mono", weight=700, fill=T.fg, anchor="middle")
+        d.rect(sx + 40, y, 250, 22, rx=4, fill=T.tint(col, 0.14, T.bg), stroke=T.tint(col, 0.6, T.bg), sw=1)
+        d.text(sx + 50, y + 11, lab, size=11, family="mono", fill=T.fg)
+        d.text(sx + 282, y + 11, "job A" if col != JB else "job B", size=10, family="mono",
+               fill=JB if col == JB else JA, anchor="end")
+        cells[i] = BBox(sx, y, sx + 290, y + 22)
+    # ---- ScheduledJobData cards ----
+    kx = sx + 340
+    cards = [
+        ("ScheduledJobData  (job A)", JA,
+         ["job.type = TYPE_RETRIEVE", "job.guid = a1f3...   (= ActionNode.job_id)", "job.state = STATE_EXECUTING",
+          "node_indices = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11]", "bay_id = 21",
+          "bay_arrival_node_guid = nodes[11].guid"]),
+        ("ScheduledJobData  (job B)", JB,
+         ["job.type = TYPE_MOVE_AGV", "job.guid = 7c02...", "job.state = STATE_EXECUTING", "node_indices = [3]",
+          "bay_id = 0   (not a retrieve)", "bay_arrival_node_guid = (empty)"]),
+        ("ScheduledJobData  (job C, failed)", T.red,
+         ["job.type = TYPE_INSERT", "job.state = STATE_ERROR", "job.note = <failure message>",
+          "job.retain_job = true / false", "node_indices = []   (no actions)"]),
+    ]
+    y = 22
+    cb = []
+    for title, col, lines in cards:
+        h = 30 + 19 * len(lines) + 8
+        d.rect(kx, y, 400, h, rx=9, fill=T.card, stroke=col, sw=1.5)
+        d.text(kx + 14, y + 17, title, size=12.5, family="mono", weight=700, fill=col)
+        for j, ln in enumerate(lines):
+            d.text(kx + 14, y + 40 + j * 19, ln, size=11, family="mono", fill=T.fg2)
+        cb.append(BBox(kx, y, kx + 400, y + h))
+        y += h + 18
+    # arrows from job A card to index 11 and job B card to index 3
+    connect(d, [(cb[0].x0, cb[0].y0 + 135), (cells[11].x1 + 20, cb[0].y0 + 135), (cells[11].x1 + 20, cells[11].cy),
+                (cells[11].x1, cells[11].cy)], kind="dep", color=T.violet)
+    connect(d, [(cb[1].x0, cb[1].y0 + 97), (cells[3].x1 + 30, cb[1].y0 + 97), (cells[3].x1 + 30, cells[3].cy),
+                (cells[3].x1, cells[3].cy)], kind="dep", color=JB)
+    note(d, 0, mb.y1 + 24, mb.w,
+         "node_indices are not contiguous: actions of different jobs interleave in the topological order "
+         "(B's move is index 3, in the middle of A's actions). Dispatch uses node_indices to know which actions "
+         "serve which job, and bay_arrival_node_guid to know when the car reaches the customer.",
+         title="Reading node_indices", accent=T.amber)
+    frame(d, title="ScheduledJobData on the Pecos map",
+          subtitle="Two planned jobs and one failed job. AGV A fetches T17 (with its car) and carries it to bay B21; "
+                   "AGV B moves out of the way. Badges on the map are positions in Schedule.nodes.",
+          badge_key="yaml+hyp",
+          legend=[("box", JA, "job A (RETRIEVE) actions"), ("box", JB, "job B (MOVE_AGV)"),
+                  ("box", T.violet, "bay command"), ("route", T.green, "A unloaded"), ("route", JA, "A loaded")],
+          footnote="Geometry from the Pecos YAML; occupancy, guids and the exact action order are illustrative. "
+                   "The shape of job A's actions matches the RetrieveJob test.")
+    return d
