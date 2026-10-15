@@ -1,9 +1,10 @@
-/** The three study documents, in tab order. `file` is relative to the repository root. */
+/** The three study documents, in tab order. `file` is relative to site/. */
 export interface Part {
   title: string;
-  /** first and last top-level section number in the part */
-  from: number;
-  to: number;
+  /** id of the first <h2> in the part; the part runs until the next part */
+  first: string;
+  /** filled in at build time, e.g. "6–13" */
+  range?: string;
 }
 
 export interface DocConfig {
@@ -20,21 +21,21 @@ export const DOCS: DocConfig[] = [
   {
     key: 'background',
     num: '01',
-    file: '01-software-background.md',
+    file: 'src/content/01-software-background.html',
     prefix: 'bg',
     tab: 'Background',
     summary: 'How the existing scheduler works, from the garage model to the response.',
     parts: [
-      { title: 'Orientation', from: 1, to: 5 },
-      { title: 'Data and objects', from: 6, to: 13 },
-      { title: 'Algorithms', from: 14, to: 20 },
-      { title: 'Working with the code', from: 21, to: 26 },
+      { title: 'Orientation', first: 'bg-what-problem-does-this-software-solve' },
+      { title: 'Data and objects', first: 'bg-the-garage-model-in-code' },
+      { title: 'Algorithms', first: 'bg-job-expansion-from-jobs-to-events' },
+      { title: 'Working with the code', first: 'bg-packages-build-system-and-dependencies' },
     ],
   },
   {
     key: 'proposal',
     num: '02',
-    file: '02-issue-and-proposal.md',
+    file: 'src/content/02-issue-and-proposal.html',
     prefix: 'pr',
     tab: 'Issue & proposal',
     summary: 'What the refactor changes and why: solver interfaces, layout, staged plan.',
@@ -42,7 +43,7 @@ export const DOCS: DocConfig[] = [
   {
     key: 'verification',
     num: '03',
-    file: '03-verification-plan.md',
+    file: 'src/content/03-verification-plan.html',
     prefix: 'vr',
     tab: 'Verification',
     summary: 'Regression parity and benchmarks for the extracted solvers.',
@@ -50,4 +51,3 @@ export const DOCS: DocConfig[] = [
 ];
 
 export const docByNum = (num: string) => DOCS.find((d) => d.num === num);
-export const docByFile = (file: string) => DOCS.find((d) => d.file === file);

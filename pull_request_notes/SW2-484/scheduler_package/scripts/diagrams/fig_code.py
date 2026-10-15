@@ -7,7 +7,7 @@ from registry import figure
 from svgkit import BBox, Doc, text_width, wrap
 from theme import S, T
 
-DOC1 = "01-software-background.md"
+DOC1 = "01-software-background.html"
 TRAY, AGV, BAYC, VECS = T.amber, T.green, T.violet, T.pink
 
 

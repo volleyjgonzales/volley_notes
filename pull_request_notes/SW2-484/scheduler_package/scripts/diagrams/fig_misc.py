@@ -8,7 +8,7 @@ from svgkit import BBox, Doc, text_width, wrap, pts_to_path
 from theme import T, S
 
 
-@figure("03_garage_xy", "Schematic garage: sequential tray moves", "02-issue-and-proposal.md")
+@figure("03_garage_xy", "Schematic garage: sequential tray moves", "02-issue-and-proposal.html")
 def garage_xy():
     d = Doc("03_garage_xy", "Schematic garage: clearing a route with sequential tray moves",
             "AGV 1 faces +x carrying tray T1 toward the goal; trays T2 and T3 sit on the route and are reparked "
@@ -98,7 +98,7 @@ def garage_xy():
     return d
 
 
-@figure("14_vrc_floors", "VRC multi-floor transfer", "01-software-background.md")
+@figure("14_vrc_floors", "VRC multi-floor transfer", "01-software-background.html")
 def vrc():
     d = Doc("14_vrc_floors", "VRC: one layout, several floors",
             "Side elevation: a VRC platform carries an AGV and its tray from a node on floor F1 to a node on "

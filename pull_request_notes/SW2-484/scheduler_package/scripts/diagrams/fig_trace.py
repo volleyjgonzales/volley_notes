@@ -10,7 +10,7 @@ from registry import figure
 from svgkit import BBox, Doc, text_width, wrap
 from theme import T
 
-DOC1 = "01-software-background.md"
+DOC1 = "01-software-background.html"
 W = 1120
 IND = 26
 BOX_R = 800          # right edge of every call box

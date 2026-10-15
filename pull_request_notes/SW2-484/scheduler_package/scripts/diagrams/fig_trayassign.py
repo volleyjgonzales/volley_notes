@@ -8,7 +8,7 @@ from fig_jobs import (GENERAL, TRAY, BAYC, bay_pill, intent, job_figure)
 from registry import figure
 from theme import T
 
-DOC1 = "01-software-background.md"
+DOC1 = "01-software-background.html"
 
 LEGEND = [("box", TRAY, "TrayMove"), ("dashbox", TRAY, "event before the call (blank shown as ?)"),
           ("arrow", TRAY, "edge added by the call"), ("ring", T.fg2, "? = blank field")]

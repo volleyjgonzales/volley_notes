@@ -9,7 +9,7 @@ from registry import figure
 from svgkit import BBox, Doc, text_width
 from theme import T, S
 
-DOC1 = "01-software-background.md"
+DOC1 = "01-software-background.html"
 ORDER = ["a", "b", "c", "d", "e", "f"]          # insertion order -> vertex index (illustrative)
 VIDX = {k: i for i, k in enumerate(ORDER)}
 POS = {"a": (0, 0), "b": (1, 0), "c": (2, 0), "d": (3, 0), "e": (0, 1), "f": (1, 1)}

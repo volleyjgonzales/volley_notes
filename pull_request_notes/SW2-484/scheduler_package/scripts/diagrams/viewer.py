@@ -73,7 +73,7 @@ const FIGS = __FIGS__;
 const nav=document.getElementById('nav'), stage=document.getElementById('stage');
 let cur=-1, svg=null, vb0=null, vb=null;
 const groups={};
-const DOCS={'01-software-background.md':'01 · Software background','02-issue-and-proposal.md':'02 · Issue and proposal','03-verification-plan.md':'03 · Verification plan'};
+const DOCS={'01-software-background.html':'01 · Software background','02-issue-and-proposal.html':'02 · Issue and proposal','03-verification-plan.html':'03 · Verification plan'};
 FIGS.forEach((f,i)=>{(groups[f.doc]=groups[f.doc]||[]).push(i)});
 for(const [doc,idx] of Object.entries(groups)){
   const h=document.createElement('h2'); h.textContent=DOCS[doc]||doc; nav.appendChild(h);
@@ -123,14 +123,15 @@ const start=FIGS.findIndex(f=>'#'+f.name===location.hash); show(start>=0?start:0
 </html>
 """
 
-# Reading order = figure numbering in the Markdown documents.
+# Reading order = figure numbering in the documents (site/src/content/*.html).
 def _doc_order():
-    """Figure order and per-document numbers, read from the image order in the Markdown files."""
-    root = Path(__file__).resolve().parents[2]
+    """Figure order and per-document numbers, read from the <img> order in the HTML sources."""
+    root = Path(__file__).resolve().parents[2] / "site" / "src" / "content"
     order = []
-    for md in ("01-software-background.md", "02-issue-and-proposal.md", "03-verification-plan.md"):
+    for name in ("01-software-background.html", "02-issue-and-proposal.html", "03-verification-plan.html"):
         seen = []
-        for n in re.findall(r"!\[[^\]]*\]\(figures/([^)]+)\.svg\)", (root / md).read_text(encoding="utf-8")):
+        source = re.sub(r"<!--.*?-->", "", (root / name).read_text(encoding="utf-8"), flags=re.S)
+        for n in re.findall(r'<img src="figures/([^"]+)\.svg"', source):
             if n not in seen:
                 seen.append(n)
         order += [(n, f"Fig {i}") for i, n in enumerate(seen, 1)]

@@ -40,7 +40,7 @@ def _event_strip(d: Doc, x0, y0, items, *, width=None, title=None):
     return boxes
 
 
-@figure("15_facility_topology", "Pecos facility graph", "01-software-background.md")
+@figure("15_facility_topology", "Pecos facility graph", "01-software-background.html")
 def facility_topology():
     d = Doc("15_facility_topology", "Pecos facility topology",
             "Top-down plan of the 5675 Pecos layout: 28 nodes and 37 undirected edges at their YAML coordinates.")
@@ -61,7 +61,7 @@ def facility_topology():
     return d
 
 
-@figure("15_facility_scenario", "Pecos overview with hypothetical occupancy", "01-software-background.md")
+@figure("15_facility_scenario", "Pecos overview with hypothetical occupancy", "01-software-background.html")
 def facility_scenario():
     d = Doc("15_facility_scenario", "Pecos overview with a hypothetical scene",
             "Pecos layout with an illustrative AGV at charger C10 and trays at P3, P15, P17 and P20.")
@@ -81,7 +81,7 @@ def facility_scenario():
     return d
 
 
-@figure("15_agv_approach_and_pickup", "AGV approach example", "01-software-background.md")
+@figure("15_agv_approach_and_pickup", "AGV approach example", "01-software-background.html")
 def agv_approach():
     d = Doc("15_agv_approach_and_pickup", "Unloaded AGV approach to a tray",
             "AGV A leaves charger C10 and drives 10 -> 9 -> 11 -> 6 -> 3 under the empty stall P6 to reach tray T15 at P3.")
@@ -110,7 +110,7 @@ def agv_approach():
     return d
 
 
-@figure("15_blocking_tray_move", "Blocking tray example", "01-software-background.md")
+@figure("15_blocking_tray_move", "Blocking tray example", "01-software-background.html")
 def blocking():
     d = Doc("15_blocking_tray_move", "A blocking tray must move first",
             "Root tray R at P17 must reach bay B21. Its exits via P15 and P20 are occupied, so AGV A first "
@@ -151,7 +151,7 @@ def blocking():
     return d
 
 
-@figure("16_discrete_garage_state_bridge", "DiscreteGarageState bridge", "01-software-background.md")
+@figure("16_discrete_garage_state_bridge", "DiscreteGarageState bridge", "01-software-background.html")
 def bridge():
     d = Doc("16_discrete_garage_state_bridge", "DiscreteGarageState: from garage to records",
             "Left: Pecos map with AGV 4 at C10, tray 15 with a payload at P3, and bay 7. Right: the matching "

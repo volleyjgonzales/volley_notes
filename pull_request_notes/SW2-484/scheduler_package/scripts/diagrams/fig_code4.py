@@ -13,9 +13,9 @@ from registry import figure
 from svgkit import BBox, Doc, text_width, wrap
 from theme import S, T
 
-DOC1 = "01-software-background.md"
-DOC2 = "02-issue-and-proposal.md"
-DOC3 = "03-verification-plan.md"
+DOC1 = "01-software-background.html"
+DOC2 = "02-issue-and-proposal.html"
+DOC3 = "03-verification-plan.html"
 TRAY, AGV, BAYC = T.amber, T.green, T.violet
 ROOT = Path(__file__).resolve().parents[2]
 REPOMIX = ROOT / "sources" / "repomix-scheduler.xml"

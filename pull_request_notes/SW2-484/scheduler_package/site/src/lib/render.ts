@@ -1,40 +1,38 @@
 /**
- * Markdown -> HTML for the study site.
+ * HTML sources (src/content/*.html) -> page HTML for the study site.
  *
- * Two phases, because links can point across documents:
- *   1. parse every document to a HAST tree and give every heading a stable, prefixed id;
- *   2. with all headings known, rewrite links, link section / figure references and keywords,
- *      wrap figures, highlight code, and serialise.
+ * The sources hold the prose; everything that can go stale is computed here:
+ *   - section numbers (from <h2 data-num> / <h3 data-num>) and figure numbers (document order);
+ *   - the text of every <a class="ref"> ("section 14.5", "Figure 12") from its target;
+ *   - keyword links (src/data/glossary.yaml), "doc 02" links, MathML, code highlighting, figure frames.
+ * The build fails on a broken reference, a missing id, or a glossary target that does not exist.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { unified } from 'unified';
-import remarkParse from 'remark-parse';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import remarkRehype from 'remark-rehype';
-import rehypeRaw from 'rehype-raw';
 import rehypeShiki from '@shikijs/rehype';
 import rehypeStringify from 'rehype-stringify';
-import GithubSlugger from 'github-slugger';
+import katex from 'katex';
 import { visit, SKIP } from 'unist-util-visit';
 import { toString } from 'hast-util-to-string';
+import { fromHtml } from 'hast-util-from-html';
 import { h } from 'hastscript';
 import YAML from 'yaml';
 import type { Root, Element, ElementContent, Text, RootContent } from 'hast';
-import { DOCS, docByFile, docByNum, type DocConfig } from '../data/docs';
+import { DOCS, docByNum, type DocConfig } from '../data/docs';
 
-export const REPO_ROOT = path.resolve(process.cwd(), '..');
+export const SITE_ROOT = process.cwd();
+export const REPO_ROOT = path.resolve(SITE_ROOT, '..');
 const FIG_DIR = path.join(REPO_ROOT, 'figures');
 
 export interface Heading {
   depth: number;
   id: string;
-  text: string;
+  /** plain text without the number */
+  title: string;
+  /** inner HTML without the number (keeps inline code) */
   html: string;
   num?: string;
-  title: string;
 }
 
 export interface RenderedDoc {
@@ -64,19 +62,9 @@ export interface ResolvedTerm extends GlossaryEntry {
 
 const isEl = (n: unknown, tag?: string): n is Element =>
   !!n && (n as Element).type === 'element' && (!tag || (n as Element).tagName === tag);
-const isBlank = (n: RootContent | ElementContent) => n.type === 'text' && !n.value.trim();
 const text = (value: string): Text => ({ type: 'text', value });
+const cls = (n: Element) => ([] as unknown[]).concat(n.properties?.className ?? []).map(String);
 const NO_LINK_INSIDE = new Set(['math', 'a', 'code', 'pre', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'button', 'summary']);
-
-function stripTocAndTitle(md: string): { title: string; body: string } {
-  const lines = md.split('\n');
-  let title = '';
-  if (lines[0].startsWith('# ')) title = lines.shift()!.slice(2).trim();
-  const start = lines.findIndex((l) => /^## Contents\s*$/.test(l));
-  const end = lines.findIndex((l) => l.trim() === '<!-- /toc -->');
-  if (start >= 0 && end > start) lines.splice(start, end - start + 1);
-  return { title, body: lines.join('\n') };
-}
 
 function svgSize(file: string): { width?: number; height?: number } {
   try {
@@ -89,169 +77,166 @@ function svgSize(file: string): { width?: number; height?: number } {
   }
 }
 
-/** Inline HTML for a heading's content (keeps `code` formatting in the sidebar). */
-function inlineHtml(node: Element): string {
-  const clone: Root = { type: 'root', children: structuredClone(node.children) as RootContent[] };
-  return unified().use(rehypeStringify).stringify(clone);
+function inlineHtml(children: ElementContent[]): string {
+  return unified().use(rehypeStringify).stringify({ type: 'root', children: structuredClone(children) as RootContent[] });
 }
 
+class BuildError extends Error {}
+
 // ---------------------------------------------------------------------------------------------
-// phase 1
+// phase 1: parse, number headings and figures
+
+interface Target {
+  kind: 'section' | 'figure';
+  doc: string;
+  num: string;
+  title: string;
+}
 
 interface Parsed {
   config: DocConfig;
   title: string;
   tree: Root;
   headings: Heading[];
+  figures: number;
 }
 
-function parse(config: DocConfig): Parsed {
-  const raw = fs.readFileSync(path.join(REPO_ROOT, config.file), 'utf8');
-  const { title, body } = stripTocAndTitle(raw);
-  const proc = unified()
-    .use(remarkParse)
-    .use(remarkGfm)
-    .use(remarkMath)
-    .use(remarkRehype, { allowDangerousHtml: true })
-    .use(rehypeRaw)
-    // MathML output: rendered natively by current browsers, no KaTeX stylesheet or fonts to ship
-    .use(rehypeKatex, { output: 'mathml', throwOnError: false });
-  const tree = proc.runSync(proc.parse(body)) as Root;
-  const slugger = new GithubSlugger();
+function parse(config: DocConfig, targets: Map<string, Target>): Parsed {
+  const source = fs.readFileSync(path.join(SITE_ROOT, config.file), 'utf8');
+  const tree = fromHtml(source, { fragment: true }) as Root;
+  // drop comments and the whitespace-only text between blocks
+  tree.children = tree.children.filter((c) => c.type !== 'comment' && !(c.type === 'text' && !c.value.trim()));
+  let title = '';
+  const h1 = tree.children.findIndex((c) => isEl(c, 'h1'));
+  if (h1 >= 0) {
+    title = toString(tree.children[h1] as Element).trim();
+    tree.children.splice(h1, 1);
+  }
   const headings: Heading[] = [];
+  let n2 = 0;
+  let n3 = 0;
+  let figs = 0;
+  const seen = new Set<string>();
   visit(tree, 'element', (node) => {
     const m = /^h([2-4])$/.exec(node.tagName);
-    if (!m) return;
-    const t = toString(node).trim();
-    const id = `${config.prefix}-${slugger.slug(t)}`;
-    node.properties = { ...node.properties, id };
-    const num = /^(\d+(?:\.\d+)?)\.?\s/.exec(t)?.[1];
-    headings.push({ depth: +m[1], id, text: t, html: inlineHtml(node), num, title: num ? t.slice(t.indexOf(' ') + 1) : t });
+    if (m) {
+      const id = String(node.properties.id ?? '');
+      if (!id) throw new BuildError(`${config.file}: heading without id: "${toString(node)}"`);
+      if (seen.has(id)) throw new BuildError(`${config.file}: duplicate id ${id}`);
+      seen.add(id);
+      const numbered = node.properties.dataNum !== undefined;
+      let num: string | undefined;
+      if (node.tagName === 'h2') {
+        n3 = 0;
+        if (numbered) num = String(++n2);
+      } else if (node.tagName === 'h3' && numbered) {
+        num = `${n2}.${++n3}`;
+      }
+      delete node.properties.dataNum;
+      const t = toString(node).trim();
+      headings.push({ depth: +m[1], id, title: t, html: inlineHtml(node.children), num });
+      if (num) targets.set(id, { kind: 'section', doc: config.num, num, title: t });
+      else targets.set(id, { kind: 'section', doc: config.num, num: '', title: t });
+      return SKIP;
+    }
+    if (node.tagName === 'figure') {
+      const id = String(node.properties.id ?? '');
+      if (!id) throw new BuildError(`${config.file}: figure without id`);
+      figs++;
+      targets.set(id, { kind: 'figure', doc: config.num, num: String(figs), title: '' });
+      node.properties.dataFigNum = String(figs);
+    }
   });
-  return { config, title, tree, headings };
+  return { config, title, tree, headings, figures: figs };
 }
 
 // ---------------------------------------------------------------------------------------------
 // phase 2 transforms
 
-type Registry = Map<string, Parsed>; // by doc num
-
-function sectionId(reg: Registry, docNum: string, num: string): string | undefined {
-  return reg.get(docNum)?.headings.find((hd) => hd.num === num)?.id;
+function resolveRefs(p: Parsed, targets: Map<string, Target>) {
+  visit(p.tree, 'element', (node) => {
+    if (node.tagName !== 'a') return;
+    const href = String(node.properties.href ?? '');
+    if (!href.startsWith('#')) return;
+    const id = href.slice(1);
+    const isRef = cls(node).includes('ref');
+    if (id.startsWith('doc-')) {
+      if (!DOCS.some((d) => `doc-${d.key}` === id)) throw new BuildError(`${p.config.file}: unknown document link ${href}`);
+      node.properties.className = ['xref'];
+      return;
+    }
+    const t = targets.get(id);
+    if (!t) throw new BuildError(`${p.config.file}: link to missing id ${href} ("${toString(node)}")`);
+    if (isRef) {
+      // keep the lead word the author wrote ("section", "Sections", "Figure"), replace the number
+      const old = toString(node);
+      const lead = /^([A-Za-z]+\s+)?/.exec(old)?.[1] ?? '';
+      if (!t.num) throw new BuildError(`${p.config.file}: ref ${href} points at an unnumbered heading`);
+      node.children = [text(lead + t.num)];
+      node.properties.className = t.kind === 'figure' ? ['xref', 'figref'] : ['xref'];
+      if (t.title) node.properties.title = t.title;
+    } else {
+      node.properties.className = [...cls(node), 'xref'];
+    }
+  });
 }
 
-function resolveTarget(reg: Registry, to: string): { id: string; doc: string; title: string } | undefined {
-  const m = /^(0[123])([#:])(.+)$/.exec(to);
-  if (!m) return undefined;
-  const doc = reg.get(m[1]);
-  if (!doc) return undefined;
-  const norm = (s: string) => s.replace(/[`*]/g, '').toLowerCase();
-  const hd =
-    m[2] === '#'
-      ? doc.headings.find((x) => x.num === m[3])
-      : doc.headings.find((x) => norm(x.text).includes(norm(m[3])));
-  return hd ? { id: hd.id, doc: m[1], title: hd.text } : undefined;
+function repoLinks(p: Parsed) {
+  visit(p.tree, 'element', (node) => {
+    if (node.tagName !== 'a') return;
+    const href = String(node.properties.href ?? '');
+    if (/^(sources|scripts|site)\//.test(href) || /\.md$/.test(href)) {
+      // repository files are not part of the site; keep the name, drop the link
+      node.tagName = 'span';
+      node.properties = { className: ['repo-path'], title: `Repository file: ${href}` };
+    } else if (/^https?:/.test(href)) {
+      node.properties.target = '_blank';
+      node.properties.rel = ['noopener'];
+    }
+  });
 }
 
-/** Wrap `![..](figures/x.svg)` + pan/zoom line + caption paragraph into <figure>. */
-function wrapFigures(p: Parsed): number {
-  const kids = p.tree.children;
-  let count = 0;
-  for (let i = 0; i < kids.length; i++) {
-    const para = kids[i];
-    if (!isEl(para, 'p')) continue;
-    const content = para.children.filter((c) => !isBlank(c));
-    if (content.length !== 1 || !isEl(content[0], 'img')) continue;
-    const img = content[0];
-    const src = String(img.properties?.src ?? '');
-    if (!src.startsWith('figures/')) continue;
-    const file = src.slice('figures/'.length);
+function renderMath(p: Parsed) {
+  visit(p.tree, 'element', (node, index, parent) => {
+    if (!cls(node).includes('math') || !parent || index === undefined) return;
+    const display = node.tagName === 'div';
+    // MathML output: rendered natively by current browsers, no KaTeX stylesheet or fonts to ship
+    const html = katex.renderToString(toString(node), { output: 'mathml', displayMode: display, throwOnError: true });
+    const frag = fromHtml(html, { fragment: true });
+    (parent as Element).children.splice(index, 1, ...(frag.children as ElementContent[]));
+    return [SKIP, index + frag.children.length];
+  });
+}
+
+function frameFigures(p: Parsed) {
+  visit(p.tree, 'element', (node) => {
+    if (node.tagName !== 'figure') return;
+    const num = String(node.properties.dataFigNum);
+    delete node.properties.dataFigNum;
+    const img = node.children.find((c): c is Element => isEl(c, 'img'));
+    const cap = node.children.find((c): c is Element => isEl(c, 'figcaption'));
+    if (!img) throw new BuildError(`${p.config.file}: figure ${node.properties.id} has no <img>`);
+    const src = String(img.properties.src);
+    const file = src.replace(/^figures\//, '');
+    if (!fs.existsSync(path.join(FIG_DIR, file))) throw new BuildError(`${p.config.file}: missing figure file ${src}`);
     const name = file.replace(/\.svg$/, '');
-    // following siblings: optional <p><sub>Pan / zoom ...</sub></p>, then the caption paragraph
-    let j = i + 1;
-    const next = () => {
-      while (j < kids.length && isBlank(kids[j])) j++;
-      return kids[j];
-    };
-    let n = next();
-    if (isEl(n, 'p') && n.children.some((c) => isEl(c, 'sub'))) {
-      j++;
-      n = next();
-    }
-    let caption: ElementContent[] | undefined;
-    let label = '';
-    if (isEl(n, 'p')) {
-      const first = n.children[0];
-      const lead = isEl(first) && (first.tagName === 'em' || first.tagName === 'strong') ? first : undefined;
-      const leadText = lead ? toString(lead) : '';
-      const lm = /^Figure (\d+)\s*—\s*/.exec(leadText);
-      if (lead && lm) {
-        label = `Figure ${lm[1]}`;
-        // strip the "Figure N — " prefix from the first text inside the lead element
-        let stripped = false;
-        visit(lead, 'text', (t: Text) => {
-          if (stripped) return;
-          t.value = t.value.replace(/^Figure \d+\s*—\s*/, '');
-          stripped = true;
-        });
-        // doc 01: the whole caption is <em>; unwrap it. docs 02/03: keep the bold title.
-        caption = lead.tagName === 'em' ? [...lead.children, ...n.children.slice(1)] : n.children;
-        j++;
-      }
-    }
-    count++;
-    const figNum = label ? label.split(' ')[1] : String(count);
+    const alt = String(img.properties.alt ?? '');
     const size = svgSize(file);
-    const alt = String(img.properties?.alt ?? label);
-    const fig = h('figure.fig', { id: `${p.config.prefix}-fig-${figNum}` }, [
-      h(
-        'button.fig-media',
-        { type: 'button', 'data-zoom': '', 'aria-label': `Enlarge ${label || 'figure'}: ${alt}` },
-        [h('img', { src, alt, width: size.width, height: size.height, loading: 'lazy', decoding: 'async' })],
-      ),
+    node.properties.className = ['fig'];
+    node.children = [
+      h('button.fig-media', { type: 'button', 'data-zoom': '', 'aria-label': `Enlarge Figure ${num}: ${alt}` }, [
+        h('img', { src, alt, width: size.width, height: size.height, loading: 'lazy', decoding: 'async' }),
+      ]),
       h('figcaption', [
-        label ? h('span.fig-label', label) : text(''),
-        ...(caption ?? [text(alt)]),
+        h('span.fig-label', `Figure ${num}`),
+        ...((cap?.children ?? [text(alt)]) as ElementContent[]),
         h('span.fig-tools', [
           h('a', { href: `figures/viewer.html#${name}`, target: '_blank', rel: 'noopener' }, 'Pan / zoom viewer'),
           h('a', { href: src, target: '_blank', rel: 'noopener' }, 'SVG'),
         ]),
       ]),
-    ]);
-    kids.splice(i, j - i, fig);
-  }
-  return count;
-}
-
-function rewriteLinks(p: Parsed, reg: Registry) {
-  visit(p.tree, 'element', (node) => {
-    if (node.tagName !== 'a') return;
-    const href = String(node.properties?.href ?? '');
-    const m = /^(0[123]-[\w-]+\.md)?(#(.*))?$/.exec(href);
-    if (m && (m[1] || m[2])) {
-      const target = m[1] ? docByFile(m[1]) : p.config;
-      if (!target) return;
-      if (m[3]) {
-        // GitHub anchors from add_toc.py; ours use github-slugger on the same text, so only the prefix differs
-        const want = `${target.prefix}-${m[3]}`;
-        const t = reg.get(target.num)?.headings.find((x) => x.id === want);
-        node.properties.href = `#${t ? t.id : want}`;
-      } else {
-        node.properties.href = `#doc-${target.key}`;
-      }
-      node.properties.className = ['xref'];
-      return;
-    }
-    if (/^(sources|scripts)\//.test(href) || href === 'README.md') {
-      // repository files are not part of the site; keep the name, drop the link
-      node.tagName = 'span';
-      node.properties = { className: ['repo-path'], title: `Repository file: ${href}` };
-      return;
-    }
-    if (/^https?:/.test(href)) {
-      node.properties.target = '_blank';
-      node.properties.rel = ['noopener'];
-    }
+    ];
+    return SKIP;
   });
 }
 
@@ -259,7 +244,7 @@ function rewriteLinks(p: Parsed, reg: Registry) {
 function replaceInText(
   tree: Root,
   re: RegExp,
-  make: (m: RegExpExecArray, parent: Element | Root, index: number, node: Text) => ElementContent[] | null,
+  make: (m: RegExpExecArray) => ElementContent[] | null,
   skip: Set<string> = NO_LINK_INSIDE,
 ) {
   visit(tree, (node, index, parent) => {
@@ -272,7 +257,7 @@ function replaceInText(
     const out: ElementContent[] = [];
     let changed = false;
     while ((m = re.exec(value))) {
-      const repl = make(m, parent as Element, index, node as Text);
+      const repl = make(m);
       if (!repl) continue;
       if (m.index > last) out.push(text(value.slice(last, m.index)));
       out.push(...repl);
@@ -284,75 +269,6 @@ function replaceInText(
     (parent as Element).children.splice(index, 1, ...out);
     return [SKIP, index + out.length];
   });
-}
-
-const SECTION_RE =
-  /\b(?:([Dd]oc) (0[123])(?:,? \(?| )?)?([Ss]ections?) (\d+(?:\.\d+)?(?:(?:, | and | or |–| to )\d+(?:\.\d+)?)*)/g;
-
-function linkSectionRefs(p: Parsed, reg: Registry) {
-  replaceInText(p.tree, SECTION_RE, (m, parent, index, node) => {
-    let docNum = m[2] ?? p.config.num;
-    // "sections 7–10 and 16 of [01 — ...](01-...md)": the target doc is named by the following link
-    if (!m[2]) {
-      const after = node.value.slice(m.index + m[0].length);
-      const sib = (parent as Element).children[index + 1];
-      if (/^ of \[?$/.test(after) || /^ of $/.test(after)) {
-        const href = isEl(sib, 'a') ? String(sib.properties?.href ?? '') : '';
-        const d = DOCS.find((x) => href.startsWith(`#doc-${x.key}`) || href.startsWith(x.file) || href.startsWith(`#${x.prefix}-`));
-        if (d) docNum = d.num;
-      }
-    }
-    const lead = m[0].slice(0, m[0].length - m[4].length);
-    const nums = m[4];
-    const parts: ElementContent[] = [];
-    const single = /^\d+(?:\.\d+)?$/.test(nums);
-    if (single) {
-      const id = sectionId(reg, docNum, nums);
-      if (!id) return null;
-      return [h('a.xref', { href: `#${id}` }, m[0])];
-    }
-    parts.push(text(lead));
-    let last = 0;
-    const numRe = /\d+(?:\.\d+)?/g;
-    let k: RegExpExecArray | null;
-    while ((k = numRe.exec(nums))) {
-      if (k.index > last) parts.push(text(nums.slice(last, k.index)));
-      const id = sectionId(reg, docNum, k[0]);
-      parts.push(id ? h('a.xref', { href: `#${id}` }, k[0]) : text(k[0]));
-      last = k.index + k[0].length;
-    }
-    if (last < nums.length) parts.push(text(nums.slice(last)));
-    return parts;
-  });
-}
-
-/** "(6.1)" style references to numbered subsections of the same document. */
-function linkParenRefs(p: Parsed, reg: Registry) {
-  replaceInText(p.tree, /\((\d+\.\d+)\)/g, (m) => {
-    const id = sectionId(reg, p.config.num, m[1]);
-    if (!id) return null;
-    return [text('('), h('a.xref', { href: `#${id}` }, m[1]), text(')')];
-  });
-}
-
-function linkFigureRefs(p: Parsed) {
-  const re = /\bFigures? (\d+)((?:(?:, | and | or |–)\d+)*)/g;
-  replaceInText(p.tree, re, (m) => {
-    const out: ElementContent[] = [];
-    const word = m[0].startsWith('Figures') ? 'Figures ' : 'Figure ';
-    out.push(text(word));
-    const rest = m[0].slice(word.length);
-    let last = 0;
-    const numRe = /\d+/g;
-    let k: RegExpExecArray | null;
-    while ((k = numRe.exec(rest))) {
-      if (k.index > last) out.push(text(rest.slice(last, k.index)));
-      out.push(h('a.xref.figref', { href: `#${p.config.prefix}-fig-${k[0]}` }, k[0]));
-      last = k.index + k[0].length;
-    }
-    if (last < rest.length) out.push(text(rest.slice(last)));
-    return out;
-  }, new Set([...NO_LINK_INSIDE, 'figcaption']));
 }
 
 function linkDocMentions(p: Parsed) {
@@ -398,7 +314,6 @@ function linkKeywords(p: Parsed, terms: ResolvedTerm[]) {
       continue;
     }
     if (!isEl(block)) continue;
-    // inline code
     visit(block, 'element', (node, index, parent) => {
       if (node.tagName === 'pre' || node.tagName === 'a' || /^h\d$/.test(node.tagName)) return SKIP;
       if (node.tagName !== 'code' || !parent || index === undefined) return;
@@ -408,7 +323,6 @@ function linkKeywords(p: Parsed, terms: ResolvedTerm[]) {
       (parent as Element).children[index] = kwLink(t, [node]);
       return SKIP;
     });
-    // plain-text phrases
     if (phraseRe) {
       const holder: Root = { type: 'root', children: [block] };
       replaceInText(holder, phraseRe, (m) => {
@@ -424,52 +338,46 @@ function linkKeywords(p: Parsed, terms: ResolvedTerm[]) {
 function wrapTables(p: Parsed) {
   visit(p.tree, 'element', (node, index, parent) => {
     if (node.tagName !== 'table' || !parent || index === undefined) return;
-    if (isEl(parent) && (parent as Element).properties?.className?.toString().includes('table-wrap')) return;
     (parent as Element).children[index] = h('div.table-wrap', { tabindex: 0, role: 'region', 'aria-label': 'Table' }, [node]);
     return SKIP;
   });
 }
 
 function decorateHeadings(p: Parsed) {
+  const byId = new Map(p.headings.map((x) => [x.id, x]));
   visit(p.tree, 'element', (node) => {
     if (!/^h[2-4]$/.test(node.tagName)) return;
     const id = String(node.properties.id);
-    const t = toString(node);
-    const num = /^(\d+(?:\.\d+)?)\.?\s/.exec(t);
-    if (num) {
-      // move the number into its own span so it can be styled
-      const first = node.children[0];
-      if (first && first.type === 'text') {
-        first.value = first.value.slice(num[0].length);
-        node.children.unshift(h('span.secnum', num[1]));
-      }
-    }
-    node.children.push(h('a.anchor', { href: `#${id}`, 'aria-label': `Link to this section` }, '#'));
+    const hd = byId.get(id);
+    if (hd?.num) node.children.unshift(h('span.secnum', hd.num));
+    node.children.push(h('a.anchor', { href: `#${id}`, 'aria-label': 'Link to this section' }, '#'));
     return SKIP;
   });
 }
 
 function insertPartDividers(p: Parsed) {
-  if (!p.config.parts) return;
+  const parts = p.config.parts;
+  if (!parts) return;
+  const nums = new Map(p.headings.filter((x) => x.depth === 2).map((x) => [x.id, x.num]));
   const kids = p.tree.children;
-  for (let i = 0; i < kids.length; i++) {
-    const k = kids[i];
-    if (!isEl(k, 'h2')) continue;
-    const n = /^(\d+)\./.exec(toString(k));
-    const part = n && p.config.parts.findIndex((pt) => pt.from === +n[1]);
-    if (part === null || part === undefined || part < 0) continue;
-    const pt = p.config.parts[part];
+  parts.forEach((pt, k) => {
+    const i = kids.findIndex((c) => isEl(c, 'h2') && c.properties.id === pt.first);
+    if (i < 0) throw new BuildError(`${p.config.file}: part "${pt.title}" starts at missing heading ${pt.first}`);
+    const from = nums.get(pt.first);
+    const nextFirst = parts[k + 1]?.first;
+    const h2s = p.headings.filter((x) => x.depth === 2 && x.num);
+    const to = nextFirst ? Number(nums.get(nextFirst)) - 1 : Number(h2s[h2s.length - 1].num);
+    pt.range = `${from}–${to}`;
     kids.splice(
       i,
       0,
-      h('div.part', { id: `${p.config.prefix}-part-${part + 1}` }, [
-        h('span.part-num', `Part ${['I', 'II', 'III', 'IV', 'V'][part]}`),
+      h('div.part', { id: `${p.config.prefix}-part-${k + 1}` }, [
+        h('span.part-num', `Part ${['I', 'II', 'III', 'IV', 'V'][k]}`),
         h('span.part-title', pt.title),
-        h('span.part-range', `Sections ${pt.from}–${pt.to}`),
+        h('span.part-range', `Sections ${pt.range}`),
       ]),
     );
-    i++;
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -479,25 +387,22 @@ let cache: { docs: RenderedDoc[]; terms: ResolvedTerm[] } | undefined;
 
 export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: ResolvedTerm[] }> {
   if (cache) return cache;
-  const reg: Registry = new Map();
-  for (const d of DOCS) reg.set(d.num, parse(d));
+  const targets = new Map<string, Target>();
+  const parsed = DOCS.map((d) => parse(d, targets));
 
-  const glossary = YAML.parse(fs.readFileSync(path.join(process.cwd(), 'src/data/glossary.yaml'), 'utf8')) as GlossaryEntry[];
-  const terms: ResolvedTerm[] = [];
-  for (const g of glossary) {
-    const t = resolveTarget(reg, g.to);
-    if (!t) throw new Error(`glossary: cannot resolve target "${g.to}" for "${g.term}"`);
-    terms.push({ ...g, id: t.id, doc: t.doc, targetTitle: t.title });
-  }
+  const glossary = YAML.parse(fs.readFileSync(path.join(SITE_ROOT, 'src/data/glossary.yaml'), 'utf8')) as GlossaryEntry[];
+  const terms: ResolvedTerm[] = glossary.map((g) => {
+    const t = targets.get(g.to);
+    if (!t || t.kind !== 'section') throw new BuildError(`glossary: "${g.term}" points at missing heading ${g.to}`);
+    return { ...g, id: g.to, doc: t.doc, targetTitle: (t.num ? `${t.num} ` : '') + t.title };
+  });
 
   const out: RenderedDoc[] = [];
-  for (const d of DOCS) {
-    const p = reg.get(d.num)!;
-    const figs = wrapFigures(p);
-    rewriteLinks(p, reg);
-    linkSectionRefs(p, reg);
-    linkParenRefs(p, reg);
-    linkFigureRefs(p);
+  for (const p of parsed) {
+    resolveRefs(p, targets);
+    repoLinks(p);
+    renderMath(p);
+    frameFigures(p);
     linkDocMentions(p);
     linkKeywords(p, terms);
     wrapTables(p);
@@ -511,8 +416,9 @@ export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: Resolve
       })
       .use(rehypeStringify);
     const tree = (await proc.run(p.tree)) as Root;
-    out.push({ config: d, title: p.title, html: proc.stringify(tree), headings: p.headings, figureCount: figs });
+    out.push({ config: p.config, title: p.title, html: proc.stringify(tree), headings: p.headings, figureCount: p.figures });
   }
   cache = { docs: out, terms };
   return cache;
 }
+

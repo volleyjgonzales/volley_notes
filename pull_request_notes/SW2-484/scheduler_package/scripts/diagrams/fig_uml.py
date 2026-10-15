@@ -29,7 +29,7 @@ def gen_tree(doc: Doc, parent: BBox, children: list[BBox], color: str, bus_y: fl
 # 11 — existing core classes
 # --------------------------------------------------------------------------------------
 
-@figure("11_uml_existing_core", "Existing core planner classes", "01-software-background.md")
+@figure("11_uml_existing_core", "Existing core planner classes", "01-software-background.html")
 def uml_core():
     d = Doc("11_uml_existing_core", "Existing core planner relationships",
             "UML class diagram of Scheduler, ScheduleContext, ScheduleEventDag, DagBase, DiscreteGarageState "
@@ -126,7 +126,7 @@ def uml_core():
 # 12 — event hierarchy
 # --------------------------------------------------------------------------------------
 
-@figure("12_uml_event_hierarchy", "ScheduleEvent hierarchy", "01-software-background.md")
+@figure("12_uml_event_hierarchy", "ScheduleEvent hierarchy", "01-software-background.html")
 def uml_events():
     d = Doc("12_uml_event_hierarchy", "Existing ScheduleEvent inheritance hierarchy",
             "ScheduleEvent abstract base class with TrayMove and AgvMove (assignment-oriented) and BayTransition, "
@@ -211,7 +211,7 @@ def uml_events():
 # 08 — proposed solver UML
 # --------------------------------------------------------------------------------------
 
-@figure("08_uml_solver", "Proposed tray_assignment classes", "02-issue-and-proposal.md")
+@figure("08_uml_solver", "Proposed tray_assignment classes", "02-issue-and-proposal.html")
 def uml_solver():
     d = Doc("08_uml_solver", "Proposed tray_assignment class structure",
             "Strategy pattern: Scheduler holds a tray_assignment::Solver; DefaultSolver and a test fake realize it; "
@@ -287,7 +287,7 @@ def uml_solver():
 # 09 — sequence
 # --------------------------------------------------------------------------------------
 
-@figure("09_sequence_tray", "Tray solver sequence", "02-issue-and-proposal.md")
+@figure("09_sequence_tray", "Tray solver sequence", "02-issue-and-proposal.html")
 def seq_tray():
     d = Doc("09_sequence_tray", "Proposed tray-solver interaction",
             "Sequence: Scheduler builds Input, calls Solve; the solver reads the topological order, records blocker "
@@ -397,7 +397,7 @@ def seq_tray():
 # 13 — ROS service / message composition
 # --------------------------------------------------------------------------------------
 
-@figure("13_uml_ros_messages", "ROS service and message composition", "01-software-background.md")
+@figure("13_uml_ros_messages", "ROS service and message composition", "01-software-background.html")
 def uml_ros():
     d = Doc("13_uml_ros_messages", "As-built ROS service and message composition",
             "Composition of srv/Plan.srv: PlanRequest (state, base schedule, jobs) and PlanResponse "

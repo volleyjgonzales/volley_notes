@@ -17,9 +17,8 @@ function groups(doc: RenderedDoc) {
   }
   return out;
 }
-function partStarting(doc: RenderedDoc, num?: string) {
-  if (!num || !doc.config.parts) return -1;
-  return doc.config.parts.findIndex((p) => String(p.from) === num);
+function partStarting(doc: RenderedDoc, id: string) {
+  return doc.config.parts ? doc.config.parts.findIndex((p) => p.first === id) : -1;
 }
 ---
 
@@ -41,7 +40,7 @@ function partStarting(doc: RenderedDoc, num?: string) {
           </a>
           <ol class="toc-list">
             {groups(doc).map(({ h2, children }) => {
-              const part = partStarting(doc, h2.num);
+              const part = partStarting(doc, h2.id);
               return (
                 <Fragment>
                   {part >= 0 && (
@@ -53,10 +52,10 @@ function partStarting(doc: RenderedDoc, num?: string) {
                     <div class="toc-row">
                       <a href={`#${h2.id}`} data-id={h2.id}>
                         {h2.num ? <span class="toc-num">{h2.num}</span> : <span class="toc-num toc-num-empty" />}
-                        <span class="toc-text" set:html={h2.num ? h2.html.replace(/^\s*\d+(\.\d+)?\.?\s*/, '') : h2.html} />
+                        <span class="toc-text" set:html={h2.html} />
                       </a>
                       {children.length > 0 && (
-                        <button class="toc-toggle" type="button" aria-expanded="false" aria-label={`Show subsections of ${h2.text}`}>
+                        <button class="toc-toggle" type="button" aria-expanded="false" aria-label={`Show subsections of ${h2.title}`}>
                           <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </button>
                       )}

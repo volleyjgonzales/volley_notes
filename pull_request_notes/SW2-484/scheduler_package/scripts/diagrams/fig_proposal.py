@@ -9,7 +9,7 @@ from registry import figure
 from svgkit import BBox, Doc, text_width
 from theme import T, S
 
-DOC2 = "02-issue-and-proposal.md"
+DOC2 = "02-issue-and-proposal.html"
 CTX, SOLVE, PASS, PURE, WRITE, ARG = T.sky, T.amber, T.violet, T.green, T.red, T.amber
 M = 12
 

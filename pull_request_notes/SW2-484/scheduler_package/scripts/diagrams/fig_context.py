@@ -7,7 +7,7 @@ from registry import figure
 from svgkit import BBox, Doc, text_width
 from theme import T, S
 
-DOC1 = "01-software-background.md"
+DOC1 = "01-software-background.html"
 
 ID, INP, PLAN, BOOK = T.fg2, T.violet, T.amber, T.green
 

@@ -1,9 +1,8 @@
 """Concept figures: Layout vs GarageGraph, the CollisionTable, and topological ordering.
 
-The internals of Layout, PoseGraph, GarageGraph and CollisionTable live in common_ros (not in the
-snapshot). What these figures state as fact is limited to what the scheduler code shows: the
-constructor chain, the methods it calls and what it passes. Graph construction details and the
-table's storage are drawn as concepts and labelled as such.
+Layout, PoseGraph, GarageGraph and CollisionTable are in common_ros (sources/repomix-common-ros.xml).
+Vertex numbers come from fig_garagemodel (the PoseGraph rules applied to the Pecos YAML). The
+footprint sizes in figure 52 are schematic: the dimension constants live in `common`.
 """
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ from registry import figure
 from svgkit import BBox, Doc, text_width, wrap
 from theme import S, T
 
-DOC1 = "01-software-background.md"
+DOC1 = "01-software-background.html"
 W = 1120
 TRAY, AGV, BAYC = T.amber, T.green, T.violet
 
@@ -113,7 +112,8 @@ def layout_vs_graph():
            "layout_->GetBaySystemFloors(bay), GetName()"]
     ya = _card(d, 0, yc.y1 + 14, pw, "What the scheduler asks it", api, T.sky, size=10.5)
 
-    # ---- right panel: GarageGraph (conceptual expansion) ----
+    # ---- right panel: GarageGraph (as built: every YAML heading h gives poses h and h + 180) ----
+    from fig_garagemodel import VERT, allowed
     rx = pw + 40
     rw = W - rx
     d.text(rx, top, "GarageGraph  (gg_)  — poses and moves", size=14, weight=600, fill=T.green)
@@ -121,41 +121,42 @@ def layout_vs_graph():
     gm = Map(d, rx, top + 20, gs, CROP_X, CROP_Y)
     gb = gm.box
     d.rect(gb.x0, gb.y0, gb.w, gb.h, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1, layer="bg")
-    # vertex positions: one per (node, heading)
     vpos = {}
     for nid in SHOW:
-        n = NODES[nid]
         x, y = gm.P(nid)
-        hs = n.headings
-        if len(hs) == 1:
-            vpos[(nid, hs[0])] = (x, y)
-        else:
-            vpos[(nid, 90)] = (x, y)
-            vpos[(nid, 0)] = (x - 44, y - 50)
-    # translation edges between same-heading vertices of adjacent nodes
+        hs = allowed(nid)
+        offs = ({0: (0, -34), 90: (-34, 0), 180: (0, 34), 270: (34, 0)} if len(hs) == 4
+                else {90: (-20, 0), 270: (20, 0)})
+        for h in hs:
+            vpos[(nid, h)] = (x + offs[h][0], y + offs[h][1])
     for a, b in EDGES:
         if a in SHOW and b in SHOW:
-            for h in (0, 90):
+            for h in (90, 270):
                 if (a, h) in vpos and (b, h) in vpos:
                     (x0, y0), (x1, y1) = vpos[(a, h)], vpos[(b, h)]
-                    d.line(x0, y0, x1, y1, stroke=T.tint(T.green, 0.55, T.bg_deep), sw=2, layer="edges")
-        elif (a in SHOW) != (b in SHOW):
-            pass
-    # rotation edge at W22
-    (xa, ya_), (xb, yb) = vpos[(22, 0)], vpos[(22, 90)]
-    d.path(f"M{xa:.1f} {ya_:.1f} Q{xa - 4:.1f} {yb + 4:.1f} {xb:.1f} {yb:.1f}", stroke=T.pink, sw=2,
-           dash="4 3", layer="edges")
-    label_pill(d, xa - 20, ya_, "rotate", color=T.pink, size=10, bg=T.bg_deep, anchor="end")
+                    d.line(x0, y0, x1, y1, stroke=T.tint(T.green, 0.45, T.bg_deep), sw=1.6, layer="edges")
+    ring = [(22, 0), (22, 90), (22, 180), (22, 270)]
+    for i in range(4):
+        (xa, ya_), (xb, yb) = vpos[ring[i]], vpos[ring[(i + 1) % 4]]
+        cx, cy = gm.P(22)
+        mx_, my_ = (xa + xb) / 2, (ya_ + yb) / 2
+        qx, qy = mx_ + (mx_ - cx) * 0.9, my_ + (my_ - cy) * 0.9
+        d.path(f"M{xa:.1f} {ya_:.1f} Q{qx:.1f} {qy:.1f} {xb:.1f} {yb:.1f}", stroke=T.pink, sw=1.8, dash="4 3",
+               layer="edges")
+    x22, y22 = gm.P(22)
+    label_pill(d, x22 - 58, y22 - 46, "rotations", color=T.pink, size=10, bg=T.bg_deep, anchor="end")
     for (nid, h), (x, y) in vpos.items():
         col = T.green
-        d.circle(x, y, 13, fill=T.card, stroke=col, sw=1.8, layer="over")
-        _arrow_glyph(d, x, y, h, col)
-        lab = f"({NODES[nid].label},{h})"
-        dy = 24 if not (nid == 22 and h == 0) else -24
-        if nid == 22 and h == 90:
-            dy = 26
-        d.text(x, y + dy, lab, size=10, family="mono", fill=T.fg2, anchor="middle", halo=T.bg_deep, halo_w=3)
-    gapi = ["gg_.GetVertexFromPose({22, 0})  -> std::optional<Vertex>",
+        d.circle(x, y, 11, fill=T.card, stroke=col, sw=1.6, layer="over")
+        _arrow_glyph(d, x, y, h, col, r=8)
+        if nid == 22:
+            cx, cy = gm.P(22)
+            lx, ly = cx + (x - cx) * 1.7, cy + (y - cy) * 1.7
+        else:
+            lx, ly = x, y - 19
+        d.text(lx, ly, str(VERT[(nid, h)]), size=10, family="mono", weight=700, fill=T.fg2, anchor="middle",
+               halo=T.bg_deep, halo_w=3, layer="top")
+    gapi = ["gg_.GetVertexFromPose({22, 0})  -> 42 (std::optional<Vertex>)",
             "gg_.GetPoseFromVertex(v)        -> GaragePoseMsg",
             "gg_.GarageNodeFromVertex(v)     -> layout node",
             "gg_.GetOutEdges(v), gg_.EdgeFromPoses(a, b)",
@@ -166,10 +167,10 @@ def layout_vs_graph():
                   "returns an empty optional."]
     gc = _card(d, rx, gb.y1 + 18, rw, "What the scheduler asks it", gapi, T.green, size=10.5)
     gn = note(d, rx, gc.y1 + 14, rw,
-              "Drawn: one vertex per allowed heading, a move between same-heading poses of adjacent nodes, and a "
-              "rotation at W22 (rotation_allowed). The exact rules (reciprocal headings, directed or "
-              "disallowed edge orientations, costs) are built by PoseGraph in common_ros and are not in the "
-              "snapshot.", title="Conceptual expansion", accent=T.violet)
+              "Each YAML heading h gives two poses, h and h + 180, so most nodes own two vertices and W22 "
+              "(headings 0 and 90) owns four: 42, 43, 44, 45. A move connects same-heading poses of adjacent "
+              "nodes; rotations exist only where rotation_allowed is true. Numbers are Vertex values for Pecos.",
+              title="How PoseGraph expands nodes", accent=T.green)
 
     # ---- bottom: which structure answers which question ----
     y = max(ya.y1, gn.y1) + 34
@@ -196,8 +197,8 @@ def layout_vs_graph():
           subtitle="Both describe the same garage. The Layout answers questions about places (node ids, types, "
                    "positions, bays). The GarageGraph answers questions about motion: its vertices are poses "
                    "(node + heading) and its edges are the moves between them. Searches and paths always run on gg_.",
-          badge_key="yaml+concept",
-          legend=[("dot", T.sky, "layout node (YAML)"), ("ring", T.green, "graph vertex = pose (arrow = heading)"),
+          badge_key="yaml",
+          legend=[("dot", T.sky, "layout node (YAML)"), ("ring", T.green, "graph vertex = pose (arrow = heading, number = Vertex)"),
                   ("line", T.green, "move between poses"), ("dash", T.pink, "rotation at a node")])
     return d
 

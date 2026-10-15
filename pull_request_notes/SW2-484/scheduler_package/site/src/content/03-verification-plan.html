@@ -1,0 +1,302 @@
+<!--
+  03 — source of truth for this document. Edit this file; the site build (site/) renders it.
+
+  Conventions
+  - <h2 data-num> / <h3 data-num>: numbered at build time (h3 numbers are "<h2>.<k>"). No number in the text.
+  - Every heading and figure has a stable id (prefix "vr-"). Link with <a href="#id">.
+  - <a class="ref" href="#id">section 7</a> / <a class="ref" href="#vr-fig-…">Figure 3</a>:
+    the build replaces the number with the current one, so references survive reordering.
+  - <figure id="vr-fig-NAME"><img src="figures/NAME.svg" alt="…"><figcaption>…</figcaption></figure>:
+    numbered at build time; NAME is the SVG from scripts/diagrams.
+  - <span class="math">TeX</span>, <div class="math">TeX</div>: rendered to MathML at build time.
+  - Keyword links (glossary.yaml), "doc 02" links and code highlighting are added at build time.
+-->
+<h1>03 — Regression and benchmark plan</h1>
+<p>This document says how to prove the refactor in <a href="#doc-proposal">02</a> changed nothing, and how to measure it. It starts with what the existing tests already cover (computed from <code>sources/repomix-scheduler.xml</code>), then defines the parity comparison and the benchmark method.</p>
+<h2 data-num id="vr-two-separate-goals">Two separate goals</h2>
+<p><strong>Behavioural equivalence</strong> asks whether the extracted default solver makes the same decisions and adds the same constraints as the old <code>Scheduler</code> method. <strong>Performance benchmarking</strong> asks whether run time or resource use changes for comparable inputs. A passing GoogleTest is neither: it shows the code still meets that test's assertions, not that output is identical or equally fast.</p>
+<h2 data-num id="vr-what-the-existing-tests-cover">What the existing tests cover</h2>
+<p>The package has <strong>72 active <code>TEST</code> cases</strong> in four files (a 73rd, <code>DoubleRetrieveDodgeAgv</code>, sits inside a <code>/* … */</code> block). <a class="ref" href="#vr-fig-35_test_entry_points">Figure 1</a> places each one under the earliest pipeline stage it calls directly.</p>
+<figure id="vr-fig-35_test_entry_points">
+  <img src="figures/35_test_entry_points.svg" alt="Where the existing tests enter the scheduler">
+  <figcaption><strong>Test entry points.</strong> Columns follow the <code>Plan()</code> pipeline from doc 01, <a class="ref" href="#bg-one-plan-call-step-by-step">section 10</a>. A card's colour stripe shows its file; "+n" means the test also calls n later stages directly.</figcaption>
+</figure>
+<table>
+  <thead>
+    <tr>
+      <th>File</th>
+      <th>Active tests</th>
+      <th>Style</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>scheduler_insert_orientation_tests.cpp</code></td>
+      <td>4</td>
+      <td>Full <code>Plan()</code> on <code>1355_fulton</code>; checks the tray heading after an insert</td>
+    </tr>
+    <tr>
+      <td><code>scheduler_jobs_tests.cpp</code></td>
+      <td>30</td>
+      <td>Full <code>Plan()</code> per job type; checks job state, notes and node indices. CMake timeout 240 s</td>
+    </tr>
+    <tr>
+      <td><code>scheduler_tests.cpp</code></td>
+      <td>25</td>
+      <td>Mostly calls one stage directly on a hand-built <code>ScheduleContext</code></td>
+    </tr>
+    <tr>
+      <td><code>utils_tests.cpp</code></td>
+      <td>13</td>
+      <td>Pure functions in <code>utils.cpp</code>: state validation, bay classification, rebalancing</td>
+    </tr>
+  </tbody>
+</table>
+<p>By stage: 37 tests enter through <code>Plan()</code>, 5 through tray assignment, 11 through AGV assignment (including the four cost-helper tests), 4 through sanity/motion/response, and 15 through utilities and context helpers. The layouts used are <code>tiny_lot</code> (37 references), <code>1355_fulton</code> (9), <code>576_eccles_half</code> (7) and <code>triple_pick_lot</code> (3).</p>
+<h3 id="vr-how-a-stage-level-test-is-built">How a stage-level test is built</h3>
+<p>Read this before writing parity tests; the new tests will look the same, with the solver call swapped in.</p>
+<pre><code class="language-cpp">// test/scheduler_tests.cpp — inside TEST(Scheduler, AmigaStash) (abridged); all names are test locals
+volley::DiscreteGarageState state;                         // garage snapshot
+auto [success, msg] = state.Set(YAML::Load(R"YML(...)YML"));  // inline YAML: AGVs, trays, bays, payloads
+
+Scheduler scheduler(layout_filepath, logger, params);      // the object under test; loads tiny_lot
+ScheduleContextSPtr ctx =                                  // std::shared_ptr&lt;ScheduleContext>
+    std::make_shared&lt;ScheduleContext>(request_id, state, rclcpp::Time());
+
+auto tray_move_1 = std::make_shared&lt;TrayMove>(0u);         // std::shared_ptr&lt;volley::TrayMove>, job_index 0
+tray_move_1->SetTrayId(2);
+GaragePoseMsg end_pose;                                    // interfaces message: node_id + heading
+end_pose.node_id = 5;
+end_pose.heading = 0;
+tray_move_1->SetDest(end_pose);
+ctx->events.AddEvent(tray_move_1);
+// ...tray_move_2 (tray 1) and tray_move_3 (tray 2 again), chained with AddDependency
+
+std::tie(success, msg) = scheduler.DoAgvAssignments(ctx);  // mutates ctx->events and the TrayMove objects
+EXPECT_EQ(tray_move_1->GetAgvId().value(), 1);             // read results back through the same shared_ptrs
+EXPECT_EQ(tray_move_2->GetAgvId().value(), 1);
+EXPECT_EQ(tray_move_3->GetAgvId().value(), 8);             // hand-over to a second AGV
+EXPECT_FALSE(ctx->events.HasDependency(tray_move_1, tray_move_2));  // direct edge removed by Reduce()
+</code></pre>
+<p>Note the last line: the test checks that <code>Reduce()</code> <em>removed</em> an edge it added itself, which is exactly the kind of detail a parity check must preserve. The test keeps its own <code>shared_ptr</code> to each event, so it can inspect the event after the algorithm has changed it. A parity harness can use the same trick on both the old and the new path.</p>
+<h3 id="vr-tests-most-relevant-to-the-two-solvers">Tests most relevant to the two solvers</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Test</th>
+      <th>Layout</th>
+      <th>What it asserts</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>TrayAssignmentTest</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>One <code>TrayMove</code> with a tray but no destination; asserts only success</td>
+    </tr>
+    <tr>
+      <td><code>TrayAssignmentTestComplexDag</code></td>
+      <td><code>triple_pick_lot</code></td>
+      <td>"Moving t13 to b1, lots of cycles"; tray, AGV and motion planning all succeed</td>
+    </tr>
+    <tr>
+      <td><code>UnblockingTrayMoveTest</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>Tray to bay with a blocker; asserts only success</td>
+    </tr>
+    <tr>
+      <td><code>ResolveBlockingTraysRecursivelyUnblocksChain</code></td>
+      <td><code>triple_pick_lot</code></td>
+      <td>Calls <code>ResolveBlockingTrays</code> directly; ≥ 2 required moves, every move has a destination, all destinations distinct</td>
+    </tr>
+    <tr>
+      <td><code>TrayAndAgvAssignments</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>Both stages; topological order exists; final continuous state computable</td>
+    </tr>
+    <tr>
+      <td><code>MiAmigaEsSuAmiga</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>Closer AGV is disabled; AGV 1 is assigned</td>
+    </tr>
+    <tr>
+      <td><code>AmigaSaysNo</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>Disabled AGV blocks the other's path; assignment fails, no AGV set</td>
+    </tr>
+    <tr>
+      <td><code>AmigaStash</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>Three chained tray moves get AGVs 1, 1 and 8; the original tray-to-tray edges are gone after <code>Reduce()</code> because longer chains imply them; applying all events reaches the expected state</td>
+    </tr>
+    <tr>
+      <td><code>NoAmigas</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>No feasible AGV; fails, no edge added, still 2 vertices</td>
+    </tr>
+    <tr>
+      <td><code>AmigaBaySos</code> / <code>AmigaBaySo</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>A <code>BayTransition</code> root traps or frees the AGV; edge bay → tray move present</td>
+    </tr>
+    <tr>
+      <td><code>TrayLiftBayTransitionDependencyTest</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>The bay transition has the AGV lift move as an out-edge</td>
+    </tr>
+    <tr>
+      <td><code>CleanGarageUnstashesTrayFromWaypoint</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>Through <code>Plan()</code>: one job, <code>STATE_EXECUTING</code>, an unstash move exists</td>
+    </tr>
+  </tbody>
+</table>
+<h3 id="vr-gaps">Gaps</h3>
+<ol>
+  <li><strong>Assertions are mostly success flags.</strong> Four of the five tray tests do not check which tray moved where. They will not catch a behaviour change; the parity harness in <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a> must.</li>
+  <li><strong>No direct tests</strong> for <code>EnsureAgvMovePathsClear</code>, <code>AddDepsAfterAmiga</code> or <code>InsertVrcActionsIntoDag</code>. They run only inside larger tests, so a regression there shows up (if at all) as a downstream failure.</li>
+  <li><strong><code>DoubleRetrieveDodgeAgv</code> is commented out.</strong> It uses the only YAML fixture in <code>test/garage_states/</code> and <code>576_eccles_half</code>. Find out why before relying on that scenario.</li>
+  <li><strong>Layout-specific code.</strong> <code>UseEvChargeHeading</code> checks <code>strstr(layout_->GetName().c_str(), "576_eccles")</code> and forces heading 0 on nodes 46 and 47. Benchmarks on that layout exercise a branch others never reach.</li>
+  <li><strong>No benchmark code.</strong> Nothing in the snapshot times the solvers, and no Google Benchmark target exists in <code>CMakeLists.txt</code>.</li>
+</ol>
+<h2 data-num id="vr-proposed-benchmark-dataset-requirements-not-completed-scenarios">Proposed benchmark dataset (requirements, not completed scenarios)</h2>
+<p>The parent ticket requires <strong>at least 10 scenarios based on real customer site layouts for each solver</strong>. The matrix below is coverage to aim for, <strong>not</strong> a claim that the cases exist. Each row needs an approved real-site fixture or a documented, anonymized derivative of one. <code>tiny_lot</code> and <code>triple_pick_lot</code> are test layouts and do not count; <code>576_eccles_half</code> and <code>1355_fulton</code> look site-derived, but record their provenance first.</p>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Tray solver characteristic</th>
+      <th>AGV solver characteristic</th>
+      <th>Existing test to start from</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>01</td>
+      <td>Low occupancy, short move</td>
+      <td>One nearby feasible AGV</td>
+      <td><code>TrayAssignmentTest</code>, <code>MiAmigaEsSuAmiga</code></td>
+    </tr>
+    <tr>
+      <td>02</td>
+      <td>Occupied destination, repark</td>
+      <td>Several candidates, distance tie</td>
+      <td><code>ReparkTrayJob</code></td>
+    </tr>
+    <tr>
+      <td>03</td>
+      <td>Single blocking tray</td>
+      <td>Candidate with a raised lift</td>
+      <td><code>UnblockingTrayMoveTest</code></td>
+    </tr>
+    <tr>
+      <td>04</td>
+      <td>Recursive chain of blockers</td>
+      <td>Closer candidate disabled</td>
+      <td><code>ResolveBlockingTraysRecursivelyUnblocksChain</code></td>
+    </tr>
+    <tr>
+      <td>05</td>
+      <td>Narrow aisle with cycles</td>
+      <td>AGV trapped in a bay</td>
+      <td><code>TrayAssignmentTestComplexDag</code>, <code>AmigaBaySos</code></td>
+    </tr>
+    <tr>
+      <td>06</td>
+      <td>High occupancy, no repark spot</td>
+      <td>AGV route unreachable</td>
+      <td><code>AmigaSaysNo</code></td>
+    </tr>
+    <tr>
+      <td>07</td>
+      <td>Waypoint-stash fallback (tier 2)</td>
+      <td>Non-tray root gates a tray root</td>
+      <td><code>CleanGarageUnstashesTrayFromWaypoint</code> (the reverse step), <code>AmigaBaySo</code></td>
+    </tr>
+    <tr>
+      <td>08</td>
+      <td>Different payload footprints</td>
+      <td>Node-arrival ordering between AGVs</td>
+      <td><code>CleanGarageAgvInTheWay</code></td>
+    </tr>
+    <tr>
+      <td>09</td>
+      <td>Several jobs, independent moves</td>
+      <td>Bottleneck matching across many roots</td>
+      <td><code>BackToBackRetrieve</code></td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>One tray moved several times</td>
+      <td>Same AGV across a chain, then a hand-over</td>
+      <td><code>AmigaStash</code></td>
+    </tr>
+  </tbody>
+</table>
+<p>Each fixture records: site/layout identifier, layout file hash, initial <code>DiscreteGarageState</code> (YAML), request (<code>PlanRequestMsg</code> or the hand-built DAG), expected result, code SHA, and whether it is anonymized.</p>
+<h2 data-num id="vr-compare-meaning-not-pointers-or-guids">Compare meaning, not pointers or GUIDs</h2>
+<p>Events have no stable id across runs: a <code>shared_ptr</code> address changes every run, and GUIDs come from a static counter. Compare a canonical description instead. For each scenario <span class="math">k\in\{1,\ldots,K\}</span>, where <span class="math">K\in\mathbb N</span> is the number of scenarios, capture:</p>
+<ul>
+  <li>Success flag and a stable error class (compare raw message strings separately).</li>
+  <li>For each <code>TrayMove</code>: tray id, destination node and heading, assigned AGV id, job index.</li>
+  <li>Event identity as (type, job index, entity id, destination, occurrence number among identical events).</li>
+  <li>The edge set after <code>Reduce()</code> (the transitive reduction is unique for a DAG), plus reachability between every pair of events.</li>
+  <li><code>first_tray_event</code> mapped to canonical event identities.</li>
+  <li>The final <code>DiscreteGarageState</code> after applying all events to <code>initial_state</code>.</li>
+  <li>For end-to-end tests: the <code>ScheduledJobDataMsg</code> list and the action-node schedule.</li>
+</ul>
+<p>Let <span class="math">e_k\in\{0,1\}</span> be 1 only when every rule above passes for scenario <span class="math">k</span>. The pass proportion <span class="math">p\in[0,1]</span> is:</p>
+<div class="math">p=\frac{1}{K}\sum_{k=1}^{K}e_k.</div>
+<p>The release gate is <span class="math">p=1</span>, with every deviation investigated. If a stage is non-deterministic (for example, ties in <code>BottleneckAssignment</code> broken by hash-map order), define the accepted equivalence classes <strong>before</strong> measuring, not after a difference appears.</p>
+<p>A parity check could look like this. <code>Canonicalize</code> and <code>CanonicalDag</code> are <strong>proposed</strong> helpers, not existing code:</p>
+<pre><code class="language-cpp">// PROPOSED — test/solver_parity_tests.cpp
+// reference_ctx, candidate_ctx : ScheduleContextSPtr built from the same YAML state and the same events
+//                                (events cloned, not shared — otherwise both paths mutate the same objects)
+// scheduler                    : volley::Scheduler (old path)
+// tray_solver                  : tray_assignment::DefaultSolver (new path, built from the scheduler's GarageServices)
+auto [ref_ok, ref_msg] = scheduler.DoTrayAssignments(reference_ctx);           // BoolStringPair (old API)
+stdx::Result cand = tray_solver.Solve({candidate_ctx->initial_state, candidate_ctx->events})  // stdx::Expected&lt;Result>
+                        .and_then([&amp;](const tray_assignment::Result&amp; r) {
+                          return tray_assignment::ApplyTrayAssignment(*candidate_ctx, r);
+                        });
+ASSERT_EQ(ref_ok, cand.has_value()) &lt;&lt; ref_msg &lt;&lt; " vs " &lt;&lt; (cand ? std::string{} : cand.error());
+if(!ref_ok) { EXPECT_EQ(ref_msg, cand.error()); }   // error text reaches clients through FailJob
+
+CanonicalDag ref  = Canonicalize(*reference_ctx);   // sorted events + reduced edge set + first_tray_event
+CanonicalDag cand = Canonicalize(*candidate_ctx);
+EXPECT_EQ(ref.events, cand.events);                 // tray ids, destinations, AGV ids, job indices
+EXPECT_EQ(ref.edges, cand.edges);                   // after Reduce() on a copy
+EXPECT_EQ(ref.first_tray_event, cand.first_tray_event);
+EXPECT_EQ(ref.final_state, cand.final_state);
+</code></pre>
+<p>Note the comment on cloning: because the DAG holds <code>shared_ptr</code>s (doc 02, <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">section 6.5</a>), the two contexts must be built independently from the same inputs. <code>Solve</code> itself changes nothing, but <code>ApplyTrayAssignment</code> and the old <code>DoTrayAssignments</code> both set fields on the event objects. A second, cheaper check needs no clone: call <code>Solve</code> twice on the same <code>Input</code> and assert the two <code>Result</code>s are equal and the input events are unchanged (doc 02, invariant 9).</p>
+<h2 data-num id="vr-benchmark-method">Benchmark method</h2>
+<p>Time the solver call alone, after fixture construction, and separately time <code>Scheduler::Plan</code> end to end. Keep layout loading, YAML parsing, ROS component start-up and <code>debug/printdags</code> output out of solver timings. Use the same optimized build flags, hardware, ROS distribution, dependency versions and thread count for every run.</p>
+<p>Let <span class="math">t_{k,r}\in\mathbb R_{\ge0}</span> [ms] be the duration of scenario <span class="math">k</span> on repetition <span class="math">r\in\{1,\ldots,R\}</span>, where <span class="math">R\in\mathbb N</span> is the repetition count. For each scenario record the median <span class="math">\widetilde t_k\in\mathbb R_{\ge0}</span> [ms], the 95th percentile <span class="math">t_{k,0.95}</span> [ms] when there are enough repetitions, and the baseline median <span class="math">\widetilde t_k^{(0)}</span> [ms] from the original code. The runtime ratio <span class="math">q_k\in\mathbb R_{\ge0}</span> is:</p>
+<div class="math">q_k=\frac{\widetilde t_k}{\widetilde t_k^{(0)}}.</div>
+<p><span class="math">q_k</span> is defined only when <span class="math">\widetilde t_k^{(0)}>0</span> [ms]; a value above 1 means the candidate is slower. Agree on a threshold with the team after measuring run-to-run variance, not before. Save raw timings as CSV or JSON:</p>
+<pre><code class="language-text">solver,scenario_id,site_fixture,layout_hash,code_sha,build_type,host,iteration,elapsed_ms,success,event_count,edge_count,semantic_hash
+</code></pre>
+<p><code>semantic_hash</code> is a hash of the canonical description from <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, never of pointer values or hash-map iteration order.</p>
+<h2 data-num id="vr-build-and-run-commands">Build and run commands</h2>
+<p>Inside the configured ROS 2 container and workspace:</p>
+<pre><code class="language-bash">colcon build --packages-up-to scheduler scheduler_advanced_tests --event-handlers console_direct+
+colcon test --packages-select planner_core scheduler scheduler_advanced_tests --event-handlers console_direct+
+colcon test-result --verbose
+</code></pre>
+<p>To run one test under a debugger, use the gtest binary in the build tree, for example <code>build/scheduler/scheduler_tests --gtest_filter=Scheduler.AmigaStash</code>. If the workspace uses wrappers (<code>poe</code>, <code>.colcon</code> profiles, a virtual environment), follow them. A successful build does not mean the tests ran; read <code>colcon test-result</code> and the logs.</p>
+<h2 data-num id="vr-acceptance-checklist">Acceptance checklist</h2>
+<ul class="contains-task-list">
+  <li class="task-list-item"><input type="checkbox" disabled> Baseline captured: all 72 active tests pass on the pinned commit; canonical outputs saved for every fixture.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Default tray solver gives the same canonical result as <code>DoTrayAssignments</code> on every fixture.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Default AGV solver does the same, including non-tray root draining, node-arrival edges, path repair and the AMIGA dependencies.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Both solvers can be constructed in a test without a <code>Scheduler</code>.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Direct tests added for <code>EnsureAgvMovePathsClear</code> and <code>AddDepsAfterAmiga</code> (gap 2).</li>
+  <li class="task-list-item"><input type="checkbox" disabled> <code>Scheduler::Plan</code> uses only the new interfaces for both assignment phases.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> The 4 direct <code>DoTrayAssignments</code> and 9 direct <code>DoAgvAssignments</code> call sites in <code>scheduler_tests.cpp</code> ported; legacy methods removed.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> At least 10 approved real-site scenarios for <strong>each</strong> solver, with recorded provenance.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Baselines from the original code stored with code SHA, environment and raw samples.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Unit tests, advanced scenarios and applicable system tests pass.</li>
+</ul>
+<h2 data-num id="vr-evidence-limits">Evidence limits</h2>
+<p>Three snapshots were used: the <code>scheduler</code> package (<code>sources/repomix-scheduler.xml</code>), the sources of <code>planner_core</code> (<code>sources/repomix-planner-core.xml</code>: the event classes and the event DAG, without <code>test/event_dag_tests.cpp</code> and <code>test/schedule_events_tests.cpp</code>) and the sources of <code>common_ros</code> (<code>sources/repomix-common-ros.xml</code>, without tests). <code>motion_planner</code>, <code>task_planner</code> and <code>scheduler_advanced_tests</code> are referenced but not included, so statements about them come from call sites and need checking. Customer-site geometry and AGV dimensions were not supplied; the 2D figures use illustrative coordinates. No timing in this document is a measured value.</p>

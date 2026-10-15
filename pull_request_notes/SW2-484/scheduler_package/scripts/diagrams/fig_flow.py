@@ -38,7 +38,7 @@ def _mini_dag(doc: Doc, x0, y0, w, h, nodes, edges, *, square=False):
             doc.circle(x, y, r, fill=col)
 
 
-@figure("01_pipeline", "Scheduler::Plan pipeline", "01-software-background.md")
+@figure("01_pipeline", "Scheduler::Plan pipeline", "01-software-background.html")
 def pipeline():
     d = Doc("01_pipeline", "Scheduler::Plan — four principal stages",
             "PlanRequest flows through job expansion, tray assignment, AGV assignment and motion planning; "
@@ -115,7 +115,7 @@ def pipeline():
     return d
 
 
-@figure("02_target_architecture", "Proposed solver boundary", "02-issue-and-proposal.md")
+@figure("02_target_architecture", "Proposed solver boundary", "02-issue-and-proposal.html")
 def target_architecture():
     d = Doc("02_target_architecture", "Proposed solver interface boundary",
             "Scheduler delegates tray and AGV assignment to swappable solver interfaces; default "
@@ -184,7 +184,7 @@ def target_architecture():
     return d
 
 
-@figure("04_dependencies", "Dependency ordering", "01-software-background.md")
+@figure("04_dependencies", "Dependency ordering", "01-software-background.html")
 def dependencies():
     d = Doc("04_dependencies", "Dependency ordering, not geometric adjacency",
             "Example event DAG: an AGV must lift a blocking tray and repark it before the root tray can be "

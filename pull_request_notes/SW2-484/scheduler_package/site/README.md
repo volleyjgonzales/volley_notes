@@ -1,14 +1,14 @@
 # Study site
 
-A static website for the three study documents (`../01-software-background.md`, `../02-issue-and-proposal.md`,
-`../03-verification-plan.md`). The Markdown files stay the single source of truth; this folder only renders them.
+A static website for the three study documents. Their **sources are the HTML files in `src/content/`**; they are
+the single source of truth (there is no Markdown copy). The build adds everything that could otherwise go stale.
 
 ## Use
 
 ```bash
 cd site
 npm ci              # exact versions from package-lock.json
-npm run dev         # http://localhost:4321, rebuilds on save (Markdown changes need a reload)
+npm run dev         # http://localhost:4321 (reload after editing a content file)
 npm run build       # -> dist/index.html + dist/figures/
 npm run check       # type-check the Astro/TypeScript sources
 npm run artifact    # -> dist-artifact/ (dist/ without the html/head/body skeleton, for claude.ai artifacts)
@@ -24,11 +24,10 @@ host or from disk. Web fonts load from Google Fonts and fall back to system font
 - **Left contents**: sticky, scrolls on its own, follows your position (scroll spy), expands the current section,
   and filters as you type. Doc 01 is grouped into the four parts of the reading plan.
 - **Right rail** (wide screens): the subsections of the section you are reading.
-- **Links added at build time**:
-  - `section 13.5`, `sections 7–10`, `doc 01, section 16`, `(6.1)` → the heading;
-  - `Figure 12` → the figure;
+- **Computed at build time**:
+  - section numbers (from `data-num` on headings) and figure numbers (document order);
+  - the text of every `<a class="ref">`: "section 13.5", "Figure 12", always the current number;
   - `doc 02` → that tab;
-  - links between the Markdown files (`02-issue-and-proposal.md#...`) → the matching heading;
   - **keywords** from `src/data/glossary.yaml` → the section that explains them, first mention per subsection,
     with a hover card showing the definition.
 - **Search** (`Ctrl K`, `⌘K` or `/`): headings and glossary terms across all three documents.
@@ -41,7 +40,8 @@ host or from disk. Web fonts load from Google Fonts and fall back to system font
 |---|---|
 | Page shell, tabs, dialogs | `src/pages/index.astro` |
 | Contents sidebar, section rail | `src/components/Sidebar.astro`, `src/components/Rail.astro` |
-| Markdown → HTML pipeline (unified: remark-gfm → rehype, Shiki highlighting, link and figure transforms) | `src/lib/render.ts` |
+| Document sources (edit these) | `src/content/01-software-background.html`, `02-issue-and-proposal.html`, `03-verification-plan.html` |
+| HTML sources → page pipeline (numbering, references, figures, MathML, Shiki highlighting, keyword links) | `src/lib/render.ts` |
 | Document list, tab names, doc 01 parts | `src/data/docs.ts` |
 | Keyword links and definitions | `src/data/glossary.yaml` |
 | Styles (design tokens at the top) | `src/styles/site.css` |
@@ -49,8 +49,33 @@ host or from disk. Web fonts load from Google Fonts and fall back to system font
 | Design system (generated with ui-ux-pro-max) and this page's overrides | `design-system/scheduler-study/` |
 | Figure copy step (`predev` / `prebuild`) | `scripts/sync-figures.mjs` |
 
-The pipeline does not use Astro's own Markdown rendering: it runs unified directly, so heading ids, cross-document
-links and keyword links are computed with every document's headings known.
+The pipeline parses the sources with unified/rehype directly (not Astro's Markdown support), so numbers, references
+and keyword links are computed with every document's headings known. The build **fails** on a link to a missing id,
+a duplicate id, a `ref` to an unnumbered heading, a missing figure file, or a glossary target that does not exist.
+
+### Editing a document
+
+The header comment of each source file lists the conventions. In short:
+
+```html
+<h2 data-num id="bg-the-garage-model-in-code">The garage model in code</h2>   <!-- numbered: "6" -->
+<h3 data-num id="bg-garagegraph-and-its-vertex">GarageGraph and its Vertex</h3> <!-- numbered: "6.3" -->
+<h3 id="bg-how-to-read-the-code-snippets">How to read the code snippets</h3>    <!-- not numbered -->
+
+<p>... see <a class="ref" href="#bg-garagegraph-and-its-vertex">section 6.3</a> and
+   <a class="ref" href="#bg-fig-76_garage_graph_vertex">Figure 9</a> ...</p>     <!-- numbers rewritten at build -->
+
+<figure id="bg-fig-76_garage_graph_vertex">
+  <img src="figures/76_garage_graph_vertex.svg" alt="What a GarageGraph Vertex is">
+  <figcaption>Caption without "Figure N —"; the build adds the label.</figcaption>
+</figure>
+
+<span class="math">\mathbf p=[x,y]^\mathsf T</span>   <div class="math">\pi(u) &lt; \pi(v)</div>
+<pre><code class="language-cpp">// highlighted by Shiki</code></pre>
+```
+
+Ids are permanent: they are the deep links. Give a new heading an id once and keep it when the title changes.
+Ids carry the document prefix (`bg-`, `pr-`, `vr-`); figure ids are `<prefix>-fig-<svg name>`.
 
 ### Adding a keyword
 
@@ -60,17 +85,6 @@ Add an entry to `src/data/glossary.yaml`:
 - term: working_state
   code: [working_state]            # inline-code spellings
   text: [working state]            # plain-text phrases
-  to: "01#14.4"                    # doc + section number, or "01:heading text"
+  to: bg-every-job-sees-the-garage-through-working_state   # heading id
   def: A scratch copy of initial_state advanced by replaying events.
-```
-
-The build fails if a target does not resolve, so renumbered sections are caught.
-
-### After editing the Markdown
-
-Section and figure numbers live in the Markdown. When sections or figures move, run from the repository root:
-
-```bash
-python3 scripts/renumber_figures.py   # caption numbers and "Figure N" references
-python3 scripts/add_toc.py            # the Contents block GitHub shows
 ```
