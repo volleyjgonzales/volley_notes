@@ -154,9 +154,9 @@ def layout_vs_graph():
             lx, ly = cx + (x - cx) * 1.7, cy + (y - cy) * 1.7
         else:
             lx, ly = x, y - 19
-        d.text(lx, ly, str(VERT[(nid, h)]), size=10, family="mono", weight=700, fill=T.fg2, anchor="middle",
+        d.text(lx, ly, f"v{VERT[(nid, h)]}", size=10, family="mono", weight=700, fill=T.fg2, anchor="middle",
                halo=T.bg_deep, halo_w=3, layer="top")
-    gapi = ["gg_.GetVertexFromPose({22, 0})  -> 43 (std::optional<Vertex>)",
+    gapi = ["gg_.GetVertexFromPose({node_id: 22, heading: 0}) -> Vertex 43",
             "gg_.GetPoseFromVertex(v)        -> GaragePoseMsg",
             "gg_.GarageNodeFromVertex(v)     -> layout node",
             "gg_.GetOutEdges(v), gg_.EdgeFromPoses(a, b)",
@@ -198,7 +198,7 @@ def layout_vs_graph():
                    "positions, bays). The GarageGraph answers questions about motion: its vertices are poses "
                    "(node + heading) and its edges are the moves between them. Searches and paths always run on gg_.",
           badge_key="yaml",
-          legend=[("dot", T.sky, "layout node (YAML)"), ("ring", T.green, "graph vertex = pose (arrow = heading, number = Vertex)"),
+          legend=[("dot", T.sky, "layout node (YAML)"), ("ring", T.green, "graph vertex = pose (arrow = heading); v42 = Vertex 42"),
                   ("line", T.green, "move between poses"), ("dash", T.pink, "rotation at a node")])
     return d
 
@@ -255,15 +255,17 @@ def collision_table():
     d.rect(X0, Y0, X1 - X0, Y1 - Y0, fill=T.tint(T.red, 0.55, T.bg_deep), layer="main")
     m.unclip()
     xa, ya = m.P(18)
-    chip(d, xa - 150, ya + 34, "parked tray: TRAY @ (W18, 90)", TRAY, size=10.5)
+    chip(d, xa - 150, ya + 34, "parked tray at {node_id: 18, heading: 90}", TRAY, size=10.5)
     xb, yb = m.P(22)
-    chip(d, xb - 120, yb - 40, "candidate a: (W22, 90)", T.green, size=10.5)
-    chip(d, xb + 40, yb - 120, "candidate b: (W22, 0)", T.red, size=10.5)
+    chip(d, xb - 120, yb - 40, "candidate a: {node_id: 22, heading: 90}", T.green, size=10.5)
+    chip(d, xb + 46, yb - 64, "candidate b: {node_id: 22, heading: 0}", T.red, size=10.5)
     mb = m.box
     q = code_panel(d, 0, mb.y1 + 20, pw, [
         "// collision ids: CollisionEntityId_t (here both are tray footprints)",
-        "table_.Query(tray_id, tray_id, {18, 90}, {22, 90})  // false: no overlap",
-        "table_.Query(tray_id, tray_id, {18, 90}, {22, 0})   // true: they overlap",
+        "table_.Query(TRAY, TRAY, {node_id: 18, heading: 90},",
+        "             {node_id: 22, heading: 90})   // false: no overlap",
+        "table_.Query(TRAY, TRAY, {node_id: 18, heading: 90},",
+        "             {node_id: 22, heading: 0})    // true: they overlap",
     ], title="bool CollisionTable::Query(id_a, id_b, pose_a, pose_b)", size=11)
     q2 = note(d, 0, q.y1 + 14, pw,
               "The same two nodes can conflict or not depending on the headings: a 5.8 m tray turned to heading 0 "
@@ -295,7 +297,8 @@ def collision_table():
     tb = ly + len(poses) * cell
     d.text(rx, tb + 18, "red = the two footprints overlap (computed here from schematic rectangles)", size=10.5,
            fill=T.muted)
-    ids = _card(d, rx, tb + 38, rw, "Which footprint? The collision id", [
+    d.text(rx, tb + 32, "labels: W18@90 = GaragePose {node_id: 18, heading: 90}", size=10.5, family="mono", fill=T.muted)
+    ids = _card(d, rx, tb + 46, rw, "Which footprint? The collision id", [
         "CollisionEntityId::AGV / TRAY / BAY_ODP",
         "CollisionEntityIdFromAgvState(agv, state, layout)",
         "CollisionEntityIdFromTrayState(tray, state, layout)",

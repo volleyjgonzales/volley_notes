@@ -70,6 +70,7 @@ STALL_W = WINDOWS["XL"]["width_m"]    # 2.21 m along y
 class Map:
     def __init__(self, doc: Doc, ox: float, oy: float, scale: float, xlim, ylim):
         self.d = doc
+        doc.uses_map = True   # frame() adds the label notation to the footnote
         self.ox, self.oy, self.s = ox, oy, scale
         self.xmin, self.xmax = xlim
         self.ymin, self.ymax = ylim

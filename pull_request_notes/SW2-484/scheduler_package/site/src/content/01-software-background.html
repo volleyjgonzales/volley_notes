@@ -245,7 +245,7 @@ float32 yaw     # radians
       <td id="bg-term-pose"><strong>pose</strong></td>
       <td>A node plus a heading: where something is <em>and</em> which way it faces. Almost every API in the planner takes poses, not nodes</td>
       <td><code>GaragePoseMsg {node_id, heading}</code>; listed by <code>PoseGraph::poses_</code> (<a class="ref" href="#bg-posegraph-from-nodes-to-poses">section 6.2</a>)</td>
-      <td><code>{22, -90}</code>, <code>{22, 0}</code>, <code>{22, 90}</code>, <code>{22, 180}</code></td>
+      <td><code>{node_id: 22, heading: -90}</code>, <code>{node_id: 22, heading: 0}</code>, <code>{node_id: 22, heading: 90}</code>, <code>{node_id: 22, heading: 180}</code></td>
     </tr>
     <tr>
       <td id="bg-term-vertex"><strong>vertex</strong></td>
@@ -301,6 +301,77 @@ float32 yaw     # radians
     </tr>
   </tbody>
 </table>
+<h3 id="bg-asset-types-and-the-other-kinds-of-type">Asset types, and the other kinds of “type”</h3>
+<p>The scheduler plans for six kinds of physical thing. This guide calls them <strong>asset types</strong>: the AGV, the tray, the payload (the customer's car), the bay, the VECS (EV charger) and the VRC (vehicle lift). Three of them move and have a pose; three are fixed and are layout nodes themselves.</p>
+<figure id="bg-fig-80_asset_types">
+  <img src="figures/80_asset_types.svg" alt="Asset types">
+  <figcaption>The six asset types. For each: its id (a <code>uint16</code> plus a one-letter <code>GarageEntityId.entity_type</code>, except the payload, which has a <code>Guid</code>), the message that holds its state in <code>DiscreteGarageState</code>, where it sits in the layout, the <code>ScheduleEvent</code> that changes it in a plan, the <code>ActionNode</code> command that executes it, and its footprint type in the collision table.</figcaption>
+</figure>
+<p>“Type” appears in many other places in this code, each with its own enum. When this guide says one of these words, it means exactly this field:</p>
+<table>
+  <thead>
+    <tr>
+      <th>This guide says</th>
+      <th>Meaning</th>
+      <th>Field or enum</th>
+      <th>Values</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td id="bg-term-asset-type"><strong>asset type</strong></td>
+      <td>Which kind of physical thing</td>
+      <td><code>GarageEntityId.entity_type</code> (<code>string&lt;=1</code>)</td>
+      <td><code>'a'</code> AGV, <code>'t'</code> tray, <code>'b'</code> bay, <code>'v'</code> VECS, <code>'r'</code> VRC (<code>'s'</code> system); a payload has a <code>Guid</code> instead</td>
+    </tr>
+    <tr>
+      <td><strong>node type</strong></td>
+      <td>What a layout place is for</td>
+      <td><code>GarageNodeMsg.type</code> (<code>uint8</code>)</td>
+      <td><code>TYPE_PARKING</code> 1, <code>WAYPOINT</code> 2, <code>LIFT</code> 3, <code>BAY</code> 4, <code>AGV_CHARGE</code> 5, <code>EV_CHARGE</code> 6, <code>BLIFT</code> 7</td>
+    </tr>
+    <tr>
+      <td id="bg-term-footprint-type"><strong>footprint type</strong></td>
+      <td>Which shape the collision table checks</td>
+      <td><code>CollisionEntityId</code> (<code>CollisionEntityId_t</code>)</td>
+      <td><code>BAY_ODP</code> 0, <code>TRAY_LEGS</code> 1, <code>TRAY</code> 2, <code>AGV</code> 3, <code>PAYLOAD</code> 4 + parking-window index</td>
+    </tr>
+    <tr>
+      <td><strong>job type</strong></td>
+      <td>What a request asks for</td>
+      <td><code>SchedulerJob.type</code> (<code>uint8</code>)</td>
+      <td><code>TYPE_MOVE_AGV</code> 1 … <code>TYPE_REBALANCE_GARAGE</code> 13 (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 15</a>)</td>
+    </tr>
+    <tr>
+      <td><strong>event type</strong></td>
+      <td>Which <code>ScheduleEvent</code> subclass</td>
+      <td><code>ScheduleEventType</code></td>
+      <td><code>AGV_MOVE</code> 1, <code>BAY_TRANSITION</code> 2, <code>TRAY_MOVE</code> 3, <code>VECS_TRANSITION</code> 4, <code>VRC_TRANSITION</code> 5</td>
+    </tr>
+    <tr>
+      <td><strong>action type</strong></td>
+      <td>Which machine executes an output action</td>
+      <td><code>ActionNode.type</code> (<code>uint8</code>)</td>
+      <td><code>TYPE_AGV_COMMAND</code> 1, <code>BAY_COMMAND</code> 2, <code>VECS_COMMAND</code> 3, <code>VRC_COMMAND</code> 4</td>
+    </tr>
+    <tr>
+      <td><strong>transition type</strong></td>
+      <td>What kind of move a <code>gg_</code> edge is</td>
+      <td><code>TransitionType</code></td>
+      <td><code>LOCOMOTE</code>, <code>STRAFE</code>, <code>ROTATION</code>, <code>VRC_TRANSITION</code></td>
+    </tr>
+  </tbody>
+</table>
+<h3 id="bg-how-values-are-written-in-this-guide">How values are written in this guide</h3>
+<p>Numbers in this code mean different things depending on the field they sit in, so this guide writes the field names:</p>
+<ul>
+  <li><strong>A pose</strong> is written <code>{node_id: 22, heading: 90}</code>, a <code>GaragePoseMsg</code>. The heading is in degrees, in <span class="math">[-179, 180]</span>.</li>
+  <li><strong>A geometric pose</strong> is written <code>{x: 30.88, y: 21.74, yaw: 1.571}</code> (metres, metres, radians).</li>
+  <li><strong>A vertex</strong> is written “Vertex 44” in text and <code>v44</code> on maps (a <code>GarageGraph::Vertex</code>).</li>
+  <li><strong>Map labels</strong> are a node-type letter plus the <code>node_id</code>: <code>P17</code> is the parking node with <code>node_id</code> 17, <code>W22</code> a waypoint, <code>B21</code> a bay, <code>C14</code> an AGV charger.</li>
+  <li><strong>Assets on maps</strong>: <code>T17</code> is the tray with <code>tray_id</code> 17, and <code>A</code>, <code>B</code> are AGVs.</li>
+  <li><strong>Compact labels</strong>: where space is tight, figures write <code>W18@90</code> for <code>{node_id: 18, heading: 90}</code>; every map figure repeats this key in its footnote.</li>
+</ul>
 <h3 id="bg-layout-garagegraph-and-collisiontable-three-views-of-the-same-garage">Layout, GarageGraph and CollisionTable: three views of the same garage</h3>
 <p>The scheduler builds three static objects from the layout file, once, in its constructor, and uses them for every plan:</p>
 <pre><code class="language-cpp">// src/scheduler.cpp — Scheduler::Scheduler(std::string layout_filepath, rclcpp::Logger logger,
@@ -353,6 +424,11 @@ table_(gg_, logger),                                  // volley::CollisionTable,
       <td><a href="#bg-term-node">node</a>, <a href="#bg-term-heading">heading</a></td>
       <td>A node is a place in the layout (<code>GarageNodeMsg</code>); a heading is the direction something there faces, in degrees (<a class="ref" href="#bg-fig-78_heading_convention">Figure 4</a>)</td>
       <td>A node lists its headings in the YAML; each also allows its reciprocal (<span class="math">h+180</span>)</td>
+    </tr>
+    <tr>
+      <td><a href="#bg-term-asset-type">asset type</a></td>
+      <td>Which kind of physical thing: AGV, tray, payload, bay, VECS or VRC (<a class="ref" href="#bg-fig-80_asset_types">Figure 6</a>)</td>
+      <td>Not the same as node type, footprint type, job type, event type or action type: <a href="#bg-asset-types-and-the-other-kinds-of-type">the kinds of “type”</a></td>
     </tr>
     <tr>
       <td><a href="#bg-term-pose">pose</a>, <a href="#bg-term-vertex"><code>Vertex</code></a></td>
@@ -621,13 +697,13 @@ private:
 </code></pre>
 <figure id="bg-fig-76_garage_graph_vertex">
   <img src="figures/76_garage_graph_vertex.svg" alt="What a GarageGraph Vertex is">
-  <figcaption>What a <code>Vertex</code> is, on Pecos around W22. Top: the type definitions and the poses around W22, each ring one vertex, numbered with its <code>Vertex</code> value. Bottom, left to right: <code>pose_to_vertex_</code> turns <code>{22, 90}</code> into 44; entry 44 of the Boost vertex vector holds the pose and the out- and in-edge lists; each out-edge carries a <code>Transition</code>. Moves along a row (W22 to W41, W22 to P23) are <code>LOCOMOTE</code>, because heading 90 faces −x; moves between rows are <code>STRAFE</code>; turns in place are <code>ROTATION</code>.</figcaption>
+  <figcaption>What a <code>Vertex</code> is, on Pecos around W22. Top: the type definitions and the poses around W22, each ring one vertex, labelled with its <code>Vertex</code> value (<code>v44</code> = Vertex 44). Bottom, left to right: <code>pose_to_vertex_</code> turns <code>{node_id: 22, heading: 90}</code> into 44; entry 44 of the Boost vertex vector holds the pose and the out- and in-edge lists; each out-edge carries a <code>Transition</code>. Moves along a row (W22 to W41, W22 to P23) are <code>LOCOMOTE</code>, because heading 90 faces −x; moves between rows are <code>STRAFE</code>; turns in place are <code>ROTATION</code>.</figcaption>
 </figure>
 <p><strong>What a vertex actually is:</strong></p>
 <ul>
   <li><strong>A number.</strong> With <code>vecS</code> as the vertex container, a Boost <code>vertex_descriptor</code> is a <code>std::size_t</code> index into the graph's internal vector of vertices. A <code>Vertex</code> is valid when it is less than <code>NumVertices()</code>; that is all <code>HasVertex</code> checks.</li>
   <li><strong>What is stored at that index:</strong> the bundled <code>GaragePoseMsg</code> (<code>base_graph_[v]</code>) and, because the graph is <code>bidirectionalS</code>, two edge lists, out-edges and in-edges. Nothing else. There is no node type, no position and no occupancy at a vertex. Node facts come from the <code>Layout</code> (<code>GarageNodeFromVertex</code> looks the node up and copies it), and occupancy comes from <code>DiscreteGarageState</code>.</li>
-  <li><strong>The numbering is the <code>PoseGraph</code> order:</strong> vertex <em>i</em> is pose index <em>i</em>, that is, node id ascending, then heading ascending. On Pecos, W22's poses <code>{22, -90}</code>, <code>{22, 0}</code>, <code>{22, 90}</code> and <code>{22, 180}</code> are vertices 42, 43, 44 and 45.</li>
+  <li><strong>The numbering is the <code>PoseGraph</code> order:</strong> vertex <em>i</em> is pose index <em>i</em>, that is, node id ascending, then heading ascending. On Pecos, W22's poses <code>{node_id: 22, heading: -90}</code>, <code>{node_id: 22, heading: 0}</code>, <code>{node_id: 22, heading: 90}</code> and <code>{node_id: 22, heading: 180}</code> are vertices 42, 43, 44 and 45.</li>
   <li><strong>Numbers are stable.</strong> Nothing adds or removes vertices after construction, so a <code>Vertex</code> stays valid for the scheduler's lifetime. Compare <code>ScheduleEventDag</code>, where <code>Remove</code> renumbers later vertices (<a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">section 12.4</a>). A <code>Vertex</code> means nothing outside one layout: never store one, or compare one across layouts or builds.</li>
   <li><strong>Per-vertex data lives outside the graph.</strong> <code>MakeVertexVectorPropertyMap&lt;T>()</code> returns a vector indexed by <code>Vertex</code>, and <code>MakeEdgeVectorPropertyMap&lt;T>()</code> a vector indexed by edge index. That is the pattern for anything a search needs per vertex or per edge. <code>GraphFilterProperties::IsEnabled(vertex)</code> and <code>IsEnabled(edge)</code> are in <code>motion_planner</code>, which is not in the snapshots, so how they store their flags is not confirmed.</li>
 </ul>
@@ -701,7 +777,7 @@ private:
   <li><code>CollisionTable</code> still stores <span class="math">h</span> and <span class="math">h+180</span> as separate keys (a TODO in <code>BuildTable</code>).</li>
 </ul>
 <h3 data-num id="bg-collisiontable-precomputed-conflict-sets"><code>CollisionTable</code>: precomputed conflict sets</h3>
-<p>The table answers one question: if an entity of type <em>F</em> stands at location <em>a</em>, may an entity of type <em>Q</em> be at location <em>b</em>? A location is a pose or an edge (a move), and an entity type is a <code>CollisionEntityId</code>:</p>
+<p>The table answers one question: if something of <a href="#bg-term-footprint-type">footprint type</a> <em>F</em> stands at location <em>a</em>, may something of footprint type <em>Q</em> be at location <em>b</em>? A location is a pose or an edge (a move), and a footprint type is a <code>CollisionEntityId</code>:</p>
 <ul>
   <li><code>BAY_ODP</code>, <code>TRAY_LEGS</code>, <code>TRAY</code> and <code>AGV</code>;</li>
   <li>one <code>PAYLOAD</code> id per parking window.</li>
@@ -711,7 +787,7 @@ private:
   <img src="figures/77_collision_table_storage.svg" alt="CollisionTable storage">
   <figcaption>The <code>ResMap</code> type, one lookup through <code>ppmap_</code>, and how the table is filled.
     <ul>
-      <li>Building it compares every vertex with every vertex and edge, for every pair of entity types. Each test checks bounding circles first, then polygons; an edge's polygon is the convex hull of the footprints at both ends.</li>
+      <li>Building it compares every vertex with every vertex and edge, for every pair of footprint types. Each test checks bounding circles first, then polygons; an edge's polygon is the convex hull of the footprints at both ends.</li>
       <li>Every conflict is stored in both directions.</li>
       <li>The result is cached as JSON under <code>~/.cache/volley/</code>, keyed by the layout's name and md5.</li>
     </ul>
@@ -774,8 +850,8 @@ private:
       <td><span class="math">O(\log n)</span> plus a copy</td>
     </tr>
     <tr>
-      <td>Is <code>{22, -90}</code> a pose, and which vertex is it?</td>
-      <td><code>gg_.GetVertexFromPose({22, -90})</code> → 42 (<code>{22, 270}</code> → empty)</td>
+      <td>Is <code>{node_id: 22, heading: -90}</code> a pose, and which vertex is it?</td>
+      <td><code>gg_.GetVertexFromPose({node_id: 22, heading: -90})</code> → 42 (<code>{node_id: 22, heading: 270}</code> → empty)</td>
       <td><code>GarageGraph::pose_to_vertex_</code></td>
       <td><span class="math">O(1)</span></td>
     </tr>
@@ -1503,7 +1579,7 @@ public:
 </table>
 <h3 id="bg-the-four-groups">The four groups</h3>
 <p><strong>Identity</strong> says which request this is and when it started. Only <code>start_time</code> affects the result: <code>PlanMotions</code> builds its <code>ContinuousState</code> from <code>initial_state</code> at <code>start_time</code>, so every timed motion in the response is measured from the moment the request arrived.</p>
-<p><strong>Fixed inputs</strong> are settled before any job is expanded. <code>initial_state</code> is the validated <code>base_state</code>, with every AGV, node, bay and VECS used by the already-running <code>base_schedule</code> marked disabled (<a class="ref" href="#bg-objects-ownership-and-lifetimes">section 9</a> shows the code). <code>disabledness_filters</code> precomputes, for each collision-entity type (an AGV, an empty tray, a tray with a certain payload, ...), which graph vertices are unusable because of those disabled entities. Job methods consult it to reject destinations early, instead of discovering the problem in a path search. Neither field is changed after this point. Nothing enforces that (they are public and non-<code>const</code>), but the whole design relies on it: every “where is everything now?” question is answered by copying <code>initial_state</code> and replaying <code>events</code> on the copy.</p>
+<p><strong>Fixed inputs</strong> are settled before any job is expanded. <code>initial_state</code> is the validated <code>base_state</code>, with every AGV, node, bay and VECS used by the already-running <code>base_schedule</code> marked disabled (<a class="ref" href="#bg-objects-ownership-and-lifetimes">section 9</a> shows the code). <code>disabledness_filters</code> precomputes, for each footprint type (<code>CollisionEntityId</code>: an AGV, an empty tray, a tray with a certain payload, ...), which graph vertices are unusable because of those disabled entities. Job methods consult it to reject destinations early, instead of discovering the problem in a path search. Neither field is changed after this point. Nothing enforces that (they are public and non-<code>const</code>), but the whole design relies on it: every “where is everything now?” question is answered by copying <code>initial_state</code> and replaying <code>events</code> on the copy.</p>
 <p><strong>The plan being built</strong> is the output in progress. <code>events</code> starts empty; job expansion adds intent, tray assignment adds blocker moves, AGV assignment adds approach, lift and lower events, and <code>Reduce()</code> removes redundant edges. <code>scheduled_jobs</code> lists the jobs that planned successfully, in planning order, so that an event's <code>job_index</code> can be turned back into the job it belongs to.</p>
 <p><strong>Bookkeeping</strong> maps hold pointers into <code>events</code> so that a stage can find “the last event for this AGV” or “the first move of this tray” without searching the DAG. They point at the same objects as the DAG (<code>shared_ptr</code> copies), so following a map entry gives you the actual vertex's event.</p>
 <p>That is enough to read the next sections. <a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">Section 13</a> comes back to <code>ScheduleContext</code> once events (<a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>) and the event DAG (<a class="ref" href="#bg-directed-acyclic-graphs-then-scheduleeventdag">section 12</a>) have been introduced, and explains <code>scheduled_jobs</code>, the three helper methods and the two bookkeeping maps in depth.</p>
@@ -1613,7 +1689,7 @@ public:
     </tr>
     <tr>
       <td><code>CollisionTable</code></td>
-      <td>Precomputed footprint conflicts between entity types at poses and edges</td>
+      <td>Precomputed footprint conflicts between footprint types at poses and edges</td>
       <td><code>common_ros/collision_geometry.hpp</code></td>
       <td><code>Query(fixed_id, queried_id, location[, queried_location])</code></td>
     </tr>
@@ -1874,13 +1950,13 @@ using ScheduleEventSPtr = std::shared_ptr&lt;ScheduleEvent>;
 </table>
 <figure id="bg-fig-67_traymove_apply">
   <img src="figures/67_traymove_apply.svg" alt="What TrayMove::Apply does">
-  <figcaption><code>TrayMove::Apply</code>, branch by branch. A blank tray id makes it a no-op. A blank destination <strong>removes</strong> the tray (and its payload) from the state. Otherwise any other tray already on the destination node is moved to the placeholder pose <code>0@0</code>, and the tray is either teleported (no AGV yet) or carried by its AGV, which must be at the tray's pose, lifted and holding that tray.</figcaption>
+  <figcaption><code>TrayMove::Apply</code>, branch by branch. A blank tray id makes it a no-op. A blank destination <strong>removes</strong> the tray (and its payload) from the state. Otherwise any other tray already on the destination node is moved to the placeholder pose <code>{node_id: 0, heading: 0}</code>, and the tray is either teleported (no AGV yet) or carried by its AGV, which must be at the tray's pose, lifted and holding that tray.</figcaption>
 </figure>
 <p><code>TrayMove::Apply</code> matters because job methods replay half-specified moves:</p>
 <ul>
   <li><strong>Blank tray id → nothing happens.</strong> <code>READY_FOR_INSERT</code>'s “some empty tray → bay” leaves no trace in a later job's <code>working_state</code>: the bay still looks empty. The source comment admits this “might cause issues with blocking tray calculations”.</li>
-  <li><strong>Blank destination → the tray disappears.</strong> “T21 → ?” removes T21 and its payload from <code>working_state</code> (a TODO suggests parking it at <code>0@0</code> instead). A later job in the same request cannot see or reuse that tray, and its old node looks free.</li>
-  <li><strong>Destination occupied → the occupant goes to <code>0@0</code>.</strong> The discrete replay never fails because two trays want one node; the earlier occupant is parked at the placeholder node. Tray assignment is what later makes such a move physically possible.</li>
+  <li><strong>Blank destination → the tray disappears.</strong> “T21 → ?” removes T21 and its payload from <code>working_state</code> (a TODO suggests parking it at <code>{node_id: 0, heading: 0}</code> instead). A later job in the same request cannot see or reuse that tray, and its old node looks free.</li>
+  <li><strong>Destination occupied → the occupant goes to <code>{node_id: 0, heading: 0}</code>.</strong> The discrete replay never fails because two trays want one node; the earlier occupant is parked at the placeholder node. Tray assignment is what later makes such a move physically possible.</li>
   <li><strong>With an AGV → strict checks.</strong> After AGV assignment, <code>Apply</code> fails unless the AGV is at the tray's pose (same or opposite heading), lifted, and carrying that tray. This is why AGV assignment adds the approach and lift events <strong>before</strong> the <code>TrayMove</code>.</li>
 </ul>
 <p>What each event looks like when it is created (constructor arguments as used in <code>scheduler.cpp</code>):</p>
@@ -2420,7 +2496,7 @@ void UpdateLeafDependencies(const ScheduleEventSPtr&amp; childevent, size_t job_
   }
 }
 </code></pre>
-<p>The two <code>Update...</code> methods are the only code in <code>ScheduleContext</code> that adds edges. Both assume the event has already been added with <code>ctx->events.AddEvent(e)</code>; if it has not, <code>AddDependency</code> returns <code>false</code> and the edge is silently lost (<a class="ref" href="#bg-the-operations">section 12.5</a>). <code>GarageEntityIdMsg</code> is a ROS message holding an entity type and id; the code builds keys with <code>volley::AgvId(id)</code>, <code>TrayId(id)</code>, <code>BayId(id)</code> and <code>VecsId(id)</code>.</p>
+<p>The two <code>Update...</code> methods are the only code in <code>ScheduleContext</code> that adds edges. Both assume the event has already been added with <code>ctx->events.AddEvent(e)</code>; if it has not, <code>AddDependency</code> returns <code>false</code> and the edge is silently lost (<a class="ref" href="#bg-the-operations">section 12.5</a>). <code>GarageEntityIdMsg</code> is a ROS message holding an <a href="#bg-term-asset-type">asset type</a> letter and an id; the code builds keys with <code>volley::AgvId(id)</code>, <code>TrayId(id)</code>, <code>BayId(id)</code> and <code>VecsId(id)</code>.</p>
 <h3 id="bg-last_entity_event-in-detail"><code>last_entity_event</code> in detail</h3>
 <p><code>last_entity_event</code> is a <code>std::unordered_map&lt;GarageEntityIdMsg, ScheduleEventSPtr></code>: for each AGV, tray, bay and VECS, the <strong>last event added so far</strong> that touches it. It exists for one purpose, rule A: when a job method adds an event for entity X, that event must wait for whatever X was last asked to do, even if a different job asked. Without it, two jobs that both move tray T19 could run in either order.</p>
 <figure id="bg-fig-70_last_entity_event">
@@ -2429,7 +2505,7 @@ void UpdateLeafDependencies(const ScheduleEventSPtr&amp; childevent, size_t job_
 </figure>
 <p>How it is keyed, written and read:</p>
 <ul>
-  <li><strong>Keys</strong> are <code>GarageEntityIdMsg</code> values (entity type plus id) built with <code>volley::AgvId(id)</code>, <code>TrayId(id)</code>, <code>BayId(id)</code>, <code>VecsId(id)</code>. Job methods take the key from <code>event->GetGarageEntityId()</code>: a <code>TrayMove</code> gives its tray, an <code>AgvMove</code> its AGV, a <code>BayTransition</code> its bay, a <code>VecsTransition</code> its VECS. A <code>TrayMove</code> with no tray yet has no key (<code>std::nullopt</code>) and skips rule A.</li>
+  <li><strong>Keys</strong> are <code>GarageEntityIdMsg</code> values (asset type letter plus id) built with <code>volley::AgvId(id)</code>, <code>TrayId(id)</code>, <code>BayId(id)</code>, <code>VecsId(id)</code>. Job methods take the key from <code>event->GetGarageEntityId()</code>: a <code>TrayMove</code> gives its tray, an <code>AgvMove</code> its AGV, a <code>BayTransition</code> its bay, a <code>VecsTransition</code> its VECS. A <code>TrayMove</code> with no tray yet has no key (<code>std::nullopt</code>) and skips rule A.</li>
   <li><strong>Written</strong> only by <code>UpdateLastEntityEvent(key, e)</code>: add the edge <code>last[key] → e</code> if <code>key</code> is present, then set <code>last[key] = e</code>. The entry always moves forward; nothing ever removes one.</li>
   <li><strong>Read</strong> in two places: inside <code>UpdateLastEntityEvent</code> (rule A), and by rule C in <code>PlanReparkTrayJob</code>, which checks <code>find(BayId(...))</code> / <code>find(VecsId(...))</code> and adds <code>last[bay] → tray_move</code> without updating the map (so the bay's chain is not moved forward by a tray entering it).</li>
 </ul>
@@ -2493,7 +2569,7 @@ for(size_t i = 1; i &lt; nav_path.size(); ++i) {
 <ul>
   <li><strong><code>last_entity_event</code> is stale after job expansion.</strong> Tray and AGV assignment add many events (blocker moves, AGV moves, lifts) without updating it. Code in those stages that needs “the last event of X” keeps its own local map instead (<code>last_tray_event</code> in tray assignment, <code>last_agv_event</code> in AGV assignment). Do not read <code>ctx->last_entity_event</code> after stage 3.</li>
   <li><strong><code>first_tray_event</code> is empty until tray assignment.</strong> A job method that read it would always find nothing.</li>
-  <li><strong><code>disabledness_filters[id]</code> uses <code>operator[]</code>.</strong> If a collision-entity id has no entry, <code>unordered_map::operator[]</code> inserts a default-constructed <code>GraphFilterProperties</code> and returns that. What a default filter allows is defined in <code>motion_planner</code> (not in this snapshot); check it before relying on a lookup for an unusual entity type.</li>
+  <li><strong><code>disabledness_filters[id]</code> uses <code>operator[]</code>.</strong> If a collision-entity id has no entry, <code>unordered_map::operator[]</code> inserts a default-constructed <code>GraphFilterProperties</code> and returns that. What a default filter allows is defined in <code>motion_planner</code> (not in this snapshot); check it before relying on a lookup for an unusual asset type.</li>
   <li><strong>Nothing is <code>const</code>, nothing is private.</strong> Any function with the pointer can change <code>initial_state</code> or <code>scheduled_jobs</code>. The code base keeps to the conventions above, but the compiler does not check them. The refactor proposal in doc 02 (sections <a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">6.1</a> and <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">6.5</a>) narrows this for tray assignment by passing <code>const</code> references and returning a result.</li>
   <li><strong>A failure inside a stage leaves partial changes.</strong> Job methods that fail after adding events, and tray or AGV assignment failing halfway, leave <code>events</code> partly edited. <code>Plan()</code> handles the second case by failing every job and returning, so the half-edited context is simply discarded; the first case is gotcha 1 in <a class="ref" href="#bg-gotchas-2">section 14.18</a>.</li>
 </ul>
@@ -2930,7 +3006,7 @@ return std::make_pair(true, "");
 </figure>
 <p>Three details matter in practice:</p>
 <ul>
-  <li><strong><code>Apply()</code> is discrete.</strong> A tray "teleports" to its destination; time and paths do not exist yet. Blank fields are not neutral (<a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>): a <code>TrayMove</code> with no tray id does nothing, one with no destination <strong>removes</strong> the tray and its payload from <code>working_state</code>, and a tray already sitting on a destination is moved to the placeholder pose <code>0@0</code>. So a later job does not see an empty tray that READY_FOR_INSERT will bring into a bay, and does not see a tray whose destination is still open.</li>
+  <li><strong><code>Apply()</code> is discrete.</strong> A tray "teleports" to its destination; time and paths do not exist yet. Blank fields are not neutral (<a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>): a <code>TrayMove</code> with no tray id does nothing, one with no destination <strong>removes</strong> the tray and its payload from <code>working_state</code>, and a tray already sitting on a destination is moved to the placeholder pose <code>{node_id: 0, heading: 0}</code>. So a later job does not see an empty tray that READY_FOR_INSERT will bring into a bay, and does not see a tray whose destination is still open.</li>
   <li><strong>Nested calls replay again.</strong> When <code>PlanRetrieveJob</code> calls <code>PlanReparkTrayJob</code>, the inner call copies and replays too, so it already sees the bay transition the outer method has just added.</li>
   <li><strong>The cost is repeated replay.</strong> Each job method replays the whole DAG, and nested calls replay it again. The code accepts this for simplicity.</li>
 </ul>
@@ -3017,7 +3093,7 @@ return std::make_pair(true, "");
       <td><code>dest</code></td>
       <td><code>std::optional&lt;GaragePoseMsg></code> (default <code>std::nullopt</code>)</td>
       <td>Target node and heading; empty means "anywhere, chosen by tray assignment". Always set when called from <code>Plan()</code></td>
-      <td><code>{24, 90}</code>, then <code>{23, 90}</code></td>
+      <td><code>{node_id: 24, heading: 90}</code>, then <code>{node_id: 23, heading: 90}</code></td>
     </tr>
     <tr>
       <td>out</td>
@@ -3081,7 +3157,7 @@ return std::make_pair(true, "");
       <td><code>dest</code></td>
       <td><code>GaragePoseMsg</code> (by value; may be edited locally)</td>
       <td>Target pose in AGV heading</td>
-      <td><code>W13@90</code>, <code>P24@90</code></td>
+      <td><code>{node_id: 13, heading: 90}</code> (W13), <code>{node_id: 24, heading: 90}</code> (P24)</td>
     </tr>
     <tr>
       <td>in</td>
@@ -3872,7 +3948,7 @@ while(!blocking_trays.empty()) {
       <td><code>pose</code></td>
       <td><code>const GaragePoseMsg&amp;</code></td>
       <td>Node id + heading</td>
-      <td><code>tray_opt->pose</code> = <code>P17@…</code>; <code>move->GetDest()</code> = <code>B21@…</code></td>
+      <td><code>tray_opt->pose</code> = <code>{node_id: 17, heading: …}</code>; <code>move->GetDest()</code> = <code>{node_id: 21, heading: …}</code></td>
     </tr>
     <tr>
       <td>out</td>
@@ -4347,7 +4423,7 @@ BoolStringPair Scheduler::AssignTrayIdForEmptyMove(
       <td><code>move</code></td>
       <td><code>volley::TrayMove&amp;</code></td>
       <td>The event with the blank tray id. Must already have a destination. On success its tray id is set and its destination heading may be adjusted</td>
-      <td><code>? → B21@-90</code> becomes <code>T23: P23 → B21@-90</code></td>
+      <td><code>{tray_id: ?, dest: {node_id: 21, heading: -90}}</code> becomes <code>{tray_id: 23, dest: {node_id: 21, heading: -90}}</code> (tray 23 starts at P23)</td>
     </tr>
     <tr>
       <td>in</td>
@@ -4372,7 +4448,7 @@ BoolStringPair Scheduler::AssignTrayIdForEmptyMove(
 <p>How it works, step by step:</p>
 <ol>
   <li><strong>Require a destination.</strong> A move with neither field set cannot be resolved: <code>{false, "Can't resolve a tray move with no tray id or dest"}</code>.</li>
-  <li><strong>Start the search at the destination.</strong> The question is “which empty tray is closest <em>to where one is needed</em>”, so the source vertex is the destination pose (<code>B21@-90</code>: B21 lists heading 90 with <code>faces_reciprocal: true</code>, so its inbound heading is −90), not any tray. The code calls this “basically the inverse OpenSpaceSearch”.</li>
+  <li><strong>Start the search at the destination.</strong> The question is “which empty tray is closest <em>to where one is needed</em>”, so the source vertex is the destination pose (<code>{node_id: 21, heading: -90}</code>, B21: B21 lists heading 90 with <code>faces_reciprocal: true</code>, so its inbound heading is −90), not any tray. The code calls this “basically the inverse OpenSpaceSearch”.</li>
   <li><strong>Ignore everything movable.</strong> <code>GetStaticFilter(TRAY, gg_, working_state, table_, all trays, all agvs, {})</code> makes every tray and AGV transparent. Only static obstacles (disabled nodes, nodes the tray footprint cannot use) block the search, so the nearest empty tray can be found even if it is buried; the main loop will clear the way afterwards.</li>
   <li><strong>Search.</strong> <code>EmptyTraySearchEnvironment(gg_, table_, working_state, cost_model_, filters)</code> treats a vertex as a goal when it holds a tray with no payload. <code>SingleSourceSearch</code> expands vertices by cost, so the first goal reached is the cheapest to reach, not necessarily the fewest hops. No goal → <code>{false, "Failed to find empty tray to move to &lt;dest>"}</code>.</li>
   <li><strong>Read the tray.</strong> <code>working_state.GetTrayOnNode(node_id_of(target))</code> → <code>move.SetTrayId(tray.id)</code>.</li>
@@ -4414,7 +4490,7 @@ BoolStringPair Scheduler::AssignDestForUntargetedMove(volley::TrayMove* move, Sc
       <td><code>move</code></td>
       <td><code>volley::TrayMove*</code></td>
       <td>The event with the blank destination, viewed as a <code>TrayMove</code>. Must have a tray id. On success its destination is set</td>
-      <td><code>T21: B21 → ?</code> becomes <code>T21: B21 → P23@90</code></td>
+      <td><code>{tray_id: 21, dest: ?}</code> becomes <code>{tray_id: 21, dest: {node_id: 23, heading: 90}}</code> (tray 21 starts in B21)</td>
     </tr>
     <tr>
       <td>in</td>
@@ -4551,7 +4627,7 @@ BoolStringPair Scheduler::AssignDestForUntargetedMove(volley::TrayMove* move, Sc
       <td><code>std::optional&lt;GaragePoseMsg></code></td>
       <td>The tray's new destination, or empty on failure</td>
       <td>K → <code>P19</code></td>
-      <td><code>P23@90</code></td>
+      <td><code>{node_id: 23, heading: 90}</code> (P23)</td>
     </tr>
     <tr>
       <td>out</td>

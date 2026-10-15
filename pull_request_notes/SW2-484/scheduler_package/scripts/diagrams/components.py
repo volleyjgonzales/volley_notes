@@ -40,12 +40,19 @@ def badge(doc: Doc, x_right: float, y: float, key: str) -> BBox:
     return BBox(x0, y, x_right, y + 24)
 
 
+MAP_NOTATION = ("Map labels: P17, W22, B21, C14 = node_id 17, 22, 21, 14 (P parking, W waypoint, B bay, "
+                "C AGV charger); T17 = tray_id 17; A, B = AGVs; X@90 = GaragePose {node_id: X, heading: 90}, "
+                "heading in degrees [-179, 180], 90 = facing -x.")
+
+
 def frame(doc: Doc, *, title: str, subtitle: str | None = None, badge_key: str | None = None,
           legend: Sequence | None = None, legend_title: str | None = "Legend", footnote: str | None = None,
           min_width: float = 0):
     """Add header (title, subtitle, status badge), a footer legend and a footnote around the
     already-drawn content. Everything is laid out from the measured content bounds, so the
     legend can never overlap the drawing and nothing can leave the canvas."""
+    if getattr(doc, "uses_map", False):
+        footnote = ((footnote + " ") if footnote else "") + MAP_NOTATION
     cb = doc.bounds
     x0 = cb.x0
     width = max(cb.w, min_width)

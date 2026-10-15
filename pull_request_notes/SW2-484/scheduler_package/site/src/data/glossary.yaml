@@ -136,6 +136,17 @@
   to: bg-node-heading-pose-vertex-the-words-for-places
   def: A node is a layout place; a heading is the direction faced (degrees, 0 = +y, CCW+); a pose is node + heading.
 
+- term: asset type
+  text: [asset type, asset types]
+  code: [GarageEntityId, GarageEntityIdMsg, entity_type]
+  to: bg-asset-types-and-the-other-kinds-of-type
+  def: "The kind of physical thing: AGV ('a'), tray ('t'), bay ('b'), VECS ('v'), VRC ('r'); payloads use a Guid."
+
+- term: footprint type
+  text: [footprint type, footprint types]
+  to: bg-asset-types-and-the-other-kinds-of-type
+  def: "CollisionEntityId, the shape the collision table checks: BAY_ODP 0, TRAY_LEGS 1, TRAY 2, AGV 3, PAYLOAD 4 + window."
+
 - term: Layout
   code: [Layout, layout_, LayoutSPtr, GetNodeById, "layout_->GetNodeById"]
   to: bg-layout-places-in-sorted-vectors-and-ordered-maps

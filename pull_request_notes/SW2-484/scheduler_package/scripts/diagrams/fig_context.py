@@ -716,22 +716,23 @@ def scheduled_job_data_map():
     sx = mb.x1 + 50
     d.text(sx, 0, "PlanResponse.schedule.nodes  (ActionNode[] in topological order)", size=12.5, weight=600,
            fill=T.fg)
-    acts = [("A 13->15", JA), ("A 15->17", JA), ("A lift", JA), ("B 26->25", JB), ("A 17->15 L", JA),
-            ("A 15->13 L", JA), ("A 13->18 L", JA), ("A 18->22 L", JA), ("A 22->41 L", JA), ("A 41->21 L", JA),
-            ("A lower", JA), ("B21 PROCESS_RETRIEVE", T.violet)]
+    acts = [("AGV A: W13 -> P15", JA), ("AGV A: P15 -> P17", JA), ("AGV A: lift", JA), ("AGV B: W26 -> W25", JB),
+            ("AGV A: P17 -> P15, lifted", JA), ("AGV A: P15 -> W13, lifted", JA), ("AGV A: W13 -> W18, lifted", JA),
+            ("AGV A: W18 -> W22, lifted", JA), ("AGV A: W22 -> W41, lifted", JA), ("AGV A: W41 -> B21, lifted", JA),
+            ("AGV A: lower", JA), ("bay 21: PROCESS_RETRIEVE", T.violet)]
     cy = 22
     cells = {}
     for i, (lab, col) in enumerate(acts):
         y = cy + i * 26
         d.rect(sx, y, 34, 22, rx=4, fill=T.muted_bg)
         d.text(sx + 17, y + 11, str(i), size=11, family="mono", weight=700, fill=T.fg, anchor="middle")
-        d.rect(sx + 40, y, 250, 22, rx=4, fill=T.tint(col, 0.14, T.bg), stroke=T.tint(col, 0.6, T.bg), sw=1)
+        d.rect(sx + 40, y, 300, 22, rx=4, fill=T.tint(col, 0.14, T.bg), stroke=T.tint(col, 0.6, T.bg), sw=1)
         d.text(sx + 50, y + 11, lab, size=11, family="mono", fill=T.fg)
-        d.text(sx + 282, y + 11, "job A" if col != JB else "job B", size=10, family="mono",
+        d.text(sx + 332, y + 11, "job A" if col != JB else "job B", size=10, family="mono",
                fill=JB if col == JB else JA, anchor="end")
-        cells[i] = BBox(sx, y, sx + 290, y + 22)
+        cells[i] = BBox(sx, y, sx + 340, y + 22)
     # ---- ScheduledJobData cards ----
-    kx = sx + 340
+    kx = sx + 390
     cards = [
         ("ScheduledJobData  (job A)", JA,
          ["job.type = TYPE_RETRIEVE", "job.guid = a1f3...   (= ActionNode.job_id)", "job.state = STATE_EXECUTING",

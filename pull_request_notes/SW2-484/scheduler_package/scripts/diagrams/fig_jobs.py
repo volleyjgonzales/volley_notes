@@ -800,12 +800,12 @@ def job_move_agv():
         "40_job_move_agv", heading="TYPE_MOVE_AGV  ->  PlanAgvMoveJob()",
         subtitle="Two MOVE_AGV jobs in one request. An empty AGV produces an AgvMove; an AGV that is carrying a tray "
                  "produces a TrayMove whose AGV is already fixed.",
-        req=[("job 0", "TYPE_MOVE_AGV, agv_id = A, destination = W13@90"),
-             ("job 1", "TYPE_MOVE_AGV, agv_id = B, destination = P24@90"),
+        req=[("job 0", "TYPE_MOVE_AGV, agv_id = A, destination = {node_id: 13, heading: 90}"),
+             ("job 1", "TYPE_MOVE_AGV, agv_id = B, destination = {node_id: 24, heading: 90}"),
              ("call", "PlanAgvMoveJob(plan_ctx, job.agv_id,\n  job.destination, false, job_index)"),
              ("returns", "BoolStringPair {success, message}")],
         region="qa", draw_map=draw, map_caption="request state (job 1 also sees A at W13 after replay)",
-        events=[("AgvMove", "A: W26@90 -> W13@90", 0, "solid"),
+        events=[("AgvMove", "AGV A: {node_id: 26, heading: 90} -> {node_id: 13, heading: 90}", 0, "solid"),
                 ("TrayMove", "T9: W18 -> P24, agv = B", 1, "solid", "AGV preset by SetAgvId(); heading may change")],
         edges=[],
         steps=[

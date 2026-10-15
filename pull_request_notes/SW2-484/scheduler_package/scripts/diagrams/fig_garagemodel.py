@@ -292,18 +292,18 @@ def garage_graph_vertex():
                 lx, ly = x + ox * 1.62, y + oy * 1.62
             else:
                 lx, ly = px, py - 19
-            d.text(lx, ly, str(VERT[(nid, h)]), size=10.5, family="mono", weight=700,
+            d.text(lx, ly, f"v{VERT[(nid, h)]}", size=10.5, family="mono", weight=700,
                    fill=T.fg if nid == 22 else T.fg2, anchor="middle", halo=T.bg_deep, halo_w=3, layer="top")
     mb = m.box
-    d.text(mb.x0, mb.y1 + 18, "Pecos, around W22: one ring per vertex (arrow = heading), number = Vertex.",
+    d.text(mb.x0, mb.y1 + 18, "Pecos, around W22: one ring per vertex (arrow = heading); v44 = GarageGraph::Vertex 44.",
            size=11, fill=T.muted)
     d.text(mb.x0, mb.y1 + 34, f"Whole layout: {len(_NODES)} nodes -> {len(POSES)} vertices, {N_EDGES} directed edges "
                               f"({N_ROT} rotations).", size=11, fill=T.muted)
 
     # ---- bottom: the three storage structures ----
     top = max(code.y1, mb.y1 + 40) + 40
-    hrows = [(f"{{{n}, {h}}}", str(VERT[(n, h)])) for n, h in ((18, -90), (18, 90), (22, -90), (22, 0), (22, 90),
-                                                                 (22, 180), (23, 90))] + [None, ("{41, 90}", str(VERT[(41, 90)]))]
+    hrows = [(f"{{node_id: {n}, heading: {h}}}", str(VERT[(n, h)])) for n, h in ((18, -90), (18, 90), (22, -90), (22, 0), (22, 90),
+                                                                 (22, 180), (23, 90))] + [None, ("{node_id: 41, heading: 90}", str(VERT[(41, 90)]))]
     t1 = _table(d, 0, top, 300, "pose_to_vertex_", "unordered_map<GaragePoseMsg, Vertex>",
                 hrows, [("key: {node_id, heading}", 10), ("Vertex", 220)], GG, hl=(4,))
     v43 = out_edges((22, 90))
@@ -312,18 +312,19 @@ def garage_graph_vertex():
         p = POSES[v]
         outs = out_edges(p)
         ins = [q for q in POSES if any(t == p for t, _ in out_edges(q))]
-        vrows.append((str(v), f"{{{p[0]}, {p[1]}}}", ", ".join(str(VERT[t]) for t, _ in outs),
+        vrows.append((str(v), f"{{node_id: {p[0]}, heading: {p[1]}}}", ", ".join(str(VERT[t]) for t, _ in outs),
                       ", ".join(str(VERT[q]) for q in ins)))
     vrows.insert(1, None)
-    t2 = _table(d, t1.x1 + 40, top, 540, "base_graph_ vertices", "std::vector: index = Vertex; stored per vertex",
-                vrows, [("Vertex", 10), ("bundle (pose)", 80), ("out_edges -> targets", 200), ("in_edges <- sources", 380)],
+    t2 = _table(d, t1.x1 + 40, top, 680, "base_graph_ vertices", "std::vector: index = Vertex; stored per vertex",
+                vrows, [("Vertex", 10), ("bundle: GaragePoseMsg", 70), ("out_edges -> target Vertex", 290),
+                        ("in_edges <- source Vertex", 480)],
                 GG, hl=(4,))
     erows = []
     for tgt, _ in v43:
         kind, length = transition((22, 90), tgt)
-        erows.append((f"{VERT[(22, 90)]} -> {VERT[tgt]}", f"{{{tgt[0]}, {tgt[1]}}}", kind, length))
-    t3 = _table(d, t2.x1 + 40, top, 470, f"edges out of vertex {VERT[(22, 90)]}", "Edge = (source, target) + Transition{type, length}",
-                erows, [("edge", 10), ("target pose", 110), ("Transition.type", 230), ("length", 370)], T.violet)
+        erows.append((f"{VERT[(22, 90)]} -> {VERT[tgt]}", f"{{node_id: {tgt[0]}, heading: {tgt[1]}}}", kind, length))
+    t3 = _table(d, t2.x1 + 40, top, 560, f"edges out of Vertex {VERT[(22, 90)]}", "Edge = (source Vertex, target Vertex) + Transition{type, length}",
+                erows, [("edge", 10), ("target pose", 90), ("Transition.type", 310), ("length", 450)], T.violet)
     # lookup arrows
     connect(d, [(t1.x1, t1.y0 + 34 + 22 + 4 * 22 + 11), (t2.x0, t2.y0 + 34 + 22 + 4 * 22 + 11)], kind="flow",
             color=GG, size=8)
@@ -331,8 +332,8 @@ def garage_graph_vertex():
             size=8)
     yb = max(t1.y1, t2.y1, t3.y1) + 28
     steps = [
-        ("gg_.GetVertexFromPose({22, 90})", "hash lookup in pose_to_vertex_ -> 44; {22, 270} or an unknown node -> nullopt"),
-        ("gg_.GetPoseFromVertex(44)", "index into base_graph_'s vertex vector -> {22, 90}; v >= NumVertices() -> nullopt"),
+        ("gg_.GetVertexFromPose({node_id: 22, heading: 90})", "hash lookup in pose_to_vertex_ -> 44; {node_id: 22, heading: 270} or an unknown node -> nullopt"),
+        ("gg_.GetPoseFromVertex(44)", "index into base_graph_'s vertex vector -> {node_id: 22, heading: 90}; v >= NumVertices() -> nullopt"),
         ("gg_.GetOutEdges(44)", "iterator pair over that vertex's out-edge vector (throws std::invalid_argument if invalid)"),
         ("gg_.GarageNodeFromVertex(44)", "pose.node_id -> layout_->GetNodeById(22): a std::map lookup and a copy of the node"),
     ]
@@ -341,11 +342,11 @@ def garage_graph_vertex():
     for i, (call, what) in enumerate(steps):
         y = yb + 22 + i * 24
         d.text(0, y, call, size=11.5, family="mono", fill=GG)
-        d.text(330, y, what, size=11.5, fill=T.fg2)
+        d.text(470, y, what, size=11.5, fill=T.fg2)
     frame(d, title="What a GarageGraph Vertex is",
           subtitle="Vertex is BoostPoseGraph::vertex_descriptor: with vecS storage, a plain std::size_t index into "
                    "the graph's vertex vector. The pose lives in that vector entry; pose_to_vertex_ is the reverse "
-                   "map. Vertex 44 is the pose {22, 90}; W22 lists headings 0 and 90, so it owns four vertices (42-45).",
+                   "map. Vertex 44 is the pose {node_id: 22, heading: 90}; W22 lists headings 0 and 90, so it owns four vertices (42-45).",
           badge_key="yaml",
           legend=[("ring", GG, "vertex (arrow = heading)"), ("box", GG, "GarageGraph storage"),
                   ("box", T.violet, "edge records")],
@@ -391,12 +392,12 @@ def collision_table_storage():
         d.text(ex + 200, y, what, size=11.5, fill=T.fg2)
     # nested lookup chain
     top = code.y1 + 50
-    d.text(0, top, "One lookup: Query(TRAY, AGV, {18, 90}, {22, 90})", size=13, weight=600, fill=T.fg)
+    d.text(0, top, "One lookup: Query(TRAY, AGV, {node_id: 18, heading: 90}, {node_id: 22, heading: 90})", size=13, weight=600, fill=T.fg)
     levels = [("ppmap_", "ResMap<Pose, Pose>", "4 maps: pick by location kinds"),
               ("[2]", "fixed id = TRAY", "unordered_map<Pose, ...>"),
-              ("[{18, 90}]", "fixed pose", "unordered_map<size_t, ...>"),
+              ("[{node_id: 18, heading: 90}]", "fixed pose", "unordered_map<size_t, ...>"),
               ("[3]", "queried id = AGV", "unordered_set<Pose>"),
-              ("contains {22, 90}?", "queried pose", "true = conflict")]
+              ("contains {node_id: 22, heading: 90}?", "queried pose", "true = conflict")]
     x = 0
     bw, gap = 222, 30
     for i, (k, a, b) in enumerate(levels):
@@ -498,7 +499,7 @@ def heading_convention():
         d.rect(bx - 90, 70, 180, 150, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
         d.circle(bx, 145, 3, fill=T.fg2)
         _rect_at(d, bx, 145, h, 124, 52, col)
-        d.text(bx, 240, f"tray at {{22, {h}}}", size=12, family="mono", fill=T.fg2, anchor="middle")
+        d.text(bx, 240, f"{{node_id: 22, heading: {h}}}", size=12, family="mono", fill=T.fg2, anchor="middle")
         d.text(bx, 258, "faces -x" if h == 90 else "faces +x", size=11, fill=T.muted, anchor="middle")
     d.text(px, 290, "The long side lies along the heading. A centred rectangle covers the same floor at h and h + 180,",
            size=11.5, fill=T.fg2)
@@ -542,7 +543,7 @@ def node_pose_vertex():
     cols = [("node", "a place", "GarageNodeMsg  (Layout::nodes_)", LAY),
             ("pose", "a place + a heading", "GaragePoseMsg  {node_id, heading}", PG),
             ("vertex", "a pose's index in gg_", "GarageGraph::Vertex  (std::size_t)", GG)]
-    cw, gap = 330, 70
+    cw, gap = 400, 70
     top = 0
     for i, (word, what, typ, col) in enumerate(cols):
         x = i * (cw + gap)
@@ -559,25 +560,27 @@ def node_pose_vertex():
     # node
     x0 = 0
     d.rect(x0, py, cw, 230, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
-    ncx, ncy = x0 + cw / 2, py + 100
+    ncx, ncy = x0 + cw / 2, py + 70
     d.circle(ncx, ncy, 9, fill=LAY)
     d.text(ncx, ncy + 26, "W22", size=13, family="mono", weight=700, fill=LAY, anchor="middle")
-    for ln_i, ln in enumerate(["id 22, x 30.88 m, y 21.74 m", "type Waypoint, headings [0, 90]",
-                                "rotation_allowed: true"]):
-        d.text(ncx, py + 160 + ln_i * 18, ln, size=11, family="mono", fill=T.fg2, anchor="middle")
+    for ln_i, ln in enumerate(["GarageNodeMsg {id: 22,", "  x: 30.88, y: 21.74,   // metres",
+                                "  type: TYPE_WAYPOINT, headings: [0, 90],", "  rotation_allowed: true, ...}"]):
+        d.text(x0 + 24, py + 150 + ln_i * 18, ln, size=11, family="mono", fill=T.fg2)
     # poses
     x1 = cw + gap
     d.rect(x1, py, cw, 230, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
     pcx, pcy = x1 + cw / 2, py + 100
     d.circle(pcx, pcy, 4, fill=T.faint)
-    for h in (0, 90, 180, -90):
+    pcx = x1 + 80
+    d.circle(pcx, pcy, 4, fill=T.faint)
+    for k, h in enumerate((-90, 0, 90, 180)):
         a = math.radians(h)
         fx, fy = -math.sin(a), -math.cos(a)
-        qx, qy = pcx + fx * 52, pcy + fy * 52
+        qx, qy = pcx + fx * 44, pcy + fy * 44
         d.circle(qx, qy, 13, fill=T.card, stroke=PG, sw=1.6)
         _arrow_glyph(d, qx, qy, h, PG, r=9)
-        lx, ly = pcx + fx * 112, pcy + fy * 84
-        d.text(lx, ly, f"{{22, {h}}}", size=11, family="mono", fill=T.fg2, anchor="middle", halo=T.bg_deep, halo_w=3)
+        d.text(qx + fx * 26, qy + fy * 22, str(h), size=9.5, family="mono", fill=T.muted, anchor="middle")
+        d.text(x1 + 160, py + 50 + k * 34, f"{{node_id: 22, heading: {h}}}", size=11, family="mono", fill=T.fg2)
     d.text(pcx, py + 214, "same place, four headings", size=11, fill=T.muted, anchor="middle")
     # vertices
     x2 = 2 * (cw + gap)
@@ -586,22 +589,24 @@ def node_pose_vertex():
         yy = py + 30 + k * 40
         d.rect(x2 + 40, yy, 60, 30, rx=4, fill=T.tint(GG, 0.16, T.bg), stroke=GG, sw=1.2)
         d.text(x2 + 70, yy + 15, str(VERT[(22, h)]), size=14, family="mono", weight=700, fill=T.fg, anchor="middle")
-        d.text(x2 + 116, yy + 15, f"base_graph_[{VERT[(22, h)]}] = {{22, {h}}}", size=11, family="mono", fill=T.fg2)
+        if k == 0:
+            d.text(x2 + 40, yy - 12, "Vertex   base_graph_[Vertex]", size=10.5, family="mono", fill=T.muted)
+        d.text(x2 + 116, yy + 15, f"= {{node_id: 22, heading: {h}}}", size=11, family="mono", fill=T.fg2)
     d.text(x2 + cw / 2, py + 214, "four numbers; nothing else stored here", size=11, fill=T.muted, anchor="middle")
     # other names for the same place
     oy = py + 270
     d.text(0, oy, "The same place under other names", size=14, weight=600, fill=T.fg)
-    others = [("GeometricPoseMsg", "{x 30.88, y 21.74, yaw 1.571}", "metres and radians, for geometry and motion", T.sky),
-              ("SizedPoseMsg", "{pose {22, 90}, resource_size_index 4}", "a pose plus a footprint size", PG),
-              ("CollisionTable location", "Pose {22, 90}  or  Edge {{22, 90}, {18, 90}}", "a pose, or a move between two", CT),
+    others = [("GeometricPoseMsg", "{x: 30.88, y: 21.74, yaw: 1.571}   // yaw of heading 90", "metres and radians, for geometry and motion", T.sky),
+              ("SizedPoseMsg", "{resource_size_index: 4, pose: {node_id: 22, heading: 90}}", "a pose plus a footprint size", PG),
+              ("CollisionTable location", "Pose {node_id: 22, heading: 90}  or  Edge {pose, pose} (a move)", "a pose, or a move between two", CT),
               ("layout graph_ vertex", "20  (W22's position in Layout::nodes_)", "not the node id and not a gg_ vertex", LAY),
-              ("pose index", "PoseGraph::GetPoseIndex({22, 90}) = 44", "equals the gg_ Vertex by construction", PG)]
+              ("pose index", "PoseGraph::GetPoseIndex({node_id: 22, heading: 90}) = 44", "equals the gg_ Vertex by construction", PG)]
     for i, (name, ex, what, col) in enumerate(others):
         y = oy + 30 + i * 28
         d.rect(0, y - 13, x2 + cw, 26, rx=4, fill=T.card if i % 2 else T.tint(T.card, 0.6, T.bg))
         d.text(12, y, name, size=12, family="mono", weight=600, fill=col)
         d.text(250, y, ex, size=12, family="mono", fill=T.fg2)
-        d.text(660, y, what, size=11.5, fill=T.muted)
+        d.text(820, y, what, size=11.5, fill=T.muted)
     frame(d, title="Node, pose, vertex: one place, several names",
           subtitle="A node is a place in the layout. A pose is that place plus a heading. A vertex is the number gg_ "
                    "gives one pose. W22 is one node, four poses and four vertices; the arrows are the only conversions "
@@ -610,4 +615,119 @@ def node_pose_vertex():
           legend=[("box", LAY, "Layout"), ("box", PG, "pose"), ("box", GG, "GarageGraph"), ("box", CT, "CollisionTable")],
           footnote="Values from the Pecos YAML; vertex numbers recomputed with the PoseGraph rules. Size index 4 = XL: "
                    "windows sorted by area are TRAY, COMPACT, STANDARD, LARGE, XL.")
+    return d
+
+
+# ======================================================================================
+# 80 — asset types
+# ======================================================================================
+
+def _icon(d, kind, x, y, col):
+    """Small pictogram centred at (x, y)."""
+    if kind == "agv":
+        d.rect(x - 26, y - 14, 52, 28, rx=6, fill=T.tint(col, 0.2, T.bg), stroke=col, sw=1.6)
+        for dx in (-18, 10):
+            d.rect(x + dx, y - 18, 8, 4, rx=1, fill=col)
+            d.rect(x + dx, y + 14, 8, 4, rx=1, fill=col)
+        d.line(x - 8, y, x + 12, y, stroke=col, sw=2)
+        d.arrowhead((x + 16, y), (x, y), kind="filled", color=col, size=7)
+    elif kind == "tray":
+        d.rect(x - 30, y - 13, 60, 26, rx=3, fill=T.tint(col, 0.15, T.bg), stroke=col, sw=1.6)
+        for dx in (-30, 26):
+            for dy in (-13, 9):
+                d.rect(x + dx, y + dy, 4, 4, fill=col)
+    elif kind == "payload":
+        d.rect(x - 28, y - 11, 56, 22, rx=9, fill=T.tint(col, 0.2, T.bg), stroke=col, sw=1.6)
+        d.rect(x - 12, y - 7, 18, 14, rx=3, fill="none", stroke=col, sw=1.2)
+    elif kind == "bay":
+        d.path(f"M{x - 26} {y - 16} L{x + 26} {y - 16} L{x + 26} {y + 16} L{x - 26} {y + 16}", stroke=col, sw=2)
+        d.line(x - 26, y - 16, x - 26, y - 6, stroke=col, sw=2)
+        d.line(x - 26, y + 6, x - 26, y + 16, stroke=col, sw=2)
+        d.text(x + 4, y + 1, "door", size=9, fill=col, anchor="middle")
+    elif kind == "vecs":
+        d.circle(x, y, 15, fill=T.tint(col, 0.15, T.bg), stroke=col, sw=1.6)
+        d.path(f"M{x + 2} {y - 10} L{x - 5} {y + 1} L{x + 1} {y + 1} L{x - 2} {y + 10} L{x + 6} {y - 2} L{x} {y - 2} Z",
+               fill=col)
+    elif kind == "vrc":
+        d.rect(x - 18, y - 18, 36, 36, rx=4, fill=T.tint(col, 0.15, T.bg), stroke=col, sw=1.6)
+        d.line(x, y - 10, x, y + 10, stroke=col, sw=1.6)
+        d.arrowhead((x, y - 13), (x, y), kind="filled", color=col, size=6)
+        d.arrowhead((x, y + 13), (x, y), kind="filled", color=col, size=6)
+
+
+@figure("80_asset_types", "Asset types", DOC1)
+def asset_types():
+    d = Doc("80_asset_types", "Asset types: what the scheduler plans for",
+            "The six kinds of physical asset in the garage: how each is identified, which message holds its state, "
+            "where it sits, which event changes it in the plan, which command executes it, and its footprint id.")
+    assets = [
+        ("agv", "AGV", T.green, "moves; carries one tray", [
+            ("id", "uint16 · GarageEntityId {entity_type: 'a', id}"),
+            ("state", "DiscreteAgvState {id, state, pose, lift, tray_id, disabled}"),
+            ("sits on", "any pose; charges on TYPE_AGV_CHARGE (5)"),
+            ("plan event", "AgvMove (pose or lift change)"),
+            ("command", "ActionNode TYPE_AGV_COMMAND · AgvCommand {src, dst: AgvGoal}"),
+            ("footprint", "CollisionEntityId AGV (3); loaded = its tray's id")]),
+        ("tray", "tray", T.amber, "carried by an AGV; holds 0 or 1 payload", [
+            ("id", "uint16 · GarageEntityId {entity_type: 't', id}"),
+            ("state", "DiscreteTrayState {id, pose, agv_id, payload_id, disabled}"),
+            ("sits on", "parking, bay or EV-charge nodes (any pose)"),
+            ("plan event", "TrayMove (tray id, destination, AGV)"),
+            ("command", "none of its own: AGV commands move it"),
+            ("footprint", "TRAY (2) on an AGV, TRAY_LEGS (1) on the floor")]),
+        ("payload", "payload (car)", T.pink, "rides on a tray", [
+            ("id", "Guid (16 bytes) · no GarageEntityId"),
+            ("state", "DiscretePayloadState {payload, tray_id, reciprocal_to_tray, charging}"),
+            ("sits on", "a tray; Payload has mass and length/width/height_m"),
+            ("plan event", "none: moves with its tray; PROCESS_RETRIEVE removes it"),
+            ("command", "none"),
+            ("footprint", "PAYLOAD + smallest parking window that fits")]),
+        ("bay", "bay", T.violet, "where customers insert and retrieve cars", [
+            ("id", "uint16 = its node_id · GarageEntityId {entity_type: 'b', id}"),
+            ("state", "DiscreteBayState {id, state (BayReport STATE_*), disabled}"),
+            ("sits on", "is a node: TYPE_BAY (4) or TYPE_BLIFT (7)"),
+            ("plan event", "BayTransition (BayCommand from a given bay state)"),
+            ("command", "ActionNode TYPE_BAY_COMMAND · BayCommand {command_type, floor}"),
+            ("footprint", "BAY_ODP (0), at bay poses only")]),
+        ("vecs", "VECS (EV charger)", T.sky, "charges a payload's battery", [
+            ("id", "uint16 = its node_id · GarageEntityId {entity_type: 'v', id}"),
+            ("state", "DiscreteVecsState {id, state (VecsReport), disabled}"),
+            ("sits on", "is a node: TYPE_EV_CHARGE (6)"),
+            ("plan event", "VecsTransition (state_curr -> state_next)"),
+            ("command", "ActionNode TYPE_VECS_COMMAND · VecsCommand START/STOP_CHARGING"),
+            ("footprint", "none")]),
+        ("vrc", "VRC (vehicle lift)", T.teal, "moves an AGV between floors", [
+            ("id", "uint16 · GarageEntityId {entity_type: 'r', id}"),
+            ("state", "DiscreteVrcState {id, state, gates, current_floor, requested_floor}"),
+            ("sits on", "a stack of TYPE_LIFT (3) nodes, one per floor"),
+            ("plan event", "VrcTransition exists; the scheduler never creates one"),
+            ("command", "ActionNode TYPE_VRC_COMMAND · VrcCommand {requested_floor}"),
+            ("footprint", "none of its own")]),
+    ]
+    cw, ch, gx, gy = 560, 236, 26, 24
+    for i, (kind, name, col, what, rows) in enumerate(assets):
+        x = (i % 2) * (cw + gx)
+        y = (i // 2) * (ch + gy)
+        d.rect(x, y, cw, ch, rx=10, fill=T.card, stroke=T.tint(col, 0.7, T.bg), sw=1.5)
+        _icon(d, kind, x + 46, y + 40, col)
+        d.text(x + 92, y + 32, name, size=16, weight=600, fill=col)
+        d.text(x + 92, y + 52, what, size=11.5, fill=T.muted)
+        for k, (lab, val) in enumerate(rows):
+            yy = y + 86 + k * 24
+            d.text(x + 18, yy, lab, size=10.5, family="mono", weight=600, fill=T.faint)
+            d.text(x + 104, yy, val, size=11, family="mono", fill=T.fg2)
+    yb = 3 * (ch + gy) + 6
+    note(d, 0, yb, 2 * cw + gx,
+         "All six live in DiscreteGarageState (agvs, trays, payloads, bays, vexen, vrcs). Fixed assets (bay, VECS, "
+         "VRC) are also layout nodes; mobile ones (AGV, tray, payload) are not: they have a pose. GarageEntityId "
+         "{entity_type, id} is how last_entity_event and ActionNode bookkeeping name an asset; 's' (system) also exists.",
+         title="Where they meet", accent=T.fg2)
+    frame(d, title="Asset types: what the scheduler plans for",
+          subtitle="Six kinds of physical asset. Three move (AGV, tray, payload) and three are fixed in the layout "
+                   "(bay, VECS, VRC). Each row says which type in the code stands for that asset.",
+          badge_key="as-built",
+          legend=[("box", T.green, "AGV"), ("box", T.amber, "tray"), ("box", T.pink, "payload"),
+                  ("box", T.violet, "bay"), ("box", T.sky, "VECS"), ("box", T.teal, "VRC")],
+          footnote="From interfaces/msg (Discrete*State, GarageEntityId, ActionNode, *Command, GarageNode), "
+                   "common_ros (AgvId/TrayId/BayId/VecsId/VrcId, CollisionEntityId) and planner_core (event classes).")
     return d

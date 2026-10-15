@@ -184,9 +184,9 @@ def bridge():
                            "+ trays: DiscreteTrayState[]", "+ payloads: DiscretePayloadState[]",
                            "+ vrcs: DiscreteVrcState[]", "+ disabled_nodes: uint32[]", "+ hash: uint64"], compact=True)
     recs = [
-        (1, "agvs[0] : DiscreteAgvState", ["+ id = 4", "+ pose = GaragePose{node_id=10, heading=90}",
+        (1, "agvs[0] : DiscreteAgvState", ["+ id = 4", "+ pose = GaragePose {node_id: 10, heading: 90}",
                                            "+ lift = false", "+ tray_id = 0"]),
-        (2, "trays[0] : DiscreteTrayState", ["+ id = 15", "+ pose = GaragePose{node_id=3, heading=90}",
+        (2, "trays[0] : DiscreteTrayState", ["+ id = 15", "+ pose = GaragePose {node_id: 3, heading: 90}",
                                              "+ agv_id = 0", "+ payload_id = <payload GUID>"]),
         (3, "payloads[0] : DiscretePayloadState", ["+ tray_id = 15", "+ reciprocal_to_tray = false"]),
         (4, "bays[0] : DiscreteBayState", ["+ id = 7", "+ state = READY_TO_RETRIEVE"]),

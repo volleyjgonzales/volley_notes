@@ -136,11 +136,11 @@ def motions_to_actions():
     ty = sy + 146
     d.text(0, ty, "3 · PlanResponse.schedule.nodes  (ActionNode[] in topological order)", size=12.5, weight=600,
            fill=T.fg)
-    cols = [("idx", 50), ("type", 190), ("entity", 90), ("command", 300), ("parents", 110), ("duration", 100)]
-    rows = [("0", "TYPE_AGV_COMMAND", "agv 1", "src 13@90 -> dst 15@90, lift false", "[]", "6.0 s"),
-            ("1", "TYPE_AGV_COMMAND", "agv 1", "15 -> 17", "[0]", "6.0 s"),
+    cols = [("idx", 50), ("type", 170), ("entity", 70), ("command", 440), ("parents", 70), ("duration", 80)]
+    rows = [("0", "TYPE_AGV_COMMAND", "agv 1", "src {node_id: 13, heading: 90} -> dst {node_id: 15, heading: 90}", "[]", "6.0 s"),
+            ("1", "TYPE_AGV_COMMAND", "agv 1", "node_id 15 -> node_id 17 (heading 90, lift false)", "[0]", "6.0 s"),
             ("2", "TYPE_AGV_COMMAND", "agv 1", "lift: src.lift false -> dst.lift true", "[1]", "4.0 s"),
-            ("3 .. 8", "TYPE_AGV_COMMAND", "agv 1", "17->15->13->18->22->41->21, loaded", "[n-1]",
+            ("3 .. 8", "TYPE_AGV_COMMAND", "agv 1", "node_id 17 -> 15 -> 13 -> 18 -> 22 -> 41 -> 21, lift true", "[n-1]",
              "..."),
             ("9", "TYPE_AGV_COMMAND", "agv 1", "lower: lift true -> false", "[8]", "4.0 s"),
             ("10", "TYPE_BAY_COMMAND", "bay 21", "COMMAND_TYPE_PROCESS_RETRIEVE", "[9]", "9.0 s")]
