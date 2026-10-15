@@ -1,0 +1,83 @@
+---
+import type { RenderedDoc } from '../lib/render';
+
+interface Props {
+  docs: RenderedDoc[];
+}
+const { docs } = Astro.props;
+
+const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
+
+/** h2 entries with their h3 children */
+function groups(doc: RenderedDoc) {
+  const out: { h2: RenderedDoc['headings'][number]; children: RenderedDoc['headings'] }[] = [];
+  for (const hd of doc.headings) {
+    if (hd.depth === 2) out.push({ h2: hd, children: [] });
+    else if (hd.depth === 3 && out.length) out[out.length - 1].children.push(hd);
+  }
+  return out;
+}
+function partStarting(doc: RenderedDoc, num?: string) {
+  if (!num || !doc.config.parts) return -1;
+  return doc.config.parts.findIndex((p) => String(p.from) === num);
+}
+---
+
+<aside class="sidebar" id="sidebar" aria-label="Table of contents">
+  <div class="sidebar-head">
+    <label class="filter">
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z" fill="currentColor"/></svg>
+      <span class="sr-only">Filter sections</span>
+      <input id="toc-filter" type="search" placeholder="Filter sections" autocomplete="off" spellcheck="false" />
+    </label>
+  </div>
+  <div class="sidebar-scroll" id="sidebar-scroll">
+    {
+      docs.map((doc) => (
+        <nav class="toc" data-doc={doc.config.key} aria-label={`${doc.config.num} ${doc.config.tab} contents`} hidden>
+          <a class="toc-doc" href={`#doc-${doc.config.key}`}>
+            <span class="toc-doc-num">{doc.config.num}</span>
+            <span>{doc.config.tab}</span>
+          </a>
+          <ol class="toc-list">
+            {groups(doc).map(({ h2, children }) => {
+              const part = partStarting(doc, h2.num);
+              return (
+                <Fragment>
+                  {part >= 0 && (
+                    <li class="toc-part" aria-hidden="true">
+                      Part {ROMAN[part]} · {doc.config.parts![part].title}
+                    </li>
+                  )}
+                  <li class="toc-h2" data-id={h2.id}>
+                    <div class="toc-row">
+                      <a href={`#${h2.id}`} data-id={h2.id}>
+                        {h2.num ? <span class="toc-num">{h2.num}</span> : <span class="toc-num toc-num-empty" />}
+                        <span class="toc-text" set:html={h2.num ? h2.html.replace(/^\s*\d+(\.\d+)?\.?\s*/, '') : h2.html} />
+                      </a>
+                      {children.length > 0 && (
+                        <button class="toc-toggle" type="button" aria-expanded="false" aria-label={`Show subsections of ${h2.text}`}>
+                          <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                      )}
+                    </div>
+                    {children.length > 0 && (
+                      <ol class="toc-sub">
+                        {children.map((c) => (
+                          <li class="toc-h3" data-id={c.id}>
+                            <a href={`#${c.id}`} data-id={c.id} set:html={c.html} />
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </li>
+                </Fragment>
+              );
+            })}
+          </ol>
+        </nav>
+      ))
+    }
+    <p class="toc-empty" id="toc-empty" hidden>No section matches.</p>
+  </div>
+</aside>

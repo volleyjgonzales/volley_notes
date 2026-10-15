@@ -1,0 +1,51 @@
+---
+import type { RenderedDoc } from '../lib/render';
+
+interface Props {
+  docs: RenderedDoc[];
+}
+const { docs } = Astro.props;
+
+/** For every h2: its h3/h4 descendants, for the "On this section" rail. */
+function sections(doc: RenderedDoc) {
+  const out: { id: string; title: string; num?: string; items: RenderedDoc['headings'] }[] = [];
+  for (const hd of doc.headings) {
+    if (hd.depth === 2) out.push({ id: hd.id, title: hd.title, num: hd.num, items: [] });
+    else if (out.length) out[out.length - 1].items.push(hd);
+  }
+  return out;
+}
+---
+
+<aside class="rail" aria-label="On this section">
+  <div class="rail-inner">
+    {
+      docs.map((doc) =>
+        sections(doc).map((s) => (
+          <nav class="rail-section" data-doc={doc.config.key} data-h2={s.id} hidden>
+            <p class="rail-label">On this section</p>
+            <a class="rail-title" href={`#${s.id}`}>
+              {s.num && <span class="toc-num">{s.num}</span>}
+              {s.title}
+            </a>
+            {s.items.length > 0 ? (
+              <ol>
+                {s.items.map((i) => (
+                  <li class={`d${i.depth}`}>
+                    <a href={`#${i.id}`} data-id={i.id} set:html={i.html} />
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p class="rail-none">No subsections.</p>
+            )}
+          </nav>
+        )),
+      )
+    }
+    <div class="rail-actions">
+      <button type="button" class="rail-btn" data-action="top">Back to top</button>
+      <button type="button" class="rail-btn" data-action="search">Search <kbd>Ctrl K</kbd></button>
+    </div>
+  </div>
+</aside>

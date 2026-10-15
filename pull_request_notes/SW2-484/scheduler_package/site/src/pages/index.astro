@@ -1,0 +1,171 @@
+---
+import { renderAll } from '../lib/render';
+import Sidebar from '../components/Sidebar.astro';
+import Rail from '../components/Rail.astro';
+import css from '../styles/site.css?raw';
+import appJs from '../scripts/app.js?raw';
+
+const { docs, terms } = await renderAll();
+
+// search index: every heading plus every glossary term
+const index = [
+  ...docs.flatMap((d) =>
+    d.headings.map((hd) => ({
+      k: 'h',
+      doc: d.config.num,
+      id: hd.id,
+      num: hd.num ?? '',
+      t: hd.title,
+      d: hd.depth,
+    })),
+  ),
+  ...terms.map((t) => ({ k: 'g', doc: t.doc, id: t.id, t: t.term, def: t.def, alias: [...(t.code ?? []), ...(t.text ?? [])].join(' ') })),
+];
+const docMeta = docs.map((d) => ({ key: d.config.key, num: d.config.num, tab: d.config.tab }));
+
+function words(html: string) {
+  return html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
+}
+const safeJson = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
+const built = new Date().toISOString().slice(0, 10);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scheduler Refactor Study</title>
+    <meta name="claude:viewport-fit-sides" content="cover" />
+    <meta name="description" content="Engineering study pack for the scheduler core refactor: software background, problem and proposal, verification plan." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    />
+    <script is:inline>
+      try {
+        const t = localStorage.getItem('study-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <style is:inline set:html={css}></style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="topbar">
+      <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-controls="sidebar" aria-expanded="false" aria-label="Open contents">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <a class="brand" href="#doc-background">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="5" cy="6" r="2.4" fill="currentColor"/><circle cx="19" cy="6" r="2.4" fill="currentColor"/><circle cx="12" cy="18" r="2.4" fill="currentColor"/><path d="M6.8 7.6 10.6 16M17.2 7.6 13.4 16" stroke="currentColor" stroke-width="1.6"/></svg>
+        </span>
+        <span class="brand-text">Scheduler Refactor <span class="brand-sub">study pack</span></span>
+      </a>
+      <nav class="tabs" role="tablist" aria-label="Documents">
+        {
+          docs.map((d) => (
+            <a class="tab" role="tab" id={`tab-${d.config.key}`} href={`#doc-${d.config.key}`} data-doc={d.config.key} aria-controls={`doc-${d.config.key}`} aria-selected="false">
+              <span class="tab-num">{d.config.num}</span>
+              <span class="tab-label">{d.config.tab}</span>
+            </a>
+          ))
+        }
+      </nav>
+      <div class="topbar-actions">
+        <button class="search-btn" type="button" data-action="search" aria-label="Search sections and terms">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z" fill="currentColor"/></svg>
+          <span class="search-btn-text">Search</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <button class="icon-btn" type="button" id="theme-btn" aria-label="Switch colour theme">
+          <svg class="i-sun" aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg class="i-moon" aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+    </header>
+
+    <div class="layout">
+      <Sidebar docs={docs} />
+      <div class="scrim" id="scrim" hidden></div>
+      <main id="main" tabindex="-1">
+        {
+          docs.map((d) => (
+            <article class="doc" id={`doc-${d.config.key}`} data-doc={d.config.key} role="tabpanel" aria-labelledby={`tab-${d.config.key}`} hidden>
+              <header class="doc-head">
+                <p class="doc-kicker">
+                  Document {d.config.num} of {docs.length}
+                </p>
+                <h1>{d.title.replace(/^0\d\s+—\s+/, '')}</h1>
+                <p class="doc-summary">{d.config.summary}</p>
+                <ul class="doc-stats">
+                  <li>
+                    <strong>{d.headings.filter((x) => x.depth === 2 && x.num).length}</strong> sections
+                  </li>
+                  <li>
+                    <strong>{d.figureCount}</strong> figures
+                  </li>
+                  <li>
+                    <strong>~{Math.max(1, Math.round(words(d.html) / 200 / 5) * 5)}</strong> min read
+                  </li>
+                </ul>
+              </header>
+              <div class="prose" set:html={d.html} />
+              <footer class="doc-foot">
+                {docs
+                  .filter((o) => o.config.key !== d.config.key)
+                  .map((o) => (
+                    <a class="next-doc" href={`#doc-${o.config.key}`}>
+                      <span class="next-doc-kicker">Document {o.config.num}</span>
+                      <span class="next-doc-title">{o.config.tab}</span>
+                      <span class="next-doc-sum">{o.config.summary}</span>
+                    </a>
+                  ))}
+              </footer>
+            </article>
+          ))
+        }
+        <p class="built">Built {built} from the Markdown sources in the repository.</p>
+      </main>
+      <Rail docs={docs} />
+    </div>
+
+    <div class="kw-tip" id="kw-tip" role="tooltip" hidden></div>
+
+    <dialog class="palette" id="palette" aria-label="Search">
+      <div class="palette-box">
+        <label class="palette-input">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z" fill="currentColor"/></svg>
+          <span class="sr-only">Search sections and terms</span>
+          <input id="palette-q" type="search" placeholder="Search sections and terms in all three documents" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palette-list" />
+          <kbd>Esc</kbd>
+        </label>
+        <ul id="palette-list" class="palette-list" role="listbox"></ul>
+        <p class="palette-hint"><kbd>↑</kbd> <kbd>↓</kbd> to move · <kbd>Enter</kbd> to open</p>
+      </div>
+    </dialog>
+
+    <dialog class="lightbox" id="lightbox" aria-label="Figure viewer">
+      <div class="lb-bar">
+        <p class="lb-title" id="lb-title"></p>
+        <div class="lb-tools">
+          <button type="button" class="icon-btn" data-lb="out" aria-label="Zoom out">−</button>
+          <span class="lb-zoom" id="lb-zoom">100%</span>
+          <button type="button" class="icon-btn" data-lb="in" aria-label="Zoom in">+</button>
+          <button type="button" class="lb-text-btn" data-lb="fit">Fit</button>
+          <a class="lb-text-btn" id="lb-open" href="#" target="_blank" rel="noopener">Open SVG</a>
+          <button type="button" class="icon-btn" data-lb="close" aria-label="Close viewer">✕</button>
+        </div>
+      </div>
+      <div class="lb-stage" id="lb-stage"><img id="lb-img" alt="" draggable="false" /></div>
+      <p class="lb-hint">Scroll or pinch to zoom · drag to pan · <kbd>0</kbd> to fit · <kbd>Esc</kbd> to close</p>
+    </dialog>
+
+    <script is:inline type="application/json" id="search-index" set:html={safeJson(index)}></script>
+    <script is:inline type="application/json" id="doc-meta" set:html={safeJson(docMeta)}></script>
+    <script is:inline set:html={appJs}></script>
+  </body>
+</html>

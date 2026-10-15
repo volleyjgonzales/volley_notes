@@ -1,0 +1,217 @@
+# Keyword links for the study site.
+#
+# Each entry turns the first mention of a term in every section into a link to the place that explains it.
+#   code:  inline-code spellings that link (exact text of a `code` span)
+#   text:  plain-text phrases that link (whole words, case-sensitive)
+#   to:    target, either "<doc>#<section number>" (e.g. "01#14.5") or "<doc>:<heading text substring>"
+#          docs: 01 = software background, 02 = issue and proposal, 03 = verification plan
+#   def:   one-line definition shown on hover and in search
+#
+# A term is not linked inside the section it points to.
+
+- term: ScheduleContext
+  code: [ScheduleContext, ScheduleContextSPtr, plan_ctx]
+  to: "01#7"
+  def: All mutable data for one Plan() call; created at the start of Plan() and freed when it returns.
+
+- term: initial_state
+  code: [initial_state, ctx->initial_state]
+  to: "01:The definition, annotated"
+  def: The garage at request time, with everything used by base_schedule disabled. Never changed after construction.
+
+- term: disabledness_filters
+  code: [disabledness_filters]
+  to: "01:The definition, annotated"
+  def: Per collision-entity type, the graph vertices that disabled entities make unusable.
+
+- term: scheduled_jobs
+  code: [scheduled_jobs, plan_ctx->scheduled_jobs, ctx->scheduled_jobs, result.scheduled_jobs]
+  to: "01:scheduled_jobs in detail"
+  def: Jobs that planned successfully, in planning order; entry k is the job whose events carry job_index k.
+
+- term: job_index
+  code: [job_index, GetJobIndex(), GetJobIndex]
+  to: "01:scheduled_jobs in detail"
+  def: Position of a job in ctx->scheduled_jobs, stamped on every event the job creates.
+
+- term: ScheduledJobData
+  code: [ScheduledJobDataMsg, ScheduledJobData, "ScheduledJobData[]", node_indices, bay_arrival_node_guid]
+  to: "01:ScheduledJobDataMsg: what one entry holds"
+  def: One per pending job in the response - the job with its status, its action indices, and for a retrieve the bay-arrival action.
+
+- term: FailJob
+  code: [FailJob]
+  to: "01:scheduled_jobs in detail"
+  def: Builds the response entry of a failed job - STATE_ERROR, the failure note and retain_job.
+
+- term: last_entity_event
+  code: [last_entity_event, ctx->last_entity_event]
+  to: "01:last_entity_event in detail"
+  def: The last event that touched each AGV, tray, bay or VECS; used by rule A during job expansion.
+
+- term: first_tray_event
+  code: [first_tray_event, ctx->first_tray_event]
+  to: "01:first_tray_event in detail"
+  def: The first move of each tray, filled by tray assignment and read by AGV assignment.
+
+- term: helper methods
+  code: [UpdateLastEntityEvent, UpdateLeafDependencies, PushBackScheduledJob]
+  to: "01:The three helper methods"
+  def: The three ScheduleContext methods - push a planned job, apply rule A, apply rule B.
+
+- term: Rules A, B and C
+  text: [rule A, rule B, rule C, Rule A, Rule B, Rule C]
+  to: "01#14.5"
+  def: The three ways job expansion adds DAG edges - same entity (A), same job's leaves (B), repark-specific (C).
+
+- term: DiscreteGarageState
+  code: [DiscreteGarageState, DGS]
+  text: [DGS]
+  to: "01#5"
+  def: Snapshot of where every AGV, tray, payload, bay, VECS and VRC is. A value type, copied freely.
+
+- term: working_state
+  code: [working_state]
+  text: [working state]
+  to: "01#14.4"
+  def: A scratch copy of initial_state advanced by replaying events; recomputed many times, never stored.
+
+- term: ScheduleEvent
+  code: [ScheduleEvent, ScheduleEventSPtr, "std::shared_ptr<ScheduleEvent>"]
+  to: "01#11"
+  def: Abstract base class for one discrete state change that can be replayed against a DiscreteGarageState.
+
+- term: Event subclasses
+  code: [TrayMove, AgvMove, BayTransition, VecsTransition, VrcTransition, "TrayMove::Apply", "volley::TrayMove"]
+  to: "01:The subclasses, and what Apply does"
+  def: The concrete ScheduleEvent types and what each one's Apply does.
+
+- term: ScheduleEventDag
+  code: [ScheduleEventDag, "volley::ScheduleEventDag", "DagBase<T>", DagBase, ctx->events, plan_ctx->events]
+  to: "01#12.3"
+  def: The event DAG - a Boost graph of shared_ptr<ScheduleEvent>; an edge u -> v means u finishes first.
+
+- term: DAG operations
+  code: [AddEvent, AddDependency, WouldCreateCycle, GetRootEvents, GetLeafEvents, GetEventFromVertex]
+  to: "01#12.5"
+  def: The ScheduleEventDag operations used by every stage.
+
+- term: Topological ordering
+  code: [GetTopologicalOrdering, GetTopologicalOrdering()]
+  text: [topological ordering, topological order]
+  to: "01#12.2"
+  def: An order of the events in which every event comes after everything it depends on.
+
+- term: Reduce()
+  code: [Reduce(), "ctx->events.Reduce()", Reduce]
+  to: "01#12.8"
+  def: Removes edges implied by longer paths (transitive reduction); the order constraints stay the same.
+
+- term: Plan()
+  code: [Plan(), "Scheduler::Plan", Plan]
+  to: "01#10"
+  def: The one entry point - validate, expand jobs, assign trays and AGVs, check, plan motions, build the response.
+
+- term: Job expansion
+  code: [PlanRetrieveJob, PlanInsertJob, PlanReparkTrayJob, PlanAgvMoveJob, PlanBayTransitionJob, PlanChargePayloadJob, PlanReadyForInsertJob, PlanReadyForRetrieveJob, PlanAgvChargeJob, PlanCleanGarageJob, PlanRebalanceGarageJob]
+  to: "01#14.3"
+  def: The Plan*Job methods - each turns one SchedulerJob into events and edges in ctx->events.
+
+- term: SchedulerJob
+  code: [SchedulerJob, SchedulerJobMsg, pending_jobs, request_data.pending_jobs]
+  to: "01#6"
+  def: A requested outcome such as TYPE_RETRIEVE; arrives in PlanRequest.pending_jobs.
+
+- term: PlanRequest / PlanResponse
+  code: [PlanRequest, PlanResponse, PlanRequestMsg, PlanResponseMsg, request_data, base_schedule]
+  to: "01#6"
+  def: The Plan service's request and response messages.
+
+- term: ActionNode
+  code: [ActionNode, ActionNodeMsg, "ActionNode[]", Schedule.nodes]
+  to: "01#6"
+  def: One executable command with parent indices into Schedule.nodes; the only thing Dispatch executes.
+
+- term: Layout, GarageGraph and CollisionTable
+  code: [GarageGraph, CollisionTable, gg_, table_, layout_, "volley::GarageGraph", "volley::CollisionTable"]
+  to: "01:Layout, GarageGraph and CollisionTable"
+  def: Three read-only views of the garage - parsed YAML, pose search graph, and footprint conflicts.
+
+- term: SchedulerRos
+  code: [SchedulerRos, SchedulerComponent]
+  to: "01#2"
+  def: The ROS adapter that owns the Scheduler and exposes the plan service.
+
+- term: DoTrayAssignments
+  code: [DoTrayAssignments]
+  text: [tray assignment, Tray assignment]
+  to: "01#16"
+  def: Fills blank tray ids and destinations and adds moves for blocking trays.
+
+- term: Blocking trays
+  code: [ResolveBlockingTrays]
+  text: [blocking trays, blocking tray, critical path]
+  to: "01:The blocking-tray loop"
+  def: Trays on another tray's critical path; they must be moved first.
+
+- term: AssignTrayIdForEmptyMove
+  code: [AssignTrayIdForEmptyMove]
+  to: "01:Filling a blank tray id"
+  def: Chooses an empty tray for a TrayMove that has no tray id.
+
+- term: AssignDestForUntargetedMove
+  code: [AssignDestForUntargetedMove]
+  to: "01:Filling a blank destination"
+  def: Chooses a parking destination for a TrayMove that has none.
+
+- term: freeing_moves
+  code: [freeing_moves, GarageOccupancyChecker]
+  to: "01:Occupancy becomes dependencies"
+  def: Remembers which event vacates each pose, so a later move into it can depend on that event.
+
+- term: DoAgvAssignments
+  code: [DoAgvAssignments, AddDepsAfterAmiga, MoveAgvToTrayPose]
+  text: [AGV assignment, AMIGA]
+  to: "01#17"
+  def: Matches AGVs to tray moves (AMIGA bottleneck matching) and wraps each move in approach, lift and lower events.
+
+- term: EnsureAgvMovePathsClear
+  code: [EnsureAgvMovePathsClear]
+  to: "01:Repairing paths after assignment"
+  def: Repair passes that add edges so AGV paths are clear after assignment.
+
+- term: SanityCheckEvents
+  code: [SanityCheckEvents]
+  to: "01#18"
+  def: Replays the final DAG and checks every move is possible before motion planning.
+
+- term: CHUGG
+  code: [Chugg, "volley::Chugg", PlanMotions, SolveSequential]
+  text: [CHUGG]
+  to: "01:CHUGG, the motion planner"
+  def: The motion planner - turns the event DAG into timed, collision-free trajectories.
+
+- term: Building the response
+  code: [ResponseFromTrajectories, BuildActionDagFromMotions, BuildScheduledActionsArray]
+  to: "01:From trajectories to the response"
+  def: Converts CHUGG's trajectories into ActionNodes and fills ScheduledJobData.
+
+- term: VECS and VRC
+  text: [VECS, VRC, VRCs]
+  to: "01#20"
+  def: VECS - EV charging stations; VRC - vehicle lifts between floors.
+
+- term: BoolStringPair
+  code: [BoolStringPair]
+  to: "02#6.4"
+  def: The (bool, message) return convention of most planning methods; doc 02 proposes stdx::Expected instead.
+
+- term: stdx::Expected
+  code: ["stdx::Expected", "stdx::Expected<Result>", "stdx::Result"]
+  to: "02#6.4"
+  def: Proposed error type - a value or an error message, replacing BoolStringPair.
+
+- term: Proposed tray solver
+  code: ["tray_assignment::Solver", "tray_assignment::DefaultSolver", DefaultSolver, ApplyTrayAssignment, GarageServices, "Result::edits"]
+  to: "02#6.1"
+  def: The proposed split - DefaultSolver::Solve decides and returns a Result; ApplyTrayAssignment writes it into the context.
