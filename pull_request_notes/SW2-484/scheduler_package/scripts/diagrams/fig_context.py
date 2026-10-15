@@ -611,6 +611,7 @@ def scheduled_job_data_uml():
                            "+ node_indices: uint32[]",
                            "    // positions in PlanResponse.schedule.nodes",
                            "    // written by BuildScheduledActionsArray",
+                           "    // .msg: the job's final actions would suffice; all are listed",
                            "+ bay_id: uint16",
                            "    // RETRIEVE only: bay of the PROCESS_RETRIEVE action",
                            "+ bay_arrival_node_guid: Guid",
@@ -630,9 +631,11 @@ def scheduled_job_data_uml():
                            "+ note: string        // FailJob: the failure message",
                            "+ retain_job: bool    // FailJob: ask Dispatch to keep and retry",
                            "+ time_planned: Time  // SchedulerRos, after Plan()",
-                           "// not read or written by the scheduler package",
+                           "// not written by the scheduler package",
+                           "+ time_registered, time_completed: Time",
                            "+ seconds_to_bay_arrival: float32",
-                           "+ needs_bay_in_retrieve: bool"])
+                           "+ needs_bay_in_retrieve: bool",
+                           "// STATE_*: UNPLANNED 0, EXECUTING 1, SUCCESS 2, ERROR 3"])
     sch = uml_class(d, job.x0, job.y1 + 60, "Schedule", accent=RESP, stereo="interfaces/msg", size=M,
                     attrs=["+ header: std_msgs/Header", "+ nodes: ActionNode[]   // topological order"])
     an = uml_class(d, job.x0, sch.y1 + 50, "ActionNode", accent=RESP, stereo="interfaces/msg · abridged", size=M,
@@ -671,9 +674,7 @@ def scheduled_job_data_uml():
           badge_key="as-built",
           legend=[("box", REQ, "request side (SchedulerJob)"), ("box", RESP, "response side"),
                   ("comp", T.fg2, "contains"), ("dep", LINK, "refers to (by index or guid)")],
-          footnote="Field names are confirmed by the scheduler code that reads or writes them; types follow the "
-                   "interfaces .msg files as summarised in the ROS-message figure (the .msg files themselves are not "
-                   "in the snapshots).")
+          footnote="Fields and types from interfaces/msg (ScheduledJobData.msg, SchedulerJob.msg, PlanResponse.msg, Schedule.msg, ActionNode.msg); \"who writes\" comments from the scheduler code.")
     return d
 
 

@@ -125,17 +125,17 @@ def layout_vs_graph():
     for nid in SHOW:
         x, y = gm.P(nid)
         hs = allowed(nid)
-        offs = ({0: (0, -34), 90: (-34, 0), 180: (0, 34), 270: (34, 0)} if len(hs) == 4
-                else {90: (-20, 0), 270: (20, 0)})
+        offs = ({0: (0, -34), 90: (-34, 0), 180: (0, 34), -90: (34, 0)} if len(hs) == 4
+                else {90: (-20, 0), -90: (20, 0)})
         for h in hs:
             vpos[(nid, h)] = (x + offs[h][0], y + offs[h][1])
     for a, b in EDGES:
         if a in SHOW and b in SHOW:
-            for h in (90, 270):
+            for h in (90, -90):
                 if (a, h) in vpos and (b, h) in vpos:
                     (x0, y0), (x1, y1) = vpos[(a, h)], vpos[(b, h)]
                     d.line(x0, y0, x1, y1, stroke=T.tint(T.green, 0.45, T.bg_deep), sw=1.6, layer="edges")
-    ring = [(22, 0), (22, 90), (22, 180), (22, 270)]
+    ring = [(22, 0), (22, 90), (22, 180), (22, -90)]
     for i in range(4):
         (xa, ya_), (xb, yb) = vpos[ring[i]], vpos[ring[(i + 1) % 4]]
         cx, cy = gm.P(22)
@@ -156,7 +156,7 @@ def layout_vs_graph():
             lx, ly = x, y - 19
         d.text(lx, ly, str(VERT[(nid, h)]), size=10, family="mono", weight=700, fill=T.fg2, anchor="middle",
                halo=T.bg_deep, halo_w=3, layer="top")
-    gapi = ["gg_.GetVertexFromPose({22, 0})  -> 42 (std::optional<Vertex>)",
+    gapi = ["gg_.GetVertexFromPose({22, 0})  -> 43 (std::optional<Vertex>)",
             "gg_.GetPoseFromVertex(v)        -> GaragePoseMsg",
             "gg_.GarageNodeFromVertex(v)     -> layout node",
             "gg_.GetOutEdges(v), gg_.EdgeFromPoses(a, b)",
@@ -167,7 +167,7 @@ def layout_vs_graph():
                   "returns an empty optional."]
     gc = _card(d, rx, gb.y1 + 18, rw, "What the scheduler asks it", gapi, T.green, size=10.5)
     gn = note(d, rx, gc.y1 + 14, rw,
-              "Each YAML heading h gives two poses, h and h + 180, so most nodes own two vertices and W22 "
+              "Each YAML heading h gives two poses, h and its reciprocal (90 gives 90 and -90), so most nodes own two vertices and W22 "
               "(headings 0 and 90) owns four: 42, 43, 44, 45. A move connects same-heading poses of adjacent "
               "nodes; rotations exist only where rotation_allowed is true. Numbers are Vertex values for Pecos.",
               title="How PoseGraph expands nodes", accent=T.green)
@@ -334,9 +334,9 @@ def collision_table():
           badge_key="yaml+concept",
           legend=[("box", TRAY, "parked tray footprint"), ("dashbox", T.green, "candidate pose: free"),
                   ("dashbox", T.red, "candidate pose: conflict"), ("fill", T.tint(T.red, 0.55, T.bg_deep), "overlap")],
-          footnote="Footprints use the XL parking window (5.79 x 2.21 m) as a schematic tray size. How the real table "
-                   "stores and computes conflicts (footprint shapes, margins, swept volumes) lives in common_ros and "
-                   "is not in the snapshot; only the Query signature and the call sites are.")
+          footnote="Footprints use the XL parking window (5.79 x 2.21 m) as a schematic tray size. The real table "
+                   "stores precomputed conflict sets (CollisionTable in common_ros); footprint dimensions are constants "
+                   "in the `common` package, which is not in the snapshots.")
     return d
 
 

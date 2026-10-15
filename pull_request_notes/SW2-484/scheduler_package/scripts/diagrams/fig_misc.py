@@ -50,7 +50,7 @@ def garage_xy():
     m.tray(cells["N3"], "T2", chip_pos="tr")
     m.tray(cells["N4"], "T3", chip_pos="tr")
     m.tray(cells["N1"], "T1", payload=True, emphasis=True, chip_pos="tr")
-    m.agv(cells["N1"], "", heading=270)
+    m.agv(cells["N1"], "", heading=-90)
     m.unclip()
     # moves
     m.route([cells["N3"], cells["S3"]], T.amber, sw=4, offset=(-30, 0), num=1, num_at=0)

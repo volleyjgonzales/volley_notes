@@ -1,0 +1,2390 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+agv_interfaces/
+  msg/
+    NodeAccuracy.msg
+    NodeAccuracyStamped.msg
+  CMakeLists.txt
+  package.xml
+bay_interfaces/
+  include/
+    bay_interfaces/
+      topics.hpp
+  msg/
+    IoLinkSensors.msg
+    LoadCells.msg
+    VehicleProxSensor.msg
+  srv/
+    PatronLightControl.srv
+  CMakeLists.txt
+  package.xml
+interfaces/
+  msg/
+    Accel.msg
+    ActionNode.msg
+    AgvBatteryFraction.msg
+    AgvCommand.msg
+    AgvCommandReport.msg
+    AgvCommandReportList.msg
+    AgvCommandSequence.msg
+    AgvCommandStamped.msg
+    AgvCommandStatus.msg
+    AgvDisablednessChanged.msg
+    AgvExistenceChanged.msg
+    AgvFault.msg
+    AgvGoal.msg
+    AgvLiftChanged.msg
+    AgvPoseChanged.msg
+    AgvReport.msg
+    AgvSimState.msg
+    AgvSnapshot.msg
+    AgvState.msg
+    AgvStateChanged.msg
+    BayCommand.msg
+    BayDisablednessChanged.msg
+    BayExistenceChanged.msg
+    BayReport.msg
+    BayState.msg
+    BayStateChanged.msg
+    CollisionBody.msg
+    ConsistencyReport.msg
+    ContinuousGarageAgvInfo.msg
+    ContinuousGarageBayInfo.msg
+    ContinuousGarageInfo.msg
+    ContinuousGarageVecsInfo.msg
+    DisabledResourceInfo.msg
+    DisallowedEdgeOrientation.msg
+    DiscreteAgvState.msg
+    DiscreteBayState.msg
+    DiscreteGarageEvent.msg
+    DiscreteGarageEventStamped.msg
+    DiscreteGarageState.msg
+    DiscretePayloadState.msg
+    DiscreteTrayState.msg
+    DiscreteVecsState.msg
+    DiscreteVrcState.msg
+    DispatchHeartbeat.msg
+    DispatchReport.msg
+    DoorReport.msg
+    DoorsReport.msg
+    Edge.msg
+    FaultStateChanged.msg
+    GarageEntityId.msg
+    GarageEvent.msg
+    GarageEventStamped.msg
+    GarageFloor.msg
+    GarageLayout.msg
+    GarageNode.msg
+    GaragePayload.msg
+    GaragePose.msg
+    GaragePoseStamped.msg
+    GarageSnapshot.msg
+    GarageStatusReport.msg
+    GarageTray.msg
+    GeometricPose.msg
+    Guid.msg
+    LiftReport.msg
+    NodeDisablednessChanged.msg
+    OdpObserver.msg
+    ParkingWindow.msg
+    Payload.msg
+    PayloadExistenceChanged.msg
+    PlanRequest.msg
+    PlanResponse.msg
+    Schedule.msg
+    ScheduledJobData.msg
+    SchedulerJob.msg
+    SchedulerJobList.msg
+    SchedulerReport.msg
+    SimReport.msg
+    SizedPose.msg
+    TrayDisablednessChanged.msg
+    TrayExistenceChanged.msg
+    TrayPoseSetManually.msg
+    Twist.msg
+    VecsCommand.msg
+    VecsDisablednessChanged.msg
+    VecsEvseReport.msg
+    VecsExistenceChanged.msg
+    VecsIoLedCommand.msg
+    VecsIoReport.msg
+    VecsReport.msg
+    VecsStateChanged.msg
+    VehicleBayPose.msg
+    VersionInfo.msg
+    VrcCommand.msg
+    VrcExistenceChanged.msg
+    VrcStateChanged.msg
+  srv/
+    AddAgv.srv
+    AddPayload.srv
+    AddTray.srv
+    AgvCommand.srv
+    AgvCommandList.srv
+    AgvStop.srv
+    BayCommand.srv
+    ChargePayload.srv
+    GetGarageLayout.srv
+    GetJobState.srv
+    LocalizeAgv.srv
+    MoveAgv.srv
+    MoveTray.srv
+    PlacePayloadInBay.srv
+    Plan.srv
+    RegisterRetrievalCode.srv
+    RemoveAgv.srv
+    RemovePayload.srv
+    RemoveTray.srv
+    ReparkTray.srv
+    Retrieve.srv
+    SetFloat32.srv
+    SetPayload.srv
+    SetPayloadInfo.srv
+    SetResourceDisabledness.srv
+    SetString.srv
+    SetUInt16.srv
+    SetUInt32.srv
+    SetUInt8.srv
+    SimEvent.srv
+    TransitionBayToInsert.srv
+    TransitionBayToRetrieve.srv
+    VecsCommand.srv
+    VecsIoLedCommand.srv
+  CMakeLists.txt
+  package.xml
+vrc_interfaces/
+  action/
+    VrcMove.action
+  msg/
+    GateReport.msg
+    GateState.msg
+    VrcReport.msg
+    VrcState.msg
+  CMakeLists.txt
+  package.xml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="agv_interfaces/msg/NodeAccuracy.msg">
+# AGV node accuracy.
+
+# Identifier of the node the offset values are measured against.
+uint32 node_id
+
+# Heading of the node in the garage frame, +x (east), +y (north), +z (up).
+int16 node_heading_deg
+
+# x-axis offset from the node origin, in the AGV frame.
+float64 x_offset_m
+
+# False if x_offset_m could not be computed.
+bool x_offset_valid false
+
+# y-axis offset from the node origin, in the AGV frame.
+float64 y_offset_m
+
+# False if y_offset_m could not be computed.
+bool y_offset_valid false
+
+# Heading offset from the node origin, in the AGV frame (CCW positive).
+float64 yaw_offset_rad
+
+# False if yaw_offset_rad could not be computed.
+bool yaw_offset_valid false
+
+# Informational message, e.g. for invalid fields.
+string message
+</file>
+
+<file path="agv_interfaces/msg/NodeAccuracyStamped.msg">
+# AGV node accuracy with reference coordinate frame and timestamp.
+
+std_msgs/Header header
+
+NodeAccuracy accuracy
+</file>
+
+<file path="agv_interfaces/CMakeLists.txt">
+cmake_minimum_required(VERSION 3.28)
+project(agv_interfaces)
+
+find_package(volley_cmake REQUIRED)
+volley_package()
+
+file(
+  GLOB_RECURSE interface_files
+  CONFIGURE_DEPENDS
+  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+  "msg/*.msg"
+  "srv/*.srv"
+  "action/*.action"
+)
+
+rosidl_generate_interfaces(
+  ${PROJECT_NAME}
+  ${interface_files}
+  DEPENDENCIES
+    std_msgs
+)
+
+ament_export_dependencies(rosidl_default_runtime)
+
+volley_ament_auto_package()
+</file>
+
+<file path="agv_interfaces/package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>agv_interfaces</name>
+  <version>0.0.1</version>
+  <description>Automated Guided Vehicle (AGV) interface definitions</description>
+  <maintainer email="sw@volleyautomation.com">Volley Automation</maintainer>
+
+  <license>proprietary</license>
+
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <buildtool_depend>volley_cmake</buildtool_depend>
+
+  <depend>std_msgs</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
+</package>
+</file>
+
+<file path="bay_interfaces/include/bay_interfaces/topics.hpp">
+#pragma once
+
+#include <rclcppx/qos.hpp>
+#include <rclcppx/topic.hpp>
+
+#include "bay_interfaces/msg/io_link_sensors.hpp"
+#include "bay_interfaces/msg/load_cells.hpp"
+#include "bay_interfaces/msg/vehicle_prox_sensor.hpp"
+
+namespace bay_interfaces {
+
+inline constexpr volley::rclcppx::Topic<msg::IoLinkSensors> kIoLinkSensorsTopic {
+    .name = "io_link_sensors",
+    .qos = volley::rclcppx::kQoSProfileBestEffort,
+};
+
+inline constexpr volley::rclcppx::Topic<msg::LoadCells> kLoadCellsTopic {
+    .name = "load_cells",
+    .qos = volley::rclcppx::QoSProfileWithDepth(volley::rclcppx::kQoSProfileBestEffort, 10),
+};
+
+inline constexpr volley::rclcppx::Topic<msg::VehicleProxSensor> kVehicleProxSensorTopic {
+    .name = "vehicle_prox_sensor",
+    .qos = volley::rclcppx::kQoSProfileBestEffort,
+};
+
+}  // namespace bay_interfaces
+</file>
+
+<file path="bay_interfaces/msg/IoLinkSensors.msg">
+uint8 BREAK_BEAM_INVALID=0
+uint8 BREAK_BEAM_OPEN=1
+uint8 BREAK_BEAM_BROKEN=2
+
+std_msgs/Header header
+
+# Ultrasonic sensors [distance in m]
+float32 sonar_patron_right
+float32 sonar_patron_left
+float32 sonar_system_right
+float32 sonar_system_left
+
+# Break-beam sensors - see BREAK_BEAM_*
+uint8 tire_patron
+uint8 tire_system
+uint8 body_patron
+uint8 body_system
+
+# 2D Lidar sensors - see BREAK_BEAM_*
+uint8 lidar_patron
+uint8 lidar_system
+uint8 lidar_right
+uint8 lidar_left
+
+# Height-check 2D Lidar sensors - see BREAK_BEAM_*.
+uint8 lidar_height_tall
+uint8 lidar_height_mid
+uint8 lidar_height_short
+
+# Ankle sensors (people presence detection) - see BREAK_BEAM_*
+uint8 ankle_patron
+uint8 ankle_system
+
+# Patron outside door lights. True if the light is on.
+bool light_green
+bool light_red
+</file>
+
+<file path="bay_interfaces/msg/LoadCells.msg">
+std_msgs/Header header
+
+# Mass in kg for the four load cell corners.
+# Array index matches ordering in `bay::LoadCellId`
+float32[4] mass
+</file>
+
+<file path="bay_interfaces/msg/VehicleProxSensor.msg">
+std_msgs/Header header
+
+# Values from the IS40-P IR presence sensor
+bool activation_detection  # true when the activation/pulse detection is high
+bool presence_detection    # true when the presence detection is high
+</file>
+
+<file path="bay_interfaces/srv/PatronLightControl.srv">
+uint8 LIGHTS_OFF = 0
+uint8 LIGHT_GREEN = 1
+uint8 LIGHT_RED = 2
+uint8 LIGHT_RED_FLASHING = 3
+
+uint8 light_state # See LIGHT_* above
+uint64 flashing_period_ms  # Period of flashing in milliseconds, if applicable
+
+---
+
+bool success
+string message
+</file>
+
+<file path="bay_interfaces/CMakeLists.txt">
+cmake_minimum_required(VERSION 3.28)
+project(bay_interfaces)
+
+find_package(volley_cmake REQUIRED)
+volley_package()
+
+file(
+  GLOB_RECURSE interface_files
+  CONFIGURE_DEPENDS
+  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+  "msg/*.msg"
+  "srv/*.srv"
+  "action/*.action"
+)
+
+rosidl_generate_interfaces(
+  ${PROJECT_NAME}
+  ${interface_files}
+  DEPENDENCIES
+    std_msgs
+)
+
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
+volley_verify_headers(DIRECTORY include LINK_LIBRARIES ${cpp_typesupport_target})
+
+ament_export_dependencies(rosidl_default_runtime)
+
+volley_ament_auto_package()
+</file>
+
+<file path="bay_interfaces/package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>bay_interfaces</name>
+  <version>0.0.0</version>
+  <description>Volley Bay Messages</description>
+  <maintainer email="sw@volleyautomation.com">dev</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <buildtool_depend>volley_cmake</buildtool_depend>
+
+  <depend>rclcppx</depend>
+  <depend>std_msgs</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+</file>
+
+<file path="interfaces/msg/Accel.msg">
+# Vector representing linear and angular accelerations in SE(2)
+
+float32 x # [m/s^2]
+float32 y # [m/s^2]
+float32 yaw # [rad/s^2]
+</file>
+
+<file path="interfaces/msg/ActionNode.msg">
+# A node in a Schedule
+
+# Types
+uint8 TYPE_AGV_COMMAND = 1
+uint8 TYPE_BAY_COMMAND = 2
+uint8 TYPE_VECS_COMMAND = 3
+uint8 TYPE_VRC_COMMAND = 4
+
+# Status
+uint8 STATUS_NOT_RECEIVED = 0 # Action has not been acknowledged as received by the entity
+uint8 STATUS_RECEIVED = 1 # Action has been acknowledged as received by the entity
+uint8 STATUS_COMPLETED = 2 # Action is complete
+
+Guid guid # this node's unique identifier
+Guid job_id # the guid for the job this node is associated with
+uint8 type # see the TYPE_* enum above
+uint32[] parents # Indices of the parent nodes that this node depends on
+float32 duration # The action duration, in seconds. Note that some actions have infinite duration.
+uint8 status # see the STATUS_* enum above
+bool outside_split # if true, this node is outside the split in the schedule while waiting on the plan call response and will not be sent
+
+# The following fields are only set when appropriate for the given type.
+# For example, `agv_id` is only set for TYPE_AGV_COMMAND
+
+# AGV command
+uint32 agv_id
+AgvCommand agv_command
+
+# Bay command
+uint32 bay_id
+BayCommand bay_command
+
+# Vecs Command
+uint32 vecs_id
+VecsCommand vecs_command
+
+# VRC Command
+uint32 vrc_id
+VrcCommand vrc_command
+</file>
+
+<file path="interfaces/msg/AgvBatteryFraction.msg">
+uint16 agv_id
+float32 battery_fraction # 0.0 -> 0% charged, 1.0 -> 100% charged
+</file>
+
+<file path="interfaces/msg/AgvCommand.msg">
+# Commands for an AGV in the garage
+
+# The full source and destination nodes and lift states are specified in every command. The AGV
+#   software will reject any command that does not end up strictly being one of the following:
+#  - Translate: src.pose.node_id != dst.pose.node_id; src.pose.heading == dst.pose.heading;
+#               src.lift == dst.lift
+#  - Rotate: src.pose.node_id == dst.pose.node_id; src.pose.heading != dst.pose.heading;
+#               src.lift == dst.lift
+#  - Lift: src.pose.node_id == dst.pose.node_id; src.pose.heading == dst.pose.heading;
+#               src.lift != dst.lift
+#  - Center: src == dst
+
+# Every command has a unique GUID string that we can use to keep track of it
+string id
+
+# There may be other poses between src and dst
+AgvGoal src
+AgvGoal dst
+</file>
+
+<file path="interfaces/msg/AgvCommandReport.msg">
+# Message for the AGV report. The command_type field is filled by the AGV and not sent by a client.
+uint8 command_type
+string command_type_string
+AgvCommand command
+</file>
+
+<file path="interfaces/msg/AgvCommandReportList.msg">
+std_msgs/Header header
+
+AgvCommandReport completed_command  # The most recently completed command.
+AgvCommandReport[] command_queue    # The current command queue. Index 0 is the currently active command.
+</file>
+
+<file path="interfaces/msg/AgvCommandSequence.msg">
+# Message containing the upcoming planned commands for a given AGV. This is currently only published as a debug message
+std_msgs/Header header
+
+uint32 agv_id
+AgvCommandStatus[] command_sequence
+</file>
+
+<file path="interfaces/msg/AgvCommandStamped.msg">
+# Commands for an AGV in the garage
+std_msgs/Header header
+AgvCommand command
+</file>
+
+<file path="interfaces/msg/AgvCommandStatus.msg">
+# Message containing the details and status of an AGV command. This is currently only published as part of a debug message
+
+string status
+string command_type
+string description
+</file>
+
+<file path="interfaces/msg/AgvDisablednessChanged.msg">
+uint16 agv_id
+bool disable # if true, we disable the AGV. If false, we enable the AGV.
+</file>
+
+<file path="interfaces/msg/AgvExistenceChanged.msg">
+uint16 agv_id
+bool added # if true, we added it. If false, we removed it.
+uint8 state # see AgvReport
+bool lift # if true, the AGV has its lift up
+uint32 node_id
+int16 heading # in degrees, [-179:180]
+uint16 tray_id  # The id of the tray the AGV is carrying, 0 if no tray
+bool disabled
+</file>
+
+<file path="interfaces/msg/AgvFault.msg">
+uint8 TYPE_NONE = 0
+uint8 TYPE_UNSPECIFIED = 1
+uint8 TYPE_CAN_INTERFACE_NODE_GUARDING = 2
+uint8 TYPE_MOTOR_GENERAL = 3
+uint8 TYPE_LOCALIZATION = 4
+uint8 TYPE_AGV_STATE_MQTT_MESSAGE_NOT_RECEIVED = 5
+uint8 TYPE_AGV_ORDER_MQTT_MESSAGE_NOT_ACKNOWLEDGED = 6
+
+std_msgs/Header header
+uint8 type
+string message
+</file>
+
+<file path="interfaces/msg/AgvGoal.msg">
+# AGV Goal or "high-level state", consisting of a garage pose and a lift state
+
+GaragePose pose
+bool lift # true if lift is or should be all the way up, false if it is or should be all the way down
+</file>
+
+<file path="interfaces/msg/AgvLiftChanged.msg">
+uint16 agv_id
+bool raised
+</file>
+
+<file path="interfaces/msg/AgvPoseChanged.msg">
+uint16 agv_id
+uint32 node_id_curr
+int16 heading_curr # in degrees, [-179:180]
+uint32 node_id_next
+int16 heading_next # in degrees, [-179:180]
+</file>
+
+<file path="interfaces/msg/AgvReport.msg">
+# Note: due to the way we store the State in the GarageTracker, state values should not be
+# renumbered. New states should be added to the end of the list, taking new values.
+uint8 STATE_BOOTING = 0
+uint8 STATE_HARDWARE_VALIDATION = 1
+uint8 STATE_NOT_LOCALIZED = 2
+uint8 STATE_CENTERING = 3
+uint8 STATE_STOPPED = 4
+uint8 STATE_ACTIVE = 5
+uint8 STATE_JOYSTICK = 6
+uint8 STATE_ERROR = 7
+
+uint8 LIFT_STATE_UNKNOWN = 0
+uint8 LIFT_STATE_DOWN = 1
+uint8 LIFT_STATE_IN_BETWEEN = 2
+uint8 LIFT_STATE_UP = 3
+
+std_msgs/Header header
+string name # AGV namespace
+uint16 agv_id
+uint8 state # Top-level vehicle state. See STATE_* enum above
+string state_string # Human-readable version of state
+string fault_reason # Reason for fault, if any. In the case of multiple faults, only the first is displayed
+bool is_moving
+bool is_charging
+uint8 lift_state # See LIFT_STATE enum above
+uint16 tray_id # ID of the tray which the robot is currently under
+uint32 installation_id
+float32 battery_fraction # 0.0 -> 0% charged, 1.0 -> 100% charged
+AgvGoal garage_pose_and_lift # Most recent fully complete garage pose
+GeometricPose pose
+GeometricPose next_pose # The destination pose; set to current pose if the vehicle has no active new destination
+AgvGoal current_goal
+string current_goal_type
+string current_goal_id
+AgvGoal next_goal
+string next_goal_type
+string next_goal_id
+AgvGoal final_goal # The final goal. Might be equal to current_goal or next_goal depending on how many goals are in the queue.
+string final_goal_type
+string final_goal_id
+</file>
+
+<file path="interfaces/msg/AgvSimState.msg">
+# The AgvState message does not contain the agv_id because the localization algorithm
+# does not need it. This message is only used for visualization purposes in the simulator.
+uint8 agv_id
+AgvState state
+</file>
+
+<file path="interfaces/msg/AgvSnapshot.msg">
+std_msgs/Header header
+
+AgvSimState[] agvs
+</file>
+
+<file path="interfaces/msg/AgvState.msg">
+std_msgs/Header header
+
+uint8 INTERSECTION_NOT_CENTERED = 0   # Not centered at an intersection
+uint8 INTERSECTION_MOVE_CENTERED = 1  # Centered at intersection enough to move to another intersection
+uint8 INTERSECTION_TRAY_CENTERED = 2  # Centered at intersection enough to place or pick up a tray
+
+# The state of the AGV relative to an observable intersection. While this state can instantaneously
+#  be inferred from from the other values in this message, this status contains some additional
+#  debouncing to account for potential estimation noise.
+uint8 intersection_status  # See INTERSECTION_* values defined above
+
+bool is_stopped  # True if the vehicle velocities are below the specified thresholds. Debounced.
+
+GeometricPose geometric_pose  # Global-frame pose.
+Twist velocity_body           # Body-frame velocities.
+Accel accel_body              # Body-frame accelerations.
+float32[4] lift_fractions     # Lift fractions of each individual actuator where 0 -> down, 1 -> up
+
+uint32 floor                # Id of the floor the AGV is on
+
+# Body-frame covariance for (x_body, x_body), (y_body, y_body) and (yaw, yaw). Useful for debugging.
+GeometricPose body_pose_covariance
+
+# Flags indicating if the uncertainty around the geometric pose in a given body-frame axis is low
+#  enough to be trustworthy for the controller
+bool controllable_x
+bool controllable_y
+bool controllable_yaw
+
+# Continuously estimated discrete pose. Note that this estimate is decoupled from the controller and
+#  so will update *before* the agv is all the way over this pose. The pose updates as soon as the
+#  sensors are all confident that they see an intersection.
+GaragePose garage_pose
+
+bool motors_enabled  # True if all the motors are operational and enabled
+
+# Gyro biases. In the order specified in LineSensorId in agv_devices.hpp
+float32[6] gyro_biases
+
+# Slip parameters (see the doc "Mecanum Wheeled Robot Kinematics and Dynamics" in the sim folder for details)
+float32 alpha_w  # Wheel slip
+float32 alpha_r  # Roller slip
+float32 alpha_c  # Slip about the roller point of contact
+</file>
+
+<file path="interfaces/msg/AgvStateChanged.msg">
+uint16 agv_id
+uint8 state_curr # see AgvReport
+uint8 state_next # see AgvReport
+</file>
+
+<file path="interfaces/msg/BayCommand.msg">
+uint8 COMMAND_TYPE_UNKNOWN = 0
+uint8 COMMAND_TYPE_TRANSITION_TO_INSERT = 1
+uint8 COMMAND_TYPE_PROCESS_RETRIEVE = 2
+uint8 COMMAND_TYPE_TRANSITION_TO_RETRIEVE = 3
+# Used by the dispatcher in place of TYPE_VRC_COMMAND when a VRC is owned by a BLift bay.
+# The bay state machine moves its lift to `floor`, taking care of door open/close
+# sequencing — no tray-in-bay precondition (unlike TRANSITION_TO_INSERT).
+uint8 COMMAND_TYPE_MOVE_LIFT_TO_FLOOR = 4
+
+uint8 command_type # One of COMMAND_TYPE_* above
+string command_id  # unique GUID string coming from the scheduler
+uint8 floor        # Transition to retrieve at the given floor (or insert or process if/when a blift can ever have 2 input floors)
+</file>
+
+<file path="interfaces/msg/BayDisablednessChanged.msg">
+uint16 bay_id
+bool disable # If true, we disable the bay. If false, we enable the bay.
+</file>
+
+<file path="interfaces/msg/BayExistenceChanged.msg">
+uint16 bay_id
+bool added # if true, we add the bay. If false, we remove the bay
+uint8 state # see BayReport
+bool disabled # if true, then the bay is disabled in the scheduler and will not be used
+</file>
+
+<file path="interfaces/msg/BayReport.msg">
+uint8 STATE_BOOTING = 0
+uint8 STATE_DOOR_VALIDATION = 1
+uint8 STATE_READY_TO_RETRIEVE = 2
+uint8 STATE_READY_TO_INSERT = 3
+uint8 STATE_TRANSITIONING_TO_INSERT = 4
+uint8 STATE_PROCESSING_RETRIEVE = 5
+uint8 STATE_PROCESSING_INSERT = 6
+uint8 STATE_TRANSITIONING_TO_RETRIEVE = 7
+uint8 STATE_ERROR = 8
+uint8 STATE_VEHICLE_INSERTED = 9
+
+uint8 COMMAND_STATUS_UNKNOWN = 0
+uint8 COMMAND_STATUS_IN_PROGRESS = 1
+uint8 COMMAND_STATUS_COMPLETED = 2
+
+
+uint8 DISPLAY_STATE_UNKNOWN = 0
+uint8 DISPLAY_STATE_BUSY = 1
+uint8 DISPLAY_STATE_OK_TO_INSERT = 2
+uint8 DISPLAY_STATE_OK_TO_APPROACH = 3
+uint8 DISPLAY_STATE_TRANSITION_TO_BUSY = 4
+
+
+std_msgs/Header header
+uint32 bay_id                        # Bay number (1, 2, etc.). Also
+                                     # corresponds to the garage node on which this bay is built.
+
+uint8 insert_floor                   # Floor designated for patron interaction
+uint8 current_floor                  # Floor the current bay is at -- should
+                                     # always be insert_floor for single floor Bays
+uint8 external_display_state         # State of the light external to the bay. See DISPLAY_STATE_
+                                     # enum above
+uint8 state                          # See STATE_ enum above
+string state_string                  # Human-readable representation of the state string
+string command_id                    # Most recent command_id from the scheduler. Initialized to
+                                     # empty.
+uint8 command_id_status              # Status of the most recent command_id from the scheduler
+int8 internal_state                  # Defined in the code. Negative value
+                                     # means no valid internal state. State
+                                     # internal to the operation of the bay
+
+string internal_state_string         # Human-readable representation of the internal state.
+
+DoorsReport[] doors_reports          # The state of each doors interface on each floor
+</file>
+
+<file path="interfaces/msg/BayState.msg">
+# The bay state
+uint32 id
+
+bool system_doors_closed     # True if the system doors are closed
+
+# TODO(Gunther): Ignore or generalize these
+uint8 patron_door_state      # State of patron access door. Values defined in DoorReport.msg
+uint8 system_door_state      # State of system interior door. Values defined in DoorReport.msg
+uint8 overdrive_left_state   # State of the left overdrive plate. Values defined in DoorReport.msg
+uint8 overdrive_right_state  # State of the right overdrive plate. Values defined in DoorReport.msg
+uint8 patron_light_state     # State of the patron light. Values defiined in PatronLightControl.srv
+</file>
+
+<file path="interfaces/msg/BayStateChanged.msg">
+uint16 bay_id
+uint8 state_curr # see BayReport
+uint8 state_next # see BayReport
+</file>
+
+<file path="interfaces/msg/CollisionBody.msg">
+# A collision body as used by the collision detector and defined in collision utils.
+
+uint32 id
+uint8 type
+
+float32 yaw # [rad]
+geometry_msgs/Point center
+geometry_msgs/Point scale # x / y / z lengths
+
+
+#----------------------
+
+uint8 TYPE_UNKNOWN = 0
+uint8 TYPE_AGV = 1
+uint8 TYPE_TRAY = 2
+uint8 TYPE_BAY = 3
+uint8 TYPE_PAYLOAD = 4
+uint8 TYPE_CHARGER = 5
+uint8 TYPE_OBSTRUCTION = 6
+</file>
+
+<file path="interfaces/msg/ConsistencyReport.msg">
+std_msgs/Header header
+bool consistent # If true, then entity version info is consistent and the scheduler may start
+</file>
+
+<file path="interfaces/msg/ContinuousGarageAgvInfo.msg">
+AgvReport report
+float32 staleness # seconds since last received report
+</file>
+
+<file path="interfaces/msg/ContinuousGarageBayInfo.msg">
+BayReport report
+float32 staleness                   # seconds since last received report
+</file>
+
+<file path="interfaces/msg/ContinuousGarageInfo.msg">
+std_msgs/Header header
+
+ContinuousGarageAgvInfo[] agvs
+ContinuousGarageBayInfo[] bays
+ContinuousGarageVecsInfo[] vexen
+vrc_interfaces/VrcReport[] vrcs
+</file>
+
+<file path="interfaces/msg/ContinuousGarageVecsInfo.msg">
+VecsReport report
+float32 staleness                   # seconds since last received report
+</file>
+
+<file path="interfaces/msg/DisabledResourceInfo.msg">
+uint32 resource_id
+string disabled_at # TODO(Any): Use builtin_interfaces/Time
+</file>
+
+<file path="interfaces/msg/DisallowedEdgeOrientation.msg">
+# A disallowed edge orientation is an orientation (ie yaw / heading) that is now allowed to be used when traversing an edge.
+# This occurs when we can traverse between two nodes that allow multiple headings, but one orientation would intersect with other geometry.
+
+uint32 src # Source node index
+uint32 dst # Destination node index
+int16 heading # 0:179 deg
+</file>
+
+<file path="interfaces/msg/DiscreteAgvState.msg">
+uint16 id
+uint8 state
+GaragePose pose
+bool lift       # if true, then the AGV's lift is raised
+uint16 tray_id  # if non-zero, the id of the tray this AGV is carrying
+bool disabled   # if true, then the AGV is disabled in the scheduler and will not be used
+</file>
+
+<file path="interfaces/msg/DiscreteBayState.msg">
+uint16 id
+uint8 state
+bool disabled # if true, then the bay is disabled in the scheduler and will not be used
+</file>
+
+<file path="interfaces/msg/DiscreteGarageEvent.msg">
+# This message represents a change in the discrete state maintained by the scheduler and the garage database.
+# Note that we send DiscreteGarageEventStamped when we publish.
+
+string type # database event name, ex: "AgvStateChanged"
+uint8[] buffer # serialized event data
+</file>
+
+<file path="interfaces/msg/DiscreteGarageEventStamped.msg">
+# This message represents a change in the discrete state maintained by the scheduler and the garage database.
+
+std_msgs/Header header
+
+# The serialized event
+DiscreteGarageEvent event
+
+# The sequence number for this event, which is a strictly monotonically increasing value
+uint64 sequence_number
+
+# The Garage Tracker maintains the garage state over time, and
+# is the source for discrete garage events.
+# Others can subscribe to these events to maintain their own state update.
+# They may deviate, however, if an event is missed or malformed.
+# This heartbeat message from the source of truth contains a hash value
+# that other trackers can listen to to determine whether they have diverged.
+uint64 hash_prev
+uint64 hash_next
+</file>
+
+<file path="interfaces/msg/DiscreteGarageState.msg">
+std_msgs/Header header
+
+bool is_faulted
+
+DiscreteAgvState[] agvs
+DiscreteBayState[] bays
+DiscreteVecsState[] vexen
+DiscreteTrayState[] trays
+DiscretePayloadState[] payloads
+DiscreteVrcState[] vrcs
+uint32[] disabled_nodes
+
+# The expected hash value for this state
+uint64 hash
+</file>
+
+<file path="interfaces/msg/DiscretePayloadState.msg">
+Payload payload
+uint16 tray_id
+bool reciprocal_to_tray     # If true, is reciprocal to the tray it is on
+bool charging               # If true, the payload should not be moved
+</file>
+
+<file path="interfaces/msg/DiscreteTrayState.msg">
+uint16 id
+GaragePose pose
+uint16 agv_id  # if non-zero, the id of the AGV this tray is being carried by
+Guid payload_id # the GUID of the payload on this tray, or zero if empty
+bool disabled
+</file>
+
+<file path="interfaces/msg/DiscreteVecsState.msg">
+uint16 id
+uint8 state
+bool disabled # if true, then the VECS is disabled in the scheduler and will not be used
+</file>
+
+<file path="interfaces/msg/DiscreteVrcState.msg">
+# VRC Identifier
+uint16 id
+
+# State of the VRC
+vrc_interfaces/VrcState state
+
+# Gate report for each floor
+vrc_interfaces/GateReport[] gates
+
+# If state.value is STATE_IDLE this represents the current floor the VRC is on
+# If not, this represents the last floor the VRC was idle on or passed while moving
+uint16 current_floor
+
+# If state.value is STATE_MOVING this represents the floor the VRC is moving to
+# If not, this will be set to the current_floor
+uint16 requested_floor
+</file>
+
+<file path="interfaces/msg/DispatchHeartbeat.msg">
+std_msgs/Header header
+uint32 installation_id
+</file>
+
+<file path="interfaces/msg/DispatchReport.msg">
+uint8 STATUS_UNKNOWN = 0
+uint8 STATUS_STARTING = 1
+uint8 STATUS_RUNNING = 2
+uint8 STATUS_STOPPING = 3
+uint8 STATUS_STOPPED = 4
+uint8 STATUS_PAUSED = 5
+
+uint8 MODE_UNKNOWN = 0
+uint8 MODE_AUTO = 1
+uint8 MODE_MANUAL = 2
+
+std_msgs/Header header
+bool consistent
+bool has_execution_state
+bool execution_state_diverged
+bool state_diverged
+uint8 status
+uint8 mode
+SchedulerJob[] jobs
+</file>
+
+<file path="interfaces/msg/DoorReport.msg">
+uint8 DOOR_STATE_CLOSED = 1 # overdrive: CLOSED means the plate is deployed for vehicle insert
+uint8 DOOR_STATE_OPEN = 2   # overdrive: OPEN means the plate is out of the way
+uint8 DOOR_STATE_MOVING = 3
+uint8 DOOR_STATE_ERROR = 4
+
+std_msgs/Header header
+uint32 bay_id # Bay number (1, 2, etc.)
+string door_name # Door name (Patron Access, System Interior, Overdrive)
+uint8 door_state # See DOOR_STATE_* enum above
+string door_state_string # Human-readable version of door state
+uint8 action # Current commanded door action. See `open_close_state_machine.hpp` for details.
+string action_string # Requested door action. Useful for debugging
+</file>
+
+<file path="interfaces/msg/DoorsReport.msg">
+uint8 DOORS_UNKNOWN = 0
+uint8 DOORS_CLOSED = 1         # All the doors are closed
+uint8 DOORS_SYSTEM_OPEN = 2    # The System door and overdrive plate are open. The Patron door is closed.
+uint8 DOORS_PATRON_OPEN = 3    # The patron door is open. The System door and overdrive plate are closed.
+uint8 DOORS_SYSTEM_CLOSED = 4  # The System door and overdrive plate are closed. The Patron door is moving.
+uint8 DOORS_PATRON_CLOSED = 5  # The Patron door is closed. The System door and overdrive plate are moving or not both closed.
+uint8 DOORS_ERROR = 6          # Something is wrong with the doors.
+
+std_msgs/Header header
+uint8 state                    # One of the above states. NOTE: Not all Doors Interfaces can achieve all states.
+string state_string            # Human-readable representation of the state string.
+uint8 floor                    # This interface controls the doors at this floor.
+
+# Values probably only needed for debugging
+# TODO(Gunther): Find a better way to represent these
+# uint8 patron_door_state             # State of patron access door. Values defined in DoorReport.msg
+# string patron_door_state_string     # Human-readable representation of patron_door_state.
+# uint8 system_door_state             # State of system interior door. Values defined in DoorReport.msg
+# string system_door_state_string     # Human-readable representation of system_door_state.
+# uint8 overdrive_left_state          # State of the left overdrive plate. Values defined in DoorReport.msg
+# string overdrive_left_state_string  # Human-readable representation of overdrive_left_state.
+# uint8 overdrive_right_state         # State of the right overdrive plate. Values defined in DoorReport.msg
+# string overdrive_right_state_string # Human-readable representation of overdrive_right_state.
+</file>
+
+<file path="interfaces/msg/Edge.msg">
+# An edge in a graph
+
+uint32 src # Source node index
+uint32 dst # Destination node index
+</file>
+
+<file path="interfaces/msg/FaultStateChanged.msg">
+bool faulted # If true, becomes faulted. If false, clears the fault
+</file>
+
+<file path="interfaces/msg/GarageEntityId.msg">
+# Garage Entity Ids are used to identify garage entities.
+# An AGV a8 has a garage entity id consisting of 'a' and id 8.
+# A bay b57 has a garage entity id consisting of 'b' and id 57.
+# A VECS v22 has a garage entity id consisting of 'v' and id 22
+
+string<=1 entity_type # The entity type character: 'a' for AGV, 'b' for bay, 't' for tray, 'v' for VECS
+uint16 id             # numeric entity id
+</file>
+
+<file path="interfaces/msg/GarageEvent.msg">
+# Garage events are special occurrences. They are often associated with service calls.
+# These events are written to /rosout. (See PrintEvent in ros_utils.) with the format:
+#   EVENT(type,agv_id,bay_id,tray_id,payload_id)
+# For example, an EVENT_BAY_ENQUEUE with bay 3 might produce:
+#   "EVENT(2,0,3,0,00000000-0000-0000-0000-000000001234,)"
+
+# These events get timestamps because we write them to /rosout.
+# They are thus parsed as Log messages, which have the fields:
+# rcl_interfaces.msg.Log
+#     stamp::builtin_interfaces.msg.Time,
+#     level::int     indicates debug/info/warn/error/fatal
+#     name::string   ex: 'bay.b1001.patron.patron_door'
+#     msg::string
+#     file::string
+#     function::string
+#     line::int
+
+uint16 EVENT_UNKNOWN = 0
+
+# (sim-only) A payload was inserted into the patron queue
+# Populates payload_id
+uint16 EVENT_PATRON_ENQUEUE = 1
+
+# (sim-only) A payload was inserted into a bay's arrival queue
+# Populates payload_id and bay_id
+uint16 EVENT_BAY_ENQUEUE = 2
+
+# A customer confirmed their payload to be inserted into the garage system
+# Populates payload_id and bay_id
+uint16 EVENT_CUSTOMER_CONFIRMED_BAY_INSERT = 3
+
+# A customer requested that their payload be retrieved from the garage
+# Populates payload_id
+uint16 EVENT_RETRIEVE = 4
+
+# A payload was delivered to a bay and the AGV is out of the way
+# Populates bay_id
+uint16 EVENT_PAYLOAD_DELIVERED = 5
+
+# A customer confirmed that they will receive their payload at a bay
+# Populates bay_id
+uint16 EVENT_CUSTOMER_CONFIRMED_BAY_RETRIEVE = 6
+
+# The parking service told the dispatcher that the payload can be removed
+# This occurs when the payload has been driven from the bay and the bay
+# is in READY_TO_RETRIEVE.
+# Populates bay_id
+uint16 EVENT_PAYLOAD_REMOVED_FROM_BAY = 7
+
+# An AGV command was overwritten.
+# Populates agv_id
+uint16 EVENT_AGV_COMMAND_OVERWRITTEN = 100
+
+# An AGV received a stop command, and it was accepted
+# Populates agv_id
+uint16 EVENT_AGV_STOP_ACCEPTED = 101
+
+# An AGV received a stop now command, and it was accepted
+# Populates agv_id
+uint16 EVENT_AGV_STOP_NOW_ACCEPTED = 102
+
+# AGV received localized event
+# Populates agv_id
+uint16 EVENT_AGV_LOCALIZED = 103
+
+# AGV received activate event
+# Populates agv_id
+uint16 EVENT_AGV_ACTIVATE = 104
+
+# AGV received enable joystick event
+# Populates agv_id
+uint16 EVENT_AGV_ENABLE_JOYSTICK = 105
+
+# AGV received disable joystick event
+# Populates agv_id
+uint16 EVENT_AGV_DISABLE_JOYSTICK = 106
+
+# AGV received fault event
+# Populates agv_id
+uint16 EVENT_AGV_FAULT = 107
+
+# AGV received lift up event
+# Populates agv_id, command_id
+uint16 EVENT_AGV_LIFT_UP_COMPLETED = 108
+
+# AGV received lift down event
+# Populates agv_id, command_id
+uint16 EVENT_AGV_LIFT_DOWN_COMPLETED = 109
+
+# AGV started charging
+# Populates agv_id, command_id
+uint16 EVENT_AGV_CHARGING_STARTED = 110
+
+# AGV stopped charging
+# Populates agv_id, command_id
+uint16 EVENT_AGV_CHARGING_STOPPED = 111
+
+# An AGV's battery fraction was set in sim
+uint16 EVENT_SIM_AGV_BATTERY_FRACTION_SET = 201
+
+# A collision was detected.
+uint16 EVENT_SIM_AGV_COLLISION = 999
+
+# The event type that specifies what occurred.
+uint16 type
+
+# Optionally specify relevant entities
+uint16 agv_id
+uint16 bay_id
+uint16 tray_id
+string payload_id
+string command_id
+</file>
+
+<file path="interfaces/msg/GarageEventStamped.msg">
+std_msgs/Header header
+
+interfaces/GarageEvent event
+</file>
+
+<file path="interfaces/msg/GarageFloor.msg">
+# A garage floor is a subset of the garage with a unique z coordinate.
+#
+# This file makes no assumption on the origin of the z coordinate. Lowest floor,
+# highest floor, something in the middle, center of the earth, it all should
+# work. Well, using the z coordinate of the center of the Andromeda galaxy may
+# hit some floating point precision issues. So don't do that.
+
+uint8 id
+
+# in [m] from the (arbitrary) origin
+float32 z
+</file>
+
+<file path="interfaces/msg/GarageLayout.msg">
+# A Garage layout is the graph over which AGVs (and thus trays and payloads) traverse
+# Edges are undirected
+
+# If an edge connects two nodes, then it is assumed that we can transition along that edge
+# with any heading that is allowed in each node.
+# For example, if node A allows headings {0,45,90}
+#             and node B allows headings {45, 90}
+# then an edge A <-> B means we can traverse with headings {45,90}
+
+# We can point out exceptions to this edge connectivity by including disallowed edge orientations
+
+std_msgs/Header header
+string name
+GarageNode[] nodes
+GarageFloor[] floors
+Edge[] edges
+DisallowedEdgeOrientation[] disallowed_edge_orientations
+
+ParkingWindow buffer # The parking window buffer dimensions - small buffer applied when computing constraints
+ParkingWindow[] resource_windows # The resource sizes allowed for nodes in the garage.
+</file>
+
+<file path="interfaces/msg/GarageNode.msg">
+uint8 TYPE_UNKNOWN = 0
+uint8 TYPE_PARKING = 1
+uint8 TYPE_WAYPOINT = 2
+uint8 TYPE_LIFT = 3
+uint8 TYPE_BAY = 4
+uint8 TYPE_AGV_CHARGE = 5
+uint8 TYPE_EV_CHARGE = 6
+uint8 TYPE_BLIFT = 7
+
+# A garage node is a fixed vertex in the garage to which AGVs can move
+
+uint32 id
+
+# location in east-north-up [m]
+float32 x
+float32 y
+
+# Id of the floor the node is on
+uint8 floor
+
+# See the node types below
+uint8 type
+
+# The maximum parking window that this node supports
+string max_resource_size
+
+# The index of the maximum resource size that this node supports
+uint8 max_resource_size_index
+
+# Only for Bay nodes: High positive values -> high preference to be ready for insert. Low negative values -> high preference to be ready for retrieve
+int16 bay_prioritization
+
+# Whether we allow rotation on this node
+bool rotation_allowed
+
+# The headings that an AGV may have on this node.
+# Guaranteed to have at least one heading.
+# Headings are in degrees, 0:179, in increasing order.
+# Headings can all be flipped by 180.
+int16[] headings
+
+# A bay or charge node is expected to only have a single valid heading in [0,179]
+# If this value is false, the bay's outer door faces that direction, and an AGV on a charge node must have this heading.
+# If this value is true, the bay's outer door faces 180 opposite that direction.
+bool faces_reciprocal
+
+# Only for Bay nodes: The floor at which the patron inserts, and all reachable system floors
+# for the standard "bay" configuration this should be `floor` and `[floor]` meaning we insert and retrieve at a single, same floor.
+# When loading from yaml insert_floor = floor and system_floors = [floor] by default if not set.
+
+uint8 insert_floor
+uint8[] system_floors
+</file>
+
+<file path="interfaces/msg/GaragePayload.msg">
+Payload payload
+GaragePose pose
+GeometricPose geometric_pose
+uint32 floor # ID of the current floor
+</file>
+
+<file path="interfaces/msg/GaragePose.msg">
+# A garage pose is a node id and an associated heading
+
+uint32 node_id
+
+# Headings are defined relative to garage local north, a direction that is defined in the CAD file.
+# Headings are right-hand, and increase in the counter clockwise direction. Thus, heading 90 points west.
+int16 heading # in degrees, [-179:180]
+</file>
+
+<file path="interfaces/msg/GaragePoseStamped.msg">
+std_msgs/Header header
+
+GaragePose garage_pose
+</file>
+
+<file path="interfaces/msg/GarageSnapshot.msg">
+# A snapshot contains the full sim garage state at a given moment in time.
+
+std_msgs/Header header
+
+AgvSimState[] agvs
+GarageTray[] trays
+GaragePayload[] payloads
+BayState[] bays
+vrc_interfaces/VrcReport[] vrcs
+
+CollisionBody[] bodies
+</file>
+
+<file path="interfaces/msg/GarageStatusReport.msg">
+std_msgs/Header header
+bool garage_up          # Is the dispatcher's status RUNNING? See DispatchReport.msg.
+bool in_auto_mode       # Is the dispatcher's mode AUTO? See DispatchReport.msg.
+uint32 uptime_seconds   # Total seconds (s) of consecutive uptime (zero if garage is down).
+uint32 downtime_seconds # Total seconds (s) of consecutive downtime (zero if garage is up).
+uint16[] agv_ids        # Ordered list of AGVs in the garage.
+uint8 active_agv_count  # Number of active AGVs.
+bool[] agv_statuses     # Ordered by AGV ID, whether each AGV is active or not.
+uint32[] bay_ids        # Ordered list of bays in the garage.
+uint8 active_bay_count  # Number of active bays.
+bool[] bay_statuses     # Ordered by bay ID, whether each bay is active or not.
+string reason           # Debug string with reasons the garage is not up (empty if it is up).
+</file>
+
+<file path="interfaces/msg/GarageTray.msg">
+uint16 id
+uint32 floor # ID of the current floor
+GaragePose pose # NOTE: Set to all zeros by the sim if the tray is not on a pose
+GeometricPose geometric_pose
+Guid payload_id # id is zero if no payload
+bool reciprocal_to_payload # If true, then payload has heading 180 deg reversed from geometric_pose
+</file>
+
+<file path="interfaces/msg/GeometricPose.msg">
+# A geometric pose is a continuous position in a garage
+# Headings are defined relative to garage local north, a direction that is defined in the CAD file.
+# Headings are right-hand, and increase in the counter clockwise diretion. Thus, heading 90 points west.
+
+float32 x # [m]
+float32 y # [m]
+float32 yaw # [rad]
+</file>
+
+<file path="interfaces/msg/Guid.msg">
+# A GUID is a 128-bit integer (16 bytes) that can be used across all computers and networks wherever a unique identifier is required.
+# Such an identifier has a very low probability of being duplicated.
+# Source: https://docs.microsoft.com/en-us/dotnet/api/system.guid?view=net-6.0
+uint8[16] bytes
+</file>
+
+<file path="interfaces/msg/LiftReport.msg">
+# Model is that of a lift with a gate. Actual lifts may not have a gate.
+
+uint8 STATE_ERROR = 0
+uint8 STATE_RESET = 1         # Close gate if open. Move to a floor.
+uint8 STATE_AT_FLOOR = 2      # Gate is closed. Lift not moving.
+uint8 STATE_MOVE_REQUEST = 3  # Gate may be open and will then close. Lift starts moving.
+uint8 STATE_MOVING = 4        # Gate is closed. Lift is moving.
+uint8 STATE_OPENING = 5       # Gate is opening.
+uint8 STATE_OPEN = 6          # Gate is open. Payload may be inserted/removed.
+
+uint8 state
+string state_string
+
+uint8 floor # Set if state is not STATE_MOVE_REQUEST, STATE_MOVING or STATE_RESET
+</file>
+
+<file path="interfaces/msg/NodeDisablednessChanged.msg">
+uint32 node_id
+bool disable # if true, we disable the node. If false, we enable the node
+</file>
+
+<file path="interfaces/msg/OdpObserver.msg">
+std_msgs/Header header
+uint32 bay_id    # Bay number (1, 2, etc.)
+string door_name # Door name (Overdrive Left, Overdrive Right)
+bool com_status  # Status of the communication over plc
+
+bool open_requested       # Request sent to the ODP to open
+bool safe_open_requested  # If ODP has determined all conditions are correct for it to comply with the open request (basically a confirmation)
+bool open                 # Whether the ODP thinks it is open (out of the way) or not
+bool close_requested      # Request sent to the ODP to close
+bool safe_close_requested # If ODP has determined all conditions are correct for it to comply with the close request (basically a confirmation)
+bool close                # Whether the ODP thinks it is closed (able to be driven on) or not
+
+bool mag_lock_enabled # Magnetic lock on the left and right ODP to hold them together
+bool bumper_pressed   # If ODP bumper, near mag lock, is pressed
+
+bool car_extend_requested  # Request sent to the ODP to extend the ODP, pushing it in front of the of the tray
+bool car_extended          # Limit switch for if ODP is completely extended
+bool car_retract_requested # Request sent to the ODP to retract the ODP, pulling it out of the AGV path
+bool car_retracted         # Limit switch for if ODP is completely retracted and out of the way
+
+bool platform_lower_requested # Request sent to the ODP to lower its platform
+bool platform_lowered         # Limit switch for if the OPD has completely lowered its top platform
+bool platform_lift_requested  # Reqest sent to the ODP to lift platform to tray tray height
+bool platform_lifted          # Limit switch for if the OPD has completely raised its top platform
+</file>
+
+<file path="interfaces/msg/ParkingWindow.msg">
+# A parking window is a rectangular area given to a parking spot in a layout.
+# A resource must fit within this parking window.
+
+string name # Name of the parking window, ex: "TRAY_16_BY_7"
+float32 length_m # Length of the parking window in meters. This is in the axis of the resource's heading
+float32 width_m # Width of the parking window in meters. This is perpendicular to the resource heading axis
+float32 height_m # Vertical envelope of the parking window in meters (z extent the resource may occupy)
+</file>
+
+<file path="interfaces/msg/Payload.msg">
+Guid id
+float32 mass # [kg]
+float32 length_m
+float32 width_m
+float32 height_m
+bool ev_charge_requested
+</file>
+
+<file path="interfaces/msg/PayloadExistenceChanged.msg">
+bool added # If true, we are adding the payload. If false, we are removing the payload
+uint8[16] payload_id
+float32 mass
+float32 length_m
+float32 width_m
+float32 height_m
+bool ev_charge_requested
+uint32 tray_id
+bool reciprocal_to_tray
+bool charging
+</file>
+
+<file path="interfaces/msg/PlanRequest.msg">
+# A request to have the scheduler produce a new schedule
+
+Guid                 id              # unique id of the plan call
+
+DiscreteGarageState  base_state      # the current discrete garage state
+Schedule             base_schedule   # the immutable portion of the current schedule- scheduler is to assume
+                                     # that all of these actions will be completed
+SchedulerJob[]       planned_jobs    # jobs that will be completed during execution of the base schedule
+SchedulerJob[]       active_jobs     # jobs that have actions in the base schedule but will not be completed
+                                     # by the base schedule
+SchedulerJob[]       pending_jobs    # jobs that need to be planned
+</file>
+
+<file path="interfaces/msg/PlanResponse.msg">
+bool                 success         # whether the plan call succeeded
+string               message         # informational, e.g. for error messages
+
+Guid                 id              # unique id of the plan call
+
+Schedule             schedule        # the newly planned schedule
+ScheduledJobData[]   scheduled_jobs  # modified jobs from the original plan call
+</file>
+
+<file path="interfaces/msg/Schedule.msg">
+# A schedule is a DAG.
+# Nodes are provided in a topological order.
+
+std_msgs/Header header
+ActionNode[] nodes
+</file>
+
+<file path="interfaces/msg/ScheduledJobData.msg">
+SchedulerJob job
+
+# Indices of ActionNodes in the schedule that must be completed for this job to be completed.
+# Technically only needs to contain the set of children ids. That is, if node A is an ancestor of another node B, then A need not be included
+# because, by being an ancestor, A is guaranteed to be completed if B is completed.
+uint32[] node_indices
+
+# Additional fields set for specific types of scheduled jobs
+# Retrieve:
+uint16 bay_id
+Guid   bay_arrival_node_guid # Guid of the node for this job that represents the target bay executing process retrieve
+                             # The customer has access to their car via that node, and can use it to estimate arrival time
+</file>
+
+<file path="interfaces/msg/SchedulerJob.msg">
+uint8 TYPE_UNKNOWN = 0
+uint8 TYPE_MOVE_AGV = 1
+uint8 TYPE_MOVE_TRAY = 2
+uint8 TYPE_READY_FOR_INSERT = 3
+uint8 TYPE_READY_FOR_RETRIEVE = 4
+uint8 TYPE_RETRIEVE = 5
+uint8 TYPE_CHARGE_AGV = 6
+uint8 TYPE_TRANSITION_BAY_TO_INSERT = 7
+uint8 TYPE_TRANSITION_BAY_TO_RETRIEVE = 8
+uint8 TYPE_CLEAN_GARAGE = 9
+uint8 TYPE_REPARK_TRAY = 10
+uint8 TYPE_INSERT = 11
+uint8 TYPE_CHARGE_PAYLOAD = 12
+uint8 TYPE_REBALANCE_GARAGE = 13
+
+uint8 STATE_UNPLANNED = 0
+uint8 STATE_EXECUTING = 1
+uint8 STATE_SUCCESS = 2
+uint8 STATE_ERROR = 3
+
+uint8 type
+string type_name # type - but as a string for human readability
+uint8 state
+string state_name # state - but as a string for human readability
+Guid guid
+builtin_interfaces/Time time_registered
+builtin_interfaces/Time time_planned
+builtin_interfaces/Time time_completed
+
+string note # Contains additional info, particularly when the job error'd out
+
+# The fields below are only set if the job is of the correct type
+# For example, a MoveAgv job will set the agv_id and destination
+uint16 agv_id
+uint16 bay_id
+uint16 tray_id
+Guid payload_id
+GaragePose destination
+bool allow_reciprocal # If true, allow the reciprocal destination as well
+
+# Additional information for planned retrieves
+float32 seconds_to_bay_arrival
+
+# Additional information for retrieves that failed to plan
+bool retain_job # If true, the dispatcher should retain the job and try it again on the next plan call
+bool needs_bay_in_retrieve # If true, the dispatcher should create a job that transitions a bay to retrieve
+</file>
+
+<file path="interfaces/msg/SchedulerJobList.msg">
+std_msgs/Header header
+
+SchedulerJob[] jobs
+</file>
+
+<file path="interfaces/msg/SchedulerReport.msg">
+std_msgs/Header header
+float32 bay_readiness_ratio  # This is here pretty much just for the NOC display
+</file>
+
+<file path="interfaces/msg/SimReport.msg">
+std_msgs/Header header
+bool running
+uint32 num_remaining_events # The number of remaining simulator events
+Payload[] payloads # queue of payloads waiting to be inserted and not yet allocated to a bay
+</file>
+
+<file path="interfaces/msg/SizedPose.msg">
+uint8 resource_size_index # The discrete size of this pose as given by the index into a layout's resource windows.
+GaragePose pose
+</file>
+
+<file path="interfaces/msg/TrayDisablednessChanged.msg">
+uint16 tray_id
+bool disable # if true, we disable the tray. If false, we enable the tray.
+</file>
+
+<file path="interfaces/msg/TrayExistenceChanged.msg">
+# NOTE: This message does not support adding or removing a tray with a payload,
+#       because all events must be reversible and if we allow that to be reversible,
+#       we have to include all of the payload information here as well.
+uint16 tray_id
+bool added # if true, we add the tray. If false, we remove the tray
+uint32 node_id
+int16 heading # in degrees, [-179:180]
+uint16 agv_id  # if non-zero, the id of the AGV this tray is being carried by
+bool disabled
+</file>
+
+<file path="interfaces/msg/TrayPoseSetManually.msg">
+uint16 tray_id
+uint32 node_id_curr
+int16 heading_curr # in degrees, [-179:180]
+uint32 node_id_next
+int16 heading_next # in degrees, [-179:180]
+</file>
+
+<file path="interfaces/msg/Twist.msg">
+# Vector representing linear and angular velocities in SE(2)
+
+float32 x # [m/s]
+float32 y # [m/s]
+float32 yaw # [rad/s]
+</file>
+
+<file path="interfaces/msg/VecsCommand.msg">
+std_msgs/Header header
+
+uint8 COMMAND_TYPE_UNKNOWN = 0
+uint8 COMMAND_TYPE_START_CHARGING = 1
+uint8 COMMAND_TYPE_STOP_CHARGING = 2
+
+# Every command has a unique GUID string that we can use to keep track of it
+string command_id
+uint8 command_type # One of COMMAND_TYPE_* above
+</file>
+
+<file path="interfaces/msg/VecsDisablednessChanged.msg">
+uint16 vecs_id
+bool disable # if true, we disable the VECS. If false, we enable the VECS.
+</file>
+
+<file path="interfaces/msg/VecsEvseReport.msg">
+std_msgs/Header header
+uint16 vecs_id
+
+int8 state                     # current state of EVSE (vecs::evse::State)
+string state_string             # current state of the EVSE as a string
+bool is_plugged_in              # 'True' if EVSE is plugged into a vehicle
+float32 vecs_set_max_current    # maximum current (in amps) selected by the VECS
+float32 current_limit           # maximum current (in amps) selected by EVSE based on load and VECS
+float32 active_power            # instantaneous power [kW] being actively delivered to the vehicle from the EVSE
+float32 energy_delivered        # amount of of energy (kWh) the EVSE has delivered to a vehicle in it's current charging session
+</file>
+
+<file path="interfaces/msg/VecsExistenceChanged.msg">
+uint16 vecs_id
+bool added # if true, we add the vecs. If false, we remove the vecs
+uint8 state # see VecsReport
+bool disabled # if true, then the vecs is disabled in the scheduler and will not be used
+</file>
+
+<file path="interfaces/msg/VecsIoLedCommand.msg">
+std_msgs/Header header
+
+uint8 COMMAND_TYPE_LEDS_ALL_ON = 0
+uint8 COMMAND_TYPE_LEDS_ALL_OFF = 1
+uint8 COMMAND_TYPE_LEDS_STOP_ON = 2
+
+# Every command has a unique GUID string that we can use to keep track of it
+string command_id
+uint8 command_type # One of COMMAND_TYPE_* above
+</file>
+
+<file path="interfaces/msg/VecsIoReport.msg">
+std_msgs/Header header
+uint16 vecs_id
+bool is_faulted
+
+bool clear_button_pressed   # State of button; True = pressed, False = not pressed
+bool stop_button_pressed    # State of button; True = pressed, False = not pressed
+
+bool clear_led_on           # State of LED; True = on, False = off
+bool stop_led_on            # State of LED; True = on, False = off
+bool alert_led_on           # State of LED; True = on, False = off
+</file>
+
+<file path="interfaces/msg/VecsReport.msg">
+# Any changes of these states also need to be reflected in the vecs::State enum in vecs.hpp
+# Please also update the std::to_string specialization in common_ros/print_utils
+uint8 BOOTING = 0
+uint8 HARDWARE_VALIDATION = 1
+uint8 READY_TO_CHARGE = 2
+uint8 ATTACHING_ADAPTER = 3
+uint8 CHARGING = 4
+uint8 DETACHING_ADAPTER = 5
+uint8 ERROR = 6
+
+uint8 COMMAND_STATUS_UNKNOWN = 0
+uint8 COMMAND_STATUS_IN_PROGRESS = 1
+uint8 COMMAND_STATUS_COMPLETED = 2
+
+std_msgs/Header header
+uint16 vecs_id                          # Parking node ID
+string name                             # v{node_name} ex. v2123
+uint8 state                             # State of the vecs
+string state_string                     # State of the vecs in string form
+uint8 current_command_type              # current VECS command
+string current_command_type_string      # current VECS command in string form
+uint8 current_command_status            # status of the current command from the options above
+string current_command_status_string    # status of the current command in string form
+</file>
+
+<file path="interfaces/msg/VecsStateChanged.msg">
+uint16 vecs_id
+uint8 state_curr # see VecsReport
+uint8 state_next # see VecsReport
+</file>
+
+<file path="interfaces/msg/VehicleBayPose.msg">
+# Error flag definitions. Must be powers of two to fit in the error_flags bitfield.
+uint16 ERROR_FLAG_NONE = 0
+uint16 ERROR_FLAG_OVERWEIGHT = 1             # Vehicle is over its maximum permitted weight
+uint16 ERROR_FLAG_TOO_LONG = 2               # Vehicle is too long
+uint16 ERROR_FLAG_TOO_WIDE = 4               # Vehicle is too wide
+uint16 ERROR_FLAG_WHEELBASE_TOO_LONG = 8     # Vehicle wheelbase is too long
+uint16 ERROR_FLAG_LIDAR_PATRON_TRIPPED = 16  # The Patron lidar is tripped
+uint16 ERROR_FLAG_LIDAR_SYSTEM_TRIPPED = 32  # The System lidar is tripped
+uint16 ERROR_FLAG_LIDAR_RIGHT_TRIPPED = 64   # The Right lidar is tripped
+uint16 ERROR_FLAG_LIDAR_LEFT_TRIPPED = 128   # The Left lidar is tripped
+uint16 ERROR_FLAG_TIRE_PATRON_TRIPPED = 256  # The Patron tire sensor is tripped
+uint16 ERROR_FLAG_TIRE_SYSTEM_TRIPPED = 512  # The System tire sensor is tripped
+uint16 ERROR_FLAG_TOO_TALL = 1024            # Vehicle is too tall to park
+
+std_msgs/Header header
+
+# Vehicle physical characteristics (depending on the sensing configuration of the bay we may not
+# be able to measure these)
+float32 height    # [m]
+float32 width     # [m]
+float32 length    # [m]
+float32 wheelbase # [m]
+float32 mass      # [kg]
+
+# Location of the vehicle relative to the center of the tray
+float32 x # [m] Along the tray length, + toward the system side
+float32 y # [m] Along the tray width, + toward the left side (facing system)
+
+# Velocity of the vehicle
+float32 x_dot # [m/s]
+float32 y_dot # [m/s]
+
+# Values from the axle counter used for debugging missed axles
+float32 mass_total_mean               # [kg]
+float32 mass_total_standard_deviation # [kg]
+float32 mass_delta                    # [kg]
+float32 mass_before_tire_sensor_trip  # [kg]
+
+# Discrete estimated states
+bool vehicle_identified  # Do the sensors detect the presence of a vehicle?
+bool tires_on_tray       # Do we sense the tires fully on the tray?
+bool bounding_box_clear  # Is the laser bounding box clear?
+bool tray_present        # Do we sense a tray in the bay?
+uint8 num_axles_on_tray  # How many vehicle axles are on the tray
+
+# Cumulative states. Based on all of the above, is/was the vehicle properly parked in the bay?
+bool vehicle_is_properly_parked   # Real-time, does the vehicle meet all of the criteria for being parked?
+bool vehicle_was_properly_parked  # While the vehicle was driving in, was it at one point properly parked?
+
+# Error flags
+uint16 error_flags  # Bitfield of error flags. See ERROR_FLAG_* definitions.
+</file>
+
+<file path="interfaces/msg/VersionInfo.msg">
+std_msgs/Header header
+
+# Entity name, such as "a16" for an AGV or "b2" for a bay.
+# The central cluster's name is "central".
+string name
+
+# Human-readable readable release tag, usually a semver. Ex: v0.1.70
+# The release tag is not guaranteed to uniquely identify the software version, but
+# is a quick human-readable reference. Please use the gitsha below for the exact version.
+string release
+
+# The software version is contained in the GITSHA, which is a 40-character hex string,
+# for example f50b51e4602e6ecff349bc12216b572bbd25181e.
+# Each entity docker container is expected to have an env var "GITSHA" that contains this string.
+string<=40 gitsha
+
+# An md5sum of the layout file, which is a 32-character hex string,
+# for example 2d084710e3b8c1656d5ae01da9d4e008
+string<=32 layout_md5sum
+</file>
+
+<file path="interfaces/msg/VrcCommand.msg">
+std_msgs/Header header
+
+uint8 COMMAND_TYPE_UNKNOWN = 0
+uint8 COMMAND_TYPE_MOVE    = 1
+
+# Every command has a unique GUID string that we can use to keep track of it
+string command_id
+uint8 command_type    # One of COMMAND_TYPE_* above
+uint16 requested_floor
+</file>
+
+<file path="interfaces/msg/VrcExistenceChanged.msg">
+DiscreteVrcState discrete_state
+bool added    # if true, we add the VRC. If false, we remove the VRC.
+</file>
+
+<file path="interfaces/msg/VrcStateChanged.msg">
+DiscreteVrcState current_discrete_state
+DiscreteVrcState next_discrete_state
+</file>
+
+<file path="interfaces/srv/AddAgv.srv">
+uint16 id
+GaragePose garage_pose   # If garage_pose node_id is non-zero, we set the pose by the given node id and heading
+GeometricPose pose       # Otherwise specify the pose directly
+float32 lift_fraction    # 0 is fully lowered, 1 is fully raised
+float32 battery_fraction # Set an alternative starting battery fraction
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/AddPayload.srv">
+Payload payload
+uint32 tray_id          # If non-zero, the payload is set on the tray of this id
+bool reciprocal_to_tray # If setting on tray, this tells us whether the payload's heading is reversed
+GaragePose pose         # If tray_id is zero, we can locate the tray by the given node id. Heading is the payload heading.
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/AddTray.srv">
+uint16 id
+uint16 agv_id          # If non-zero, the id of the AGV this tray is being carried by
+bool reciprocal_to_agv # If adding onto an AGV, whether we are reciprocal to it or not.
+GaragePose garage_pose # Only used if agv_id is zero
+bool disabled          # Whether the added tray is disabled (not used by sim - only garage tracker)
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/AgvCommand.srv">
+AgvCommand command
+
+---
+
+uint8 command_status    # See CommandStatus in common/command_status.hpp
+string message          # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/AgvCommandList.srv">
+AgvCommand[] commands
+
+---
+
+uint8 command_status    # See CommandStatus in common/command_status.hpp
+string message          # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/AgvStop.srv">
+# A service command to stop the AGV
+
+# Every command has an id string that we can use to keep track of it
+string id
+
+# How hard we need to stop. They are defined in numerical order with larger values
+#  indicating more severe stopping.
+# A stop can be cleared by triggering the AGV's /activate service..
+uint8 STOP_INVALID = 0
+uint8 STOP_AT_NEXT_POSE = 1
+uint8 STOP_NOW = 2
+uint8 STOP_HARD_FAULT = 3
+uint8 severity
+
+# Reason for stopping
+string reason
+
+# When the severity is STOP_HARD_FAULT, the type of fault based on its origin should be specified.
+AgvFault fault
+
+---
+
+uint8 command_status # See CommandStatus in agv_command_queue.hpp
+bool success  # Set to false when command_status == REJECTED. Included to support print functions.
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/BayCommand.srv">
+BayCommand command
+
+---
+
+bool success
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/ChargePayload.srv">
+# A service command sent to the scheduler to move a payload to an EV Charge spot and plug it in
+# The scheduler will produce a ChargePayload job if in auto mode
+Guid payload_id
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+Guid job_id    # if successful, we include the job id assigned to the new job
+</file>
+
+<file path="interfaces/srv/GetGarageLayout.srv">
+# request is empty
+
+---
+# response contains the layout, if it was successful
+bool success
+int16 status_code # HTML status code
+GarageLayout layout
+</file>
+
+<file path="interfaces/srv/GetJobState.srv">
+Guid guid
+
+---
+bool success   # indicate successful run of triggered service
+string message
+SchedulerJob job
+</file>
+
+<file path="interfaces/srv/LocalizeAgv.srv">
+# Service for localizing an AGV on a graph. Assumes that the AGV is close to
+#  the specified garage pose
+
+GaragePose garage_pose  # The node/heading that the AGV is currently at or approximately at
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/MoveAgv.srv">
+# A service command sent to the scheduler to move an AGV
+# The scheduler will produce a MoveAgv job
+
+uint16 agv_id
+GaragePose pose
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+Guid job_id    # if successful, we include the job id assigned to the new job
+</file>
+
+<file path="interfaces/srv/MoveTray.srv">
+# A service command sent to the scheduler to move a tray
+# The scheduler will produce a MoveTray job
+
+uint16 tray_id
+GaragePose pose
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+Guid job_id    # if successful, we include the job id assigned to the new job
+</file>
+
+<file path="interfaces/srv/PlacePayloadInBay.srv">
+# A service command sent to the scheduler to save the payload_id into the database
+
+Payload payload
+uint32 bay_id
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/Plan.srv">
+# Plan request and response fields are put into separate messages so that they can be easily bagged
+
+PlanRequest request_data
+
+---
+
+PlanResponse response_data
+</file>
+
+<file path="interfaces/srv/RegisterRetrievalCode.srv">
+Guid payload_id
+
+---
+bool success
+
+# Contains code if success=true, otherwise empty
+string retrieval_code
+
+# Contains failure details if success=false
+string message
+</file>
+
+<file path="interfaces/srv/RemoveAgv.srv">
+uint16 id
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/RemovePayload.srv">
+Guid payload_id
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/RemoveTray.srv">
+uint16 id
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/ReparkTray.srv">
+# A service command sent to the scheduler to move a tray to another parking node in auto mode
+# The scheduler will produce a ReparkTray job
+
+uint16 tray_id        # Tray id of the tray being reparked
+GaragePose pose       # Parking destination
+bool allow_reciprocal # If true, we allow the tray to arrive with either heading
+
+---
+
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+Guid job_id    # if successful, we include the job id assigned to the new job
+</file>
+
+<file path="interfaces/srv/Retrieve.srv">
+# A service command sent to the dispatcher to process a retrieve
+# The dispatcher will produce a Retrieve job
+
+Guid payload_id
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+Guid job_id   # if successful, we include the job id assigned to the new job
+</file>
+
+<file path="interfaces/srv/SetFloat32.srv">
+# A service command to set a float value, like std_srvs/SetBool
+
+float32 value
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/SetPayload.srv">
+Payload payload
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/SetPayloadInfo.srv">
+Guid payload_id
+bool ev_charge_requested
+
+# Optional payload dimensions. When any of these is > 0 the bay uses them
+# instead of the values it sensed via VehicleBayPose. Real hardware leaves
+# them at 0 (the default) and falls back to vehicle_pose; simulation fills
+# them with the scenario's actual patron payload so per-payload height
+# reaches the scheduler.
+float32 length_m
+float32 width_m
+float32 height_m
+float32 mass
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/SetResourceDisabledness.srv">
+# A service command sent to the scheduler to enable or disable an entity
+# Note that this command does NOT go to the entity itself
+# Disabling an entity in this context tells the scheduler not to use that entity,
+# and is primarily a user-interface interaction.
+
+uint32 resource_id # AGV, bay, tray, or node id, etc. (uint32 because node ids are 32 bits)
+bool disable       # If true, we disable the entity. If false, we enable the entity.
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/SetString.srv">
+# A service command to set a string value, like std_srvs/SetBool
+
+string value
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/SetUInt16.srv">
+# A service command to set a UInt16 value, like std_srvs/SetBool
+
+uint16 value
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/SetUInt32.srv">
+# A service command to set a UInt32 value, like std_srvs/SetBool
+
+uint32 value
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/SetUInt8.srv">
+# A service command to set a Uint8 value, like std_srvs/SetBool
+
+uint8 value
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/SimEvent.srv">
+string type
+float64 time # Event will fire time seconds since sim start. If less than current sim time, will
+            # fire on next tick [s]
+
+# TODO(Gunther): Can we remove this pseudo polymorphism
+# Optional values below. Fill in depending on EventType
+int32 resource_id # Agv/Bay/Tray id
+GaragePose pose
+float32 float_value
+uint32 uint_value
+bool bool_value
+Payload payload
+---
+bool success # indicate event added successfully
+string message
+</file>
+
+<file path="interfaces/srv/TransitionBayToInsert.srv">
+# A service command sent to the scheduler to manually transition a bay over to ready-to-insert.
+# The scheduler will produce a BayCommand job.
+# Note that this job is not the same as a ReadyForInsert job, which is used in AUTO mode to
+# move a bay over to ready-to-insert. In auto mode, we are okay with the scheduler clearing
+# the bay and finding an empty tray. In manual mode, we expect the user to perform these tasks
+# separately. The BayCommand will simply issue the command to change state.
+
+uint16 bay_id
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+Guid job_id    # if successful, we include the job id assigned to the new job
+</file>
+
+<file path="interfaces/srv/TransitionBayToRetrieve.srv">
+# A service command sent to the scheduler to manually transition a bay over to ready-to-retrieve.
+# The scheduler will produce a BayCommand job.
+# Note that this job is not the same as a ReadyForRetrieve job, which is used in AUTO mode to
+# move a bay over to ready-to-retrieve. In auto mode, we are okay with the scheduler clearing
+# the bay. In manual mode, we expect the user to do that separately. The BayCommand will simply
+# issue the command to change state.
+
+uint16 bay_id
+
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
+Guid job_id    # if successful, we include the job id assigned to the new job
+</file>
+
+<file path="interfaces/srv/VecsCommand.srv">
+VecsCommand command
+
+---
+
+bool success # status if the command was received successfully
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/srv/VecsIoLedCommand.srv">
+VecsIoLedCommand command
+
+---
+
+bool success # status if the command was received successfully
+string message # informational, e.g. for error messages
+</file>
+
+<file path="interfaces/CMakeLists.txt">
+cmake_minimum_required(VERSION 3.28)
+project(interfaces)
+
+find_package(volley_cmake REQUIRED)
+volley_package()
+
+file(
+  GLOB_RECURSE interface_files
+  CONFIGURE_DEPENDS
+  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+  "msg/*.msg"
+  "srv/*.srv"
+  "action/*.action"
+)
+
+rosidl_generate_interfaces(
+  ${PROJECT_NAME}
+  ${interface_files}
+  DEPENDENCIES
+    geometry_msgs
+    std_msgs
+    vrc_interfaces
+)
+
+ament_export_dependencies(rosidl_default_runtime)
+
+volley_ament_auto_package()
+</file>
+
+<file path="interfaces/package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>interfaces</name>
+  <version>0.0.1</version>
+  <description>ROS messages, services, etc.</description>
+  <maintainer email="sw@volleyautomation.com">dev</maintainer>
+  <license>proprietary</license>
+
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <buildtool_depend>volley_cmake</buildtool_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>vrc_interfaces</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+</file>
+
+<file path="vrc_interfaces/action/VrcMove.action">
+# Action for moving a Vertical Reciprocating Conveyor (VRC) to a target floor
+
+# Goal
+uint16 requested_floor
+---
+
+# Result
+# If succeeded: current floor matches requested floor
+# Else: current floor is the last floor the VRC was positioned at
+uint16 current_floor
+string message
+---
+
+# Feedback
+# Positive distance from the lowest indexed floor in meters
+uint16 current_floor
+float32 carriage_height_m
+</file>
+
+<file path="vrc_interfaces/msg/GateReport.msg">
+# Report of a floor fall protection gate
+
+uint16 floor
+
+GateState state
+</file>
+
+<file path="vrc_interfaces/msg/GateState.msg">
+# State of a fall protection gate
+
+uint8 STATE_CLOSED=0
+uint8 STATE_OPEN=1
+uint8 STATE_CLOSING=2
+uint8 STATE_OPENING=3
+uint8 STATE_UNKNOWN=255
+
+uint8 value
+</file>
+
+<file path="vrc_interfaces/msg/VrcReport.msg">
+std_msgs/Header header
+
+# VRC Identifier
+uint16 id
+
+VrcState state
+
+# Human readable state description
+string state_description
+
+GateReport[] gates
+
+# If state.value is STATE_IDLE this represents the current floor the VRC is on
+# If not, this represents the last floor the VRC was idle on or passed while moving
+uint16 current_floor
+
+# If state.value is STATE_MOVING this represents the floor the VRC is moving to
+# If not, this will be set to the current_floor
+uint16 requested_floor
+
+# Positive distance from the lowest indexed floor in meters
+float32 carriage_height_m
+</file>
+
+<file path="vrc_interfaces/msg/VrcState.msg">
+# State of a Vertical Reciprocating Conveyor (VRC)
+
+# Named enumeration constants for the state value
+uint8 STATE_INITIALIZING=0
+uint8 STATE_IDLE=1
+uint8 STATE_MOVING=2
+uint8 STATE_CLOSING=3
+uint8 STATE_OPENING=4
+uint8 STATE_DISABLED=5
+uint8 STATE_ERROR=6
+uint8 STATE_UNKNOWN=255
+
+uint8 value
+</file>
+
+<file path="vrc_interfaces/CMakeLists.txt">
+cmake_minimum_required(VERSION 3.28)
+project(vrc_interfaces)
+
+find_package(volley_cmake REQUIRED)
+volley_package()
+
+file(
+  GLOB_RECURSE interface_files
+  CONFIGURE_DEPENDS
+  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+  "msg/*.msg"
+  "srv/*.srv"
+  "action/*.action"
+)
+
+rosidl_generate_interfaces(
+  ${PROJECT_NAME}
+  ${interface_files}
+  DEPENDENCIES
+    std_msgs
+)
+
+ament_export_dependencies(rosidl_default_runtime)
+
+volley_ament_auto_package()
+</file>
+
+<file path="vrc_interfaces/package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>vrc_interfaces</name>
+  <version>0.0.1</version>
+  <description>Vertical Reciprocating Conveyor (VRC) interface definitions</description>
+  <maintainer email="sw@volleyautomation.com">Volley Automation</maintainer>
+
+  <license>proprietary</license>
+
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <buildtool_depend>volley_cmake</buildtool_depend>
+
+  <depend>std_msgs</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
+</package>
+</file>
+
+</files>

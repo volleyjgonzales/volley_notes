@@ -208,10 +208,12 @@ def bay_logic():
             label="TRANSITION_TO_INSERT", label_at=((B["RTR"].cx + 40 + B["RTI"].cx) / 2 + 60, B["RTI"].y0 - 20))
     connect(d, [(B["RTR"].cx + 40, B["RTR"].y1), (B["PR"].cx + 40, B["PR"].y0)], kind="flow", color=BAYC, size=8,
             sw=1.6, label="PROCESS_RETRIEVE", label_at=(B["PR"].cx + 40, (B["RTR"].y1 + B["PR"].y0) / 2))
-    d.text(0, B["PI"].y1 + 24, "VEHICLE_INSERTED, PROCESSING_* are reached through bay / customer activity,",
-           size=11, fill=T.muted)
-    d.text(0, B["PI"].y1 + 40, "not through scheduler commands. PROCESS_RETRIEVE -> PROCESSING_RETRIEVE is inferred.",
-           size=11, fill=T.muted)
+    for k_, ln_ in enumerate([
+            "VEHICLE_INSERTED and PROCESSING_* come from bay / customer activity (BayReport.msg states 5, 6, 9).",
+            "In the scheduler's own replay (BayTransition::Apply), PROCESS_RETRIEVE goes straight from",
+            "READY_TO_RETRIEVE to READY_TO_INSERT: the car leaves. Other bay states: BOOTING, DOOR_VALIDATION,",
+            "TRANSITIONING_TO_INSERT / _RETRIEVE, ERROR. MOVE_LIFT_TO_FLOOR is sent by Dispatch for BLift bays."]):
+        d.text(0, B["PI"].y1 + 24 + k_ * 16, ln_, size=11, fill=T.muted)
     # --- classification table
     tx = 610
     d.text(tx, 10, "ClassifyBay(state, tray_in_bay, payload_in_bay)", size=12.5, weight=600, fill=T.fg)

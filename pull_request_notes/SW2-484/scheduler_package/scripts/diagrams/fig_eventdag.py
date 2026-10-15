@@ -1,6 +1,6 @@
 """ScheduleEventDag figures for doc 01 section 12: class family, storage and identity, the operations
 on a small example, and the shallow copy used as a work queue in DoAgvAssignments.
-planner_core is not in the snapshot: types are inferred from call sites in scheduler.cpp and the tests."""
+Types from sources/repomix-planner-core.xml and the interfaces .msg files."""
 from __future__ import annotations
 
 from components import EVENT_COLOR, chip, connect, frame, label_pill, note, uml_class
@@ -465,7 +465,7 @@ def traymove_apply():
                                      "(TODO in the code: park it at 0@0 instead)"], T.red, "tray disappears"),
         ("another tray on the destination node?", "yes", ["move that tray to the placeholder pose 0@0,",
                                                            "then continue below"], T.sky, "occupant evicted"),
-        ("AGV id set?", "no", ["TrayPoseChanged: the tray jumps to", "dest (node and heading); no AGV moves"],
+        ("AGV id set?", "no", ["TrayPoseChanged (TrayPoseSetManually): the tray jumps to", "dest (node and heading); no AGV moves"],
          T.green, "teleport"),
         ("AGV at tray pose (same axis), lifted,\nand carrying this tray?", "no",
          ["return {false, \"Tray move has assigned AGV", "but ...\"}: replay stops here"], T.red, "fail"),
@@ -492,7 +492,7 @@ def traymove_apply():
         prev = qb
         y = max(qb.y1, ob.y1) + 48
     end = _box(d, 0, y, QW + GX + OW, ["AgvPoseChanged: the AGV (and the tray it carries) moves to dest; the AGV's "
-                                        "heading is dest + 180 if it faces opposite to the tray"], T.green,
+                                        "heading is Wrap(dest + 180) if it faces opposite to the tray"], T.green,
                title="carried by the AGV")
     connect(d, [(60, prev.y1), (60, end.y0)], kind="flow", color=T.fg2, size=8)
     frame(d, title="What TrayMove::Apply does to a DiscreteGarageState",

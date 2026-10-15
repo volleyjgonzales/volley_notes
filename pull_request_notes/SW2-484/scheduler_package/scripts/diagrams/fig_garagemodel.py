@@ -2,8 +2,8 @@
 CollisionTable as data structures, from sources/repomix-common-ros.xml.
 
 Pose indices / vertex numbers are computed from the Pecos YAML with the PoseGraph rules
-(nodes in id order, headings sorted, each YAML heading h plus h + 180). Headings are written 0-359;
-volley::Wrap's exact range lives in the `common` package, which is not in the snapshots.
+(nodes in id order, headings sorted, each YAML heading h plus Wrap(h + 180)). Headings are int16 in
+[-179, 180] (interfaces/msg/GaragePose.msg), so the reciprocal of 90 is -90.
 """
 from __future__ import annotations
 
@@ -33,8 +33,13 @@ for _e in _Y["edges"]:
     _ADJ[_e["dst"]].add(_e["src"])
 
 
+def wrap(a):
+    """volley::Wrap as GaragePose.msg defines the range: degrees in [-179, 180]."""
+    return (a + 179) % 360 - 179
+
+
 def allowed(nid):
-    return sorted({(h + d) % 360 for h in _NODES[nid]["headings"] for d in (0, 180)})
+    return sorted({wrap(h + d) for h in _NODES[nid]["headings"] for d in (0, 180)})
 
 
 POSES = [(i, h) for i in sorted(_NODES) for h in allowed(i)]
@@ -179,19 +184,22 @@ def garage_model_classes():
            size=11, fill=T.muted)
     vts = [
         ("GaragePoseMsg", "msg · a pose: in poses_, pose_to_vertex_, table keys", T.green, [
-            "+ node_id: uint32", "+ heading: int16   // degrees, 0 = +y, CCW+, 90 = west"]),
+            "+ node_id: uint32", "+ heading: int16   // degrees [-179, 180]; 0 = +y, CCW+, 90 = west"]),
         ("GarageNodeMsg", "msg · a place: in Layout::nodes_", LAY, [
-            "+ id: uint32", "+ x, y: float          // metres", "+ floor", "+ type: TYPE_PARKING | WAYPOINT | BAY",
-            "        | BLIFT | AGV_CHARGE | EV_CHARGE | LIFT", "+ headings: uint16[]   // 0..179, sorted",
-            "+ rotation_allowed, faces_reciprocal: bool", "+ max_resource_size: string",
-            "+ max_resource_size_index", "+ insert_floor, system_floors[]   // bays"]),
+            "TYPE_UNKNOWN 0, PARKING 1, WAYPOINT 2, LIFT 3,", "BAY 4, AGV_CHARGE 5, EV_CHARGE 6, BLIFT 7",
+            "+ id: uint32", "+ x, y: float32       // metres, east-north-up", "+ floor: uint8", "+ type: uint8",
+            "+ max_resource_size: string", "+ max_resource_size_index: uint8",
+            "+ bay_prioritization: int16   // bays", "+ rotation_allowed: bool",
+            "+ headings: int16[]   // 0..179, ascending", "+ faces_reciprocal: bool",
+            "+ insert_floor: uint8, system_floors: uint8[]   // bays"]),
         ("GeometricPoseMsg", "msg · metres + radians: GetGeometricPoseAtPose", T.sky, [
-            "+ x, y: float32   // metres", "+ yaw: float32     // radians = heading x pi/180"]),
+            "+ x, y: float32   // metres", "+ yaw: float32     // radians, same zero and sense as heading"]),
         ("SizedPoseMsg", "msg · pose + footprint size: overlapping_sized_poses_", PG, [
-            "+ pose: GaragePose", "+ resource_size_index   // into resource_windows_"]),
+            "+ resource_size_index: uint8   // into resource_windows_", "+ pose: GaragePose"]),
         ("ParkingWindowMsg", "msg · a size class: Layout::resource_windows_", LAY, [
-            "+ name: string   // COMPACT, ..., XL, TRAY", "+ length_m, width_m, height_m: float"]),
-        ("GarageFloorMsg", "msg · Layout::floors_", LAY, ["+ id", "+ z: float   // metres"]),
+            "+ name: string   // COMPACT, ..., XL, TRAY", "+ length_m: float32   // along the heading",
+            "+ width_m: float32    // across it", "+ height_m: float32"]),
+        ("GarageFloorMsg", "msg · Layout::floors_", LAY, ["+ id: uint8", "+ z: float32   // metres, arbitrary origin"]),
         ("Vrc", "struct (layout.hpp) · Layout::vrcs_", LAY, [
             "+ id, root_node_id: uint32", "+ nodes: vector<GarageNodeMsg>   // by floor"]),
         ("Transition", "struct (garage_graph.hpp) · every gg_ edge", GG, [
@@ -231,8 +239,8 @@ def garage_model_classes():
           legend=[("box", LAY, "places"), ("box", PG, "poses"), ("box", GG, "motion graph"),
                   ("box", CT, "space"), ("box", T.sky, "geometry"), ("assoc", T.fg2, "holds"), ("dep", T.fg2, "built from")],
           footnote="From sources/repomix-common-ros.xml: layout.hpp, pose_graph.hpp, garage_graph.hpp, "
-                   "collision_geometry.hpp. Private members abridged. The .msg files are not in the snapshots: message "
-                   "field names are those common_ros reads and writes; types without a width follow that code.")
+                   "collision_geometry.hpp; messages from interfaces/msg (sources/repomix-interfaces.xml). "
+                   "Private members abridged.")
     return d
 
 
@@ -272,8 +280,8 @@ def garage_graph_vertex():
     for nid in show:
         x, y = m.P(nid)
         hs = allowed(nid)
-        offs = ({0: (0, -36), 90: (-36, 0), 180: (0, 36), 270: (36, 0)} if len(hs) == 4
-                else {90: (-24, -24), 270: (24, -24)})
+        offs = ({0: (0, -36), 90: (-36, 0), 180: (0, 36), -90: (36, 0)} if len(hs) == 4
+                else {90: (-24, -24), -90: (24, -24)})
         for h in hs:
             ox, oy = offs[h]
             px, py = x + ox, y + oy
@@ -294,13 +302,13 @@ def garage_graph_vertex():
 
     # ---- bottom: the three storage structures ----
     top = max(code.y1, mb.y1 + 40) + 40
-    hrows = [("{18, 90}", "34"), ("{18, 270}", "35"), ("{22, 0}", "42"), ("{22, 90}", "43"), ("{22, 180}", "44"),
-             ("{22, 270}", "45"), ("{23, 90}", "46"), None, ("{41, 90}", "58")]
+    hrows = [(f"{{{n}, {h}}}", str(VERT[(n, h)])) for n, h in ((18, -90), (18, 90), (22, -90), (22, 0), (22, 90),
+                                                                 (22, 180), (23, 90))] + [None, ("{41, 90}", str(VERT[(41, 90)]))]
     t1 = _table(d, 0, top, 300, "pose_to_vertex_", "unordered_map<GaragePoseMsg, Vertex>",
-                hrows, [("key: {node_id, heading}", 10), ("Vertex", 220)], GG, hl=(3,))
+                hrows, [("key: {node_id, heading}", 10), ("Vertex", 220)], GG, hl=(4,))
     v43 = out_edges((22, 90))
     vrows = []
-    for v in (34, 42, 43, 44, 45, 46):
+    for v in (35, 42, 43, 44, 45, 47):
         p = POSES[v]
         outs = out_edges(p)
         ins = [q for q in POSES if any(t == p for t, _ in out_edges(q))]
@@ -309,24 +317,24 @@ def garage_graph_vertex():
     vrows.insert(1, None)
     t2 = _table(d, t1.x1 + 40, top, 540, "base_graph_ vertices", "std::vector: index = Vertex; stored per vertex",
                 vrows, [("Vertex", 10), ("bundle (pose)", 80), ("out_edges -> targets", 200), ("in_edges <- sources", 380)],
-                GG, hl=(3,))
+                GG, hl=(4,))
     erows = []
     for tgt, _ in v43:
         kind, length = transition((22, 90), tgt)
-        erows.append((f"43 -> {VERT[tgt]}", f"{{{tgt[0]}, {tgt[1]}}}", kind, length))
-    t3 = _table(d, t2.x1 + 40, top, 470, "edges out of vertex 43", "Edge = (source, target) + Transition{type, length}",
+        erows.append((f"{VERT[(22, 90)]} -> {VERT[tgt]}", f"{{{tgt[0]}, {tgt[1]}}}", kind, length))
+    t3 = _table(d, t2.x1 + 40, top, 470, f"edges out of vertex {VERT[(22, 90)]}", "Edge = (source, target) + Transition{type, length}",
                 erows, [("edge", 10), ("target pose", 110), ("Transition.type", 230), ("length", 370)], T.violet)
     # lookup arrows
-    connect(d, [(t1.x1, t1.y0 + 34 + 22 + 3 * 22 + 11), (t2.x0, t2.y0 + 34 + 22 + 3 * 22 + 11)], kind="flow",
+    connect(d, [(t1.x1, t1.y0 + 34 + 22 + 4 * 22 + 11), (t2.x0, t2.y0 + 34 + 22 + 4 * 22 + 11)], kind="flow",
             color=GG, size=8)
-    connect(d, [(t2.x1, t2.y0 + 34 + 22 + 3 * 22 + 11), (t3.x0, t3.y0 + 34 + 22 + 11)], kind="flow", color=T.violet,
+    connect(d, [(t2.x1, t2.y0 + 34 + 22 + 4 * 22 + 11), (t3.x0, t3.y0 + 34 + 22 + 11)], kind="flow", color=T.violet,
             size=8)
     yb = max(t1.y1, t2.y1, t3.y1) + 28
     steps = [
-        ("gg_.GetVertexFromPose({22, 90})", "hash lookup in pose_to_vertex_ -> 43; an unknown node or heading -> nullopt"),
-        ("gg_.GetPoseFromVertex(43)", "index into base_graph_'s vertex vector -> {22, 90}; 43 >= NumVertices() -> nullopt"),
-        ("gg_.GetOutEdges(43)", "iterator pair over that vertex's out-edge vector (throws std::invalid_argument if invalid)"),
-        ("gg_.GarageNodeFromVertex(43)", "pose.node_id -> layout_->GetNodeById(22): a std::map lookup and a copy of the node"),
+        ("gg_.GetVertexFromPose({22, 90})", "hash lookup in pose_to_vertex_ -> 44; {22, 270} or an unknown node -> nullopt"),
+        ("gg_.GetPoseFromVertex(44)", "index into base_graph_'s vertex vector -> {22, 90}; v >= NumVertices() -> nullopt"),
+        ("gg_.GetOutEdges(44)", "iterator pair over that vertex's out-edge vector (throws std::invalid_argument if invalid)"),
+        ("gg_.GarageNodeFromVertex(44)", "pose.node_id -> layout_->GetNodeById(22): a std::map lookup and a copy of the node"),
     ]
     w = t3.x1
     d.text(0, yb, "Reading the structure", size=13, weight=600, fill=T.fg)
@@ -337,14 +345,14 @@ def garage_graph_vertex():
     frame(d, title="What a GarageGraph Vertex is",
           subtitle="Vertex is BoostPoseGraph::vertex_descriptor: with vecS storage, a plain std::size_t index into "
                    "the graph's vertex vector. The pose lives in that vector entry; pose_to_vertex_ is the reverse "
-                   "map. Vertex 43 is the pose {22, 90}; W22 lists headings 0 and 90, so it owns four vertices (42-45).",
+                   "map. Vertex 44 is the pose {22, 90}; W22 lists headings 0 and 90, so it owns four vertices (42-45).",
           badge_key="yaml",
           legend=[("ring", GG, "vertex (arrow = heading)"), ("box", GG, "GarageGraph storage"),
                   ("box", T.violet, "edge records")],
           footnote="Vertex numbers and edges recomputed from the Pecos YAML with the PoseGraph rules "
                    "(nodes by id, headings ascending, h and h+180). Out-edge order inside Boost is insertion order, "
-                   "which follows the neighbour slots; the lists here are sorted. Headings shown 0-359 "
-                   "(volley::Wrap is in `common`, not in the snapshots).")
+                   "which follows the neighbour slots; the lists here are sorted. Headings are int16 in [-179, 180] "
+                   "(GaragePose.msg), so the reciprocal of 90 is -90 and it sorts first.")
     return d
 
 
@@ -467,25 +475,25 @@ def heading_convention():
     d.arrowhead((cx, cy - R - 30), (cx, cy), kind="filled", color=T.faint, size=8)
     d.text(cx + R + 36, cy, "+x", size=12, family="mono", fill=T.muted)
     d.text(cx + 8, cy - R - 34, "+y", size=12, family="mono", fill=T.muted)
-    for h, lab in ((0, "0"), (90, "90"), (180, "180"), (270, "270")):
+    for h, lab in ((0, "0"), (90, "90"), (180, "180"), (-90, "-90")):
         a = math.radians(h)
         fx, fy = -math.sin(a), -math.cos(a)
         tip = (cx + fx * (R - 14), cy + fy * (R - 14))
         d.line(cx, cy, tip[0] - fx * 8, tip[1] - fy * 8, stroke=T.green, sw=2.4)
         d.arrowhead(tip, (cx, cy), kind="filled", color=T.green, size=10)
-        lx, ly = cx + fx * (R + 0) + (-18 if h == 90 else 18 if h == 270 else 14), cy + fy * (R - 2) + (16 if h == 180 else -6 if h == 0 else 14)
+        lx, ly = cx + fx * (R + 0) + (-18 if h == 90 else 22 if h == -90 else 14), cy + fy * (R - 2) + (16 if h == 180 else -6 if h == 0 else 14)
         d.text(lx, ly, lab, size=13, family="mono", weight=700, fill=T.fg, anchor="middle", halo=T.bg, halo_w=3)
     d.path(f"M{cx + 46:.1f} {cy - 38:.1f} A 60 60 0 0 0 {cx - 38:.1f} {cy - 46:.1f}", stroke=T.pink, sw=1.8)
     d.arrowhead((cx - 40, cy - 45), (cx - 20, cy - 58), kind="filled", color=T.pink, size=8)
     d.text(cx + 50, cy - 64, "CCW +", size=11, family="mono", fill=T.pink)
-    d.text(cx, cy + R + 52, "GaragePoseMsg.heading: int16, degrees", size=12, family="mono", fill=T.fg2, anchor="middle")
-    d.text(cx, cy + R + 70, "GeometricPoseMsg.yaw = heading x pi / 180 (same zero)", size=11, family="mono",
+    d.text(cx, cy + R + 52, "GaragePoseMsg.heading: int16, degrees in [-179, 180]", size=12, family="mono", fill=T.fg2, anchor="middle")
+    d.text(cx, cy + R + 70, "270 is never stored: Wrap(270) = -90.  yaw = heading x pi / 180", size=11, family="mono",
            fill=T.muted, anchor="middle")
 
     # ---- reciprocal: same footprint ----
     px = 470
-    d.text(px, 40, "h and h + 180: same footprint, opposite facing", size=14, weight=600, fill=T.fg)
-    for i, (h, col) in enumerate(((90, T.amber), (270, T.amber))):
+    d.text(px, 40, "h and its reciprocal: same footprint, opposite facing", size=14, weight=600, fill=T.fg)
+    for i, (h, col) in enumerate(((90, T.amber), (-90, T.amber))):
         bx = px + 40 + i * 230
         d.rect(bx - 90, 70, 180, 150, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
         d.circle(bx, 145, 3, fill=T.fg2)
@@ -501,9 +509,9 @@ def heading_convention():
     # ---- from YAML headings to poses ----
     ty = 370
     d.text(px, ty, "From the YAML to poses (GetAllowedHeadings)", size=14, weight=600, fill=T.fg)
-    rows = [("W22", "headings: [0, 90]", "0, 90, 180, 270", "4 poses, rotation_allowed: true"),
-            ("P23", "headings: [90]", "90, 270", "2 poses, no rotation"),
-            ("B21", "headings: [90]", "90, 270", "2 poses; inbound heading 90 (faces_reciprocal: false)")]
+    rows = [("W22", "headings: [0, 90]", "-90, 0, 90, 180", "4 poses, rotation_allowed: true"),
+            ("P23", "headings: [90]", "-90, 90", "2 poses, no rotation"),
+            ("B21", "headings: [90]", "-90, 90", "2 poses; inbound heading -90 (faces_reciprocal: true)")]
     for i, (n, yml, poses, note_) in enumerate(rows):
         y = ty + 30 + i * 30
         d.rect(px, y - 13, 760, 26, rx=4, fill=T.card if i % 2 else T.tint(T.card, 0.6, T.bg))
@@ -514,12 +522,12 @@ def heading_convention():
         d.text(px + 450, y, note_, size=11.5, fill=T.muted)
     frame(d, title="Headings: what the number means",
           subtitle="A heading is the direction a pose faces, in whole degrees: 0 along +y, counter-clockwise positive, "
-                   "so 90 faces -x (west on the Pecos drawings) and 270 faces +x. It is an int16 in GaragePoseMsg; "
+                   "so 90 faces -x (west) and -90 faces +x. It is an int16 in [-179, 180] in GaragePoseMsg; "
                    "GeometricPoseMsg carries the same angle as yaw in radians.",
           badge_key="as-built",
           legend=[("box", T.green, "heading arrow"), ("box", T.amber, "tray footprint"), ("box", LAY, "YAML node")],
           footnote="Convention from GaragePose.msg's comment and LocomoteOrStrafe in garage_graph.cpp; yaw from "
-                   "Layout::GetGeometricPoseAtPose. Headings written 0-359 here; volley::Wrap's range is in `common`.")
+                   "Layout::GetGeometricPoseAtPose; range [-179, 180] from GaragePose.msg. YAML and GarageNode.headings use 0..179.")
     return d
 
 
@@ -562,7 +570,7 @@ def node_pose_vertex():
     d.rect(x1, py, cw, 230, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
     pcx, pcy = x1 + cw / 2, py + 100
     d.circle(pcx, pcy, 4, fill=T.faint)
-    for h in (0, 90, 180, 270):
+    for h in (0, 90, 180, -90):
         a = math.radians(h)
         fx, fy = -math.sin(a), -math.cos(a)
         qx, qy = pcx + fx * 52, pcy + fy * 52
@@ -574,7 +582,7 @@ def node_pose_vertex():
     # vertices
     x2 = 2 * (cw + gap)
     d.rect(x2, py, cw, 230, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
-    for k, h in enumerate((0, 90, 180, 270)):
+    for k, h in enumerate((-90, 0, 90, 180)):
         yy = py + 30 + k * 40
         d.rect(x2 + 40, yy, 60, 30, rx=4, fill=T.tint(GG, 0.16, T.bg), stroke=GG, sw=1.2)
         d.text(x2 + 70, yy + 15, str(VERT[(22, h)]), size=14, family="mono", weight=700, fill=T.fg, anchor="middle")
@@ -587,7 +595,7 @@ def node_pose_vertex():
               ("SizedPoseMsg", "{pose {22, 90}, resource_size_index 4}", "a pose plus a footprint size", PG),
               ("CollisionTable location", "Pose {22, 90}  or  Edge {{22, 90}, {18, 90}}", "a pose, or a move between two", CT),
               ("layout graph_ vertex", "20  (W22's position in Layout::nodes_)", "not the node id and not a gg_ vertex", LAY),
-              ("pose index", "PoseGraph::GetPoseIndex({22, 90}) = 43", "equals the gg_ Vertex by construction", PG)]
+              ("pose index", "PoseGraph::GetPoseIndex({22, 90}) = 44", "equals the gg_ Vertex by construction", PG)]
     for i, (name, ex, what, col) in enumerate(others):
         y = oy + 30 + i * 28
         d.rect(0, y - 13, x2 + cw, 26, rx=4, fill=T.card if i % 2 else T.tint(T.card, 0.6, T.bg))

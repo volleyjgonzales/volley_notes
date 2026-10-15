@@ -282,7 +282,7 @@ class Map:
         d = self.d
         x, y = self.P(xy)
         L, Wd = 2.2 * self.s, 1.1 * self.s
-        ang = {90: 180, 270: 0, 0: -90, 180: 90}.get(heading, 180)  # svg rotation: facing -x
+        ang = {90: 180, 270: 0, -90: 0, 0: -90, 180: 90}.get(heading, 180)  # svg rotation: facing -x
         g = []
         hx, hy = L / 2, Wd / 2
         wheel = f'<rect x="{-hx + 0.16 * L}" y="{-hy - 3}" width="{0.2 * L}" height="5" rx="2" fill="#CBD5E1"/>' \

@@ -179,9 +179,10 @@ def bridge():
     rx = b.x1 + 64
     VIO = T.violet
     top = uml_class(d, rx, b.y0, "DiscreteGarageState", accent=VIO, stereo="one snapshot per plan", size=12,
-                    attrs=["+ agvs: DiscreteAgvState[]", "+ bays: DiscreteBayState[]", "+ trays: DiscreteTrayState[]",
-                           "+ payloads: DiscretePayloadState[]", "+ vrcs: DiscreteVrcState[]",
-                           "+ disabled_nodes: uint32[]"], compact=True)
+                    attrs=["+ header: std_msgs/Header", "+ is_faulted: bool",
+                           "+ agvs: DiscreteAgvState[]", "+ bays: DiscreteBayState[]", "+ vexen: DiscreteVecsState[]",
+                           "+ trays: DiscreteTrayState[]", "+ payloads: DiscretePayloadState[]",
+                           "+ vrcs: DiscreteVrcState[]", "+ disabled_nodes: uint32[]", "+ hash: uint64"], compact=True)
     recs = [
         (1, "agvs[0] : DiscreteAgvState", ["+ id = 4", "+ pose = GaragePose{node_id=10, heading=90}",
                                            "+ lift = false", "+ tray_id = 0"]),

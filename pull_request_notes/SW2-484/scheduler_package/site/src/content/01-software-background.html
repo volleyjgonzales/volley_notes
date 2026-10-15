@@ -14,7 +14,7 @@
 <h1>01 — Scheduler software background</h1>
 <p><em>A ground-up guide to the <code>scheduler</code> ROS 2 package for engineers who are new to the team. It is written against the package snapshot in <code>sources/repomix-scheduler.xml</code> (headers, sources, tests, CMake and <code>package.xml</code>), the ROS interface definitions, and the <code>5675_pecos_combined.yaml</code> facility layout.</em></p>
 <blockquote>
-  <p><strong>Scope and evidence.</strong> This guide documents the <em>existing</em> implementation, not the proposed solver refactor (that is <a href="#doc-proposal">02</a>). Everything labelled <strong>AS-BUILT</strong> was checked against <code>scheduler.hpp</code>, <code>scheduler.cpp</code>, <code>utils.cpp</code>, <code>scheduler_ros.cpp</code> and <code>scheduler_component.cpp</code>. <code>planner_core</code> (the event classes and the event DAG) was checked against a second snapshot, <code>sources/repomix-planner-core.xml</code> (<code>event_dag.hpp/.cpp</code>, <code>schedule_events.hpp/.cpp</code>, without its tests). <code>common_ros</code> (<code>DiscreteGarageState</code>, <code>Layout</code>, <code>PoseGraph</code>, <code>GarageGraph</code>, <code>CollisionTable</code>, <code>GarageOccupancyChecker</code>) was checked against a third snapshot, <code>sources/repomix-common-ros.xml</code> (without its tests). <code>motion_planner</code>, <code>task_planner</code>, <code>cost_functions</code> and <code>common</code> were <strong>not</strong> available; where this guide describes them, it does so from call sites and says so. The Pecos figures use real node positions and edges, but <strong>AGV, tray and payload occupancy is hypothetical</strong>. The Pecos YAML has bays and chargers but <strong>no VRC</strong>.</p>
+  <p><strong>Scope and evidence.</strong> This guide documents the <em>existing</em> implementation, not the proposed solver refactor (that is <a href="#doc-proposal">02</a>). Everything labelled <strong>AS-BUILT</strong> was checked against <code>scheduler.hpp</code>, <code>scheduler.cpp</code>, <code>utils.cpp</code>, <code>scheduler_ros.cpp</code> and <code>scheduler_component.cpp</code>. <code>planner_core</code> (the event classes and the event DAG) was checked against a second snapshot, <code>sources/repomix-planner-core.xml</code> (<code>event_dag.hpp/.cpp</code>, <code>schedule_events.hpp/.cpp</code>, without its tests). <code>common_ros</code> (<code>DiscreteGarageState</code>, <code>Layout</code>, <code>PoseGraph</code>, <code>GarageGraph</code>, <code>CollisionTable</code>, <code>GarageOccupancyChecker</code>) was checked against a third snapshot, <code>sources/repomix-common-ros.xml</code> (without its tests). The ROS messages and services were checked against <code>sources/repomix-interfaces.xml</code>, every <code>.msg</code> and <code>.srv</code> of the <code>interfaces</code> packages. <code>motion_planner</code>, <code>task_planner</code>, <code>cost_functions</code> and <code>common</code> were <strong>not</strong> available; where this guide describes them, it does so from call sites and says so. The Pecos figures use real node positions and edges, but <strong>AGV, tray and payload occupancy is hypothetical</strong>. The Pecos YAML has bays and chargers but <strong>no VRC</strong>.</p>
 </blockquote>
 <blockquote>
   <p><strong>Viewing the figures.</strong> Click a figure to open it full screen with pan and zoom; "Pan / zoom viewer" under each caption opens the gallery of all figures (<a href="figures/viewer.html"><code>figures/viewer.html</code></a>). Every figure carries a status badge: <strong>AS-BUILT</strong>, <strong>PROPOSED</strong>, <strong>ILLUSTRATIVE</strong>, <strong>SCHEMATIC</strong>, <strong>CONCEPTUAL</strong>, or <strong>YAML GEOMETRY · HYPOTHETICAL OCCUPANCY</strong>.</p>
@@ -238,14 +238,14 @@ float32 yaw     # radians
     <tr>
       <td id="bg-term-heading"><strong>heading</strong></td>
       <td>The direction something at a node faces, in whole degrees: 0 along +y, counter-clockwise positive (<a class="ref" href="#bg-fig-78_heading_convention">Figure 4</a>)</td>
-      <td><code>int16</code> field of <code>GaragePoseMsg</code>; the YAML lists 0–179 and each also allows <span class="math">h+180</span></td>
-      <td>0, 90, 180, 270</td>
+      <td><code>int16</code> field of <code>GaragePoseMsg</code>, in <span class="math">[-179, 180]</span> (<code>GaragePose.msg</code>); the YAML lists 0–179 and each also allows its reciprocal, so 90 also allows −90</td>
+      <td>−90, 0, 90, 180</td>
     </tr>
     <tr>
       <td id="bg-term-pose"><strong>pose</strong></td>
       <td>A node plus a heading: where something is <em>and</em> which way it faces. Almost every API in the planner takes poses, not nodes</td>
       <td><code>GaragePoseMsg {node_id, heading}</code>; listed by <code>PoseGraph::poses_</code> (<a class="ref" href="#bg-posegraph-from-nodes-to-poses">section 6.2</a>)</td>
-      <td><code>{22, 0}</code>, <code>{22, 90}</code>, <code>{22, 180}</code>, <code>{22, 270}</code></td>
+      <td><code>{22, -90}</code>, <code>{22, 0}</code>, <code>{22, 90}</code>, <code>{22, 180}</code></td>
     </tr>
     <tr>
       <td id="bg-term-vertex"><strong>vertex</strong></td>
@@ -257,7 +257,7 @@ float32 yaw     # radians
 </table>
 <figure id="bg-fig-78_heading_convention">
   <img src="figures/78_heading_convention.svg" alt="Headings: what the number means">
-  <figcaption>The heading convention. Left: 0 points along +y and angles grow counter-clockwise, so 90 faces −x and 270 faces +x. <code>GeometricPoseMsg.yaw</code> is the same angle in radians. Middle: a tray (or AGV) footprint is a centred rectangle with its long side along the heading, so <span class="math">h</span> and <span class="math">h+180</span> cover the same floor; only the facing differs. Right: how YAML headings become poses.</figcaption>
+  <figcaption>The heading convention. Left: 0 points along +y and angles grow counter-clockwise, so 90 faces −x and −90 faces +x. Headings are stored in <span class="math">[-179, 180]</span>: 270 is never a valid value. <code>GeometricPoseMsg.yaw</code> is the same angle in radians. Middle: a tray (or AGV) footprint is a centred rectangle with its long side along the heading, so <span class="math">h</span> and <span class="math">h+180</span> cover the same floor; only the facing differs. Right: how YAML headings become poses.</figcaption>
 </figure>
 <figure id="bg-fig-79_node_pose_vertex">
   <img src="figures/79_node_pose_vertex.svg" alt="Node, pose, vertex">
@@ -447,7 +447,7 @@ table_(gg_, logger),                                  // volley::CollisionTable,
 <p><a class="ref" href="#bg-the-physical-garage-and-its-coordinate-system">Section 3</a> introduced three views of the garage. This section opens them up: what each class stores, in which container, how each query is answered and what it costs. All four classes are in <code>common_ros</code> (<code>sources/repomix-common-ros.xml</code>). The <code>Scheduler</code> constructor builds them once, in a chain, and nothing changes them afterwards, so every call below is a read of a fixed structure. A plan never pays to build them.</p>
 <figure id="bg-fig-75_garage_model_classes">
   <img src="figures/75_garage_model_classes.svg" alt="The static garage model: four classes">
-  <figcaption>The four classes with their real members (abridged). <code>Layout</code> stores places; <code>PoseGraph</code> expands every node into poses and works out each pose's neighbours; <code>GarageGraph</code> copies that into a Boost graph that every search runs on; <code>CollisionTable</code> holds precomputed conflict sets. Solid arrows are members that point at another object; the dashed arrow is "built from" (the <code>GarageGraph</code> constructor reads the <code>PoseGraph</code> and keeps no pointer to it). Below them are the value types the four classes are made of: the ROS messages <code>GaragePoseMsg</code>, <code>GarageNodeMsg</code>, <code>GeometricPoseMsg</code>, <code>SizedPoseMsg</code>, <code>ParkingWindowMsg</code> and <code>GarageFloorMsg</code>, and the C++ types <code>Vrc</code>, <code>Transition</code>, <code>PoseNeighbor</code>, <code>Vertex</code>/<code>Edge</code>, the <code>CollisionTable</code> key aliases and <code>CollisionEntityId</code>. Each box says which member holds it. The <code>.msg</code> files are not in the snapshots: message fields are the ones <code>common_ros</code> reads and writes.</figcaption>
+  <figcaption>The four classes with their real members (abridged). <code>Layout</code> stores places; <code>PoseGraph</code> expands every node into poses and works out each pose's neighbours; <code>GarageGraph</code> copies that into a Boost graph that every search runs on; <code>CollisionTable</code> holds precomputed conflict sets. Solid arrows are members that point at another object; the dashed arrow is "built from" (the <code>GarageGraph</code> constructor reads the <code>PoseGraph</code> and keeps no pointer to it). Below them are the value types the four classes are made of: the ROS messages <code>GaragePoseMsg</code>, <code>GarageNodeMsg</code>, <code>GeometricPoseMsg</code>, <code>SizedPoseMsg</code>, <code>ParkingWindowMsg</code> and <code>GarageFloorMsg</code>, and the C++ types <code>Vrc</code>, <code>Transition</code>, <code>PoseNeighbor</code>, <code>Vertex</code>/<code>Edge</code>, the <code>CollisionTable</code> key aliases and <code>CollisionEntityId</code>. Each box says which member holds it. Message fields and types are from the <code>.msg</code> files (<a class="ref" href="#bg-ros-messages-and-services">section 7</a> lists them).</figcaption>
 </figure>
 <pre><code class="language-cpp">// src/scheduler.cpp — Scheduler::Scheduler(...): one chain, built once
 layout_(std::make_shared&lt;Layout>(layout_filepath)),  // parse the YAML
@@ -471,7 +471,7 @@ table_(gg_, logger),                                 // load the cached table, o
     <tr>
       <td><code>nodes_</code></td>
       <td><code>std::vector&lt;GarageNodeMsg></code></td>
-      <td>Every node, sorted by id: id, x, y (metres), floor, type, headings (sorted, 0–179), <code>rotation_allowed</code>, <code>faces_reciprocal</code>, <code>max_resource_size</code></td>
+      <td>Every node, sorted by id (<code>GarageNode.msg</code>): <code>id</code> (uint32), <code>x</code>, <code>y</code> (float32, metres, east-north-up), <code>floor</code> (uint8), <code>type</code> (uint8: <code>TYPE_PARKING</code> 1, <code>WAYPOINT</code> 2, <code>LIFT</code> 3, <code>BAY</code> 4, <code>AGV_CHARGE</code> 5, <code>EV_CHARGE</code> 6, <code>BLIFT</code> 7), <code>headings</code> (int16[], 0–179, ascending), <code>rotation_allowed</code>, <code>faces_reciprocal</code>, <code>max_resource_size</code> and its index, <code>bay_prioritization</code>, <code>insert_floor</code>, <code>system_floors</code></td>
       <td><code>nodes:</code></td>
     </tr>
     <tr>
@@ -577,7 +577,7 @@ std::vector&lt;int16_t> GetAllowedHeadings(const GarageNodeMsg&amp; node) {
   return headings;
 }
 </code></pre>
-<p>So a node with one YAML heading (most Pecos nodes list <code>[90]</code>) has two poses, 90 and 270, and <code>W22</code>, which lists <code>[0, 90]</code>, has four: 0, 90, 180 and 270. Pecos's 28 nodes give 60 poses. (This guide writes headings as 0–359. <code>volley::Wrap</code> is in the <code>common</code> package, which is not in the snapshots, so its exact range is unconfirmed.)</p>
+<p>So a node with one YAML heading (most Pecos nodes list <code>[90]</code>) has two poses, −90 and 90, and <code>W22</code>, which lists <code>[0, 90]</code>, has four: −90, 0, 90 and 180. Pecos's 28 nodes give 60 poses. <code>GaragePose.msg</code> fixes the range: a heading is an <code>int16</code> in <span class="math">[-179, 180]</span>, so <code>Wrap(90 + 180)</code> is −90, not 270 (a scheduler test expects <code>ConstructGaragePose(1, -90)</code>). Because the list is sorted, −90 comes first at each node.</p>
 <p><code>PoseGraph</code> stores the poses in three containers:</p>
 <ul>
   <li><strong><code>poses_</code></strong>, a <code>std::vector&lt;GaragePoseMsg></code> ordered by node id, then heading. A pose's <strong>pose index</strong> is its position here.</li>
@@ -621,13 +621,13 @@ private:
 </code></pre>
 <figure id="bg-fig-76_garage_graph_vertex">
   <img src="figures/76_garage_graph_vertex.svg" alt="What a GarageGraph Vertex is">
-  <figcaption>What a <code>Vertex</code> is, on Pecos around W22. Top: the type definitions and the poses around W22, each ring one vertex, numbered with its <code>Vertex</code> value. Bottom, left to right: <code>pose_to_vertex_</code> turns <code>{22, 90}</code> into 43; entry 43 of the Boost vertex vector holds the pose and the out- and in-edge lists; each out-edge carries a <code>Transition</code>. Moves along a row (W22 to W41, W22 to P23) are <code>LOCOMOTE</code>, because heading 90 faces −x; moves between rows are <code>STRAFE</code>; turns in place are <code>ROTATION</code>.</figcaption>
+  <figcaption>What a <code>Vertex</code> is, on Pecos around W22. Top: the type definitions and the poses around W22, each ring one vertex, numbered with its <code>Vertex</code> value. Bottom, left to right: <code>pose_to_vertex_</code> turns <code>{22, 90}</code> into 44; entry 44 of the Boost vertex vector holds the pose and the out- and in-edge lists; each out-edge carries a <code>Transition</code>. Moves along a row (W22 to W41, W22 to P23) are <code>LOCOMOTE</code>, because heading 90 faces −x; moves between rows are <code>STRAFE</code>; turns in place are <code>ROTATION</code>.</figcaption>
 </figure>
 <p><strong>What a vertex actually is:</strong></p>
 <ul>
   <li><strong>A number.</strong> With <code>vecS</code> as the vertex container, a Boost <code>vertex_descriptor</code> is a <code>std::size_t</code> index into the graph's internal vector of vertices. A <code>Vertex</code> is valid when it is less than <code>NumVertices()</code>; that is all <code>HasVertex</code> checks.</li>
   <li><strong>What is stored at that index:</strong> the bundled <code>GaragePoseMsg</code> (<code>base_graph_[v]</code>) and, because the graph is <code>bidirectionalS</code>, two edge lists, out-edges and in-edges. Nothing else. There is no node type, no position and no occupancy at a vertex. Node facts come from the <code>Layout</code> (<code>GarageNodeFromVertex</code> looks the node up and copies it), and occupancy comes from <code>DiscreteGarageState</code>.</li>
-  <li><strong>The numbering is the <code>PoseGraph</code> order:</strong> vertex <em>i</em> is pose index <em>i</em>, that is, node id ascending, then heading ascending. On Pecos, vertex 43 is <code>{22, 90}</code>.</li>
+  <li><strong>The numbering is the <code>PoseGraph</code> order:</strong> vertex <em>i</em> is pose index <em>i</em>, that is, node id ascending, then heading ascending. On Pecos, W22's poses <code>{22, -90}</code>, <code>{22, 0}</code>, <code>{22, 90}</code> and <code>{22, 180}</code> are vertices 42, 43, 44 and 45.</li>
   <li><strong>Numbers are stable.</strong> Nothing adds or removes vertices after construction, so a <code>Vertex</code> stays valid for the scheduler's lifetime. Compare <code>ScheduleEventDag</code>, where <code>Remove</code> renumbers later vertices (<a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">section 12.4</a>). A <code>Vertex</code> means nothing outside one layout: never store one, or compare one across layouts or builds.</li>
   <li><strong>Per-vertex data lives outside the graph.</strong> <code>MakeVertexVectorPropertyMap&lt;T>()</code> returns a vector indexed by <code>Vertex</code>, and <code>MakeEdgeVectorPropertyMap&lt;T>()</code> a vector indexed by edge index. That is the pattern for anything a search needs per vertex or per edge. <code>GraphFilterProperties::IsEnabled(vertex)</code> and <code>IsEnabled(edge)</code> are in <code>motion_planner</code>, which is not in the snapshots, so how they store their flags is not confirmed.</li>
 </ul>
@@ -690,10 +690,10 @@ private:
 <ul>
   <li>the node id is not in the layout;</li>
   <li>the heading is not one of the node's YAML headings or their reciprocals;</li>
-  <li>the heading is an equivalent angle written differently from the stored one (for example −90 against 270).</li>
+  <li>the heading is outside <span class="math">[-179, 180]</span>, so it does not match the stored value (for example 270 instead of the stored −90).</li>
 </ul>
 <p>Any of these produces the "does not exist in garage graph" errors.</p>
-<p>Reciprocals deserve care. <code>PoseGraph</code> always adds <span class="math">h</span> and <span class="math">h+180</span> together, so <code>(n, h)</code> and <code>(n, h+180)</code> are either both vertices or both missing. When <code>DoTrayAssignments</code> checks a requested destination, it retries the reciprocal after an empty lookup (<code>scheduler.cpp:2624</code>–<code>:2636</code>). That retry cannot find a vertex the first lookup missed, unless the first heading was in a non-canonical form that <code>ReciprocalAngle</code> happens to normalise; that function is in <code>common</code> and not in the snapshots. Reciprocals matter for <strong>footprints and turns</strong>, not for vertex existence:</p>
+<p>Reciprocals deserve care. <code>PoseGraph</code> always adds <span class="math">h</span> and <span class="math">h+180</span> together, so <code>(n, h)</code> and <code>(n, h+180)</code> are either both vertices or both missing. When <code>DoTrayAssignments</code> checks a requested destination, it retries the reciprocal after an empty lookup (<code>scheduler.cpp:2624</code>–<code>:2636</code>). That retry cannot find a vertex the first lookup missed, unless the first heading was outside <span class="math">[-179, 180]</span> (say 270) and <code>ReciprocalAngle</code> returns a wrapped value (90); <code>ReciprocalAngle</code> itself is in <code>common</code>, which is not in the snapshots. Reciprocals matter for <strong>footprints and turns</strong>, not for vertex existence:</p>
 <ul>
   <li>A tray or AGV is a centred rectangle, so <span class="math">h</span> and <span class="math">h+180</span> cover the same floor.</li>
   <li><code>PlanAgvMoveJob</code> uses <code>IsAngleOrReciprocal</code> to skip a needless rotation when the job allows it (<code>:749</code>).</li>
@@ -774,14 +774,14 @@ private:
       <td><span class="math">O(\log n)</span> plus a copy</td>
     </tr>
     <tr>
-      <td>Is <code>{22, 270}</code> a pose, and which vertex is it?</td>
-      <td><code>gg_.GetVertexFromPose({22, 270})</code></td>
+      <td>Is <code>{22, -90}</code> a pose, and which vertex is it?</td>
+      <td><code>gg_.GetVertexFromPose({22, -90})</code> → 42 (<code>{22, 270}</code> → empty)</td>
       <td><code>GarageGraph::pose_to_vertex_</code></td>
       <td><span class="math">O(1)</span></td>
     </tr>
     <tr>
-      <td>Where can I go from vertex 43, and how long is each move?</td>
-      <td><code>gg_.GetOutEdges(43)</code>, <code>gg_.GetTransition(e)</code></td>
+      <td>Where can I go from vertex 44, and how long is each move?</td>
+      <td><code>gg_.GetOutEdges(44)</code>, <code>gg_.GetTransition(e)</code></td>
       <td>Boost out-edge vector, edge property</td>
       <td><span class="math">O(1)</span> per edge</td>
     </tr>
@@ -875,6 +875,423 @@ private:
   <li><code>ActionNode</code> is wide: it has a command field for every machine type, but only the one matching <code>type</code> is meaningful.</li>
   <li><code>ScheduledJobData.node_indices</code> tells Dispatch which actions belong to which job; for <code>TYPE_RETRIEVE</code>, <code>bay_arrival_node_guid</code> names the <code>PROCESS_RETRIEVE</code> action. The next subsection looks at one entry in detail.</li>
 </ul>
+<h3 id="bg-the-message-definitions">The message definitions</h3>
+<p>The definitions below are copied from the <code>interfaces</code> package (<code>sources/repomix-interfaces.xml</code>), grouped by role. Three details matter everywhere in this guide:</p>
+<ul>
+  <li><code>GaragePose.heading</code> is an <code>int16</code> in degrees, in <span class="math">[-179, 180]</span>: the reciprocal of 90 is −90.</li>
+  <li><code>ActionNode.parents</code> and <code>ScheduledJobData.node_indices</code> are indices into <code>Schedule.nodes</code>, and <code>Schedule.nodes</code> is in topological order.</li>
+  <li>Ids have different widths in different messages: AGV, tray, bay and VECS ids are <code>uint16</code> in the state and job messages, but <code>uint32</code> in <code>ActionNode</code>, <code>BayState</code> and <code>GarageNode</code>.</li>
+</ul>
+<details open>
+  <summary>The service and the request: <code>Plan</code>, <code>PlanRequest</code>, <code>SchedulerJob</code></summary>
+<pre><code class="language-text"># ---- interfaces/srv/Plan.srv ----
+# Plan request and response fields are put into separate messages so that they can be easily bagged
+
+PlanRequest request_data
+
+---
+
+PlanResponse response_data
+
+# ---- interfaces/msg/PlanRequest.msg ----
+# A request to have the scheduler produce a new schedule
+
+Guid                 id              # unique id of the plan call
+
+DiscreteGarageState  base_state      # the current discrete garage state
+Schedule             base_schedule   # the immutable portion of the current schedule- scheduler is to assume
+                                     # that all of these actions will be completed
+SchedulerJob[]       planned_jobs    # jobs that will be completed during execution of the base schedule
+SchedulerJob[]       active_jobs     # jobs that have actions in the base schedule but will not be completed
+                                     # by the base schedule
+SchedulerJob[]       pending_jobs    # jobs that need to be planned
+
+# ---- interfaces/msg/SchedulerJob.msg ----
+uint8 TYPE_UNKNOWN = 0
+uint8 TYPE_MOVE_AGV = 1
+uint8 TYPE_MOVE_TRAY = 2
+uint8 TYPE_READY_FOR_INSERT = 3
+uint8 TYPE_READY_FOR_RETRIEVE = 4
+uint8 TYPE_RETRIEVE = 5
+uint8 TYPE_CHARGE_AGV = 6
+uint8 TYPE_TRANSITION_BAY_TO_INSERT = 7
+uint8 TYPE_TRANSITION_BAY_TO_RETRIEVE = 8
+uint8 TYPE_CLEAN_GARAGE = 9
+uint8 TYPE_REPARK_TRAY = 10
+uint8 TYPE_INSERT = 11
+uint8 TYPE_CHARGE_PAYLOAD = 12
+uint8 TYPE_REBALANCE_GARAGE = 13
+
+uint8 STATE_UNPLANNED = 0
+uint8 STATE_EXECUTING = 1
+uint8 STATE_SUCCESS = 2
+uint8 STATE_ERROR = 3
+
+uint8 type
+string type_name # type - but as a string for human readability
+uint8 state
+string state_name # state - but as a string for human readability
+Guid guid
+builtin_interfaces/Time time_registered
+builtin_interfaces/Time time_planned
+builtin_interfaces/Time time_completed
+
+string note # Contains additional info, particularly when the job error'd out
+
+# The fields below are only set if the job is of the correct type
+# For example, a MoveAgv job will set the agv_id and destination
+uint16 agv_id
+uint16 bay_id
+uint16 tray_id
+Guid payload_id
+GaragePose destination
+bool allow_reciprocal # If true, allow the reciprocal destination as well
+
+# Additional information for planned retrieves
+float32 seconds_to_bay_arrival
+
+# Additional information for retrieves that failed to plan
+bool retain_job # If true, the dispatcher should retain the job and try it again on the next plan call
+bool needs_bay_in_retrieve # If true, the dispatcher should create a job that transitions a bay to retrieve
+</code></pre>
+</details>
+<details>
+  <summary>The response: <code>PlanResponse</code>, <code>ScheduledJobData</code>, <code>Schedule</code>, <code>ActionNode</code></summary>
+<pre><code class="language-text"># ---- interfaces/msg/PlanResponse.msg ----
+bool                 success         # whether the plan call succeeded
+string               message         # informational, e.g. for error messages
+
+Guid                 id              # unique id of the plan call
+
+Schedule             schedule        # the newly planned schedule
+ScheduledJobData[]   scheduled_jobs  # modified jobs from the original plan call
+
+# ---- interfaces/msg/ScheduledJobData.msg ----
+SchedulerJob job
+
+# Indices of ActionNodes in the schedule that must be completed for this job to be completed.
+# Technically only needs to contain the set of children ids. That is, if node A is an ancestor of another node B, then A need not be included
+# because, by being an ancestor, A is guaranteed to be completed if B is completed.
+uint32[] node_indices
+
+# Additional fields set for specific types of scheduled jobs
+# Retrieve:
+uint16 bay_id
+Guid   bay_arrival_node_guid # Guid of the node for this job that represents the target bay executing process retrieve
+                             # The customer has access to their car via that node, and can use it to estimate arrival time
+
+# ---- interfaces/msg/Schedule.msg ----
+# A schedule is a DAG.
+# Nodes are provided in a topological order.
+
+std_msgs/Header header
+ActionNode[] nodes
+
+# ---- interfaces/msg/ActionNode.msg ----
+# A node in a Schedule
+
+# Types
+uint8 TYPE_AGV_COMMAND = 1
+uint8 TYPE_BAY_COMMAND = 2
+uint8 TYPE_VECS_COMMAND = 3
+uint8 TYPE_VRC_COMMAND = 4
+
+# Status
+uint8 STATUS_NOT_RECEIVED = 0 # Action has not been acknowledged as received by the entity
+uint8 STATUS_RECEIVED = 1 # Action has been acknowledged as received by the entity
+uint8 STATUS_COMPLETED = 2 # Action is complete
+
+Guid guid # this node's unique identifier
+Guid job_id # the guid for the job this node is associated with
+uint8 type # see the TYPE_* enum above
+uint32[] parents # Indices of the parent nodes that this node depends on
+float32 duration # The action duration, in seconds. Note that some actions have infinite duration.
+uint8 status # see the STATUS_* enum above
+bool outside_split # if true, this node is outside the split in the schedule while waiting on the plan call response and will not be sent
+
+# The following fields are only set when appropriate for the given type.
+# For example, `agv_id` is only set for TYPE_AGV_COMMAND
+
+# AGV command
+uint32 agv_id
+AgvCommand agv_command
+
+# Bay command
+uint32 bay_id
+BayCommand bay_command
+
+# Vecs Command
+uint32 vecs_id
+VecsCommand vecs_command
+
+# VRC Command
+uint32 vrc_id
+VrcCommand vrc_command
+</code></pre>
+</details>
+<details>
+  <summary>Commands inside an ActionNode: <code>AgvCommand</code>, <code>AgvGoal</code>, <code>BayCommand</code>, <code>VecsCommand</code>, <code>VrcCommand</code></summary>
+<pre><code class="language-text"># ---- interfaces/msg/AgvCommand.msg ----
+# Commands for an AGV in the garage
+
+# The full source and destination nodes and lift states are specified in every command. The AGV
+#   software will reject any command that does not end up strictly being one of the following:
+#  - Translate: src.pose.node_id != dst.pose.node_id; src.pose.heading == dst.pose.heading;
+#               src.lift == dst.lift
+#  - Rotate: src.pose.node_id == dst.pose.node_id; src.pose.heading != dst.pose.heading;
+#               src.lift == dst.lift
+#  - Lift: src.pose.node_id == dst.pose.node_id; src.pose.heading == dst.pose.heading;
+#               src.lift != dst.lift
+#  - Center: src == dst
+
+# Every command has a unique GUID string that we can use to keep track of it
+string id
+
+# There may be other poses between src and dst
+AgvGoal src
+AgvGoal dst
+
+# ---- interfaces/msg/AgvGoal.msg ----
+# AGV Goal or "high-level state", consisting of a garage pose and a lift state
+
+GaragePose pose
+bool lift # true if lift is or should be all the way up, false if it is or should be all the way down
+
+# ---- interfaces/msg/BayCommand.msg ----
+uint8 COMMAND_TYPE_UNKNOWN = 0
+uint8 COMMAND_TYPE_TRANSITION_TO_INSERT = 1
+uint8 COMMAND_TYPE_PROCESS_RETRIEVE = 2
+uint8 COMMAND_TYPE_TRANSITION_TO_RETRIEVE = 3
+# Used by the dispatcher in place of TYPE_VRC_COMMAND when a VRC is owned by a BLift bay.
+# The bay state machine moves its lift to `floor`, taking care of door open/close
+# sequencing — no tray-in-bay precondition (unlike TRANSITION_TO_INSERT).
+uint8 COMMAND_TYPE_MOVE_LIFT_TO_FLOOR = 4
+
+uint8 command_type # One of COMMAND_TYPE_* above
+string command_id  # unique GUID string coming from the scheduler
+uint8 floor        # Transition to retrieve at the given floor (or insert or process if/when a blift can ever have 2 input floors)
+
+# ---- interfaces/msg/VecsCommand.msg ----
+std_msgs/Header header
+
+uint8 COMMAND_TYPE_UNKNOWN = 0
+uint8 COMMAND_TYPE_START_CHARGING = 1
+uint8 COMMAND_TYPE_STOP_CHARGING = 2
+
+# Every command has a unique GUID string that we can use to keep track of it
+string command_id
+uint8 command_type # One of COMMAND_TYPE_* above
+
+# ---- interfaces/msg/VrcCommand.msg ----
+std_msgs/Header header
+
+uint8 COMMAND_TYPE_UNKNOWN = 0
+uint8 COMMAND_TYPE_MOVE    = 1
+
+# Every command has a unique GUID string that we can use to keep track of it
+string command_id
+uint8 command_type    # One of COMMAND_TYPE_* above
+uint16 requested_floor
+</code></pre>
+</details>
+<details>
+  <summary>The garage snapshot: <code>DiscreteGarageState</code>, <code>DiscreteAgvState</code>, <code>DiscreteTrayState</code>, <code>DiscretePayloadState</code>, <code>Payload</code>, <code>DiscreteBayState</code>, <code>DiscreteVecsState</code>, <code>DiscreteVrcState</code></summary>
+<pre><code class="language-text"># ---- interfaces/msg/DiscreteGarageState.msg ----
+std_msgs/Header header
+
+bool is_faulted
+
+DiscreteAgvState[] agvs
+DiscreteBayState[] bays
+DiscreteVecsState[] vexen
+DiscreteTrayState[] trays
+DiscretePayloadState[] payloads
+DiscreteVrcState[] vrcs
+uint32[] disabled_nodes
+
+# The expected hash value for this state
+uint64 hash
+
+# ---- interfaces/msg/DiscreteAgvState.msg ----
+uint16 id
+uint8 state
+GaragePose pose
+bool lift       # if true, then the AGV's lift is raised
+uint16 tray_id  # if non-zero, the id of the tray this AGV is carrying
+bool disabled   # if true, then the AGV is disabled in the scheduler and will not be used
+
+# ---- interfaces/msg/DiscreteTrayState.msg ----
+uint16 id
+GaragePose pose
+uint16 agv_id  # if non-zero, the id of the AGV this tray is being carried by
+Guid payload_id # the GUID of the payload on this tray, or zero if empty
+bool disabled
+
+# ---- interfaces/msg/DiscretePayloadState.msg ----
+Payload payload
+uint16 tray_id
+bool reciprocal_to_tray     # If true, is reciprocal to the tray it is on
+bool charging               # If true, the payload should not be moved
+
+# ---- interfaces/msg/Payload.msg ----
+Guid id
+float32 mass # [kg]
+float32 length_m
+float32 width_m
+float32 height_m
+bool ev_charge_requested
+
+# ---- interfaces/msg/DiscreteBayState.msg ----
+uint16 id
+uint8 state
+bool disabled # if true, then the bay is disabled in the scheduler and will not be used
+
+# ---- interfaces/msg/DiscreteVecsState.msg ----
+uint16 id
+uint8 state
+bool disabled # if true, then the VECS is disabled in the scheduler and will not be used
+
+# ---- interfaces/msg/DiscreteVrcState.msg ----
+# VRC Identifier
+uint16 id
+
+# State of the VRC
+vrc_interfaces/VrcState state
+
+# Gate report for each floor
+vrc_interfaces/GateReport[] gates
+
+# If state.value is STATE_IDLE this represents the current floor the VRC is on
+# If not, this represents the last floor the VRC was idle on or passed while moving
+uint16 current_floor
+
+# If state.value is STATE_MOVING this represents the floor the VRC is moving to
+# If not, this will be set to the current_floor
+uint16 requested_floor
+</code></pre>
+</details>
+<details>
+  <summary>Places and identifiers: <code>GaragePose</code>, <code>GeometricPose</code>, <code>SizedPose</code>, <code>GarageNode</code>, <code>GarageEntityId</code>, <code>Guid</code></summary>
+<pre><code class="language-text"># ---- interfaces/msg/GaragePose.msg ----
+# A garage pose is a node id and an associated heading
+
+uint32 node_id
+
+# Headings are defined relative to garage local north, a direction that is defined in the CAD file.
+# Headings are right-hand, and increase in the counter clockwise direction. Thus, heading 90 points west.
+int16 heading # in degrees, [-179:180]
+
+# ---- interfaces/msg/GeometricPose.msg ----
+# A geometric pose is a continuous position in a garage
+# Headings are defined relative to garage local north, a direction that is defined in the CAD file.
+# Headings are right-hand, and increase in the counter clockwise diretion. Thus, heading 90 points west.
+
+float32 x # [m]
+float32 y # [m]
+float32 yaw # [rad]
+
+# ---- interfaces/msg/SizedPose.msg ----
+uint8 resource_size_index # The discrete size of this pose as given by the index into a layout's resource windows.
+GaragePose pose
+
+# ---- interfaces/msg/GarageNode.msg ----
+uint8 TYPE_UNKNOWN = 0
+uint8 TYPE_PARKING = 1
+uint8 TYPE_WAYPOINT = 2
+uint8 TYPE_LIFT = 3
+uint8 TYPE_BAY = 4
+uint8 TYPE_AGV_CHARGE = 5
+uint8 TYPE_EV_CHARGE = 6
+uint8 TYPE_BLIFT = 7
+
+# A garage node is a fixed vertex in the garage to which AGVs can move
+
+uint32 id
+
+# location in east-north-up [m]
+float32 x
+float32 y
+
+# Id of the floor the node is on
+uint8 floor
+
+# See the node types below
+uint8 type
+
+# The maximum parking window that this node supports
+string max_resource_size
+
+# The index of the maximum resource size that this node supports
+uint8 max_resource_size_index
+
+# Only for Bay nodes: High positive values -&gt; high preference to be ready for insert. Low negative values -&gt; high preference to be ready for retrieve
+int16 bay_prioritization
+
+# Whether we allow rotation on this node
+bool rotation_allowed
+
+# The headings that an AGV may have on this node.
+# Guaranteed to have at least one heading.
+# Headings are in degrees, 0:179, in increasing order.
+# Headings can all be flipped by 180.
+int16[] headings
+
+# A bay or charge node is expected to only have a single valid heading in [0,179]
+# If this value is false, the bay's outer door faces that direction, and an AGV on a charge node must have this heading.
+# If this value is true, the bay's outer door faces 180 opposite that direction.
+bool faces_reciprocal
+
+# Only for Bay nodes: The floor at which the patron inserts, and all reachable system floors
+# for the standard "bay" configuration this should be `floor` and `[floor]` meaning we insert and retrieve at a single, same floor.
+# When loading from yaml insert_floor = floor and system_floors = [floor] by default if not set.
+
+uint8 insert_floor
+uint8[] system_floors
+
+# ---- interfaces/msg/GarageEntityId.msg ----
+# Garage Entity Ids are used to identify garage entities.
+# An AGV a8 has a garage entity id consisting of 'a' and id 8.
+# A bay b57 has a garage entity id consisting of 'b' and id 57.
+# A VECS v22 has a garage entity id consisting of 'v' and id 22
+
+string&lt;=1 entity_type # The entity type character: 'a' for AGV, 'b' for bay, 't' for tray, 'v' for VECS
+uint16 id             # numeric entity id
+
+# ---- interfaces/msg/Guid.msg ----
+# A GUID is a 128-bit integer (16 bytes) that can be used across all computers and networks wherever a unique identifier is required.
+# Such an identifier has a very low probability of being duplicated.
+# Source: https://docs.microsoft.com/en-us/dotnet/api/system.guid?view=net-6.0
+uint8[16] bytes
+</code></pre>
+</details>
+<details>
+  <summary>Events the replay applies: <code>AgvPoseChanged</code>, <code>AgvLiftChanged</code>, <code>BayStateChanged</code>, <code>VecsStateChanged</code>, <code>VrcStateChanged</code></summary>
+<pre><code class="language-text"># ---- interfaces/msg/AgvPoseChanged.msg ----
+uint16 agv_id
+uint32 node_id_curr
+int16 heading_curr # in degrees, [-179:180]
+uint32 node_id_next
+int16 heading_next # in degrees, [-179:180]
+
+# ---- interfaces/msg/AgvLiftChanged.msg ----
+uint16 agv_id
+bool raised
+
+# ---- interfaces/msg/BayStateChanged.msg ----
+uint16 bay_id
+uint8 state_curr # see BayReport
+uint8 state_next # see BayReport
+
+# ---- interfaces/msg/VecsStateChanged.msg ----
+uint16 vecs_id
+uint8 state_curr # see VecsReport
+uint8 state_next # see VecsReport
+
+# ---- interfaces/msg/VrcStateChanged.msg ----
+DiscreteVrcState current_discrete_state
+DiscreteVrcState next_discrete_state
+</code></pre>
+</details>
 <h3 id="bg-scheduledjobdatamsg-what-one-entry-holds"><code>ScheduledJobDataMsg</code>: what one entry holds</h3>
 <p><code>ScheduledJobDataMsg</code> is the scheduler's C++ alias for the ROS message <code>interfaces::msg::ScheduledJobData</code>. The response carries one per pending job, in <code>PlanResponse.scheduled_jobs</code>. (How <code>Plan()</code> builds these entries, and the internal <code>plan_ctx->scheduled_jobs</code> list it builds them from, is in <a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">section 13</a>.) Each entry answers three questions for Dispatch: <strong>which job is this and how did it go</strong> (<code>job</code>), <strong>which actions in the schedule belong to it</strong> (<code>node_indices</code>), and, for a retrieve, <strong>which action is the car arriving at the bay</strong> (<code>bay_id</code>, <code>bay_arrival_node_guid</code>).</p>
 <figure id="bg-fig-73_scheduled_job_data_uml">
@@ -932,7 +1349,7 @@ private:
       <td><code>uint32[]</code></td>
       <td><code>BuildScheduledActionsArray</code></td>
       <td>after motion planning</td>
-      <td>positions in <code>result.schedule.nodes</code> of this job's actions, ascending; empty for a failed job</td>
+      <td>positions in <code>result.schedule.nodes</code> of this job's actions, ascending; empty for a failed job. The <code>.msg</code> notes that the job's final actions would be enough (their ancestors are implied); the scheduler lists every action</td>
     </tr>
     <tr>
       <td><code>bay_id</code></td>
@@ -3930,7 +4347,7 @@ BoolStringPair Scheduler::AssignTrayIdForEmptyMove(
       <td><code>move</code></td>
       <td><code>volley::TrayMove&amp;</code></td>
       <td>The event with the blank tray id. Must already have a destination. On success its tray id is set and its destination heading may be adjusted</td>
-      <td><code>? → B21@90</code> becomes <code>T23: P23 → B21@90</code></td>
+      <td><code>? → B21@-90</code> becomes <code>T23: P23 → B21@-90</code></td>
     </tr>
     <tr>
       <td>in</td>
@@ -3955,7 +4372,7 @@ BoolStringPair Scheduler::AssignTrayIdForEmptyMove(
 <p>How it works, step by step:</p>
 <ol>
   <li><strong>Require a destination.</strong> A move with neither field set cannot be resolved: <code>{false, "Can't resolve a tray move with no tray id or dest"}</code>.</li>
-  <li><strong>Start the search at the destination.</strong> The question is “which empty tray is closest <em>to where one is needed</em>”, so the source vertex is the destination pose (<code>B21@90</code>), not any tray. The code calls this “basically the inverse OpenSpaceSearch”.</li>
+  <li><strong>Start the search at the destination.</strong> The question is “which empty tray is closest <em>to where one is needed</em>”, so the source vertex is the destination pose (<code>B21@-90</code>: B21 lists heading 90 with <code>faces_reciprocal: true</code>, so its inbound heading is −90), not any tray. The code calls this “basically the inverse OpenSpaceSearch”.</li>
   <li><strong>Ignore everything movable.</strong> <code>GetStaticFilter(TRAY, gg_, working_state, table_, all trays, all agvs, {})</code> makes every tray and AGV transparent. Only static obstacles (disabled nodes, nodes the tray footprint cannot use) block the search, so the nearest empty tray can be found even if it is buried; the main loop will clear the way afterwards.</li>
   <li><strong>Search.</strong> <code>EmptyTraySearchEnvironment(gg_, table_, working_state, cost_model_, filters)</code> treats a vertex as a goal when it holds a tray with no payload. <code>SingleSourceSearch</code> expands vertices by cost, so the first goal reached is the cheapest to reach, not necessarily the fewest hops. No goal → <code>{false, "Failed to find empty tray to move to &lt;dest>"}</code>.</li>
   <li><strong>Read the tray.</strong> <code>working_state.GetTrayOnNode(node_id_of(target))</code> → <code>move.SetTrayId(tray.id)</code>.</li>
@@ -4350,13 +4767,13 @@ if(delta->type == "AgvPoseChanged") {
 </figure>
 <p><code>bay_readiness_ratio</code> is the fraction of usable bays that should be ready for insert. <code>CalculateDesiredBaySplit</code> rounds up (it biases towards insert because arriving customers cannot be detected), clamps, and never asks for more insert-ready bays than there are empty trays. <code>ComputeBayRebalancingActions</code> first counts bays already moving towards a state (<code>WILL_BE_*</code>), then keeps bays already in a wanted state, and only then picks bays to change, in <code>bay_prioritization</code> order for insert and reverse order for retrieve. Bays left in an invalid state fall back to ready-for-retrieve.</p>
 <h3 id="bg-vecs-ev-charging">VECS (EV charging)</h3>
-<p>A VECS sits under a parking node of type <code>TYPE_EV_CHARGE</code>. Moving a tray off a VECS that is <code>CHARGING</code> first adds <code>VecsTransition CHARGING -> READY_TO_CHARGE</code>; moving onto one is refused unless it is <code>READY_TO_CHARGE</code>. <code>PlanChargePayloadJob</code> finds a VECS with <code>ResolveBlockingTrays</code> (the open-space search knows about VECS nodes) and then adds <code>READY_TO_CHARGE -> CHARGING</code>.</p>
+<p>A VECS sits on a node of type <code>TYPE_EV_CHARGE</code> (6, a node type of its own; its VECS id is the node id). Moving a tray off a VECS that is <code>CHARGING</code> first adds <code>VecsTransition CHARGING -> READY_TO_CHARGE</code>; moving onto one is refused unless it is <code>READY_TO_CHARGE</code>. <code>PlanChargePayloadJob</code> finds a VECS with <code>ResolveBlockingTrays</code> (the open-space search knows about VECS nodes) and then adds <code>READY_TO_CHARGE -> CHARGING</code>.</p>
 <h3 id="bg-vrcs-lifts-between-floors">VRCs (lifts between floors)</h3>
 <figure id="bg-fig-14_vrc_floors">
   <img src="figures/14_vrc_floors.svg" alt="VRC conceptual transfer">
   <figcaption>Conceptual VRC connecting two floors, as a side elevation. The Pecos YAML has no VRC; this shows general code-supported behaviour.</figcaption>
 </figure>
-<p>In this package VRCs are handled at the <strong>action</strong> level, after motion planning: <code>InsertVrcActionsIntoDag</code> (in <code>utils.cpp</code>) walks AGV actions in topological order, simulates the carriage floor per VRC, and inserts a <code>TYPE_VRC_COMMAND</code> <em>approach</em> when the carriage is on the wrong floor for the AGV's next action, plus a <em>move</em> command that replaces each cross-floor AGV action. Each command's duration is door close + carriage transit + door open. Consecutive cross-floor motions are first collapsed into one motion in <code>CollectAndCollapseTrajectoryMotions</code>. <code>VrcTransition</code> events and their <code>Apply</code> live in <code>planner_core</code> and were not in the snapshot.</p>
+<p>In this package VRCs are handled at the <strong>action</strong> level, after motion planning: <code>InsertVrcActionsIntoDag</code> (in <code>utils.cpp</code>) walks AGV actions in topological order, simulates the carriage floor per VRC, and inserts a <code>TYPE_VRC_COMMAND</code> <em>approach</em> when the carriage is on the wrong floor for the AGV's next action, plus a <em>move</em> command that replaces each cross-floor AGV action. Each command's duration is door close + carriage transit + door open. Consecutive cross-floor motions are first collapsed into one motion in <code>CollectAndCollapseTrajectoryMotions</code>. <code>VrcTransition</code> (in <code>planner_core</code>, <a class="ref" href="#bg-event-types-and-polymorphism">section 12</a>) exists, but the scheduler never creates one.</p>
 <h2 data-num id="bg-packages-build-system-and-dependencies">Packages, build system and dependencies</h2>
 <table>
   <thead>
@@ -4748,7 +5165,7 @@ colcon test-result --verbose
 </ul>
 <p>The three rules are not the whole story. They only order what the job methods know about. Geometric conflicts (a tray in the way, two AGVs on one node) are turned into edges later by tray and AGV assignment (sections <a class="ref" href="#bg-tray-assignment-dotrayassignments">16</a> and <a class="ref" href="#bg-agv-assignment-doagvassignments">17</a>).</p>
 <h2 data-num id="bg-known-limitations-and-reading-checkpoint">Known limitations and reading checkpoint</h2>
-<p>Limits of this guide: the search environments, <code>GetStaticFilter</code> and <code>GraphFilterProperties</code>, <code>BottleneckAssignment</code>, CHUGG, the cost model and the <code>common</code> utilities (<code>volley::Wrap</code>, footprint dimensions) live in packages that were not in the snapshots. <code>planner_core</code> (events, event DAG) and <code>common_ros</code> (garage state, layout, graphs, collision table) were. Dispatch, AGV firmware and the Pecos garage's real occupancy were not supplied. Do not infer those details from a schematic figure.</p>
+<p>Limits of this guide: the search environments, <code>GetStaticFilter</code> and <code>GraphFilterProperties</code>, <code>BottleneckAssignment</code>, CHUGG, the cost model and the <code>common</code> utilities (the code of <code>volley::Wrap</code>, footprint dimensions) live in packages that were not in the snapshots. <code>planner_core</code> (events, event DAG), <code>common_ros</code> (garage state, layout, graphs, collision table) and the <code>interfaces</code> messages were. Dispatch, AGV firmware and the Pecos garage's real occupancy were not supplied. Do not infer those details from a schematic figure.</p>
 <p>Limits of the code worth remembering: <code>GetAgvOccupiedDuration</code> returns zero; failed jobs can leave events in the DAG; any failure after expansion fails all jobs in the request; <code>Reduce()</code> placement is load-bearing; <code>UseEvChargeHeading</code> contains a hard-coded site rule.</p>
 <p><strong>Before reading <a href="#doc-proposal">02</a>, check you can answer:</strong></p>
 <ol>
@@ -4771,5 +5188,8 @@ colcon test-result --verbose
   <li><code>test/*.cpp</code>, <code>test/garage_states/double_retrieve_garage_state.yaml</code>: 72 active tests and one fixture</li>
   <li><code>CMakeLists.txt</code>, <code>package.xml</code>: targets and dependencies</li>
   <li><code>sources/repomix-scheduler.xml</code>: the snapshot all of the above was read from</li>
+  <li><code>sources/repomix-planner-core.xml</code>: <code>planner_core</code>, the event classes and the event DAG</li>
+  <li><code>sources/repomix-common-ros.xml</code>: <code>common_ros</code>, the garage state, layout, pose graph, garage graph and collision table</li>
+  <li><code>sources/repomix-interfaces.xml</code>: every <code>.msg</code> and <code>.srv</code> of <code>interfaces</code>, <code>vrc_interfaces</code>, <code>bay_interfaces</code> and <code>agv_interfaces</code></li>
   <li><code>sources/5675_pecos_combined.yaml</code>: coordinates, node metadata and edges for the Pecos figures</li>
 </ul>
