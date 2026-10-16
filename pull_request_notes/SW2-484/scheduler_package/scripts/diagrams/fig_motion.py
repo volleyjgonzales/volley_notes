@@ -277,3 +277,112 @@ def chugg_sequential():
                    "GetDependencyCompletionTime) and chugg_sequential.cpp (PlanNodeSequential, PlanEventSequential, "
                    "SetEventSafeIntervals). The table on the right is illustrative.")
     return d
+
+
+# --------------------------------------------------------------------------------------
+# 94 — trapezoid profiles, and three ways to time one straight run
+# --------------------------------------------------------------------------------------
+
+def _trap(d, v, a):
+    import math
+    return 2 * math.sqrt(d / a) if d < v * v / a else v / a + d / v
+
+
+def _profile(t0, d, v, a):
+    """Velocity profile points (t, v) of one rest-to-rest move."""
+    import math
+    if d < v * v / a:
+        tp = math.sqrt(d / a)
+        return [(t0, 0), (t0 + tp, a * tp), (t0 + 2 * tp, 0)]
+    t1 = v / a
+    T_ = _trap(d, v, a)
+    return [(t0, 0), (t0 + t1, v), (t0 + T_ - t1, v), (t0 + T_, 0)]
+
+
+@figure("94_trapezoid_runs", "Trapezoid profiles and three ways to time a run", DOC1)
+def trapezoid_runs():
+    import math
+    d = Doc("94_trapezoid_runs", "How cost_functions times a move",
+            "Left: trapezoidal and triangular velocity profiles. Right: three 2.29 m driving edges in a line with "
+            "the default parameters, timed by stopping at every node (20.3 s), as one run (11.9 s), by SIPP's "
+            "run-extension rule (11.3 s) and by cruise time only (6.9 s).")
+    # ---- left panel: the two shapes (schematic)
+    LX, LY, LW, LH = 0, 0, 380, 150
+
+    def axes(x0, y0, w, h, xl, yl):
+        d.line(x0, y0 + h, x0 + w, y0 + h, stroke=T.border, sw=1.2)
+        d.line(x0, y0, x0, y0 + h, stroke=T.border, sw=1.2)
+        d.text(x0 + w, y0 + h + 16, xl, size=10.5, fill=T.muted, anchor="end")
+        d.text(x0 - 6, y0 - 8, yl, size=10.5, fill=T.muted)
+
+    axes(LX, LY, LW, LH, "time", "speed")
+    pts = [(LX, LY + LH), (LX + 90, LY + 30), (LX + 290, LY + 30), (LX + 380, LY + LH)]
+    d.polyline(pts, stroke=T.green, sw=2.2, radius=0)
+    d.line(LX, LY + 30, LX + 380, LY + 30, stroke=T.border_soft, sw=1, dash="3 4")
+    d.text(LX + 190, LY + 18, "cruise at v", size=11, fill=T.green, anchor="middle")
+    d.text(LX + 62, LY + 104, "slope a", size=10.5, fill=T.muted)
+    d.text(LX + 190, LY + LH + 36, "d >= v*v/a :  T = v/a + d/v", size=11.5, family="mono", fill=T.fg, anchor="middle")
+    ty = LY + LH + 90
+    axes(LX, ty, LW, LH, "time", "speed")
+    tri = [(LX, ty + LH), (LX + 140, ty + 70), (LX + 280, ty + LH)]
+    d.polyline(tri, stroke=T.amber, sw=2.2, radius=0)
+    d.line(LX, ty + 30, LX + 380, ty + 30, stroke=T.border_soft, sw=1, dash="3 4")
+    d.text(LX + 300, ty + 22, "v never reached", size=11, fill=T.amber)
+    d.text(LX + 190, ty + LH + 36, "d < v*v/a :  T = 2*sqrt(d/a)", size=11.5, family="mono", fill=T.fg, anchor="middle")
+    d.text(LX, ty + LH + 70, "v²/a with defaults: drive 5.0 m, strafe 1.8 m,", size=11, fill=T.fg2)
+    d.text(LX, ty + LH + 88, "turn 0.83 rad (47°), VRC 0.32 m", size=11, fill=T.fg2)
+
+    # ---- right panel: three edges of 2.29 m
+    v, a, L = 1.0, 0.2, 2.286
+    RX, RY, RW, RH = 500, 0, 720, 210
+    TMAX, VMAX = 21.0, 1.1
+    sx = lambda t: RX + t / TMAX * RW
+    sy = lambda u: RY + RH - u / VMAX * RH
+    axes(RX, RY, RW, RH, "time [s]", "speed [m/s]")
+    for t in range(0, 19, 3):
+        d.text(sx(t), RY + RH + 14, str(t), size=10, family="mono", fill=T.muted, anchor="middle")
+    for u in (0.5, 1.0):
+        d.text(RX - 8, sy(u), f"{u:.1f}", size=10, family="mono", fill=T.muted, anchor="end")
+        d.line(RX, sy(u), RX + RW, sy(u), stroke=T.grid, sw=1)
+    # stop at every node
+    stop = []
+    t0 = 0
+    for _ in range(3):
+        stop += _profile(t0, L, v, a)
+        t0 += _trap(L, v, a)
+    d.polyline([(sx(t), sy(u)) for t, u in stop], stroke=T.red, sw=1.8, radius=0, dash="6 4")
+    # one run
+    run = _profile(0, 3 * L, v, a)
+    d.polyline([(sx(t), sy(u)) for t, u in run], stroke=T.green, sw=2.4, radius=0)
+    # node crossings on the run (TimeAtDistance)
+    def tad(s, D):
+        da = 0.5 * v * v / a
+        if s <= da:
+            return math.sqrt(2 * s / a)
+        if s <= D - da:
+            return v / a + (s - da) / v
+        return _trap(D, v, a) - math.sqrt(2 * (D - s) / a)
+    for k in (1, 2):
+        t = tad(k * L, 3 * L)
+        d.line(sx(t), sy(0), sx(t), sy(1.0) - 6, stroke=T.green, sw=1, dash="2 3")
+        d.text(sx(t), sy(1.0) - 14, f"node {k}: {t:.1f} s", size=10, fill=T.green, anchor="middle")
+    # bars: time charged by each rule
+    by = RY + RH + 50
+    bars = [("stop at every node: one trapezoid per edge (heuristic)", 3 * _trap(L, v, a), T.red),
+            ("one trapezoid over the run (ConvertPosePathToTrajectory)", _trap(3 * L, v, a), T.green),
+            ("SIPP: trapezoid for edge 1, then length / speed", _trap(L, v, a) + 2 * L / v, T.sky),
+            ("cruise time only (GetEdgeMarginalDurations)", 3 * L / v, T.violet)]
+    for i, (lab, t, col) in enumerate(bars):
+        y = by + i * 34
+        d.rect(RX, y, sx(t) - RX, 20, rx=4, fill=T.tint(col, 0.35, T.bg), stroke=col, sw=1.2)
+        d.text(sx(t) + 8, y + 10, f"{t:.1f} s", size=11, family="mono", fill=col)
+        d.text(sx(t) + 62, y + 10, lab, size=11, fill=T.fg2)
+    frame(d, title="How cost_functions times a move",
+          subtitle="Every edge, run and turn is a rest-to-rest trapezoid. Short moves never reach full speed, so the "
+                   "way edges are grouped into runs changes the estimate a lot.",
+          badge_key="as-built",
+          legend=[("box", T.green, "one run (what the AGV does)"), ("box", T.red, "stop at every node"),
+                  ("box", T.sky, "SIPP's charge"), ("box", T.violet, "admissible lower bound")],
+          footnote="Formulas from cost_functions.cpp (Trapezoid, TimeAtDistance); parameters are the MotionCostParams "
+                   "defaults (locomote 1.0 m/s, 0.2 m/s²); 2.29 m is the most common edge length in the Pecos layout.")
+    return d

@@ -1,0 +1,646 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: test/**
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+include/
+  cost_functions/
+    cost_functions.hpp
+    motion_cost_model.hpp
+    motion_run.hpp
+src/
+  cost_functions.cpp
+  motion_cost_model.cpp
+  motion_run.cpp
+CMakeLists.txt
+package.xml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="include/cost_functions/cost_functions.hpp">
+#pragma once
+
+#include <chrono>
+#include <numeric>
+#include <string>
+#include <vector>
+
+namespace volley::cost {
+
+using SecondsF = std::chrono::duration<float>;
+
+// Input for linear motion: distance_meters, max_velocity_mps, acceleration_mpss
+// Input for rotational motion: distance_radians, max_velocity_rps, acceleration_rpss
+// Output: duration in seconds for motion
+float Trapezoid(float distance, float vmax, float amax);
+
+SecondsF TrapezoidDuration(float distance, float vmax, float amax);
+
+// Returns the time elapsed in a trapezoidal/triangular profile of
+// (total_length, vmax, amax) when arclength s has been covered. The profile
+// starts and ends at rest. Used to chop a coalesced motion into per-edge
+// sub-intervals so per-node timing remains correct for collision deconfliction
+// even though the run itself is one continuous trapezoid.
+//
+// Requires 0 <= s <= total_length and amax > 0. TimeAtDistance(0, ...) == 0,
+// and TimeAtDistance(total_length, ...) == Trapezoid(total_length, ...).
+float TimeAtDistance(float s, float total_length, float vmax, float amax);
+
+struct CostEntry {
+  SecondsF duration_;        // e.g. 1.7 seconds
+  std::string explanation_;  // e.g. "turn drive wheels from LOCOMOTE to ROTATE"
+};
+
+struct CostVector {
+  std::vector<CostEntry> entries_;
+  SecondsF duration_ = SecondsF(0.0f);  // total for all entries
+
+  void push(const CostEntry& entry) {
+    duration_ += entry.duration_;
+    entries_.push_back(entry);
+  }
+  SecondsF eval() {
+    if(entries_.empty()) {
+      duration_ = SecondsF(0.0f);
+      return duration_;
+    }
+    duration_ = std::accumulate(entries_.begin(), entries_.end(), SecondsF::zero(),
+        [](SecondsF acc, const CostEntry& e) { return acc + e.duration_; });
+    return duration_;
+  }
+  SecondsF value() const { return duration_; }
+  float seconds() { return duration_.count(); }
+};
+
+}  // namespace volley::cost
+</file>
+
+<file path="include/cost_functions/motion_cost_model.hpp">
+#pragma once
+
+#include <common_ros/garage_graph.hpp>
+
+#include "cost_functions/cost_functions.hpp"
+#include "cost_functions/motion_run.hpp"
+
+namespace volley::cost {
+
+// Speed and acceleration limits for one motion mode.
+struct VelocityLimits {
+  float speed = 0.0f;  // [m/s] for linear, [rad/s] for rotation
+  // Speed applied instead of `speed` when the AGV is carrying a load. Unused for VRC transitions.
+  float loaded_speed = 0.0f;
+  float accel = 0.0f;  // [m/s^2] for linear, [rad/s^2] for rotation
+};
+
+// Durations of scheduler events that aren't graph-edge motions (open-loop seconds).
+struct EventDurations {
+  float agv_lift_up = 0.0f;
+  float agv_lift_down = 0.0f;
+  float bay_door_open = 0.0f;
+  float bay_door_close = 0.0f;
+  float bay_wait_to_open = 0.0f;
+  float vecs_transition = 0.0f;
+  // VRC gate timings — single value covers all gates on all floors.
+  float vrc_door_open = 0.0f;
+  float vrc_door_close = 0.0f;
+  // AGV time to physically reorient drive wheels when switching between LOCOMOTE / STRAFE /
+  // ROTATE motion modes. Charged once per mode change.
+  float agv_wheel_turn = 0.0f;
+};
+
+// All cost-relevant kinematic parameters consumed by the scheduler.
+//
+// The defaults match the values in launcher/params/params.yaml so unit tests that don't go
+// through the launch pipeline get reasonable (non-zero) Trapezoid inputs. Production callers
+// always read the values explicitly via SchedulerComponent.
+struct MotionCostParams {
+  VelocityLimits locomote {.speed = 1.0f, .loaded_speed = 0.8f, .accel = 0.2f};
+  VelocityLimits strafe {.speed = 0.6f, .loaded_speed = 0.32f, .accel = 0.2f};
+  VelocityLimits rotate {.speed = 0.17f, .loaded_speed = 0.136f, .accel = 0.035f};
+  VelocityLimits vrc_transit {.speed = 0.254f, .accel = 0.2f};
+  EventDurations events {
+      .agv_lift_up = 6.0f,
+      .agv_lift_down = 5.5f,
+      .bay_door_open = 4.0f,
+      .bay_door_close = 4.0f,
+      .bay_wait_to_open = 10.0f,
+      .vecs_transition = 120.0f,
+      .vrc_door_open = 3.0f,
+      .vrc_door_close = 3.0f,
+      .agv_wheel_turn = 1.5f  // 90 deg at 60 deg/s
+  };
+};
+
+// Maps a graph Transition (length + type) to a Trapezoid-profile duration.
+//
+// All Duration*-style methods come in two flavors:
+//   - the bare overload returns just the SecondsF (used inside hot search loops)
+//   - the audit overload also pushes a labeled CostEntry into a caller-supplied CostVector,
+//     producing a per-segment breakdown for committed plans / event timelines
+class MotionCostModel {
+public:
+  explicit MotionCostModel(MotionCostParams params) : params_(params) { }
+
+  const MotionCostParams& Params() const { return params_; }
+
+  SecondsF Duration(const volley::Transition& transition, bool is_agv_loaded = false) const;
+  SecondsF Duration(const volley::Transition& transition, CostVector& audit, std::string label,
+      bool is_agv_loaded = false) const;
+
+  // A run's duration is one Trapezoid over its total_length, regardless of how
+  // many graph edges it contains. This is the apples-to-apples form: a chain
+  // of N codirectional edges that the AGV blows through without stopping, or
+  // a chain of same-sign rotations on one node, costs only one accel+decel
+  // pair instead of N.
+  SecondsF Duration(const MotionRun& run, bool is_agv_loaded = false) const;
+  SecondsF Duration(
+      const MotionRun& run, CostVector& audit, std::string label, bool is_agv_loaded = false) const;
+
+  // Wheel-turn time when transitioning between two motion modes. Returns the configured
+  // `agv_wheel_turn` time when the pair is a real mode change, otherwise 0.
+  SecondsF WheelTurnDuration(volley::TransitionType prev, volley::TransitionType curr) const;
+
+  // Returns the speed/accel pair driving Trapezoid math for the given transition type.
+  // Used by run-level callers that need vmax/amax to slice a run into per-edge sub-intervals
+  // via TimeAtDistance.
+  VelocityLimits VelocityLimitsFor(volley::TransitionType type, bool is_agv_loaded = false) const;
+
+  // Pushes a fixed-duration event into the audit and returns it. Used for non-graph events
+  // (lift up/down, bay door open/close, VECS transition) so they show up in the audit alongside
+  // motion costs.
+  static SecondsF Event(SecondsF duration, CostVector& audit, std::string label);
+
+private:
+  MotionCostParams params_;
+};
+
+}  // namespace volley::cost
+</file>
+
+<file path="include/cost_functions/motion_run.hpp">
+#pragma once
+
+#include <common_ros/garage_graph.hpp>
+#include <interfaces/msg/garage_pose.hpp>
+#include <vector>
+
+namespace volley::cost {
+
+// A MotionRun is a contiguous chain of graph edges that the AGV executes as a
+// single trapezoidal motion (no stop at the intermediate nodes). All edges
+// share a TransitionType, and:
+//   - LOCOMOTE / STRAFE runs: consecutive edge displacements are codirectional.
+//   - ROTATION runs: same node, consecutive heading deltas share the same sign.
+//   - VRC_TRANSITION runs: same VRC carriage entity, same vertical direction.
+//     The carriage doesn't stop at intermediate floors, so a multi-floor ride
+//     is one trapezoid over the total z delta.
+//
+// poses[0] is the run's start; poses.back() is its end. For a run of N edges
+// poses.size() == N + 1.
+struct MotionRun {
+  std::vector<GaragePoseMsg> poses;
+  volley::TransitionType type = volley::TransitionType::LOCOMOTE;
+  double total_length = 0.0;  // [m] for linear, [rad] for rotation
+};
+
+// Walk a pose path and group consecutive edges into MotionRuns. The path must
+// have at least 2 poses and every consecutive pair must correspond to a graph
+// edge with a known Transition. Throws std::invalid_argument otherwise.
+std::vector<MotionRun> CoalesceMotionRuns(
+    const std::vector<GaragePoseMsg>& pose_path, const volley::GarageGraph& graph);
+
+}  // namespace volley::cost
+</file>
+
+<file path="src/cost_functions.cpp">
+#include "cost_functions/cost_functions.hpp"
+
+#include <cmath>
+#include <numeric>
+
+namespace volley::cost {
+
+#pragma GCC diagnostic ignored "-Wcomment"
+// velocity
+//    |
+//    |         ___________________
+//    |        /|                 |\
+// vmax -----/--.-----------------.--\-----
+//    |     /   |                 |   \
+//    |    /    |                 |    \
+//    |   /     |                 |     \
+//    |  /      |                 |      \
+//    | /       |                 |       \
+//    |/        |                 |        \
+//    +----+----+-----------------+----+----+---> time
+//    0   t1   t2                t3   t4  total
+//
+//    |<-- d1 ->|<------ d2 ----->|<-- d3 ->|
+//    |<------------- d_total -------------->|
+//
+//
+//  t1 = vmax / amax          (time to reach vmax)
+//  t4 = vmax / amax          (time to decelerate to rest)  [t4 == t1]
+//  d1 = vmax^2 / (2*amax)    (distance during accel)
+//  d3 = vmax^2 / (2*amax)    (distance during decel)       [d3 == d1]
+//  d2 = d_total - d1 - d3    (cruise distance)
+//  total_time = t1 + d2/vmax + t4
+//             = vmax/amax + d_total/vmax   [simplified]
+//
+// velocity
+//    |
+//    |        /\
+// vpeak -----/--\-----
+//    |      /    \
+//    |     /      \
+//    |    /        \
+//    |   /          \
+//    |  /            \
+//    | /              \
+//    |/                \
+//    +---------+--------+---> time
+//    0        t1      total
+//  total_time = 2 * sqrt(d/amax)    (triangle, when d < vmax^2/amax)
+//
+//  vpeak = sqrt(amax * d_total)
+//  total_time = 2 * sqrt(d_total / amax)
+
+// Input for linear motion: distance_meters, max_velocity_mps, acceleration_mpss
+// Input for rotational motion: distance_radians, max_velocity_rps, acceleration_rpss
+// Output: duration in seconds for motion
+float Trapezoid(float distance, float vmax, float amax) {
+  // Distance needed to reach vmax and stop again
+  const float d_full = (vmax * vmax) / amax;
+  if(distance < d_full) {
+    // Triangular profile: never reaches vmax
+    return 2.0f * std::sqrt(distance / amax);
+  }
+  else {
+    // Trapezoidal profile: accelerate, cruise, decelerate
+    return vmax / amax + distance / vmax;
+  }
+}
+
+SecondsF TrapezoidDuration(float distance, float vmax, float amax) {
+  return SecondsF(Trapezoid(distance, vmax, amax));
+}
+
+float TimeAtDistance(float s, float total_length, float vmax, float amax) {
+  if(s <= 0.0f) {
+    return 0.0f;
+  }
+  if(s >= total_length) {
+    return Trapezoid(total_length, vmax, amax);
+  }
+  const float d_full = (vmax * vmax) / amax;
+  if(total_length < d_full) {
+    // Triangular profile: peak at midpoint. Symmetric about d/2.
+    const float d_half = total_length / 2.0f;
+    if(s <= d_half) {
+      return std::sqrt(2.0f * s / amax);
+    }
+    const float total_time = 2.0f * std::sqrt(total_length / amax);
+    return total_time - std::sqrt(2.0f * (total_length - s) / amax);
+  }
+  // Trapezoidal profile.
+  const float d_accel = 0.5f * (vmax * vmax) / amax;
+  const float t_accel = vmax / amax;
+  if(s <= d_accel) {
+    return std::sqrt(2.0f * s / amax);
+  }
+  if(s <= total_length - d_accel) {
+    return t_accel + (s - d_accel) / vmax;
+  }
+  const float total_time = vmax / amax + total_length / vmax;
+  return total_time - std::sqrt(2.0f * (total_length - s) / amax);
+}
+
+}  // namespace volley::cost
+</file>
+
+<file path="src/motion_cost_model.cpp">
+#include "cost_functions/motion_cost_model.hpp"
+
+#include <stdexcept>
+
+#include "common_ros/garage_graph.hpp"
+#include "cost_functions/cost_functions.hpp"
+
+namespace volley::cost {
+
+SecondsF MotionCostModel::Duration(const volley::Transition& transition, bool is_agv_loaded) const {
+  const auto limits = VelocityLimitsFor(transition.type, is_agv_loaded);
+  return TrapezoidDuration(static_cast<float>(transition.length), limits.speed, limits.accel);
+}
+
+SecondsF MotionCostModel::Duration(
+    const volley::Transition& transition, CostVector& audit, std::string label, bool is_agv_loaded) const {
+  auto d = Duration(transition, is_agv_loaded);
+  audit.push({d, std::move(label)});
+  return d;
+}
+
+SecondsF MotionCostModel::Duration(const MotionRun& run, bool is_agv_loaded) const {
+  // Reuse the Transition overload by constructing a synthetic Transition that
+  // represents the whole run's length and type. The Trapezoid math then folds
+  // N edges into a single accel/cruise/decel curve.
+  return Duration(volley::Transition {run.total_length, run.type}, is_agv_loaded);
+}
+
+SecondsF MotionCostModel::Duration(
+    const MotionRun& run, CostVector& audit, std::string label, bool is_agv_loaded) const {
+  auto d = Duration(run, is_agv_loaded);
+  audit.push({d, std::move(label)});
+  return d;
+}
+
+VelocityLimits MotionCostModel::VelocityLimitsFor(volley::TransitionType type, bool is_agv_loaded) const {
+  switch(type) {
+  case volley::TransitionType::LOCOMOTE:
+    return {.speed = is_agv_loaded ? params_.locomote.loaded_speed : params_.locomote.speed,
+        .accel = params_.locomote.accel};
+  case volley::TransitionType::STRAFE:
+    return {.speed = is_agv_loaded ? params_.strafe.loaded_speed : params_.strafe.speed,
+        .accel = params_.strafe.accel};
+  case volley::TransitionType::ROTATION:
+    return {.speed = is_agv_loaded ? params_.rotate.loaded_speed : params_.rotate.speed,
+        .accel = params_.rotate.accel};
+  case volley::TransitionType::VRC_TRANSITION:
+    // No load-based speed reduction for VRC moves
+    return params_.vrc_transit;
+  }
+  throw std::invalid_argument("MotionCostModel::VelocityLimitsFor: unknown TransitionType");
+}
+
+SecondsF MotionCostModel::WheelTurnDuration(volley::TransitionType prev, volley::TransitionType curr) const {
+  using volley::TransitionType;
+  // 90 degree turn for LOCOMOTE <--> STRAFE, so apply the cost
+  // 95 degree turn LOCOMOTE <--> ROTATE, so apply the cost
+  //  5 degree turn for STRAFE <--> ROTATE, so essentially no cost (0.08s)
+  auto is_costed_transition = false;
+
+  if(prev == TransitionType::LOCOMOTE) {
+    if(curr == TransitionType::STRAFE || curr == TransitionType::ROTATION) {
+      is_costed_transition = true;
+    }
+  }
+  else if(prev == TransitionType::STRAFE || prev == TransitionType::ROTATION) {
+    if(curr == TransitionType::LOCOMOTE) {
+      is_costed_transition = true;
+    }
+  }
+
+  return is_costed_transition ? SecondsF(params_.events.agv_wheel_turn) : SecondsF(0);
+}
+
+SecondsF MotionCostModel::Event(SecondsF duration, CostVector& audit, std::string label) {
+  audit.push({duration, std::move(label)});
+  return duration;
+}
+
+}  // namespace volley::cost
+</file>
+
+<file path="src/motion_run.cpp">
+#include "cost_functions/motion_run.hpp"
+
+#include <common/geometry_utils.hpp>
+#include <common/math_utils.hpp>
+#include <common_ros/print_utils.hpp>
+#include <stdexcept>
+
+namespace volley::cost {
+
+namespace {
+
+// Displacement vector between two layout nodes referenced by a GaragePose.
+Eigen::Vector2d Displacement(
+    const GaragePoseMsg& src, const GaragePoseMsg& dst, const volley::GarageGraph& graph) {
+  auto layout = graph.GetLayout();
+  auto src_opt = layout->GetNodeById(src.node_id);
+  auto dst_opt = layout->GetNodeById(dst.node_id);
+  if(!src_opt || !dst_opt) {
+    throw std::invalid_argument("CoalesceMotionRuns: pose references node not in layout");
+  }
+  return Eigen::Vector2d {dst_opt->x - src_opt->x, dst_opt->y - src_opt->y};
+}
+
+// Returns true if extending `run` with the new edge (last_pose -> next_pose) is
+// physically continuous: same TransitionType plus codirectional motion (linear
+// runs), same-sign rotation at the same node (rotation runs), or same VRC carriage
+// going in the same vertical direction (VRC runs).
+bool ExtendsRun(const MotionRun& run, const GaragePoseMsg& next_pose, volley::TransitionType next_type,
+    const volley::GarageGraph& graph) {
+  if(run.type != next_type) {
+    return false;
+  }
+  const GaragePoseMsg& run_end = run.poses.back();
+  const GaragePoseMsg& run_prev = run.poses[run.poses.size() - 2];
+
+  if(next_type == volley::TransitionType::VRC_TRANSITION) {
+    // A VRC carriage moves continuously between floors — there's no stop at
+    // intermediate floors, so a multi-floor ride is one trapezoid (matches
+    // mock_hw_driver.cpp's Motion1D and chugg_sequential's VrcTransition timing,
+    // both of which compute one trapezoid over the full z delta). Coalesce
+    // adjacent VRC edges when both belong to the same VRC entity AND the carriage
+    // is traveling in the same vertical direction. Different VRC entities or a
+    // direction reversal force a stop, so they remain separate runs.
+    auto layout = graph.GetLayout();
+    auto run_vrc = layout->GetVrcForNodeId(run_end.node_id);
+    auto next_vrc = layout->GetVrcForNodeId(next_pose.node_id);
+    if(!run_vrc || !next_vrc || run_vrc->id != next_vrc->id) {
+      return false;
+    }
+    auto z_run_prev = layout->GetFloorZForNodeId(run_prev.node_id);
+    auto z_run_end = layout->GetFloorZForNodeId(run_end.node_id);
+    auto z_next = layout->GetFloorZForNodeId(next_pose.node_id);
+    if(!z_run_prev || !z_run_end || !z_next) {
+      return false;
+    }
+    const float prev_dz = z_run_end.value() - z_run_prev.value();
+    const float next_dz = z_next.value() - z_run_end.value();
+    if(prev_dz == 0.0f || next_dz == 0.0f) {
+      return false;
+    }
+    return (prev_dz > 0.0f) == (next_dz > 0.0f);
+  }
+
+  if(next_type == volley::TransitionType::ROTATION) {
+    // Rotations stay at the same node and must share the sign of the wrapped
+    // heading delta with the rest of the run.
+    if(run_end.node_id != next_pose.node_id) {
+      return false;
+    }
+    const int prev_delta =
+        volley::Wrap(static_cast<int>(run_end.heading) - static_cast<int>(run_prev.heading));
+    const int next_delta =
+        volley::Wrap(static_cast<int>(next_pose.heading) - static_cast<int>(run_end.heading));
+    if(prev_delta == 0 || next_delta == 0) {
+      return false;
+    }
+    return (prev_delta > 0) == (next_delta > 0);
+  }
+
+  // LOCOMOTE / STRAFE: codirectional displacement. Tolerance matches the sim's
+  // FindCollinearMotion (~0.57°): tight enough to reject right-angle changes
+  // and direction reversals, loose enough to absorb float noise.
+  const Eigen::Vector2d prev_disp = Displacement(run_prev, run_end, graph);
+  const Eigen::Vector2d next_disp = Displacement(run_end, next_pose, graph);
+  return volley::AreSameDirection(prev_disp, next_disp, 0.01);
+}
+
+}  // namespace
+
+std::vector<MotionRun> CoalesceMotionRuns(
+    const std::vector<GaragePoseMsg>& pose_path, const volley::GarageGraph& graph) {
+  std::vector<MotionRun> runs;
+  if(pose_path.size() < 2) {
+    return runs;
+  }
+
+  auto get_transition = [&](const GaragePoseMsg& a, const GaragePoseMsg& b) -> volley::Transition {
+    auto edge_opt = graph.EdgeFromPoses(a, b);
+    if(!edge_opt) {
+      throw std::invalid_argument(
+          "CoalesceMotionRuns: no edge between " + std::to_string(a) + " and " + std::to_string(b));
+    }
+    auto t_opt = graph.GetTransition(edge_opt.value());
+    if(!t_opt) {
+      throw std::invalid_argument("CoalesceMotionRuns: edge has no Transition between " + std::to_string(a) +
+                                  " and " + std::to_string(b));
+    }
+    return t_opt.value();
+  };
+
+  // Seed first run from the first edge.
+  auto first_t = get_transition(pose_path[0], pose_path[1]);
+  MotionRun current {{pose_path[0], pose_path[1]}, first_t.type, first_t.length};
+
+  for(size_t i = 2; i < pose_path.size(); ++i) {
+    const auto& next_pose = pose_path[i];
+    auto t = get_transition(pose_path[i - 1], next_pose);
+    if(ExtendsRun(current, next_pose, t.type, graph)) {
+      current.poses.push_back(next_pose);
+      current.total_length += t.length;
+    }
+    else {
+      runs.push_back(std::move(current));
+      current = MotionRun {{pose_path[i - 1], next_pose}, t.type, t.length};
+    }
+  }
+  runs.push_back(std::move(current));
+  return runs;
+}
+
+}  // namespace volley::cost
+</file>
+
+<file path="CMakeLists.txt">
+cmake_minimum_required(VERSION 3.28)
+project(cost_functions)
+
+find_package(volley_cmake REQUIRED)
+volley_package()
+
+volley_add_library(${PROJECT_NAME} SHARED src/cost_functions.cpp)
+
+# MotionCostModel is its own shared library so consumers that only need the pure math
+# (Trapezoid, CostVector) don't transitively pick up common_ros. MotionRun lives
+# alongside since it also depends on common_ros (GarageGraph + Layout).
+volley_add_library(
+  motion_cost_model
+  SHARED
+  src/motion_cost_model.cpp
+  src/motion_run.cpp
+  LINK_LIBRARIES
+    ${PROJECT_NAME}
+)
+
+if(BUILD_TESTING)
+  volley_add_gtest(${PROJECT_NAME}_tests test/cost_functions_tests.cpp LINK_LIBRARIES ${PROJECT_NAME})
+
+  volley_add_gtest(
+    motion_run_tests
+    test/motion_run_tests.cpp
+    LINK_LIBRARIES
+      motion_cost_model
+      ${PROJECT_NAME}
+  )
+
+  # VRC-bearing test layout. Lives here because motion_run + coalesce_trajectory +
+  # SIPP all need a layout with multiple VRCs to verify same-carriage / same-
+  # direction coalescing rules; common_ros itself doesn't run any VRC tests.
+  install(FILES test/test_vrc_layout.yaml DESTINATION share/${PROJECT_NAME}/test)
+endif()
+
+volley_ament_auto_package()
+</file>
+
+<file path="package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cost_functions</name>
+  <version>0.2.0</version>
+  <description>Single source of truth for all cost and duration estimates used in motion planning and simulation</description>
+  <maintainer email="dev@volleyautomation.com">dev</maintainer>
+  <license>proprietary</license>
+
+  <buildtool_depend>volley_cmake</buildtool_depend>
+
+  <depend>common</depend>
+  <depend>common_ros</depend>
+  <depend>eigen</depend>
+  <depend>interfaces</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_index_cpp</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+</file>
+
+</files>

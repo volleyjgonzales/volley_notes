@@ -289,58 +289,39 @@ cpp:
     file: include/motion_planner/static_graph_filtering.hpp
     parts: ["GraphFilterProperties GetStaticFilter(", "std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetAllStaticFilters(", "std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetDisabledEntitiesFilters("]
 
-  # ---- cost_functions and the shared utility library (common/types.hpp, stdx) are still NOT in the
-  # snapshots. These sketches are reconstructed from call sites (scheduler and motion_planner), so they
-  # show only members seen in use. Replace each with an extract once the headers are supplied.
+  # ---- cost_functions (sources/repomix-cost-functions.xml)
   - names: [MotionCostModel, "cost::MotionCostModel", "volley::cost::MotionCostModel", "const cost::MotionCostModel&"]
-    file: "cost_functions/motion_cost_model.hpp (not supplied)"
-    note: "Not in the snapshots; reconstructed from call sites in scheduler.cpp and motion_planner (Params, Duration, Event, VelocityLimitsFor)."
-    sketch: |
-      namespace volley::cost {
-      class MotionCostModel {
-      public:
-        explicit MotionCostModel(MotionCostParams params);   // built from SchedulerParams::motion_cost
-        const MotionCostParams& Params() const;              // e.g. Params().events.agv_lift_up
-        SecondsF Duration(const Transition& t) const;        // trapezoid time of one edge (GetEdgeDurations)
-        SecondsF Duration(const Transition& t, CostVector& audit, std::string label) const;
-        /* {speed, accel} */ VelocityLimitsFor(TransitionType type, bool is_agv_loaded) const;
-        static void Event(SecondsF seconds, CostVector& audit, std::string label);  // audit row
-      };
-      using SecondsF = std::chrono::duration<float>;         // cost::SecondsF(lift_seconds)
-      }
+    from: cost-functions
+    file: include/cost_functions/motion_cost_model.hpp
+    parts: ["class MotionCostModel {"]
   - names: [MotionCostParams, "cost::MotionCostParams", "volley::cost::MotionCostParams"]
-    file: "cost_functions/motion_cost_model.hpp (not supplied)"
-    note: "Field names are exact (from ReadParams in scheduler_component.cpp); the nested struct names and the units are inferred from the ROS parameter names."
-    sketch: |
-      namespace volley::cost {
-      struct MotionCostParams {
-        struct Profile { float speed, loaded_speed, accel; };      // trapezoid: accelerate, cruise, brake
-        Profile locomote;   // agv.performance_limits.locomote.{speed,loaded_speed,accel}  drive along heading
-        Profile strafe;     // agv.performance_limits.strafe.*                              sideways
-        Profile rotate;     // agv.performance_limits.rotate.*                              turn in place
-        struct { float speed, accel; } vrc_transit;   // vrc.performance_limits.transit.{speed,accel}
-        struct {                                      // fixed durations, seconds
-          float agv_lift_up, agv_lift_down;           // agv.lift.{up,down}_time
-          float bay_door_open, bay_door_close;        // bay.door.{open,close}_time
-          float bay_wait_to_open;                     // bay.door.wait_to_open_time
-          float vecs_transition;                      // vecs.transition_time
-          float vrc_door_open, vrc_door_close;        // vrc.door.{open,close}_time
-          float agv_wheel_turn;                       // agv.wheel_turn_time
-        } events;
-      };
-      }
-  - names: [CostVector, "cost::CostVector", "cost::CostVector*"]
-    file: "cost_functions (not supplied)"
-    note: "Not in the snapshots; reconstructed from the cost-audit code in Scheduler::PlanMotions and Chugg::SolveSequential."
-    sketch: |
-      namespace volley::cost {
-      struct CostVector {
-        struct Entry { SecondsF duration_; std::string explanation_; };
-        std::vector<Entry> entries_;      // one per segment: AGV motion, wheel-turn gap, bay door, VECS, VRC, lift
-        void eval();                      // computes the total
-        SecondsF value() const;           // the total, after eval()
-      };
-      }
+    from: cost-functions
+    file: include/cost_functions/motion_cost_model.hpp
+    parts: ["struct MotionCostParams {", "struct VelocityLimits {", "struct EventDurations {"]
+  - names: [VelocityLimits, "cost::VelocityLimits"]
+    from: cost-functions
+    file: include/cost_functions/motion_cost_model.hpp
+    parts: ["struct VelocityLimits {"]
+  - names: [EventDurations, "cost::EventDurations"]
+    from: cost-functions
+    file: include/cost_functions/motion_cost_model.hpp
+    parts: ["struct EventDurations {"]
+  - names: [CostVector, "cost::CostVector", "cost::CostVector*", CostEntry, "cost::CostEntry"]
+    from: cost-functions
+    file: include/cost_functions/cost_functions.hpp
+    parts: ["struct CostEntry {", "struct CostVector {"]
+  - names: [Trapezoid, "cost::Trapezoid", TrapezoidDuration, TimeAtDistance, "cost::TimeAtDistance", SecondsF, "cost::SecondsF"]
+    title: "Trapezoid, TimeAtDistance"
+    from: cost-functions
+    file: include/cost_functions/cost_functions.hpp
+    parts: ["using SecondsF", "float Trapezoid(", "SecondsF TrapezoidDuration(", "float TimeAtDistance("]
+  - names: [MotionRun, "cost::MotionRun", CoalesceMotionRuns, "cost::CoalesceMotionRuns"]
+    from: cost-functions
+    file: include/cost_functions/motion_run.hpp
+    parts: ["struct MotionRun {", "std::vector<MotionRun> CoalesceMotionRuns("]
+
+  # ---- the shared utility library (common/types.hpp, stdx) is still NOT in the snapshots. These
+  # sketches are reconstructed from call sites, so they show only what is seen in use.
   - names: [BoolStringPair]
     file: "shared utility library (not supplied)"
     note: "Inferred from use: every Plan* helper returns std::make_pair(bool, std::string)."

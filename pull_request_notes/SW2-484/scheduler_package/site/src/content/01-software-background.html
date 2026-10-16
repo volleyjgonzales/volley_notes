@@ -5045,19 +5045,20 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
   <li><strong>The table.</strong> Each <code>SippAgv</code> owns a <code>SafeIntervalTable</code>: for each (footprint type, vertex) and (footprint type, edge), an <code>IntervalSet</code> of safe times. A missing entry means “always safe”. <code>AddDeconflictConstraints(motion)</code> asks the collision table which poses and edges conflict with that motion's footprint and carves the motion's interval out of each, for every footprint this AGV will use.</li>
   <li><strong>The state.</strong> <code>SippState</code> holds the source and target vertex (equal when waiting), the time interval of the move or wait, the index of the goal being worked on, and the number of steps so far.</li>
   <li><strong>Neighbors.</strong> From a state, each out-edge whose target fits the footprint and is enabled by the static filters is tried. If the edge and its target are safe now, the move is a neighbor; otherwise a wait-then-move neighbor is added for the next safe window. Waits are not chained.</li>
-  <li><strong>Edge time.</strong> A move from rest pays the full trapezoid time from <code>edge_durations</code>. A move that continues the previous one in the same direction (same-direction locomote or strafe, same-sign rotation at a node, same-direction VRC ride) pays only cruise time, <code>length / speed</code> (the “run-extension” cost, “Ring 3b” in the comments). Switching between locomote, strafe and rotate adds <code>agv_wheel_turn</code> seconds before the move.</li>
+  <li><strong>Edge time.</strong> A move from rest pays the full trapezoid time from <code>edge_durations</code> (<a href="#bg-the-cost-model">the cost model</a>). A move that continues the previous one in the same direction (same-direction locomote or strafe, same-sign rotation at a node, same-direction VRC ride) pays only cruise time, <code>length / speed</code> (the “run-extension” cost, “Ring 3b” in the comments); this is exact only when the run's first edge reached full speed. Any change among locomote, strafe and rotate adds <code>agv_wheel_turn</code> seconds before the move.</li>
   <li><strong>Goals.</strong> An arrival goal is met only if the AGV can stay at the target <em>forever</em> afterwards (the comment explains: otherwise an AGV could “complete” a goal by parking in the path of an already planned event). A lift is a wait goal of <code>agv_lift_up</code> or <code>agv_lift_down</code> seconds.</li>
   <li><strong>Search cost is not travel time.</strong> Each step costs its duration plus wheel-turn time plus 3 s × (steps so far) (<code>kMagicPredecessorCost</code>). The extra term grows with path length, so A* prefers short paths in steps even when they arrive later. The heuristic sums all-pairs travel times over the remaining goals.</li>
   <li><strong>A* engine.</strong> <code>SingleSourceSearch</code> is a generic A* with a Fibonacci-heap open list and a closed set, capped at 5,000,000 expansions (<code>kMaxExpansions</code>). Every other search in this package uses the same function.</li>
 </ul>
 <h3 id="bg-what-can-be-configured">What can be configured</h3>
 <p><strong>Two solvers, one usable.</strong> <code>Chugg</code> has <code>SolveSequential</code> and <code>SolveCbs</code>. <code>SolveCbs</code> plans sequentially first, then returns <code>std::nullopt</code> on any collision; the branching code after that point is unreachable, only handles AGV-against-AGV conflicts, and never re-plans its branches (“TODO (mark): remove this when cbs is done”). No parameter selects between them; <code>PlanMotions</code> calls <code>SolveSequential</code>.</p>
-<p><strong>ROS parameters.</strong> <code>SchedulerComponent</code> reads these into <code>SchedulerParams</code>; the motion ones go through <code>ReadParams</code> into <code>cost::MotionCostParams</code> and from there into the <code>cost::MotionCostModel</code> that CHUGG and the single-agent searches use. Event times are seconds (they are wrapped in <code>cost::SecondsF</code>); speed and acceleration units are defined in <code>cost_functions</code>, which is not in the snapshots.</p>
+<p><strong>ROS parameters.</strong> <code>SchedulerComponent</code> reads these into <code>SchedulerParams</code>; the motion ones go through <code>ReadParams</code> into <code>cost::MotionCostParams</code> and from there into the <code>cost::MotionCostModel</code> that CHUGG and the single-agent searches use. Linear speeds are m/s and accelerations m/s²; rotation uses rad/s and rad/s²; event times are seconds. The defaults are the struct's initialisers, which its comment says “match the values in launcher/params/params.yaml” (that file is not in the snapshots, so a site may override them).</p>
 <table>
   <thead>
     <tr>
       <th>ROS parameter</th>
       <th>Field</th>
+      <th>Default</th>
       <th>Used for</th>
     </tr>
   </thead>
@@ -5065,61 +5066,72 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
     <tr>
       <td><code>agv.performance_limits.locomote.{speed, loaded_speed, accel}</code></td>
       <td><code>motion_cost.locomote</code></td>
-      <td>Driving along the heading (<code>LOCOMOTE</code> edges). Speed and acceleration give the trapezoid edge time; <code>speed</code> alone gives the run-extension time.</td>
+      <td>1.0 / 0.8 m/s, 0.2 m/s²</td>
+      <td>Driving along the heading (<code>LOCOMOTE</code> edges)</td>
     </tr>
     <tr>
       <td><code>agv.performance_limits.strafe.*</code></td>
       <td><code>motion_cost.strafe</code></td>
+      <td>0.6 / 0.32 m/s, 0.2 m/s²</td>
       <td>Sideways moves (<code>STRAFE</code> edges)</td>
     </tr>
     <tr>
       <td><code>agv.performance_limits.rotate.*</code></td>
       <td><code>motion_cost.rotate</code></td>
+      <td>0.17 / 0.136 rad/s (about 9.7° / 7.8° per s), 0.035 rad/s²</td>
       <td>Turning in place (<code>ROTATION</code> edges)</td>
     </tr>
     <tr>
       <td><code>vrc.performance_limits.transit.{speed, accel}</code></td>
       <td><code>motion_cost.vrc_transit</code></td>
+      <td>0.254 m/s, 0.2 m/s² (no loaded speed)</td>
       <td>Riding a VRC between floors (<code>VRC_TRANSITION</code> edges)</td>
     </tr>
     <tr>
       <td><code>agv.lift.up_time</code>, <code>agv.lift.down_time</code></td>
       <td><code>motion_cost.events.agv_lift_up</code>, <code>agv_lift_down</code></td>
+      <td>6.0 s, 5.5 s</td>
       <td>SIPP wait goals for lifts; also AGV assignment costs</td>
     </tr>
     <tr>
       <td><code>bay.door.close_time</code></td>
       <td><code>motion_cost.events.bay_door_close</code></td>
+      <td>4.0 s</td>
       <td><code>COMMAND_TYPE_TRANSITION_TO_INSERT</code></td>
     </tr>
     <tr>
       <td><code>bay.door.open_time</code> + <code>bay.door.wait_to_open_time</code></td>
       <td><code>bay_door_open</code> + <code>bay_wait_to_open</code></td>
+      <td>4.0 s + 10.0 s</td>
       <td><code>COMMAND_TYPE_TRANSITION_TO_RETRIEVE</code> (the two are added)</td>
     </tr>
     <tr>
       <td><code>vecs.transition_time</code></td>
       <td><code>motion_cost.events.vecs_transition</code></td>
+      <td>120 s</td>
       <td>Start / stop charging</td>
     </tr>
     <tr>
       <td><code>vrc.door.open_time</code>, <code>close_time</code></td>
       <td><code>motion_cost.events.vrc_door_*</code></td>
+      <td>3.0 s each</td>
       <td>Only in the unused VRC event handler and <code>InsertVrcActionsIntoDag</code></td>
     </tr>
     <tr>
       <td><code>agv.wheel_turn_time</code></td>
       <td><code>motion_cost.events.agv_wheel_turn</code></td>
-      <td>Delay whenever an AGV switches between locomote, strafe and rotate</td>
+      <td>1.5 s (“90 deg at 60 deg/s”)</td>
+      <td>Delay when an AGV changes drive mode (three different rules, <a href="#bg-the-cost-model">see the cost model</a>)</td>
     </tr>
     <tr>
-      <td><code>scheduler.cost_audit</code> (default <code>true</code>)</td>
+      <td><code>scheduler.cost_audit</code></td>
       <td><code>SchedulerParams::cost_audit</code></td>
+      <td><code>true</code></td>
       <td>Pass a <code>cost::CostVector</code> to <code>SolveSequential</code>, which records one row per AGV motion, wheel-turn gap, bay door, VECS and VRC event; logged as CSV. Does not change the plan.</td>
     </tr>
   </tbody>
 </table>
-<p><strong>Loaded speeds and CHUGG.</strong> As far as the code shows, CHUGG times every AGV move at unloaded speed: <code>GetEdgeDurations</code> calls <code>cost_model.Duration(transition)</code> without a load flag, and the run-extension cost uses <code>speed</code>, not <code>loaded_speed</code>. Only the single-agent helpers (<code>ConvertPosePathToTrajectory(..., is_agv_loaded)</code>) take the load into account. Worth confirming in <code>cost_functions</code>; if true, loaded moves are planned faster than they run, and the ADG's ordering, not the timing, is what keeps execution safe.</p>
+<p><strong>Loaded speeds.</strong> CHUGG never uses <code>loaded_speed</code>; every planned move is timed as if the AGV were empty (<a href="#bg-the-cost-model">the cost model</a> below quantifies this).</p>
 <p><code>scheduler.bay_readiness_ratio</code> and <code>layout</code> are read in the same place but are not motion settings: the first feeds bay rebalancing, the second selects the layout file that <code>gg_</code> and <code>table_</code> are built from.</p>
 <p><strong>Fixed in code.</strong> These values change plans but are not parameters:</p>
 <table>
@@ -5160,10 +5172,130 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
 </table>
 <p><strong>Choices made in <code>PlanMotions</code>.</strong></p>
 <ul>
-  <li><strong>The heuristic.</strong> <code>GetAllPairsMinCost</code> (Floyd–Warshall, cubic in the number of vertices, recomputed on every <code>Plan()</code> call) over the full trapezoid edge times. Because a run of edges costs less than the sum of their trapezoids, this can overestimate, so SIPP may return paths that are not the fastest. The admissible alternative, <code>GetEdgeMarginalDurations</code> (cruise time only), exists but is “too loose”, which makes the search slow.</li>
+  <li><strong>The heuristic.</strong> <code>GetAllPairsMinCost</code> (Floyd–Warshall, cubic in the number of vertices, recomputed on every <code>Plan()</code> call) over the full trapezoid edge times. Because a run of edges costs less than the sum of their trapezoids, this overestimates (20.3 s instead of 11.9 s for three short edges in a line), so SIPP may return paths that are not the fastest. The admissible alternative, <code>GetEdgeMarginalDurations</code> (cruise time only, 6.9 s for the same run), exists but is “too loose”, which makes the search slow.</li>
   <li><strong>The start state.</strong> Everything stands still until <code>ctx->start_time</code>. Actions still running from an earlier plan are not in the timeline; instead <code>Plan()</code> disables the AGVs, bays, VECS and nodes that <code>base_schedule</code> uses (doc 05, <a class="ref" href="#ad-persistent-planning-base-schedule-and-the-split">section 7.5</a>), so CHUGG treats them as static obstacles.</li>
   <li><strong>The event DAG's shape.</strong> The order CHUGG plans in comes from the DAG, so node-arrival edges, path repair and <code>Reduce()</code> are, in effect, how the scheduler steers the planner.</li>
 </ul>
+<h3 id="bg-the-cost-model">The cost model: how long a move takes</h3>
+<p>Every duration in the planner comes from <code>cost_functions</code>, which calls itself the “single source of truth for all cost and duration estimates used in motion planning and simulation”. The basic unit is a <strong>trapezoidal velocity profile</strong>: start at rest, accelerate at <span class="math">a</span> up to speed <span class="math">v</span>, cruise, decelerate to rest. Covering a distance <span class="math">d</span> (metres, or radians for a turn) takes</p>
+<div class="math">T(d) = \frac{v}{a} + \frac{d}{v} \quad \text{if } d \ge \frac{v^2}{a}, \qquad T(d) = 2\sqrt{\frac{d}{a}} \quad \text{otherwise (a triangle: } v \text{ is never reached)}</div>
+<p>(<code>Trapezoid(distance, vmax, amax)</code>). The threshold <span class="math">v^2/a</span> is the distance needed to reach full speed and stop again. With the default parameters it is 5.0 m for driving, 1.8 m for strafing, 0.83 rad (47°) for turning and 0.32 m for a VRC. The most common edge in the Pecos layout is 2.29 m long, so <strong>a single driving edge never reaches full speed</strong>: its time is set by acceleration alone.</p>
+<figure id="bg-fig-94_trapezoid_runs">
+  <img src="figures/94_trapezoid_runs.svg" alt="Trapezoid profiles and three ways to time a run">
+  <figcaption>Left: the two profile shapes. Right: three 2.29 m driving edges in a straight line, timed three ways with the default parameters. Stopping at every node (the heuristic's assumption) takes 20.3 s; one trapezoid over the whole run (what the AGV does, and what <code>ConvertPosePathToTrajectory</code> computes) takes 11.9 s; SIPP's run-extension rule charges 11.3 s, slightly too little, because after a triangular first edge the AGV is not yet at full speed.</figcaption>
+</figure>
+<p><strong>Example durations</strong> (defaults, from <code>T(d)</code> above):</p>
+<table>
+  <thead>
+    <tr>
+      <th>Move</th>
+      <th>Empty</th>
+      <th>Loaded</th>
+      <th>Profile</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Drive 2.29 m (one short edge)</td>
+      <td>6.8 s</td>
+      <td>6.8 s</td>
+      <td>triangle: the loaded speed limit is never reached</td>
+    </tr>
+    <tr>
+      <td>Drive 5.79 m (one long edge)</td>
+      <td>10.8 s</td>
+      <td>11.2 s</td>
+      <td>trapezoid</td>
+    </tr>
+    <tr>
+      <td>Strafe 2.29 m</td>
+      <td>6.8 s</td>
+      <td>8.7 s</td>
+      <td>trapezoid</td>
+    </tr>
+    <tr>
+      <td>Turn 90°</td>
+      <td>14.1 s</td>
+      <td>15.4 s</td>
+      <td>trapezoid</td>
+    </tr>
+    <tr>
+      <td>Turn 180°</td>
+      <td>23.3 s</td>
+      <td>27.0 s</td>
+      <td>trapezoid</td>
+    </tr>
+    <tr>
+      <td>Lift up / down, change drive mode</td>
+      <td colspan="2">6.0 s / 5.5 s, 1.5 s</td>
+      <td>fixed</td>
+    </tr>
+  </tbody>
+</table>
+<p>Turning is slow: a 90° turn takes about as long as driving 9 m. That is why the SIPP step penalty and the wheel-turn delay both push the planner towards paths with fewer, straighter moves.</p>
+<p><strong>Runs.</strong> <code>CoalesceMotionRuns</code> groups consecutive edges of one path into <code>MotionRun</code>s that the AGV executes without stopping: same transition type and same direction (driving or strafing within about 0.6°), same-sign rotation at one node, or the same VRC moving in the same vertical direction. A run is timed as one trapezoid over its total length, and <code>TimeAtDistance</code> slices that time back into per-edge intervals so collision checks at intermediate nodes stay exact.</p>
+<p><strong>Three estimates of the same path.</strong> The same physics is approximated differently in three places:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Where</th>
+      <th>Rule</th>
+      <th>Three 2.29 m edges</th>
+      <th>Consequence</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>GetEdgeDurations</code> → <code>GetAllPairsMinCost</code> (SIPP's heuristic)</td>
+      <td>one full trapezoid per edge, as if stopping at every node</td>
+      <td>20.3 s</td>
+      <td>overestimates straight runs (by 70 % here, more for longer runs): the heuristic is inadmissible, so SIPP can return paths that are not the fastest</td>
+    </tr>
+    <tr>
+      <td>SIPP's edge cost (“Ring 3b”)</td>
+      <td>full trapezoid for an edge from rest, <code>length / speed</code> for an edge that continues a run</td>
+      <td>11.3 s</td>
+      <td>exact when the first edge reaches full speed; slightly short when it does not, which is the common case for driving here</td>
+    </tr>
+    <tr>
+      <td><code>ConvertPosePathToTrajectory</code></td>
+      <td>one trapezoid per <code>MotionRun</code>, sliced with <code>TimeAtDistance</code></td>
+      <td>11.9 s</td>
+      <td>matches the motion profile; used for AGV assignment costs</td>
+    </tr>
+    <tr>
+      <td><code>GetEdgeMarginalDurations</code> (unused alternative)</td>
+      <td><code>length / speed</code> for every edge</td>
+      <td>6.9 s</td>
+      <td>never overestimates, but is too far below the truth to guide the search well</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Loaded speeds are not used by CHUGG.</strong> <code>MotionCostModel::Duration(transition, is_agv_loaded = false)</code> defaults to empty, and <code>GetEdgeDurations</code> does not pass the flag; SIPP's run-extension cost also reads <code>speed</code>, never <code>loaded_speed</code>. So every move in the plan is timed as if the AGV were empty. From the table above, a loaded strafe takes 28 % longer than planned and a loaded 180° turn 16 % longer; short driving edges are unaffected because they never reach either speed limit. Only <code>ConvertPosePathToTrajectory(..., is_agv_loaded)</code> uses the loaded speeds. Execution stays safe because the ADG keeps the order, not the times (doc 05), but the plan's timing, and with it which of two conflicting AGVs SIPP lets go first, is based on optimistic durations.</p>
+<p><strong>Three wheel-turn rules.</strong> The drive wheels must be reoriented when an AGV changes between driving, strafing and turning, and the code charges for it in three different ways:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Where</th>
+      <th>Charged on</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>SippEnvironment</code> (CHUGG)</td>
+      <td>any change among locomote, strafe and rotate</td>
+    </tr>
+    <tr>
+      <td><code>MotionCostModel::WheelTurnDuration</code></td>
+      <td>only changes to or from locomote; strafe ↔ rotate is free (“5 degree turn … essentially no cost”). Not called by any code in the snapshots.</td>
+    </tr>
+    <tr>
+      <td><code>ConvertPosePathToTrajectory</code> (assignment costs)</td>
+      <td>never</td>
+    </tr>
+  </tbody>
+</table>
+<p>So CHUGG charges 1.5 s for a strafe-then-turn that the cost model says is free, and the assignment stage ignores wheel turns entirely. Each difference is small, but they add up along paths with many mode changes, and they make the assignment cost and CHUGG's timing disagree in a consistent direction. A refactor that moves cost estimation behind one interface would be the natural place to pick one rule.</p>
 <h3 id="bg-the-motion-planner-toolbox">The rest of the motion_planner toolbox</h3>
 <p>CHUGG is the only <em>multi-agent</em> planner, and it runs once, at the end. Earlier stages call single-agent searches from the same package to cost and check moves while the event DAG is being built. They ignore everyone else's timing and only see static obstacles through filters. All of them run on <code>SingleSourceSearch</code>; the <em>environment</em> object supplies neighbors, costs, a heuristic and the stopping test.</p>
 <table>
@@ -5182,7 +5314,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
     </tr>
     <tr>
       <td><code>GetPosePath</code> + <code>ConvertPosePathToTrajectory</code></td>
-      <td>Fastest pose path for one AGV over the static graph (Dijkstra: zero heuristic, <code>GarageGraphEnvironment</code>), then its duration with trapezoids per run of same-direction edges, loaded or not</td>
+      <td>Fastest pose path for one AGV over the static graph (Dijkstra: zero heuristic, <code>GarageGraphEnvironment</code>), then its duration with one trapezoid per run of same-direction edges, loaded or not, without wheel-turn time</td>
       <td><code>GetPosePath</code>: <code>GetJustMovingCost</code> (AGV assignment costs), <code>IsMovePossible</code> (sanity check), <code>MoveAgvToTrayPose</code>, <code>TryClearBlockedAgvMove</code>. <code>ConvertPosePathToTrajectory</code>: <code>GetJustMovingCost</code> only</td>
     </tr>
     <tr>
@@ -5286,7 +5418,7 @@ cont_state.SetTrajectory(volley::AgvId(2u), a2_traj);
 auto [action_nodes_opt, message] = scheduler.ResponseFromTrajectories(ctx, cont_state);
 </code></pre>
 <p>Two details worth knowing. The test's comment calls the fourth argument <code>JobId</code>, but everywhere in CHUGG and the response code it is the event's vertex in the event DAG; with one event per job in this test the two coincide. And because a <code>Motion</code> stores the footprint (<code>GetCollisionId()</code>), the response code can tell a loaded AGV from an empty one without replaying the discrete state.</p>
-<p><strong>Still reconstructed.</strong> <code>cost_functions</code> (<code>MotionCostModel</code>, <code>MotionCostParams</code>, <code>CostVector</code>) and the shared utility code (<code>stdx</code>, <code>BoolStringPair</code>) are not in the snapshots; their hover windows show sketches from call sites, marked as such.</p>
+<p><strong>Still reconstructed.</strong> The shared utility code (<code>stdx</code>, <code>BoolStringPair</code>, <code>common/types.hpp</code>) is not in the snapshots; those hover windows show sketches from call sites, marked as such.</p>
 <h3 id="bg-from-trajectories-to-the-response">From trajectories to the response</h3>
 <p>The action DAG built here is an <em>action dependency graph</em>. Doc 05 explains the idea from scratch: the construction rule, why executing it is safe, how timing works on it, and how this code relates to the textbook version (<a class="ref" href="#ad-the-adg-in-our-software">section 7</a> there).</p>
 <p><code>ResponseFromTrajectories(ctx, final_state)</code> then turns trajectories into the wire format:</p>
