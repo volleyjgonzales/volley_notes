@@ -66,9 +66,9 @@
   </tbody>
 </table>
 <h2 data-num id="pr-ticket-and-scope">Ticket and scope</h2>
-<p><strong>Parent Jira initiative:</strong> <strong>Scheduler Core Refactor</strong> (parent key not given in the supplied ticket text). <strong>Specific tasks:</strong> <a href="https://volleyautomation.atlassian.net/browse/SW2-484">SW2-484</a> (tray solver interface, in progress), <a href="https://volleyautomation.atlassian.net/browse/SW2-769">SW2-769</a> (scheduler package reorganization, marked done) and <a href="https://volleyautomation.atlassian.net/browse/SW2-487">SW2-487</a> (tray benchmark set, To Do). The links follow the usual Jira URL pattern; the base domain and current status have not been verified. Related keys reported by the user: SW2-677, SW2-652, SW2-593, SW2-488, SW2-496, SW2-514, SW2-663, SW2-18, SW2-686, SW2-776 and SW2-905. <strong>Do not assume all of them block the refactor.</strong></p>
+<p><strong>Parent Jira initiative:</strong> <strong>Scheduler Core Refactor</strong> (parent key to be confirmed). <strong>Specific tasks:</strong> <a href="https://volleyautomation.atlassian.net/browse/SW2-484">SW2-484</a> (tray solver interface, in progress), <a href="https://volleyautomation.atlassian.net/browse/SW2-769">SW2-769</a> (scheduler package reorganization, marked done) and <a href="https://volleyautomation.atlassian.net/browse/SW2-487">SW2-487</a> (tray benchmark set, To Do). The links follow the usual Jira URL pattern; the base domain and current status have not been verified. Related keys: SW2-677, SW2-652, SW2-593, SW2-488, SW2-496, SW2-514, SW2-663, SW2-18, SW2-686, SW2-776 and SW2-905. <strong>Do not assume all of them block the refactor.</strong></p>
 <p><strong>Objective:</strong> move tray-move planning and AGV assignment out of large <code>Scheduler</code> methods and behind generic, swappable interfaces. Default implementations must reproduce current behaviour, and each solver needs at least <strong>10 real-customer-layout scenarios</strong> with recorded baseline performance. <strong>Out of scope:</strong> changes to CHUGG/SIPP motion planning, a new optimal solver, and adding to active schedules.</p>
-<p><strong>Definition of Done:</strong> two generic interfaces; two behaviour-equivalent default implementations; 10+ site-based benchmark scenarios per solver with saved baselines; every <code>Scheduler</code> assignment call site routed through the interfaces; old code paths removed. Source: user-provided Jira text, October 2026. This describes the intended state, not the code today.</p>
+<p><strong>Definition of Done:</strong> two generic interfaces; two behaviour-equivalent default implementations; 10+ site-based benchmark scenarios per solver with saved baselines; every <code>Scheduler</code> assignment call site routed through the interfaces; old code paths removed. Source: Jira ticket text, October 2026. This describes the intended state, not the code today.</p>
 <h2 data-num id="pr-the-pipeline-the-refactor-works-on">The pipeline the refactor works on</h2>
 <p><code>Scheduler::Plan()</code> is a pipeline of five stages (doc 01, <a class="ref" href="#bg-fig-01_pipeline">Figure 1</a> there). The ticket's two algorithms are two of them. The other three matter for the refactor because the code layout should follow the stages, and because each stage boundary is a natural interface: every stage hands the next one a data structure, not a call into its internals.</p>
 <table>
@@ -329,34 +329,30 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
   <figcaption><strong>Stage folders vs stage packages.</strong> Option 1 (top) keeps one <code>scheduler</code> package with one folder per stage and a shared <code>core/</code>. Option 2 (bottom) makes the stages packages: stage 4 already is one (<code>motion_planner</code>); <code>task_planning</code> needs a new <code>scheduler_core</code> package for <code>PlanContext</code> and <code>GarageServices</code>; <code>action_graph</code> needs nothing new once its inputs are narrowed. This is a proposal, not existing code.</figcaption>
 </figure>
 <h3 data-num id="pr-stage-names">Stage names</h3>
-<p>The folder names should say what each stage produces, using the field's standard terms (doc 01, <a href="#bg-how-to-think-about-the-scheduler">How to think about the scheduler</a>):</p>
+<p>The folder names say what each stage produces, using the field's standard terms (doc 01, <a href="#bg-how-to-think-about-the-scheduler">How to think about the scheduler</a>):</p>
 <table>
   <thead>
     <tr>
       <th>Stages</th>
-      <th>Suggested in the request</th>
-      <th>Recommended</th>
+      <th>Folder</th>
       <th>Why</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>1–3</td>
-      <td><code>task_assignment</code></td>
       <td><code>task_planning</code></td>
-      <td>Stages 1–3 do more than assignment: job expansion <em>decomposes</em> jobs into events and adds blocker moves (rearrangement), and only stages 2–3 <em>allocate</em> trays and AGVs. "Task planning" is the usual name for decomposition plus allocation, and the output is a plan (the event DAG). The name is close to the existing <code>task_planner</code> package, which holds <code>BottleneckAssignment</code>; if that is confusing, use <code>event_planning</code>, which names the output directly.</td>
+      <td>Together the three stages decompose jobs into events, allocate trays and AGVs, and add blocker moves (rearrangement). "Task planning" is the usual name for decomposition plus allocation, and the output is a plan (the event DAG). The name is close to the existing <code>task_planner</code> package, which holds <code>BottleneckAssignment</code>; if that proves confusing, <code>event_planning</code> names the output directly.</td>
     </tr>
     <tr>
       <td>4</td>
-      <td><code>path_planning</code></td>
       <td><code>motion_planning</code></td>
-      <td>CHUGG plans <em>timed</em> trajectories for many agents at once (MAPF with SIPP), not paths alone; a path has no time. The name also matches the package that does the work, <code>motion_planner</code>, and the existing method <code>PlanMotions</code>.</td>
+      <td>CHUGG plans <em>timed</em> trajectories for many agents at once (MAPF with SIPP), so "motion" rather than "path", which has no time. The name matches the package that does the work, <code>motion_planner</code>, and the existing method <code>PlanMotions</code>.</td>
     </tr>
     <tr>
       <td>5</td>
-      <td><code>action_sequencing</code></td>
       <td><code>action_graph</code></td>
-      <td>The output is a partial order (the action dependency graph, doc 05), not a sequence: actions of different AGVs run in parallel unless an edge orders them. A "sequence" would suggest the total order the ADG exists to avoid.</td>
+      <td>The output is a partial order, the action dependency graph (doc 05): actions of different AGVs run in parallel unless an edge orders them.</td>
     </tr>
   </tbody>
 </table>
@@ -369,7 +365,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
   <li><strong>Moves are cheap and reversible.</strong> Changing a boundary is a <code>git mv</code> and a CMake edit in one package, reviewed in one PR.</li>
 </ul>
 <h3 data-num id="pr-option-2-one-package-per-stage">Option 2: one package per stage</h3>
-<p>Each stage becomes a ROS package with its own <code>package.xml</code> and CMake. Three things differ from how the request pictures it:</p>
+<p>Each stage becomes a ROS package with its own <code>package.xml</code> and CMake. Three facts decide what that means in practice:</p>
 <ul>
   <li><strong>Stage 4 already is a package.</strong> <code>motion_planner</code> holds CHUGG, SIPP and the searches. What remains in <code>scheduler</code> is <code>PlanMotions</code>, about 60 lines that adapt the event DAG and the garage state to CHUGG's inputs. A <code>motion_planning</code> package would hold only that adapter, so it should stay in <code>scheduler</code>.</li>
   <li><strong><code>task_planning</code> needs a lower package first.</strong> Its solvers take <code>PlanContext</code>, <code>GarageServices</code> and the internal types. Those cannot stay in <code>scheduler</code> (a package below <code>scheduler</code> cannot include it), so a new <code>scheduler_core</code> package must hold them. Today's dependencies leave room for it: <code>planner_core</code> depends only on <code>common</code>, <code>common_ros</code> and <code>interfaces</code>; <code>motion_planner</code> on those plus <code>cost_functions</code>; <code>scheduler</code> on all of them plus <code>task_planner</code> and <code>stdx</code>. A <code>scheduler_core</code> between <code>motion_planner</code> and <code>scheduler</code> creates no cycle.</li>
@@ -1470,7 +1466,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     </tr>
   </tbody>
 </table>
-<p><strong>Ticket mapping:</strong> check SW2-769's package structure against the current branch. SW2-484 is the natural first implementation ticket. B2, C0 and C1 are good first PRs inside it: both are mechanical, and the parity tests review them. SW2-487 can start as soon as baseline capture is deterministic. No AGV-specific child tickets were supplied, so none are named here.</p>
+<p><strong>Ticket mapping:</strong> check SW2-769's package structure against the current branch. SW2-484 is the natural first implementation ticket. B2, C0 and C1 are good first PRs inside it: both are mechanical, and the parity tests review them. SW2-487 can start as soon as baseline capture is deterministic. No AGV-specific child ticket is listed; stage F needs one.</p>
 <h2 data-num id="pr-decisions-to-resolve-in-review">Decisions to resolve in review</h2>
 <table>
   <thead>
@@ -1529,7 +1525,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     <tr>
       <td>What "same result" means</td>
       <td>Same tray/AGV assignments, same edge set after <code>Reduce</code>, same final state and errors</td>
-      <td>Stable event identifiers. Tie-breaking is now known: identical <code>AddEvent</code>/<code>AddDependency</code> sequences give identical orders; otherwise compare orders per job index</td>
+      <td>Stable event identifiers. Tie-breaking: identical <code>AddEvent</code>/<code>AddDependency</code> sequences give identical orders; otherwise compare orders per job index</td>
     </tr>
     <tr>
       <td>Naming scope</td>
@@ -1553,7 +1549,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
 <ol>
   <li><code>GetAgvOccupiedDuration</code> always returns <code>Duration::zero()</code> (<code>// TODO(isabel) implement!</code>). The matching costs depend on that.</li>
   <li><code>Reduce()</code> runs inside <code>DoAgvAssignments</code> <em>and</em> again in <code>Plan</code>. The <code>TODO</code> above the second call says planning may fail without it; nobody has confirmed why.</li>
-  <li><code>DoTrayAssignments</code> postpones DAG reduction until after AGV assignment (“Reduce here breaks the AgvAssignments for some reason”); moving it earlier is high risk. A likely reason, now that <code>Reduce()</code> is readable: AGV assignment has code that looks only at <strong>direct</strong> edges. <code>PropagateEventCostToChildren</code> passes a matched tray move's cost to its direct children only, and only tray moves propagate; if <code>Reduce()</code> replaces a direct edge “tray move A → tray move C” with the path “A → bay transition → C”, C never sees A's cost and the matching changes. <code>AddDepsAfterAmiga</code> also inspects only direct in- and out-edges (and already runs after the reduction at the end of <code>DoAgvAssignments</code>). Treat this as a hypothesis to test, not a fix.</li>
+  <li><code>DoTrayAssignments</code> postpones DAG reduction until after AGV assignment (“Reduce here breaks the AgvAssignments for some reason”); moving it earlier is high risk. A likely reason, from the code of <code>Reduce()</code>: AGV assignment has code that looks only at <strong>direct</strong> edges. <code>PropagateEventCostToChildren</code> passes a matched tray move's cost to its direct children only, and only tray moves propagate; if <code>Reduce()</code> replaces a direct edge “tray move A → tray move C” with the path “A → bay transition → C”, C never sees A's cost and the matching changes. <code>AddDepsAfterAmiga</code> also inspects only direct in- and out-edges (and already runs after the reduction at the end of <code>DoAgvAssignments</code>). Treat this as a hypothesis to test, not a fix.</li>
   <li><code>TrayMove::Apply</code> treats blank fields specially (<code>planner_core/src/schedule_events.cpp</code>): no tray id → no-op; no destination → the tray and its payload are <strong>removed</strong> from the state; a tray already on the destination is moved to <code>{node_id: 0, heading: 0}</code>. Later jobs' <code>working_state</code> depends on this; a solver that replays half-specified moves must reproduce it exactly.</li>
   <li><code>ScheduleEventDag</code> uses pointer identity and Boost <code>vecS</code> vertex indices. Removing a vertex shifts every later index down by one (the comment in <code>RemoveVertexHelper</code> says so), and CHUGG maps motions back to events by vertex index, so never remove from <code>ctx->events</code> and never cache vertex descriptors across <code>Remove</code>.</li>
   <li><code>AddDependency</code> never checks for cycles and returns <code>false</code> silently when an endpoint is missing; <code>WouldCreateCycle</code> returns <code>false</code> ("safe") in the same case. A refactor that reorders <code>AddEvent</code> and <code>AddDependency</code> calls can drop edges without any error.</li>

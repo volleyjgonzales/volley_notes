@@ -6,7 +6,7 @@
 -->
 <h1>04 — Naming and small struct refactors</h1>
 <p>This is a working list to keep open while refactoring. It covers the whole stack the scheduler touches: the ROS messages in <code>interfaces</code>, the garage model in <code>common_ros</code>, the events and DAG in <code>planner_core</code>, and the <code>scheduler</code> package itself. Each row gives the current name, the proposed one, where it lives, how expensive the change is, and why. The rules in <a class="ref" href="#nm-naming-rules">section 2</a> produce the proposals, so a name not listed here can be decided the same way.</p>
-<blockquote><p><strong>Scope decided for the refactor.</strong> Doc 02 adopts the rows for <code>scheduler</code> and <code>planner_core</code> (<a class="ref" href="#pr-naming-and-the-ros-boundary">section 7</a> there). Rows for <code>common_ros</code> and the ROS interfaces are not renamed yet: the scheduler reaches them through one translation header and its own internal types, so its code can use the good names now and drop the translation when <code>common_ros</code> catches up.</p></blockquote>
+<blockquote><p><strong>Scope of the refactor.</strong> Doc 02 adopts the rows for <code>scheduler</code> and <code>planner_core</code> (<a class="ref" href="#pr-naming-and-the-ros-boundary">section 7</a> there). Rows for <code>common_ros</code> and the ROS interfaces are not renamed yet: the scheduler reaches them through one translation header and its own internal types, so its code can use the good names now and drop the translation when <code>common_ros</code> catches up.</p></blockquote>
 <p>These are recommendations, not decisions. The few that need a team decision are collected in <a class="ref" href="#nm-decisions-for-review">section 9</a>. Everything is taken from the six source snapshots (<code>sources/repomix-*.xml</code>: <code>scheduler</code>, <code>planner_core</code>, <code>common_ros</code>, <code>interfaces</code>, <code>motion_planner</code>, <code>cost_functions</code>); where the snapshots do not show something, the row says so.</p>
 
 <h2 data-num id="nm-how-to-read-this-list">How to read this list</h2>
@@ -424,13 +424,12 @@
 </table>
 
 <h3 data-num id="nm-pipeline-stage-names">Pipeline stages: folders and namespaces</h3>
-<p>Doc 02 organises the <code>scheduler</code> package by pipeline stage (<a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> there): one folder, one CMake target and one namespace per stage, and possibly one package per stage later. The folder names are therefore names that people will say every day, and that may become package names. All of them are tier A while they stay folders.</p>
+<p>Doc 02 organises the <code>scheduler</code> package by pipeline stage (<a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> there): one folder, one CMake target and one namespace per stage, and possibly one package per stage later. These are names people will say every day, and they may become package names. All of them are tier A while they stay folders.</p>
 <table>
   <thead>
     <tr>
       <th>Stage</th>
-      <th>Proposed folder · namespace</th>
-      <th>Alternatives considered</th>
+      <th>Folder · namespace</th>
       <th>Why</th>
     </tr>
   </thead>
@@ -438,49 +437,41 @@
     <tr>
       <td>1–3 · jobs → finished event DAG</td>
       <td><code>task_planning/</code> · <code>volley::task_planning</code></td>
-      <td><code>task_assignment</code>; <code>event_planning</code></td>
-      <td>The stages decompose jobs into events, allocate trays and AGVs, and add blocker moves: decomposition plus allocation is what "task planning" means, while "assignment" covers only stages 2–3. Close to the existing <code>task_planner</code> package (which holds <code>BottleneckAssignment</code>, used by stage 3); if reviewers find that confusing, <code>event_planning</code> names the output instead</td>
+      <td>The stages decompose jobs into events, allocate trays and AGVs, and add blocker moves: decomposition plus allocation is what "task planning" means. Close to the existing <code>task_planner</code> package (which holds <code>BottleneckAssignment</code>, used by stage 3); if reviewers find that confusing, <code>event_planning</code> names the output instead</td>
     </tr>
     <tr>
       <td>1 · job expansion</td>
       <td><code>task_planning/job_expansion/</code></td>
-      <td><code>job_planning</code></td>
       <td>"Expand" is the stage's verb (<code>Expand&lt;Type>Job</code>); "plan" is reserved for <code>Plan()</code> (<a class="ref" href="#nm-rule-plan-word">section 2.10</a>)</td>
     </tr>
     <tr>
       <td>2 · tray assignment</td>
       <td><code>task_planning/tray_assignment/</code> · <code>volley::task_planning::tray_assignment</code></td>
-      <td><code>tray_movement</code></td>
       <td>Job expansion also moves trays; this step only fills in what expansion left open (doc 02, <a class="ref" href="#pr-source-tree">section 8.2</a>)</td>
     </tr>
     <tr>
       <td>3 · AGV assignment</td>
       <td><code>task_planning/agv_assignment/</code> · <code>volley::task_planning::agv_assignment</code></td>
-      <td><code>agv_matching</code></td>
       <td>Pairs with <code>tray_assignment</code>; matching is one step inside it</td>
     </tr>
     <tr>
       <td>3 · validation</td>
       <td><code>task_planning/validation/</code></td>
-      <td><code>sanity_check</code></td>
       <td>Matches <code>ValidateEvents</code></td>
     </tr>
     <tr>
       <td>4 · timed motions</td>
       <td><code>motion_planning/</code> · <code>volley::motion_planning</code></td>
-      <td><code>path_planning</code>; <code>mapf</code></td>
-      <td>CHUGG plans timed trajectories for all agents together; a path has no time. Matches the package that does the work (<code>motion_planner</code>) and <code>PlanMotions</code>. The namespace must not be <code>motion_planner</code>, so it cannot hide the package's names</td>
+      <td>CHUGG plans timed trajectories for all agents together. Matches the package that does the work (<code>motion_planner</code>) and <code>PlanMotions</code>. The namespace must not be <code>motion_planner</code>, so it cannot hide the package's names</td>
     </tr>
     <tr>
       <td>5 · action DAG</td>
       <td><code>action_graph/</code> · <code>volley::action_graph</code></td>
-      <td><code>action_sequencing</code>; <code>adg</code></td>
-      <td>The output is a partial order, not a sequence: actions of different AGVs run in parallel unless an edge orders them (doc 05). Spelled out, not the acronym</td>
+      <td>The output is a partial order: actions of different AGVs run in parallel unless an edge orders them (doc 05). Spelled out rather than the acronym</td>
     </tr>
     <tr>
       <td>shared</td>
       <td><code>core/</code> · <code>volley::scheduler_core</code></td>
-      <td><code>common/</code></td>
       <td>A <code>volley::common</code> namespace would hide <code>::common</code> and break today's <code>common::EnumInteger</code> calls (doc 02, <a class="ref" href="#pr-source-tree">section 8.2</a>)</td>
     </tr>
   </tbody>
@@ -1291,7 +1282,6 @@ Edge[] edges   # Edge: node_id_a, node_id_b, int16[] disallowed_headings (0:179,
 <h2 data-num id="nm-decisions-for-review">Decisions for review</h2>
 <ol>
   <li><strong><code>GarageGraph</code> → <code>MotionGraph</code>, and <code>PoseGraph</code> → <code>PoseLattice</code>?</strong> Inside the scheduler this is settled by doc 02: the translation header aliases the classes, and members are <code>motion_graph_</code>. The <code>common_ros</code> class rename itself is still open; when it happens, the alias line is deleted and no scheduler code changes.</li>
-  <li><strong>Should doc 02's <code>GarageServices</code> fields follow the member names?</strong> <em>Done:</em> doc 02 now uses <code>motion_graph</code>, <code>collision_table</code>, <code>cost_model</code> and <code>layout</code>, following the same-name rule (<a class="ref" href="#nm-rule-same-object-same-name">section 2.9</a>).</li>
   <li><strong><code>TransitionType</code> values.</strong> <code>TRANSLATE_LONGITUDINAL</code> and <code>TRANSLATE_LATERAL</code>, or shorter <code>DRIVE</code> and <code>CRAB</code>? Pick whatever the AGV team says out loud.</li>
   <li><strong>"Size class" for parking windows, resource windows and resource sizes.</strong> Confirm with the layout owners, who write these in YAML.</li>
   <li><strong>The interface version.</strong> Which tier C items go into it, and how stored <code>DiscreteGarageEvent</code> buffers are migrated or read.</li>
