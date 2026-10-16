@@ -363,7 +363,7 @@ def job_recipes():
     frame(d, title="Cheat sheet: what each job type adds to the event DAG",
           subtitle="One row per job type (rows are independent, not one scenario). Read a row left to right: the "
                    "events that Plan<Type>Job appends, in creation order. A \"?\" is left empty for "
-                   "DoTrayAssignments() to fill. Section 13 shows each row in a 2D garage example.",
+                   "DoTrayAssignments() to fill. 'Job expansion' shows each row in a 2D garage example.",
           badge_key="as-built",
           legend=[("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),
                   ("box", VECS, "VecsTransition"), ("dashbox", T.fg2, "only when needed"),

@@ -12,42 +12,52 @@
   - Keyword links (glossary.yaml), "doc 02" links and code highlighting are added at build time.
 -->
 <h1>01 — Scheduler software background</h1>
-<p><em>A ground-up guide to the <code>scheduler</code> ROS 2 package for engineers who are new to the team. It is written against the package snapshot in <code>sources/repomix-scheduler.xml</code> (headers, sources, tests, CMake and <code>package.xml</code>), the ROS interface definitions, and the <code>5675_pecos_combined.yaml</code> facility layout.</em></p>
+<p><em>A ground-up guide to the <code>scheduler</code> ROS 2 package for engineers who are new to the team: what it computes, the data it computes it with, each stage of a plan call from the request to the action DAG it returns, and how to find your way around the code.</em></p>
 <blockquote>
-  <p><strong>Scope and evidence.</strong> This guide documents the <em>existing</em> implementation, not the proposed solver refactor (that is <a href="#doc-proposal">02</a>). Everything labelled <strong>AS-BUILT</strong> was checked against <code>scheduler.hpp</code>, <code>scheduler.cpp</code>, <code>utils.cpp</code>, <code>scheduler_ros.cpp</code> and <code>scheduler_component.cpp</code>. <code>planner_core</code> (the event classes and the event DAG) was checked against a second snapshot, <code>sources/repomix-planner-core.xml</code> (<code>event_dag.hpp/.cpp</code>, <code>schedule_events.hpp/.cpp</code>, without its tests). <code>common_ros</code> (<code>DiscreteGarageState</code>, <code>Layout</code>, <code>PoseGraph</code>, <code>GarageGraph</code>, <code>CollisionTable</code>, <code>GarageOccupancyChecker</code>) was checked against a third snapshot, <code>sources/repomix-common-ros.xml</code> (without its tests). The ROS messages and services were checked against <code>sources/repomix-interfaces.xml</code>, every <code>.msg</code> and <code>.srv</code> of the <code>interfaces</code> packages. <code>motion_planner</code>, <code>task_planner</code>, <code>cost_functions</code> and <code>common</code> were <strong>not</strong> available; where this guide describes them, it does so from call sites and says so. The Pecos figures use real node positions and edges, but <strong>AGV, tray and payload occupancy is hypothetical</strong>. The Pecos YAML has bays and chargers but <strong>no VRC</strong>.</p>
+  <p><strong>Scope and evidence.</strong> This guide documents the <em>existing</em> implementation, not the proposed solver refactor (that is <a href="#doc-proposal">02</a>). It was checked against six source snapshots in <code>sources/</code>: the <code>scheduler</code> package itself (<code>repomix-scheduler.xml</code>: headers, sources, tests, CMake), <code>planner_core</code> (events and the event DAG), <code>common_ros</code> (<code>DiscreteGarageState</code>, <code>Layout</code>, <code>PoseGraph</code>, <code>GarageGraph</code>, <code>CollisionTable</code>, <code>GarageOccupancyChecker</code>), <code>motion_planner</code> (CHUGG, SIPP, <code>ContinuousState</code>, the single-agent searches and filters), <code>cost_functions</code> (the timing model and parameter defaults), and every <code>.msg</code> and <code>.srv</code> of the interface packages. The other packages' tests were not included. <code>task_planner</code> (<code>BottleneckAssignment</code>), <code>common</code>/<code>stdx</code> and Dispatch were <strong>not</strong> available; where this guide describes them, it does so from call sites and says so. The Pecos figures use real node positions and edges from <code>5675_pecos_combined.yaml</code>, but <strong>AGV, tray and payload occupancy is hypothetical</strong>. The Pecos YAML has bays and chargers but <strong>no VRC</strong>.</p>
 </blockquote>
 <blockquote>
   <p><strong>Viewing the figures.</strong> Click a figure to open it full screen with pan and zoom; "Pan / zoom viewer" under each caption opens the gallery of all figures (<a href="figures/viewer.html"><code>figures/viewer.html</code></a>). Every figure carries a status badge: <strong>AS-BUILT</strong>, <strong>PROPOSED</strong>, <strong>ILLUSTRATIVE</strong>, <strong>SCHEMATIC</strong>, <strong>CONCEPTUAL</strong>, or <strong>YAML GEOMETRY · HYPOTHETICAL OCCUPANCY</strong>.</p>
 </blockquote>
 <h2 id="bg-how-to-use-this-guide">How to use this guide</h2>
-<p>Read it in three passes. Each pass is useful on its own.</p>
+<p>The guide has five parts. Read Part I first; it gives the picture that the rest fills in. Each later part is useful on its own.</p>
 <table>
   <thead>
     <tr>
-      <th>Pass</th>
+      <th>Part</th>
       <th>Read</th>
       <th>You will be able to</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>1 · Orientation (30 min)</td>
+      <td>I · Orientation (30 min)</td>
       <td>Sections <a class="ref" href="#bg-what-problem-does-this-software-solve">1</a>–<a class="ref" href="#bg-discretegaragestate-the-bridge-between-the-garage-and-the-planner">5</a></td>
-      <td>Say what the scheduler is for, where it sits in the ROS system, and how it models the garage</td>
+      <td>Say what the scheduler is for, name its pipeline (event DAG → CHUGG → action DAG → Dispatch), say where it sits in the ROS system, and how it models the garage</td>
     </tr>
     <tr>
-      <td>2 · Data and objects (2 h)</td>
-      <td>Sections <a class="ref" href="#bg-the-garage-model-in-code">6</a>–<a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">13</a></td>
-      <td>Name the main types, who owns them, and follow one <code>Plan()</code> call from request to response. The core data structures are the static garage model (<a class="ref" href="#bg-the-garage-model-in-code">section 6</a>: layout, pose graph and its vertices, collision table) and, per plan, events, the event DAG and the context that ties them together (sections <a class="ref" href="#bg-event-types-and-polymorphism">11</a>–<a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">13</a>)</td>
+      <td>II · Data and objects (2 h)</td>
+      <td>Sections <a class="ref" href="#bg-the-garage-model-in-code">6</a>–<a class="ref" href="#bg-schedulecontext-the-per-call-workspace">13</a></td>
+      <td>Name the main types, who owns them, and follow one <code>Plan()</code> call from request to response. The core data structures are the static garage model (<a class="ref" href="#bg-the-garage-model-in-code">section 6</a>) and, per plan, the events, the event DAG and the context that ties them together (sections <a class="ref" href="#bg-event-types-and-polymorphism">11</a>–<a class="ref" href="#bg-schedulecontext-the-per-call-workspace">13</a>)</td>
     </tr>
     <tr>
-      <td>3 · Algorithms (3 h, with the code open)</td>
-      <td>Sections <a class="ref" href="#bg-job-expansion-from-jobs-to-events">14</a>–<a class="ref" href="#bg-bays-vecs-and-vrcs">20</a></td>
-      <td>Explain job expansion, tray assignment, AGV assignment, motion planning and bay rebalancing. <a class="ref" href="#bg-job-expansion-from-jobs-to-events">Section 14</a> is long: read <a class="ref" href="#bg-what-a-job-is">14.1</a>–<a class="ref" href="#bg-job-methods-are-built-from-a-few-shared-pieces">14.6</a> first, then the job types you will work on</td>
+      <td>III · Building the event DAG (3 h, with the code open)</td>
+      <td>Sections <a class="ref" href="#bg-the-whole-journey-of-one-job">14</a>–<a class="ref" href="#bg-bays-vecs-and-vrcs">19</a></td>
+      <td>Explain job expansion, tray assignment, AGV assignment, the final checks and the bay, VECS and VRC rules. <a class="ref" href="#bg-job-expansion-from-jobs-to-events">Section 15</a> is long: read <a class="ref" href="#bg-what-a-job-is">15.1</a>–<a class="ref" href="#bg-job-methods-are-built-from-a-few-shared-pieces">15.6</a> first, then the job types you will work on</td>
+    </tr>
+    <tr>
+      <td>IV · Motion planning and execution (1.5 h)</td>
+      <td>Sections <a class="ref" href="#bg-motion-planning-and-the-response">20</a>–<a class="ref" href="#bg-from-trajectories-to-the-response">25</a></td>
+      <td>Explain how CHUGG turns the event DAG into timed motions, how long each move is assumed to take, and how the action DAG that Dispatch executes is built. Doc 05 is the companion for the ADG theory</td>
+    </tr>
+    <tr>
+      <td>V · Working with the code (reference)</td>
+      <td>Sections <a class="ref" href="#bg-packages-build-system-and-dependencies">26</a>–<a class="ref" href="#bg-known-limitations-and-reading-checkpoint">31</a></td>
+      <td>Build and test, read the C++ idioms, follow a call trace, and check your understanding</td>
     </tr>
   </tbody>
 </table>
-<p>Then work through the checkpoint questions in <a class="ref" href="#bg-known-limitations-and-reading-checkpoint">section 26</a>, read the design FAQ in <a class="ref" href="#bg-faq-design-questions">section 25</a>, follow the call trace in <a class="ref" href="#bg-reading-the-c-code-a-call-trace-and-a-route-through-the-source">section 24</a> when you open the code, run one test from <a class="ref" href="#bg-debugging-and-testing">section 22</a> under a debugger, and keep <a class="ref" href="#bg-c-concepts-and-idioms-in-context">section 23</a> (C++ idioms) open as a reference.</p>
+<p>Then work through the checkpoint questions in <a class="ref" href="#bg-known-limitations-and-reading-checkpoint">section 31</a>, read the design FAQ in <a class="ref" href="#bg-faq-design-questions">section 30</a>, follow the call trace in <a class="ref" href="#bg-reading-the-c-code-a-call-trace-and-a-route-through-the-source">section 29</a> when you open the code, run one test from <a class="ref" href="#bg-debugging-and-testing">section 27</a> under a debugger, and keep <a class="ref" href="#bg-c-concepts-and-idioms-in-context">section 28</a> (C++ idioms) open as a reference.</p>
 <h3 id="bg-how-to-read-the-code-snippets">How to read the code snippets</h3>
 <p>Every snippet starts with a <strong>Where</strong> line that names the function it comes from and what each variable is. Snippets are abridged (logging and some error handling removed) but keep the real names. These names recur everywhere, so learn them once:</p>
 <table>
@@ -131,10 +141,25 @@
     </tr>
   </tbody>
 </table>
-<h2 data-num id="bg-what-problem-does-this-software-solve">What problem does this software solve?</h2>
-<p>A customer vehicle sits on a <strong>tray</strong> inside an automated parking facility. An <strong>AGV</strong> (automated guided vehicle) drives under a tray, raises its lift, and carries the tray. A <strong>bay</strong> is the customer-facing handoff room; a <strong>waypoint</strong> is a navigation node; a <strong>parking node</strong> is where trays are stored; an <strong>AGV charge</strong> node is where robots recharge. Some installations have a <strong>VECS</strong> (EV charging station under a parking node) or a <strong>VRC</strong> (vertical reciprocating conveyor, a lift between floors). These are different resources with different rules.</p>
-<p>A job such as <strong>retrieve this payload</strong> does not say how to do it. The Scheduler decides which tray moves are needed, which AGV does each one, which operations must happen first, and how long everything takes. It then returns a schedule of discrete commands that Dispatch executes. The scheduler never drives a motor and never talks to an AGV directly.</p>
-<p>The key distinction is <strong>what</strong> should happen versus <strong>how and when</strong> it happens:</p>
+<h2 data-num id="bg-what-problem-does-this-software-solve">What the scheduler does: the big picture</h2>
+<p>A customer vehicle sits on a <strong>tray</strong> inside an automated parking facility. An <strong>AGV</strong> (automated guided vehicle) drives under a tray, raises its lift, and carries the tray. A <strong>bay</strong> is the customer-facing handoff room; a <strong>waypoint</strong> is a navigation node; a <strong>parking node</strong> is where trays are stored; an <strong>AGV charge</strong> node is where robots recharge. Some installations have a <strong>VECS</strong> (an EV charging station, on a node of its own type, <code>TYPE_EV_CHARGE</code>) or a <strong>VRC</strong> (vertical reciprocating conveyor, a lift between floors). These are different resources with different rules.</p>
+<p>A job such as <strong>retrieve this payload</strong> does not say how to do it. The Scheduler decides which tray moves are needed, which AGV does each one, which operations must happen first, and how long everything takes. It then returns a schedule of discrete commands that Dispatch executes. The scheduler never drives a motor and never talks to an AGV directly, and it keeps nothing between calls: each request carries the current garage state, and each answer is a complete new schedule.</p>
+<h3 id="bg-the-pipeline-in-one-picture">The pipeline in one picture</h3>
+<p>One call to <code>Scheduler::Plan()</code> turns a request into a schedule in five stages. The first three build one graph, the <strong>event DAG</strong>; the fourth plans motion in time; the fifth builds a second graph, the <strong>action DAG</strong>, which is what Dispatch executes.</p>
+<figure id="bg-fig-01_pipeline">
+  <img src="figures/01_pipeline.svg" alt="Planning stages">
+  <figcaption>The five stages of <code>Scheduler::Plan</code>, from <code>PlanRequest</code> to the schedule Dispatch runs. The strip underneath shows what exists after each stage: the same event DAG (<code>ctx->events</code>) is enriched by stages 1–3; CHUGG turns it into a timeline per entity; the response builds a new graph of actions from that timeline. The brackets give the standard names for each step. This is not a ROS thread or executor schedule.</figcaption>
+</figure>
+<ol>
+  <li><strong>Job expansion</strong> turns each requested job into <code>ScheduleEvent</code>s, the discrete changes it needs (“move tray 17 into bay 21”, “open bay 21”), and adds “must finish before” edges between them. Some events are left incomplete on purpose: a tray move may not yet know which tray or where to (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 15</a>).</li>
+  <li><strong>Tray assignment</strong> fills those blanks and adds moves for trays that are in the way, with edges that keep them in order (<a class="ref" href="#bg-tray-assignment-dotrayassignments">section 16</a>).</li>
+  <li><strong>AGV assignment</strong> decides which AGV carries each tray and adds its approach, lift and lower events; then <code>Reduce()</code> removes redundant edges and <code>SanityCheckEvents</code> replays the whole DAG once (sections <a class="ref" href="#bg-agv-assignment-doagvassignments">17</a>–<a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>).</li>
+  <li><strong>Motion planning.</strong> CHUGG plans every event, one at a time in the DAG's topological order, as timed, collision-free motions along the garage graph. The result is a <code>ContinuousState</code>: a timeline of motions per AGV, bay and VECS (sections <a class="ref" href="#bg-chugg-the-motion-planner">21</a>–<a class="ref" href="#bg-continuousstate-the-timeline">24</a>).</li>
+  <li><strong>The action DAG.</strong> The response turns every motion that changes something into an <code>ActionNode</code>, orders actions that use the same space, copies the event DAG's edges across, adds VRC commands, and writes the graph as <code>Schedule.nodes</code> with parent indices (<a class="ref" href="#bg-from-trajectories-to-the-response">section 25</a>).</li>
+</ol>
+<p><strong>Dispatch</strong>, outside this package, starts each action as soon as all its parents are done. To react to anything new, it sends a new <code>PlanRequest</code> with the current garage state and the actions already running (<a href="#bg-a-request-is-not-a-plan">A request is not a plan</a>).</p>
+<h3 id="bg-four-representations-of-one-plan">Four representations of one plan</h3>
+<p>The key distinction is <strong>what</strong> should happen versus <strong>how and when</strong> it happens. The same plan exists in four forms, each produced by one stage and consumed by the next:</p>
 <table>
   <thead>
     <tr>
@@ -142,6 +167,7 @@
       <th>Question</th>
       <th>Example</th>
       <th>Where it lives</th>
+      <th>Structure</th>
     </tr>
   </thead>
   <tbody>
@@ -149,32 +175,133 @@
       <td>Job</td>
       <td>What outcome is requested?</td>
       <td>Retrieve a payload</td>
-      <td><code>SchedulerJob.msg</code></td>
+      <td><code>SchedulerJob.msg</code> in <code>PlanRequest.pending_jobs</code></td>
+      <td>a list</td>
     </tr>
     <tr>
       <td>Event</td>
-      <td>What discrete state change is needed?</td>
-      <td>Move tray 17 into bay 21</td>
-      <td><code>ScheduleEvent</code> subclasses, <code>ctx->events</code></td>
+      <td>What discrete state change is needed, and after what?</td>
+      <td>Move tray 17 into bay 21, after bay 21 opens</td>
+      <td><code>ScheduleEvent</code> subclasses in <code>ctx->events</code></td>
+      <td>the <strong>event DAG</strong> (<code>ScheduleEventDag</code>), no times</td>
     </tr>
     <tr>
       <td>Motion</td>
-      <td>How does an AGV get there over time?</td>
-      <td>Timed pose changes along graph edges</td>
-      <td><code>ContinuousState</code> from CHUGG</td>
+      <td>When, and along which poses, does each thing move?</td>
+      <td>AGV 2 waits at node 6 until 6 s, then drives 6 → 9 → 12</td>
+      <td><code>Motion</code>s in a <code>ContinuousState</code> from CHUGG</td>
+      <td>a timeline per entity</td>
     </tr>
     <tr>
       <td>Action</td>
-      <td>What command is sent to which machine?</td>
-      <td><code>TYPE_AGV_COMMAND</code> from node 13 to node 15</td>
+      <td>What command is sent to which machine, after which others?</td>
+      <td><code>TYPE_AGV_COMMAND</code> from node 13 to node 15, after action 4</td>
       <td><code>ActionNode.msg</code> inside <code>Schedule.msg</code></td>
+      <td>the <strong>action DAG</strong>, as an array with parent indices</td>
     </tr>
   </tbody>
 </table>
-<figure id="bg-fig-01_pipeline">
-  <img src="figures/01_pipeline.svg" alt="Planning stages">
-  <figcaption>The four principal stages of <code>Scheduler::Plan</code>, from <code>PlanRequest</code> to <code>PlanResponse</code>. The strip underneath shows the same <code>ctx->events</code> DAG being enriched: incomplete tray moves get IDs and destinations, blocker moves and AGV events are added, and finally the reduced DAG becomes <code>ActionNode[]</code> with parent indices. This is not a ROS thread or executor schedule.</figcaption>
-</figure>
+<p>Events and actions are both discrete changes, and both graphs mean “must finish before”, so the two DAGs are easy to confuse. They are different graphs with different jobs: the event DAG is the planner's <em>input</em>, built before any time exists; the action DAG is its <em>output</em>, built from the planned motions, and it inherits the event DAG's edges rather than being converted from it (<a class="ref" href="#bg-motion-planning-and-the-response">section 20</a>).</p>
+<h3 id="bg-how-to-think-about-the-scheduler">How to think about the scheduler</h3>
+<p>In the vocabulary of multi-robot planning, the five stages are three standard steps and an executor:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Standard step</th>
+      <th>Here</th>
+      <th>What it decides</th>
+      <th>What it ignores</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Task planning and allocation</strong></td>
+      <td>Stages 1–3: job expansion, tray and AGV assignment</td>
+      <td>Which discrete changes are needed, which tray and AGV do each, and which change must come first</td>
+      <td>Time. Choices use single-AGV travel-time estimates that assume nobody else is moving</td>
+    </tr>
+    <tr>
+      <td><strong>Multi-agent path finding (MAPF)</strong>, with precedence constraints</td>
+      <td>Stage 4: CHUGG (prioritized planning with SIPP)</td>
+      <td>When each event happens and which poses each AGV passes through, without any two footprints overlapping</td>
+      <td>Changing the plan's content: it cannot reorder, reassign or add events, only time them</td>
+    </tr>
+    <tr>
+      <td><strong>Action dependency graph (ADG)</strong></td>
+      <td>Stage 5: the response</td>
+      <td>Which action must wait for which, so that robots running early or late still never collide</td>
+      <td>The planned times themselves, which are dropped except as each action's <code>duration</code></td>
+    </tr>
+    <tr>
+      <td><strong>Executor</strong></td>
+      <td>Dispatch (not in this package)</td>
+      <td>When to start each action: as soon as its parents are done</td>
+      <td>Planning; anything new means a new <code>PlanRequest</code></td>
+    </tr>
+  </tbody>
+</table>
+<p>The order MAPF → ADG → executor is the textbook one (doc 05 builds the ADG from scratch). What is particular here is the MAPF input: not one goal per robot, but a precedence graph of events for many entities. Four ideas make the code much easier to read:</p>
+<ul>
+  <li><strong>Discrete state, replayed.</strong> Until CHUGG, the garage is a <code>DiscreteGarageState</code> snapshot and an event is applied to it in one step. Every stage that needs “where is everything now?” copies <code>ctx->initial_state</code> and replays the events so far (<a class="ref" href="#bg-every-job-sees-the-garage-through-working_state">section 15.4</a>).</li>
+  <li><strong>Edges are added from many places.</strong> Job rules, tray conflicts, AGV occupancy and path repair all add “must finish before” edges to the same event DAG, and <code>Reduce()</code> removes the redundant ones (<a class="ref" href="#bg-how-the-dag-grows-during-plan">section 12.7</a>).</li>
+  <li><strong>The topological order is a priority order.</strong> Stages replay, and CHUGG plans, events in one deterministic topological order that prefers lower job indices. An event earlier in that order gets first claim on space and time (<a class="ref" href="#bg-inside-solvesequential">section 21.1</a>).</li>
+  <li><strong>Time appears late and leaves early.</strong> Before CHUGG, durations are only cost estimates; CHUGG assigns real start times; the response keeps only each action's duration and the order between actions.</li>
+</ul>
+<h3 id="bg-a-map-of-this-guide-by-stage">A map of this guide by stage</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
+      <th>Entry point</th>
+      <th>Read</th>
+      <th>Key figures</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Request and context</td>
+      <td><code>Scheduler::Plan</code>, <code>ValidateBaseState</code></td>
+      <td>sections <a class="ref" href="#bg-objects-ownership-and-lifetimes">9</a>, <a class="ref" href="#bg-one-plan-call-step-by-step">10</a>, <a class="ref" href="#bg-schedulecontext-the-per-call-workspace">13</a></td>
+      <td><a class="ref" href="#bg-fig-22_plan_control_flow">Figure 1</a>, <a class="ref" href="#bg-fig-61_schedule_context_anatomy">Figure 1</a></td>
+    </tr>
+    <tr>
+      <td>The event DAG as a data structure</td>
+      <td><code>ScheduleEventDag</code></td>
+      <td>sections <a class="ref" href="#bg-event-types-and-polymorphism">11</a>, <a class="ref" href="#bg-directed-acyclic-graphs-then-scheduleeventdag">12</a></td>
+      <td><a class="ref" href="#bg-fig-63_event_dag_classes">Figure 1</a>, <a class="ref" href="#bg-fig-68_topological_priority">Figure 1</a></td>
+    </tr>
+    <tr>
+      <td>1 · Job expansion</td>
+      <td><code>Plan&lt;Type>Job</code></td>
+      <td>sections <a class="ref" href="#bg-the-whole-journey-of-one-job">14</a>, <a class="ref" href="#bg-job-expansion-from-jobs-to-events">15</a></td>
+      <td><a class="ref" href="#bg-fig-26_retrieve_walkthrough">Figure 1</a>, <a class="ref" href="#bg-fig-24_job_recipes">Figure 1</a></td>
+    </tr>
+    <tr>
+      <td>2 · Tray assignment</td>
+      <td><code>DoTrayAssignments</code></td>
+      <td>section <a class="ref" href="#bg-tray-assignment-dotrayassignments">16</a></td>
+      <td><a class="ref" href="#bg-fig-27_tray_assignment_flow">Figure 1</a>, <a class="ref" href="#bg-fig-15_blocking_tray_move">Figure 1</a></td>
+    </tr>
+    <tr>
+      <td>3 · AGV assignment and checks</td>
+      <td><code>DoAgvAssignments</code>, <code>SanityCheckEvents</code></td>
+      <td>sections <a class="ref" href="#bg-agv-assignment-doagvassignments">17</a>, <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a></td>
+      <td><a class="ref" href="#bg-fig-29_agv_matching">Figure 1</a>, <a class="ref" href="#bg-fig-30_agv_event_expansion">Figure 1</a></td>
+    </tr>
+    <tr>
+      <td>4 · Motion planning</td>
+      <td><code>PlanMotions</code>, <code>Chugg::SolveSequential</code></td>
+      <td>sections <a class="ref" href="#bg-motion-planning-and-the-response">20</a>–<a class="ref" href="#bg-continuousstate-the-timeline">24</a></td>
+      <td><a class="ref" href="#bg-fig-91_planning_pipeline">Figure 1</a>, <a class="ref" href="#bg-fig-93_chugg_sequential">Figure 1</a>, <a class="ref" href="#bg-fig-94_trapezoid_runs">Figure 1</a></td>
+    </tr>
+    <tr>
+      <td>5 · The action DAG</td>
+      <td><code>ResponseFromTrajectories</code></td>
+      <td>section <a class="ref" href="#bg-from-trajectories-to-the-response">25</a>; doc 05</td>
+      <td><a class="ref" href="#bg-fig-92_continuous_state">Figure 1</a>, <a class="ref" href="#bg-fig-32_motions_to_actions">Figure 1</a></td>
+    </tr>
+  </tbody>
+</table>
 <h2 data-num id="bg-where-the-scheduler-runs-the-node-and-its-interfaces">Where the scheduler runs: the node and its interfaces</h2>
 <p>The package builds one shared library (<code>libscheduler</code>: <code>scheduler.cpp</code>, <code>utils.cpp</code>) and one ROS 2 component (<code>scheduler_component.cpp</code>, <code>scheduler_ros.cpp</code>) that is also installed as the executable <code>scheduler_node</code>. Three layers wrap each other:</p>
 <ol>
@@ -398,7 +525,7 @@ table_(gg_, logger),                                  // volley::CollisionTable,
   <img src="figures/52_collision_table.svg" alt="CollisionTable">
   <figcaption>Two <code>Query</code> calls for a tray at W22 against a tray parked at W18: heading 90 is clear, heading 0 overlaps. The grid on the right shows the idea of a table built once and then looked up (overlaps computed here from schematic rectangles; the real footprint sizes are constants in the <code>common</code> package). The real storage, four nested hash maps, is in <a class="ref" href="#bg-collisiontable-precomputed-conflict-sets">section 6.5</a>.</figcaption>
 </figure>
-<p>Most code does not call <code>Query</code> directly. It asks <code>volley::GetStaticFilter(id, gg_, working_state, table_, ...)</code>, which uses the table to mark which graph vertices a given entity cannot use given everything in <code>working_state</code>, and then tests <code>filters.IsEnabled(vertex)</code>. <code>ctx->disabledness_filters</code>, built once per <code>Plan()</code>, works the same way for disabled nodes and entities. The direct <code>Query</code> calls are in <code>DoTrayAssignments</code> (is another tray in the way of the root tray's next pose?) and <code>AgvMatchingEventDeps</code> (would two AGVs conflict?).</p>
+<p>Most code does not call <code>Query</code> directly. It asks <code>volley::GetStaticFilter(id, gg_, working_state, table_, ...)</code>, which uses the table to mark which graph vertices and edges a given footprint cannot use given everything in <code>working_state</code>, and then tests <code>filters.IsEnabled(vertex)</code> or <code>IsEnabled(edge)</code> (<a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a> lists every filter rule). <code>ctx->disabledness_filters</code>, built once per <code>Plan()</code>, works the same way for disabled nodes and entities. The direct <code>Query</code> calls are in <code>DoTrayAssignments</code> (is another tray in the way of the root tray's next pose?) and <code>AgvMatchingEventDeps</code> (would two AGVs conflict?).</p>
 <p>The fourth structure is the one that changes: <code>DiscreteGarageState</code> (<a class="ref" href="#bg-discretegaragestate-the-bridge-between-the-garage-and-the-planner">section 5</a>) records <strong>who is where right now</strong>. Layout, graph and table never change after start-up; the state is different in every plan request. <a class="ref" href="#bg-the-garage-model-in-code">Section 6</a> opens up the first three: their containers, their lookups and what each costs.</p>
 <h2 data-num id="bg-vocabulary">Vocabulary</h2>
 <table>
@@ -457,13 +584,13 @@ table_(gg_, logger),                                  // volley::CollisionTable,
     </tr>
     <tr>
       <td><code>ScheduleEventDag</code></td>
-      <td>DAG of events; edge u → v means u must finish first</td>
-      <td>Lives in <code>ctx->events</code></td>
+      <td>The <strong>event DAG</strong>: events with edges u → v meaning u must finish before v starts. Built by stages 1–3; CHUGG's input</td>
+      <td>Lives in <code>ctx->events</code>; has no times. Not the action DAG</td>
     </tr>
     <tr>
       <td><code>ScheduleContext</code></td>
       <td>All mutable data for one plan call: <code>initial_state</code>, the event DAG, the job list and two bookkeeping maps</td>
-      <td>Created in <code>Plan()</code>, dies when <code>Plan()</code> returns; <a class="ref" href="#bg-schedulecontext-the-per-call-workspace">section 7</a> introduces every field, <a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">section 13</a> the job indices and bookkeeping maps</td>
+      <td>Created in <code>Plan()</code>, dies when <code>Plan()</code> returns; every field in <a class="ref" href="#bg-schedulecontext-the-per-call-workspace">section 13</a></td>
     </tr>
     <tr>
       <td>working state</td>
@@ -486,13 +613,33 @@ table_(gg_, logger),                                  // volley::CollisionTable,
       <td>Bottleneck matching of AGVs to tray moves</td>
     </tr>
     <tr>
+      <td>MAPF</td>
+      <td>Multi-agent path finding: collision-free paths in time for many robots. Here with precedence constraints between events of different entities</td>
+      <td>The step CHUGG performs; it times events, it does not choose them</td>
+    </tr>
+    <tr>
       <td>CHUGG</td>
-      <td>The motion planner, <code>volley::Chugg</code> in <code>motion_planner/chugg.hpp</code> (“Constrained Huge Unknown Graph alGorithm”; <a class="ref" href="#bg-motion-planning-and-the-response">section 19</a>)</td>
-      <td>Turns the event DAG into timed, collision-free trajectories</td>
+      <td>The motion planner, <code>volley::Chugg</code> in <code>motion_planner/chugg.hpp</code> (“Constrained Huge Unknown Graph alGorithm”; <a class="ref" href="#bg-chugg-the-motion-planner">section 21</a>)</td>
+      <td>Plans the event DAG's events one at a time, in topological order (prioritized planning)</td>
+    </tr>
+    <tr>
+      <td>SIPP</td>
+      <td>Safe Interval Path Planning: CHUGG's search for one AGV over (place, safe time window) states (<a class="ref" href="#bg-sipp-the-single-agv-search">section 21.2</a>)</td>
+      <td>Avoids every motion already planned; never moves them</td>
+    </tr>
+    <tr>
+      <td><code>ContinuousState</code>, <code>Motion</code></td>
+      <td>CHUGG's output: per entity, a timeline of motions; a motion is a wait at a pose or a move along one edge, with a time interval and the event it implements (<a class="ref" href="#bg-continuousstate-the-timeline">section 24</a>)</td>
+      <td>“Continuous” means continuous time; the discrete counterpart is <code>DiscreteGarageState</code></td>
+    </tr>
+    <tr>
+      <td>action DAG (ADG)</td>
+      <td>An action dependency graph: one action per motion that changes something, with edges that order shared space and copied event edges (<a class="ref" href="#bg-from-trajectories-to-the-response">section 25</a>; doc 05)</td>
+      <td>Built after CHUGG, from its motions; the output</td>
     </tr>
     <tr>
       <td><code>ActionNode</code></td>
-      <td>One executable command with parent indices</td>
+      <td>One action of the action DAG: an executable command with parent indices into <code>Schedule.nodes</code></td>
       <td>The only thing Dispatch executes</td>
     </tr>
   </tbody>
@@ -865,7 +1012,7 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
     The edge lists hold the target vertex and an iterator into the graph-wide edge list; each edge's index and <code>Transition</code> are stored there once, not in the vertex. Nothing else is stored: there is no node type, no position and no occupancy at a vertex. Node facts come from the <code>Layout</code> (<code>GarageNodeFromVertex</code> looks the node up and copies it), and occupancy comes from <code>DiscreteGarageState</code>.</li>
   <li><strong>The numbering is the <code>PoseGraph</code> order:</strong> vertex <em>i</em> is pose index <em>i</em>, that is, node id ascending, then heading ascending. On Pecos, W22's poses <code>{node_id: 22, heading: -90}</code>, <code>{node_id: 22, heading: 0}</code>, <code>{node_id: 22, heading: 90}</code> and <code>{node_id: 22, heading: 180}</code> are vertices 42, 43, 44 and 45.</li>
   <li><strong>Numbers are stable.</strong> Nothing adds or removes vertices after construction, so a <code>Vertex</code> stays valid for the scheduler's lifetime. Compare <code>ScheduleEventDag</code>, where <code>Remove</code> renumbers later vertices (<a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">section 12.4</a>). A <code>Vertex</code> means nothing outside one layout: never store one, or compare one across layouts or builds.</li>
-  <li><strong>Per-vertex data lives outside the graph.</strong> <code>MakeVertexVectorPropertyMap&lt;T>()</code> returns a vector indexed by <code>Vertex</code>, and <code>MakeEdgeVectorPropertyMap&lt;T>()</code> a vector indexed by edge index. That is the pattern for anything a search needs per vertex or per edge. <code>GraphFilterProperties::IsEnabled(vertex)</code> and <code>IsEnabled(edge)</code> are in <code>motion_planner</code>, which is not in the snapshots, so how they store their flags is not confirmed.</li>
+  <li><strong>Per-vertex data lives outside the graph.</strong> <code>MakeVertexVectorPropertyMap&lt;T>()</code> returns a vector indexed by <code>Vertex</code>, and <code>MakeEdgeVectorPropertyMap&lt;T>()</code> a vector indexed by edge index. That is the pattern for anything a search needs per vertex or per edge. <code>GraphFilterProperties</code> (in <code>motion_planner</code>) uses exactly this pattern: two <code>vector_property_map&lt;bool></code>s, one per vertex and one per edge, and <code>IsEnabled(vertex)</code> / <code>IsEnabled(edge)</code> are unchecked lookups into them (“These functions offer no bounds checking”).</li>
 </ul>
 <table>
   <thead>
@@ -1022,21 +1169,21 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
       <td><span class="math">O(1)</span> per edge</td>
     </tr>
     <tr>
-      <td>What is the fastest path from A to B?</td>
+      <td>Which path from A to B is quickest?</td>
       <td><code>GetPosePath(gg_, a, b, cost_model_, filters)</code></td>
-      <td>a search in <code>motion_planner</code> over <code>gg_</code></td>
+      <td><code>GetPosePath</code> in <code>motion_planner</code>: Dijkstra over <code>gg_</code>, each edge weighted by its trapezoid time (<a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a>)</td>
       <td>a graph search</td>
     </tr>
     <tr>
       <td>Would a tray at <em>a</em> block an AGV at <em>b</em>?</td>
-      <td><code>table_.Query(TRAY, AGV, a, b)</code></td>
+      <td><code>table_.Query(TRAY_LEGS, AGV, a, b)</code>: an empty AGV drives under a parked tray, so only the tray's legs can block it (<code>GetStaticFilter</code> does this)</td>
       <td><code>CollisionTable::ppmap_</code></td>
       <td><span class="math">O(1)</span> plus a set copy</td>
     </tr>
     <tr>
-      <td>Which vertices may tray 17 not use right now?</td>
-      <td><code>GetStaticFilter(...)</code>, then <code>filters.IsEnabled(v)</code></td>
-      <td><code>motion_planner</code>, from <code>table_</code> and <code>working_state</code></td>
+      <td>Which vertices and edges may tray 17 not use right now?</td>
+      <td><code>GetStaticFilter(...)</code>, then <code>filters.IsEnabled(v)</code> or <code>IsEnabled(e)</code></td>
+      <td><code>GraphFilterProperties</code> in <code>motion_planner</code>: two bool vectors, built from <code>table_</code> and <code>working_state</code></td>
       <td>built per call</td>
     </tr>
     <tr>
@@ -1107,7 +1254,7 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
 </figure>
 <p>Reading notes:</p>
 <ul>
-  <li><code>ActionNode.parents</code> are <strong>integer indices</strong> into <code>Schedule.nodes</code>, not pointers. The conversion from event objects to indices happens at the very end of <code>Plan()</code> (<a class="ref" href="#bg-motion-planning-and-the-response">section 19</a>).</li>
+  <li><code>ActionNode.parents</code> are <strong>integer indices</strong> into <code>Schedule.nodes</code>, not pointers. They index <strong>actions</strong>, not events: the response builds a separate graph, the action DAG, from CHUGG's motions, and writes its edges as these indices at the very end of <code>Plan()</code> (<a class="ref" href="#bg-from-trajectories-to-the-response">section 25</a>). Event-DAG edges reach it only by being copied across.</li>
   <li><code>ActionNode</code> is wide: it has a command field for every machine type, but only the one matching <code>type</code> is meaningful.</li>
   <li><code>ScheduledJobData.node_indices</code> tells Dispatch which actions belong to which job; for <code>TYPE_RETRIEVE</code>, <code>bay_arrival_node_guid</code> names the <code>PROCESS_RETRIEVE</code> action. The next subsection looks at one entry in detail.</li>
 </ul>
@@ -1608,141 +1755,6 @@ DiscreteVrcState next_discrete_state
   <img src="figures/74_scheduled_job_data_map.svg" alt="ScheduledJobData on the Pecos map">
   <figcaption>What the entries hold for a concrete request. AGV A retrieves the car on T17 to bay B21 (job A); AGV B moves out of the way (job B); an INSERT fails (job C). The badges on the map are positions in <code>Schedule.nodes</code>. Job A's <code>node_indices</code> skip 3 because B's move was ordered between A's actions; its <code>bay_arrival_node_guid</code> points at node 11, the <code>PROCESS_RETRIEVE</code>. Job C has no actions: only its <code>job</code> status fields say anything.</figcaption>
 </figure>
-<h2 data-num id="bg-schedulecontext-the-per-call-workspace"><code>ScheduleContext</code>: the per-call workspace</h2>
-<p><code>DiscreteGarageState</code> describes the garage. <code>ScheduleContext</code> describes <strong>one planning attempt</strong>: the garage it started from, the events planned so far, the jobs they belong to, and the maps that link those events together. Every stage of <code>Plan()</code> after request validation reads it, and most of them change it. When a later section says “the job method adds an edge” or “tray assignment fills the destination”, the thing being changed is a field of this object. Learning its nine fields once makes the rest of this guide much easier to follow.</p>
-<p>Key facts:</p>
-<ul>
-  <li><strong>One per <code>Plan()</code> call.</strong> <code>Plan()</code> creates it with <code>std::make_shared&lt;ScheduleContext>(...)</code> right after the request passes validation, and it is freed when <code>Plan()</code> returns. Nothing in it survives to the next request; the only output is the <code>PlanResponse</code> built from it.</li>
-  <li><strong>Shared, not copied.</strong> Every stage receives the same <code>ScheduleContextSPtr</code> (<code>std::shared_ptr&lt;ScheduleContext></code>). Passing the pointer by value copies the pointer, so all stages edit one object (<a class="ref" href="#bg-objects-ownership-and-lifetimes">section 9</a> explains why <code>const</code> methods can still do that).</li>
-  <li><strong>A plain bag of public fields.</strong> It is declared as a <code>class</code> in <code>include/scheduler/scheduler.hpp</code> (<code>:57</code>–<code>:115</code>), but all members are public, and it enforces no invariants. Three small helper methods exist; everything else is direct field access (<code>ctx->events.AddEvent(...)</code>).</li>
-</ul>
-<figure id="bg-fig-61_schedule_context_anatomy">
-  <img src="figures/61_schedule_context_anatomy.svg" alt="ScheduleContext anatomy">
-  <figcaption><code>ScheduleContext</code>, field by field. Left: <code>Plan()</code> owns the <code>shared_ptr</code> and hands the same pointer to every stage. Centre: the nine fields in four groups, and the three helper methods. Right: the types the fields hold. <code>initial_state</code>, <code>events</code> and <code>scheduled_jobs</code> are held by value; the two bookkeeping maps hold <code>shared_ptr</code>s to events that also live in <code>events</code>, so a map entry and the DAG vertex are the same object.</figcaption>
-</figure>
-<h3 id="bg-the-definition-annotated">The definition, annotated</h3>
-<pre><code class="language-cpp">// include/scheduler/scheduler.hpp:57 (abridged; the three helper methods are shown further below)
-class ScheduleContext {
-public:
-  ScheduleContext(const GuidMsg&amp; reqid, volley::DiscreteGarageState initial_state, const rclcpp::Time&amp; now) :
-      request_id(reqid),                                    // the PlanRequest's id
-      request_id_str(std::to_string(reqid)),                // same id as text, for debug file names
-      initial_state(std::move(initial_state)),              // moved in: Plan() built and adjusted it
-      start_time(std::chrono::nanoseconds(now.nanoseconds())) { }  // time the request arrived
-
-  // ---- identity ------------------------------------------------------------------------------
-  GuidMsg request_id;                    // stored for completeness; scheduler.cpp never reads it back
-  std::string request_id_str;            // only used to name DAG dumps (debug/printdags)
-  volley::Interval::Timepoint start_time;  // t = 0 for PlanMotions' trajectories
-
-  // ---- fixed inputs: written at the start of Plan(), then only read ----------------------------
-  volley::DiscreteGarageState initial_state;  // garage at request time, with base_schedule users disabled
-  using CollistionFilterMap =                 // (sic) one filter per collision-entity type
-      std::unordered_map&lt;volley::CollisionEntityId_t, volley::GraphFilterProperties>;
-  CollistionFilterMap disabledness_filters;   // which graph vertices each footprint may not use
-
-  // ---- the plan being built ---------------------------------------------------------------------
-  volley::ScheduleEventDag events;                  // the event DAG (section 12); grows in every stage
-  std::vector&lt;ScheduledJobDataMsg> scheduled_jobs;  // one entry per job that planned; index = job_index
-
-  // ---- bookkeeping: links between events -------------------------------------------------------
-  using GarageEntityEventMap = std::unordered_map&lt;GarageEntityIdMsg, ScheduleEventSPtr>;
-  GarageEntityEventMap last_entity_event;           // last event that touched each AGV/tray/bay/VECS
-  std::unordered_map&lt;uint16_t, ScheduleEventSPtr> first_tray_event;  // first move of each tray
-};
-</code></pre>
-<table>
-  <thead>
-    <tr>
-      <th>Field</th>
-      <th>Type</th>
-      <th>Group</th>
-      <th>Set by</th>
-      <th>Read by</th>
-      <th>What to remember</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>request_id</code></td>
-      <td><code>GuidMsg</code></td>
-      <td>identity</td>
-      <td>constructor</td>
-      <td>(nothing in <code>scheduler.cpp</code>)</td>
-      <td><code>Plan()</code> copies the id into the response directly from the request</td>
-    </tr>
-    <tr>
-      <td><code>request_id_str</code></td>
-      <td><code>std::string</code></td>
-      <td>identity</td>
-      <td>constructor</td>
-      <td><code>PrintGraph(...)</code> calls in <code>Plan()</code> and <code>ResponseFromTrajectories</code></td>
-      <td>Only matters when DAG dumps are on (<code>printdags_</code>)</td>
-    </tr>
-    <tr>
-      <td><code>start_time</code></td>
-      <td><code>volley::Interval::Timepoint</code></td>
-      <td>identity</td>
-      <td>constructor, from <code>now</code></td>
-      <td><code>PlanMotions</code> (<code>ContinuousState(..., ctx->start_time)</code>)</td>
-      <td>The time origin of every trajectory in the response</td>
-    </tr>
-    <tr>
-      <td><code>initial_state</code></td>
-      <td><code>volley::DiscreteGarageState</code></td>
-      <td>fixed input</td>
-      <td>constructor (moved in)</td>
-      <td>every job method, tray and AGV assignment, <code>SanityCheckEvents</code>, <code>PlanMotions</code>, VRC insertion</td>
-      <td>Never changed after construction; every stage that needs “the garage now” copies it and replays events (<a class="ref" href="#bg-every-job-sees-the-garage-through-working_state">section 14.4</a>)</td>
-    </tr>
-    <tr>
-      <td><code>disabledness_filters</code></td>
-      <td><code>CollistionFilterMap</code></td>
-      <td>fixed input</td>
-      <td><code>Plan()</code>, right after construction, via <code>GetDisabledEntitiesFilters(gg_, initial_state, table_)</code></td>
-      <td><code>PlanAgvMoveJob</code>, <code>PlanRetrieveJob</code>, <code>PlanReparkTrayJob</code>, <code>PlanAgvChargeJob</code>, <code>IsMovePossible</code> (from <code>SanityCheckEvents</code>)</td>
-      <td>Answers “is this vertex unusable for this footprint because something is disabled?”</td>
-    </tr>
-    <tr>
-      <td><code>events</code></td>
-      <td><code>volley::ScheduleEventDag</code></td>
-      <td>plan</td>
-      <td>job methods, tray assignment, AGV assignment, <code>Reduce()</code></td>
-      <td>every later stage</td>
-      <td>The plan itself: vertices are <code>shared_ptr&lt;ScheduleEvent></code>, an edge u → v means u finishes first</td>
-    </tr>
-    <tr>
-      <td><code>scheduled_jobs</code></td>
-      <td><code>std::vector&lt;ScheduledJobDataMsg></code></td>
-      <td>plan</td>
-      <td><code>Plan()</code> via <code>PushBackScheduledJob</code> after each job that planned; rebuilt by <code>BuildScheduledActionsArray</code></td>
-      <td><code>Plan()</code> (its <code>size()</code> is the next <code>job_index</code>), <code>BuildActionDagFromMotions</code>, final response loop</td>
-      <td>Entry k is the job whose events have <code>GetJobIndex() == k</code></td>
-    </tr>
-    <tr>
-      <td><code>last_entity_event</code></td>
-      <td><code>GarageEntityEventMap</code></td>
-      <td>bookkeeping</td>
-      <td><code>UpdateLastEntityEvent</code> (rule A)</td>
-      <td><code>UpdateLastEntityEvent</code>; rule C in <code>PlanReparkTrayJob</code></td>
-      <td>Maintained only during job expansion</td>
-    </tr>
-    <tr>
-      <td><code>first_tray_event</code></td>
-      <td><code>unordered_map&lt;uint16_t, ScheduleEventSPtr></code></td>
-      <td>bookkeeping</td>
-      <td>tray assignment</td>
-      <td>AGV assignment (<code>MoveAgvToTrayPose</code>)</td>
-      <td>Empty until tray assignment; keyed by tray id</td>
-    </tr>
-  </tbody>
-</table>
-<h3 id="bg-the-four-groups">The four groups</h3>
-<p><strong>Identity</strong> says which request this is and when it started. Only <code>start_time</code> affects the result: <code>PlanMotions</code> builds its <code>ContinuousState</code> from <code>initial_state</code> at <code>start_time</code>, so every timed motion in the response is measured from the moment the request arrived.</p>
-<p><strong>Fixed inputs</strong> are settled before any job is expanded. <code>initial_state</code> is the validated <code>base_state</code>, with every AGV, node, bay and VECS used by the already-running <code>base_schedule</code> marked disabled (<a class="ref" href="#bg-objects-ownership-and-lifetimes">section 9</a> shows the code). <code>disabledness_filters</code> precomputes, for each footprint type (<code>CollisionEntityId</code>: an AGV, an empty tray, a tray with a certain payload, ...), which graph vertices are unusable because of those disabled entities. Job methods consult it to reject destinations early, instead of discovering the problem in a path search. Neither field is changed after this point. Nothing enforces that (they are public and non-<code>const</code>), but the whole design relies on it: every “where is everything now?” question is answered by copying <code>initial_state</code> and replaying <code>events</code> on the copy.</p>
-<p><strong>The plan being built</strong> is the output in progress. <code>events</code> starts empty; job expansion adds intent, tray assignment adds blocker moves, AGV assignment adds approach, lift and lower events, and <code>Reduce()</code> removes redundant edges. <code>scheduled_jobs</code> lists the jobs that planned successfully, in planning order, so that an event's <code>job_index</code> can be turned back into the job it belongs to.</p>
-<p><strong>Bookkeeping</strong> maps hold pointers into <code>events</code> so that a stage can find “the last event for this AGV” or “the first move of this tray” without searching the DAG. They point at the same objects as the DAG (<code>shared_ptr</code> copies), so following a map entry gives you the actual vertex's event.</p>
-<p>That is enough to read the next sections. <a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">Section 13</a> comes back to <code>ScheduleContext</code> once events (<a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>) and the event DAG (<a class="ref" href="#bg-directed-acyclic-graphs-then-scheduleeventdag">section 12</a>) have been introduced, and explains <code>scheduled_jobs</code>, the three helper methods and the two bookkeeping maps in depth.</p>
 <h2 data-num id="bg-package-anatomy-files-and-classes">Package anatomy: files and classes</h2>
 <table>
   <thead>
@@ -1862,8 +1874,20 @@ public:
     <tr>
       <td><code>MotionCostModel</code></td>
       <td>Durations from speeds, accelerations and event times</td>
-      <td><code>cost_functions/motion_cost_model.hpp</code> (not in snapshot)</td>
-      <td><code>Params()</code>, <code>Duration(transition)</code></td>
+      <td><code>cost_functions/motion_cost_model.hpp</code></td>
+      <td><code>Params()</code>, <code>Duration(transition | run, is_agv_loaded)</code>, <code>VelocityLimitsFor</code> (<a class="ref" href="#bg-the-cost-model">section 23.2</a>)</td>
+    </tr>
+    <tr>
+      <td><code>Chugg</code></td>
+      <td>The motion planner: plans every event of the event DAG into timed, collision-free motions</td>
+      <td><code>motion_planner/chugg.hpp</code></td>
+      <td><code>SolveSequential</code> (used), <code>SolveCbs</code> (unfinished) (<a class="ref" href="#bg-chugg-the-motion-planner">section 21</a>)</td>
+    </tr>
+    <tr>
+      <td><code>ContinuousState</code>, <code>Trajectory</code>, <code>Motion</code>, <code>Interval</code></td>
+      <td>CHUGG's output: a timeline of motions per entity</td>
+      <td><code>motion_planner/continuous_state.hpp</code>, <code>trajectory.hpp</code>, <code>interval.hpp</code></td>
+      <td><code>GetTrajectories</code>, <code>SetTrajectory</code>, <code>Motion::GetDelta</code>, <code>GetActionId</code> (<a class="ref" href="#bg-continuousstate-the-timeline">section 24</a>)</td>
     </tr>
     <tr>
       <td><code>SchedulerRos</code>, <code>SchedulerComponent</code></td>
@@ -1907,7 +1931,7 @@ Scheduler::Scheduler(std::string layout_filepath, rclcpp::Logger logger, const S
 //                                        const rclcpp::Time&amp; now) const   (src/scheduler.cpp)
 //   this          -> the Scheduler. There is no variable called "scheduler" here: layout_, gg_
 //                    and table_ are its members. The method is const, so it cannot change them.
-//   request_data  -> the PlanRequest from Dispatch (see section 4)
+//   request_data  -> the PlanRequest from Dispatch (see "ROS messages and services")
 //   now           -> node time when the service call arrived
 PlanResponseMsg result;
 result.id = request_data.id;                          // echo the id so Dispatch can match the reply
@@ -1937,7 +1961,7 @@ ScheduleContextSPtr plan_ctx =
     std::make_shared&lt;ScheduleContext>(request_data.id, std::move(initial_state), now);
 
 // For each collision-entity type: which graph vertices and edges are unusable because of
-// disabled AGVs / nodes / bays. A free function from another package (not in this snapshot).
+// disabled AGVs / nodes / bays. A free function in motion_planner (static_graph_filtering.cpp).
 plan_ctx->disabledness_filters =
     volley::GetDisabledEntitiesFilters(gg_, plan_ctx->initial_state, table_);
 </code></pre>
@@ -1946,7 +1970,7 @@ plan_ctx->disabledness_filters =
 <h2 data-num id="bg-one-plan-call-step-by-step">One <code>Plan()</code> call, step by step</h2>
 <figure id="bg-fig-22_plan_control_flow">
   <img src="figures/22_plan_control_flow.svg" alt="Plan control flow">
-  <figcaption><code>Scheduler::Plan()</code> step by step with every early return. Job expansion fails jobs one at a time. Any failure after expansion fails <strong>every</strong> pending job at once and returns no schedule, but <code>PlanResponse.success</code> stays <code>true</code>; only an invalid base state returns <code>false</code>.</figcaption>
+  <figcaption><code>Scheduler::Plan()</code> step by step with every early return. Job expansion fails jobs one at a time. Any failure after expansion fails <strong>every</strong> pending job at once and returns no schedule, but <code>PlanResponse.success</code> stays <code>true</code>; only an invalid base state returns <code>false</code>. Not drawn: CHUGG can also <em>throw</em> (<a class="ref" href="#bg-chugg-the-motion-planner">section 21</a>), and nothing in the scheduler catches it.</figcaption>
 </figure>
 <p>The job loop is a plain <code>switch</code>. Each case calls one <code>Plan&lt;Type>Job</code> method with the index the job <strong>will</strong> have if it succeeds:</p>
 <pre><code class="language-cpp">// Where: Scheduler::Plan(...) const, after plan_ctx has been created.
@@ -1965,7 +1989,7 @@ for(const SchedulerJobMsg&amp; job : request_data.pending_jobs) {
     }
     plan_ctx->PushBackScheduledJob(job);      // now job_index really is this job's position
   } break;
-  // ... one case per job type, see section 14
+  // ... one case per job type, see "Job expansion"
   }
 }
 </code></pre>
@@ -2158,7 +2182,7 @@ using ScheduleEventSPtr = std::shared_ptr&lt;ScheduleEvent>;
 </table>
 <p>A <code>TrayMove</code> is <strong>not</strong> an AGV command. Before assignment it may mean “bring <em>some</em> empty tray to this bay” (no tray id) or “put this tray <em>somewhere</em> sensible” (no destination). <code>AgvMove</code> also declares <code>SetSrc</code> and <code>SetDest</code>, but a source comment says they “aren't implemented anywhere”; do not call them.</p>
 <h2 data-num id="bg-directed-acyclic-graphs-then-scheduleeventdag">Directed acyclic graphs, then <code>ScheduleEventDag</code></h2>
-<p><code>ctx->events</code>, a <code>ScheduleEventDag</code>, <em>is</em> the plan while <code>Plan()</code> runs. Job expansion writes intent into it, tray and AGV assignment extend it, <code>Reduce()</code> thins it, the sanity check replays it, CHUGG turns it into timed motions, and the response turns its edges into the action nodes' parent lists. This section starts with the graph theory (<a class="ref" href="#bg-graph-theory-in-one-paragraph">12.1</a>, <a class="ref" href="#bg-what-a-topological-ordering-is-in-plain-words">12.2</a>), then goes inside the class: its type family (<a class="ref" href="#bg-the-class-dagbaset-and-scheduleeventdag">12.3</a>), what it stores (<a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">12.4</a>), each operation (<a class="ref" href="#bg-the-operations">12.5</a>), how copies behave (<a class="ref" href="#bg-copies-share-events-event_dag_copy-as-a-work-queue">12.6</a>), how the DAG grows during <code>Plan()</code> (<a class="ref" href="#bg-how-the-dag-grows-during-plan">12.7</a>), what <code>Reduce()</code> does (<a class="ref" href="#bg-reduce-fewer-edges-same-order">12.8</a>), and the traps (<a class="ref" href="#bg-gotchas">12.9</a>).</p>
+<p><code>ctx->events</code>, a <code>ScheduleEventDag</code>, <em>is</em> the plan while <code>Plan()</code> runs. Job expansion writes intent into it, tray and AGV assignment extend it, <code>Reduce()</code> thins it, the sanity check replays it, CHUGG plans timed motions from it, and the response builds a <em>second</em> graph, the action DAG, from those motions, copying the event edges into it (<a class="ref" href="#bg-motion-planning-and-the-response">section 20</a>). This section starts with the graph theory (<a class="ref" href="#bg-graph-theory-in-one-paragraph">12.1</a>, <a class="ref" href="#bg-what-a-topological-ordering-is-in-plain-words">12.2</a>), then goes inside the class: its type family (<a class="ref" href="#bg-the-class-dagbaset-and-scheduleeventdag">12.3</a>), what it stores (<a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">12.4</a>), each operation (<a class="ref" href="#bg-the-operations">12.5</a>), how copies behave (<a class="ref" href="#bg-copies-share-events-event_dag_copy-as-a-work-queue">12.6</a>), how the DAG grows during <code>Plan()</code> (<a class="ref" href="#bg-how-the-dag-grows-during-plan">12.7</a>), what <code>Reduce()</code> does (<a class="ref" href="#bg-reduce-fewer-edges-same-order">12.8</a>), and the traps (<a class="ref" href="#bg-gotchas">12.9</a>).</p>
 <h3 data-num id="bg-graph-theory-in-one-paragraph">Graph theory in one paragraph</h3>
 <p><strong>Graph theory first.</strong> A directed graph <strong><span class="math">\mathcal G=(\mathcal V,\mathcal E)</span></strong> has vertices <strong><span class="math">\mathcal V</span></strong> and directed edges <strong><span class="math">\mathcal E\subseteq\mathcal V\times\mathcal V</span></strong>. Here an edge <strong><span class="math">(u,v)\in\mathcal E</span></strong> means event <strong><span class="math">u</span></strong> must finish before event <strong><span class="math">v</span></strong> may start. A DAG has no directed cycle; otherwise some event would have to finish before itself.</p>
 <p>An ordering function <strong><span class="math">\pi:\mathcal V\to\{0,\ldots,n-1\}</span></strong> assigns each vertex an index, where <strong><span class="math">n=|\mathcal V|</span></strong> is the number of events. A topological order satisfies:</p>
@@ -2190,7 +2214,7 @@ public:
   using Edge   = typename DagT::edge_descriptor;     // what GetInEdges / GetOutEdges iterate over
   DagBase(DagBase const&amp;) = default;                 // copies dag_ and ptr_to_vertex_: same shared_ptrs
   virtual ~DagBase() = default;
-  // ... about 30 methods, listed in 12.5 ...
+  // ... about 30 methods, listed under "The operations" ...
   virtual std::optional&lt;std::vector&lt;Vertex>> GetTopologicalOrdering() const;   // Boost DFS version
 protected:
   DagT dag_;                                                   // vertices + edges
@@ -2207,7 +2231,7 @@ public:
   std::optional&lt;Vertex> GetVertexFromEvent(const ScheduleEventSPtr&amp; e) const { return GetVertex(e); }
   std::vector&lt;ScheduleEventSPtr> GetLeafEvents() const;        // vertex order
   std::vector&lt;ScheduleEventSPtr> GetRootEvents() const;        // sorted by job index
-  std::optional&lt;VertexVec> GetTopologicalOrdering() const override;  // job-index priority (12.5)
+  std::optional&lt;VertexVec> GetTopologicalOrdering() const override;  // job-index priority (see "The operations")
 };
 </code></pre>
 <p>Three design choices explain most of the behaviour in the rest of this section:</p>
@@ -2398,7 +2422,7 @@ public:
       <td><code>GetTopologicalOrdering()</code></td>
       <td><code>std::optional&lt;VertexVec></code></td>
       <td><code>ScheduleEventDag</code>: Kahn's algorithm with a min-priority queue on job index (below). <code>DagBase&lt;T></code>: Boost <code>topological_sort</code> (DFS), reversed. <code>std::nullopt</code> on a cycle</td>
-      <td>8 calls on <code>ctx->events</code> (tray and AGV assignment, <code>PlanReadyForInsertJob</code>, sanity check, path repair, <code>AddDepsAfterAmiga</code>, the response); <code>agv_event_dag</code> and the response's action DAG use the Boost version</td>
+      <td>8 calls on <code>ctx->events</code> (tray and AGV assignment, <code>PlanReadyForInsertJob</code>, sanity check, path repair, <code>AddDepsAfterAmiga</code>, the response), plus CHUGG's <code>InitializeEventOrder</code>, which makes this order CHUGG's planning priority; <code>agv_event_dag</code> and the response's action DAG use the Boost version</td>
     </tr>
     <tr>
       <td></td>
@@ -2534,10 +2558,10 @@ while(event_dag_copy.GetRootEvents().size() > 0) {
       <td>—</td>
     </tr>
     <tr>
-      <td>Sanity check, motion planning, response (sections <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>, <a class="ref" href="#bg-motion-planning-and-the-response">19</a>)</td>
+      <td>Sanity check, motion planning, response (sections <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>, <a class="ref" href="#bg-chugg-the-motion-planner">21</a>, <a class="ref" href="#bg-from-trajectories-to-the-response">25</a>)</td>
       <td>—</td>
       <td>—</td>
-      <td><code>SanityCheckEvents</code> replays it; CHUGG receives <code>ctx->events</code>; <code>TransferEventDagDepsToActionDag</code> turns each edge u → v into an action edge “last action of u → first action of v”</td>
+      <td><code>SanityCheckEvents</code> replays it; CHUGG receives <code>ctx->events</code> and plans its events in <code>GetTopologicalOrdering()</code> order; <code>TransferEventDagDepsToActionDag</code> turns each edge u → v into an action edge “last action of u → first action of v”</td>
     </tr>
   </tbody>
 </table>
@@ -2558,20 +2582,155 @@ while(event_dag_copy.GetRootEvents().size() > 0) {
   <li><strong>At the end of AGV assignment</strong>, before <code>AddDepsAfterAmiga</code>.</li>
   <li><strong>Again in <code>Plan()</code></strong>, before <code>SanityCheckEvents</code>, with “TODO(any) Planning may fail if Reduce() is not called”.</li>
 </ul>
-<p>Both calls discard the returned <code>BoolStringPair</code>, so a cyclic DAG at that point is not reported by <code>Reduce()</code>; the next <code>GetTopologicalOrdering()</code> catches it. Nobody has written down why the placement matters (doc 02, risk 2). Doc 02, risk 3, gives a likely reason for the tray-assignment case: two AGV-assignment helpers look only at direct edges, which <code>Reduce()</code> may replace with longer paths. A test shows the visible effect: after <code>DoAgvAssignments</code>, the direct edges <code>tray_move_1 → tray_move_2</code> that the test added are gone (<code>EXPECT_FALSE(ctx->events.HasDependency(...))</code>), because the AGV chains now imply them. <code>HasDependency</code> checks a direct edge only, so after <code>Reduce()</code> it is the wrong question for “must a finish before b?”.</p>
+<p>Both calls discard the returned <code>BoolStringPair</code>, so a cyclic DAG at that point is not reported by <code>Reduce()</code>; the next <code>GetTopologicalOrdering()</code> catches it. The code does not say why the placement matters (doc 02, risk 2); <a class="ref" href="#bg-inside-solvesequential">Section 21.1</a> gives a reading of CHUGG's code that would explain the motion-planning case. Doc 02, risk 3, gives a likely reason for the tray-assignment case: two AGV-assignment helpers look only at direct edges, which <code>Reduce()</code> may replace with longer paths. A test shows the visible effect: after <code>DoAgvAssignments</code>, the direct edges <code>tray_move_1 → tray_move_2</code> that the test added are gone (<code>EXPECT_FALSE(ctx->events.HasDependency(...))</code>), because the AGV chains now imply them. <code>HasDependency</code> checks a direct edge only, so after <code>Reduce()</code> it is the wrong question for “must a finish before b?”.</p>
 <h3 data-num id="bg-gotchas">Gotchas</h3>
 <ul>
   <li><strong>Never remove a vertex from <code>ctx->events</code>.</strong> Vertex indices are how CHUGG's motions find their events again, and removal shifts every later index. Removing from a copy is fine; that is what the copy is for.</li>
   <li><strong>A copy is not a snapshot of the events.</strong> <code>auto copy(ctx->events)</code> shares every event object. To compare “before” and “after” a stage (as the parity tests in doc 03 must), build two contexts independently.</li>
   <li><strong><code>AddDependency</code> fails silently.</strong> It returns <code>false</code> when either endpoint was never added (a forgotten <code>AddEvent</code>) or the edge exists, and almost every caller ignores the result. A missing <code>AddEvent</code> therefore means a missing edge, not an error.</li>
   <li><strong>Not every edge is cycle-checked, and the check needs both events present.</strong> <code>AddDependency</code> never checks for cycles. Only the two risky AGV-assignment edges ask <code>WouldCreateCycle</code> first, and it answers <code>false</code> (safe) if either endpoint is missing. Everything else relies on the stage-end <code>GetTopologicalOrdering()</code> check, which reports <em>that</em> there is a cycle, not <em>which edge</em> closed it. When debugging one, dump the graph with <code>debug/printdags</code> (<a class="ref" href="#bg-debugging-and-testing">section 22</a>).</li>
-  <li><strong>Order is by job index, then heap order.</strong> <code>GetTopologicalOrdering()</code> and <code>GetRootEvents()</code> both prefer lower job indices. Within one job, <code>GetRootEvents()</code> uses <code>std::sort</code> (not stable) and the topological sort uses a heap, so code must not assume anything about the order of same-job events beyond what the edges force.</li>
+  <li><strong>Order is by job index, then heap order.</strong> <code>GetTopologicalOrdering()</code> and <code>GetRootEvents()</code> both prefer lower job indices. Within one job, <code>GetRootEvents()</code> uses <code>std::sort</code> (not stable) and the topological sort uses a heap, so code must not assume anything about the order of same-job events beyond what the edges force. The same order is CHUGG's planning priority (<a class="ref" href="#bg-inside-solvesequential">section 21.1</a>), so it decides which event gets space and time first.</li>
   <li><strong><code>Apply</code> stops at the first failing event.</strong> The state has then been advanced by every event before it. Job methods return the error, but <code>working_state</code> is already partly replayed.</li>
   <li><strong>Replays are repeated, not cached.</strong> Each job method copies <code>initial_state</code> and replays the whole DAG, nested calls replay again, and <code>AddDepsAfterAmiga</code> recomputes a topological order and replays from scratch for each dependency it inspects. This is simple and correct, but cost grows with the square of the number of events.</li>
   <li><strong>Lookups assume membership.</strong> Most call sites write <code>GetEventFromVertex(v).value()</code>, which throws <code>std::bad_optional_access</code> for an out-of-range vertex; <code>GetInEdges</code> / <code>GetOutEdges</code> throw <code>std::invalid_argument</code>. <code>PropagateEventCostToChildren</code> throws its own <code>std::runtime_error("Failed to get AGV vertex in DAG")</code> when an event is missing.</li>
 </ul>
-<h2 data-num id="bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps"><code>ScheduleContext</code> in depth: job indices and bookkeeping maps</h2>
-<p><a class="ref" href="#bg-schedulecontext-the-per-call-workspace">Section 7</a> introduced the context's nine fields. With events (<a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>) and the event DAG (<a class="ref" href="#bg-directed-acyclic-graphs-then-scheduleeventdag">section 12</a>) in hand, this section explains the fields that link them: <code>scheduled_jobs</code>, which turns an event's <code>job_index</code> back into a job; the three helper methods that add edges while jobs are expanded (rules A and B); and the two bookkeeping maps, <code>last_entity_event</code> and <code>first_tray_event</code>. It ends with the context's life cycle across one <code>Plan()</code> call and its gotchas.</p>
+<h2 data-num id="bg-schedulecontext-the-per-call-workspace"><code>ScheduleContext</code>: the per-call workspace</h2>
+<p><code>DiscreteGarageState</code> describes the garage. <code>ScheduleContext</code> describes <strong>one planning attempt</strong>: the garage it started from, the events planned so far, the jobs they belong to, and the maps that link those events together. Every stage of <code>Plan()</code> after request validation reads it, and most of them change it. When a later section says “the job method adds an edge” or “tray assignment fills the destination”, the thing being changed is a field of this object. Learning its nine fields once makes the rest of this guide much easier to follow.</p>
+<p>Key facts:</p>
+<ul>
+  <li><strong>One per <code>Plan()</code> call.</strong> <code>Plan()</code> creates it with <code>std::make_shared&lt;ScheduleContext>(...)</code> right after the request passes validation, and it is freed when <code>Plan()</code> returns. Nothing in it survives to the next request; the only output is the <code>PlanResponse</code> built from it.</li>
+  <li><strong>Shared, not copied.</strong> Every stage receives the same <code>ScheduleContextSPtr</code> (<code>std::shared_ptr&lt;ScheduleContext></code>). Passing the pointer by value copies the pointer, so all stages edit one object (<a class="ref" href="#bg-objects-ownership-and-lifetimes">section 9</a> explains why <code>const</code> methods can still do that).</li>
+  <li><strong>A plain bag of public fields.</strong> It is declared as a <code>class</code> in <code>include/scheduler/scheduler.hpp</code> (<code>:57</code>–<code>:115</code>), but all members are public, and it enforces no invariants. Three small helper methods exist; everything else is direct field access (<code>ctx->events.AddEvent(...)</code>).</li>
+</ul>
+<figure id="bg-fig-61_schedule_context_anatomy">
+  <img src="figures/61_schedule_context_anatomy.svg" alt="ScheduleContext anatomy">
+  <figcaption><code>ScheduleContext</code>, field by field. Left: <code>Plan()</code> owns the <code>shared_ptr</code> and hands the same pointer to every stage. Centre: the nine fields in four groups, and the three helper methods. Right: the types the fields hold. <code>initial_state</code>, <code>events</code> and <code>scheduled_jobs</code> are held by value; the two bookkeeping maps hold <code>shared_ptr</code>s to events that also live in <code>events</code>, so a map entry and the DAG vertex are the same object.</figcaption>
+</figure>
+<h3 id="bg-the-definition-annotated">The definition, annotated</h3>
+<pre><code class="language-cpp">// include/scheduler/scheduler.hpp:57 (abridged; the three helper methods are shown further below)
+class ScheduleContext {
+public:
+  ScheduleContext(const GuidMsg&amp; reqid, volley::DiscreteGarageState initial_state, const rclcpp::Time&amp; now) :
+      request_id(reqid),                                    // the PlanRequest's id
+      request_id_str(std::to_string(reqid)),                // same id as text, for debug file names
+      initial_state(std::move(initial_state)),              // moved in: Plan() built and adjusted it
+      start_time(std::chrono::nanoseconds(now.nanoseconds())) { }  // time the request arrived
+
+  // ---- identity ------------------------------------------------------------------------------
+  GuidMsg request_id;                    // stored for completeness; scheduler.cpp never reads it back
+  std::string request_id_str;            // only used to name DAG dumps (debug/printdags)
+  volley::Interval::Timepoint start_time;  // t = 0 for PlanMotions' trajectories
+
+  // ---- fixed inputs: written at the start of Plan(), then only read ----------------------------
+  volley::DiscreteGarageState initial_state;  // garage at request time, with base_schedule users disabled
+  using CollistionFilterMap =                 // (sic) one filter per collision-entity type
+      std::unordered_map&lt;volley::CollisionEntityId_t, volley::GraphFilterProperties>;
+  CollistionFilterMap disabledness_filters;   // which graph vertices each footprint may not use
+
+  // ---- the plan being built ---------------------------------------------------------------------
+  volley::ScheduleEventDag events;                  // the event DAG ("Directed acyclic graphs"); grows in every stage
+  std::vector&lt;ScheduledJobDataMsg> scheduled_jobs;  // one entry per job that planned; index = job_index
+
+  // ---- bookkeeping: links between events -------------------------------------------------------
+  using GarageEntityEventMap = std::unordered_map&lt;GarageEntityIdMsg, ScheduleEventSPtr>;
+  GarageEntityEventMap last_entity_event;           // last event that touched each AGV/tray/bay/VECS
+  std::unordered_map&lt;uint16_t, ScheduleEventSPtr> first_tray_event;  // first move of each tray
+};
+</code></pre>
+<table>
+  <thead>
+    <tr>
+      <th>Field</th>
+      <th>Type</th>
+      <th>Group</th>
+      <th>Set by</th>
+      <th>Read by</th>
+      <th>What to remember</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>request_id</code></td>
+      <td><code>GuidMsg</code></td>
+      <td>identity</td>
+      <td>constructor</td>
+      <td>(nothing in <code>scheduler.cpp</code>)</td>
+      <td><code>Plan()</code> copies the id into the response directly from the request</td>
+    </tr>
+    <tr>
+      <td><code>request_id_str</code></td>
+      <td><code>std::string</code></td>
+      <td>identity</td>
+      <td>constructor</td>
+      <td><code>PrintGraph(...)</code> calls in <code>Plan()</code> and <code>ResponseFromTrajectories</code></td>
+      <td>Only matters when DAG dumps are on (<code>printdags_</code>)</td>
+    </tr>
+    <tr>
+      <td><code>start_time</code></td>
+      <td><code>volley::Interval::Timepoint</code></td>
+      <td>identity</td>
+      <td>constructor, from <code>now</code></td>
+      <td><code>PlanMotions</code> (<code>ContinuousState(..., ctx->start_time)</code>)</td>
+      <td>The time origin of every trajectory in the response</td>
+    </tr>
+    <tr>
+      <td><code>initial_state</code></td>
+      <td><code>volley::DiscreteGarageState</code></td>
+      <td>fixed input</td>
+      <td>constructor (moved in)</td>
+      <td>every job method, tray and AGV assignment, <code>SanityCheckEvents</code>, <code>PlanMotions</code>, VRC insertion</td>
+      <td>Never changed after construction; every stage that needs “the garage now” copies it and replays events (<a class="ref" href="#bg-every-job-sees-the-garage-through-working_state">section 14.4</a>)</td>
+    </tr>
+    <tr>
+      <td><code>disabledness_filters</code></td>
+      <td><code>CollistionFilterMap</code></td>
+      <td>fixed input</td>
+      <td><code>Plan()</code>, right after construction, via <code>GetDisabledEntitiesFilters(gg_, initial_state, table_)</code></td>
+      <td><code>PlanAgvMoveJob</code>, <code>PlanRetrieveJob</code>, <code>PlanReparkTrayJob</code>, <code>PlanAgvChargeJob</code>, <code>IsMovePossible</code> (from <code>SanityCheckEvents</code>)</td>
+      <td>Answers “is this vertex unusable for this footprint because something is disabled?”</td>
+    </tr>
+    <tr>
+      <td><code>events</code></td>
+      <td><code>volley::ScheduleEventDag</code></td>
+      <td>plan</td>
+      <td>job methods, tray assignment, AGV assignment, <code>Reduce()</code></td>
+      <td>every later stage</td>
+      <td>The plan itself: vertices are <code>shared_ptr&lt;ScheduleEvent></code>, an edge u → v means u finishes first</td>
+    </tr>
+    <tr>
+      <td><code>scheduled_jobs</code></td>
+      <td><code>std::vector&lt;ScheduledJobDataMsg></code></td>
+      <td>plan</td>
+      <td><code>Plan()</code> via <code>PushBackScheduledJob</code> after each job that planned; rebuilt by <code>BuildScheduledActionsArray</code></td>
+      <td><code>Plan()</code> (its <code>size()</code> is the next <code>job_index</code>), <code>BuildActionDagFromMotions</code>, final response loop</td>
+      <td>Entry k is the job whose events have <code>GetJobIndex() == k</code></td>
+    </tr>
+    <tr>
+      <td><code>last_entity_event</code></td>
+      <td><code>GarageEntityEventMap</code></td>
+      <td>bookkeeping</td>
+      <td><code>UpdateLastEntityEvent</code> (rule A)</td>
+      <td><code>UpdateLastEntityEvent</code>; rule C in <code>PlanReparkTrayJob</code></td>
+      <td>Maintained only during job expansion</td>
+    </tr>
+    <tr>
+      <td><code>first_tray_event</code></td>
+      <td><code>unordered_map&lt;uint16_t, ScheduleEventSPtr></code></td>
+      <td>bookkeeping</td>
+      <td>tray assignment</td>
+      <td>AGV assignment (<code>MoveAgvToTrayPose</code>)</td>
+      <td>Empty until tray assignment; keyed by tray id</td>
+    </tr>
+  </tbody>
+</table>
+<h3 id="bg-the-four-groups">The four groups</h3>
+<p><strong>Identity</strong> says which request this is and when it started. Only <code>start_time</code> affects the result: <code>PlanMotions</code> builds its <code>ContinuousState</code> from <code>initial_state</code> at <code>start_time</code>, so CHUGG's timeline starts at the moment the request arrived. The response keeps no absolute times, only each action's <code>duration</code>.</p>
+<p><strong>Fixed inputs</strong> are settled before any job is expanded. <code>initial_state</code> is the validated <code>base_state</code>, with every AGV, node, bay and VECS used by the already-running <code>base_schedule</code> marked disabled (<a class="ref" href="#bg-objects-ownership-and-lifetimes">section 9</a> shows the code). <code>disabledness_filters</code> precomputes, for each footprint type (<code>CollisionEntityId</code>: an AGV, an empty tray, a tray with a certain payload, ...), which graph vertices are unusable because of those disabled entities. Job methods consult it to reject destinations early, instead of discovering the problem in a path search. Neither field is changed after this point. Nothing enforces that (they are public and non-<code>const</code>), but the whole design relies on it: every “where is everything now?” question is answered by copying <code>initial_state</code> and replaying <code>events</code> on the copy.</p>
+<p><strong>The plan being built</strong> is the output in progress. <code>events</code> starts empty; job expansion adds intent, tray assignment adds blocker moves, AGV assignment adds approach, lift and lower events, and <code>Reduce()</code> removes redundant edges. <code>scheduled_jobs</code> lists the jobs that planned successfully, in planning order, so that an event's <code>job_index</code> can be turned back into the job it belongs to.</p>
+<p><strong>Bookkeeping</strong> maps hold pointers into <code>events</code> so that a stage can find “the last event for this AGV” or “the first move of this tray” without searching the DAG. They point at the same objects as the DAG (<code>shared_ptr</code> copies), so following a map entry gives you the actual vertex's event.</p>
+<p>Of the nine fields, four link events and jobs together and are where most bugs hide: <code>scheduled_jobs</code>, which turns an event's <code>job_index</code> back into a job, and the bookkeeping maps that the job methods and assignment stages use to add edges. The rest of this section looks at them in detail.</p>
+<h3 data-num id="bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">Job indices and bookkeeping maps</h3>
+<p>This part explains <code>scheduled_jobs</code>; the three helper methods that add edges while jobs are expanded (rules A and B, <a class="ref" href="#bg-where-the-edges-come-from">section 15.5</a>); and the two bookkeeping maps, <code>last_entity_event</code> and <code>first_tray_event</code>. It ends with the context's life cycle across one <code>Plan()</code> call and its gotchas.</p>
 <h3 id="bg-scheduled_jobs-in-detail"><code>scheduled_jobs</code> in detail</h3>
 <p>There are <strong>two</strong> vectors of <code>ScheduledJobDataMsg</code> in <code>Plan()</code>, and <a class="ref" href="#bg-fig-69_scheduled_jobs">Figure 23</a> tracks both:</p>
 <ul>
@@ -2638,7 +2797,7 @@ void PushBackScheduledJob(const SchedulerJobMsg&amp; job) {      // wrap the job
   scheduled_jobs.push_back(scheduled_job);
 }
 
-// Rule A (section 14.5): chain events that touch the same entity, across jobs.
+// Rule A ("Where the edges come from"): chain events that touch the same entity, across jobs.
 void UpdateLastEntityEvent(const GarageEntityIdMsg&amp; entity_id, ScheduleEventSPtr new_event) {
   if(last_entity_event.find(entity_id) != last_entity_event.end()) {
     events.AddDependency(last_entity_event.at(entity_id), new_event);   // previous event -> new event
@@ -2646,7 +2805,7 @@ void UpdateLastEntityEvent(const GarageEntityIdMsg&amp; entity_id, ScheduleEvent
   last_entity_event[entity_id] = new_event;                             // new event is now the last
 }
 
-// Rule B (section 14.5): the new event waits for every current leaf of the SAME job.
+// Rule B ("Where the edges come from"): the new event waits for every current leaf of the SAME job.
 void UpdateLeafDependencies(const ScheduleEventSPtr&amp; childevent, size_t job_index) {
   for(const auto&amp; leaf_event : events.GetLeafEvents()) {               // leaf = no outgoing edge
     if(leaf_event == childevent) continue;
@@ -2729,10 +2888,17 @@ for(size_t i = 1; i &lt; nav_path.size(); ++i) {
 <ul>
   <li><strong><code>last_entity_event</code> is stale after job expansion.</strong> Tray and AGV assignment add many events (blocker moves, AGV moves, lifts) without updating it. Code in those stages that needs “the last event of X” keeps its own local map instead (<code>last_tray_event</code> in tray assignment, <code>last_agv_event</code> in AGV assignment). Do not read <code>ctx->last_entity_event</code> after stage 3.</li>
   <li><strong><code>first_tray_event</code> is empty until tray assignment.</strong> A job method that read it would always find nothing.</li>
-  <li><strong><code>disabledness_filters[id]</code> uses <code>operator[]</code>.</strong> If a collision-entity id has no entry, <code>unordered_map::operator[]</code> inserts a default-constructed <code>GraphFilterProperties</code> and returns that. What a default filter allows is defined in <code>motion_planner</code> (not in this snapshot); check it before relying on a lookup for an unusual asset type.</li>
+  <li><strong><code>disabledness_filters[id]</code> uses <code>operator[]</code>.</strong> If a collision-entity id has no entry, <code>unordered_map::operator[]</code> inserts a default-constructed <code>GraphFilterProperties</code> and returns that. <code>GraphFilterProperties()</code> is <code>= default</code>, so its property maps are empty, and <code>IsEnabled</code> does no bounds check; Boost's <code>vector_property_map</code> grows with <code>false</code> on access, so a default filter reports every vertex and edge as <strong>disabled</strong>. Entries exist only for <code>AGV</code>, <code>TRAY</code> and the footprint of each tray in <code>initial_state</code> (<code>GetAllStaticFilters</code>), so a lookup for any other footprint rejects everything.</li>
   <li><strong>Nothing is <code>const</code>, nothing is private.</strong> Any function with the pointer can change <code>initial_state</code> or <code>scheduled_jobs</code>. The code base keeps to the conventions above, but the compiler does not check them. The refactor proposal in doc 02 (sections <a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">6.1</a> and <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">6.5</a>) narrows this for tray assignment by passing <code>const</code> references and returning a result.</li>
   <li><strong>A failure inside a stage leaves partial changes.</strong> Job methods that fail after adding events, and tray or AGV assignment failing halfway, leave <code>events</code> partly edited. <code>Plan()</code> handles the second case by failing every job and returning, so the half-edited context is simply discarded; the first case is gotcha 1 in <a class="ref" href="#bg-gotchas-2">section 14.18</a>.</li>
 </ul>
+<h2 data-num id="bg-the-whole-journey-of-one-job">The whole journey of one job</h2>
+<p>This part covers stages 1–3 of the pipeline (<a class="ref" href="#bg-fig-01_pipeline">Figure 1</a>): everything that builds the event DAG. All three stages edit the same <code>ctx->events</code>, so an event created in one stage is completed or wrapped in another. Before the details of each stage, here is one retrieve followed through all three passes.</p>
+<figure id="bg-fig-26_retrieve_walkthrough">
+  <img src="figures/26_retrieve_walkthrough.svg" alt="Retrieve walkthrough">
+  <figcaption>One <code>TYPE_RETRIEVE</code> job on Pecos, stage by stage. Map numbers match event ids. Band 1: job expansion creates intent, including a move of the empty tray T21 out of the bay with no destination. Band 2: tray assignment gives T21 a destination and inserts a move for blocker T15, which sits on T17's critical path. Band 3: AGV assignment wraps every <code>TrayMove</code> in move → lift → carry → lower, and <code>AddDepsAfterAmiga</code> ties the bay transitions to the right lift and lower. Destinations and AGV order are illustrative.</figcaption>
+</figure>
+<p>Read the bands as the order of the next sections: band 1 is job expansion (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 15</a>), band 2 tray assignment (<a class="ref" href="#bg-tray-assignment-dotrayassignments">section 16</a>), band 3 AGV assignment (<a class="ref" href="#bg-agv-assignment-doagvassignments">section 17</a>). After band 3, <code>Reduce()</code> and the sanity check (<a class="ref" href="#bg-reduce-and-sanitycheckevents">section 18</a>) close Part III. What happens to the finished DAG next, from CHUGG's motions to the action DAG, is Part IV; doc 05 follows a retrieve of the same shape through those last steps (<a class="ref" href="#ad-fig-87_adg_in_scheduler">Figure 4</a> there).</p>
 <h2 data-num id="bg-job-expansion-from-jobs-to-events">Job expansion: from jobs to events</h2>
 <p><strong>Job expansion</strong> is the first planning stage inside <code>Plan()</code>. It turns each line of the request ("retrieve this car", "move this tray") into a handful of <code>ScheduleEvent</code> objects in <code>plan_ctx->events</code>, connected by dependency edges. It decides <strong>what</strong> has to happen and <strong>in which order</strong>. It does not decide <strong>how</strong> (no paths, no timing) or <strong>by whom</strong> (no AGV is chosen, except in one case).</p>
 <p>A useful picture: each job method is a recipe. It writes a few cards (events) onto a shared board (the event DAG) and ties strings (edges) between cards that must happen one after another. Later stages fill in the blanks on the cards and add more cards and strings.</p>
@@ -2839,9 +3005,9 @@ for(size_t i = 1; i &lt; nav_path.size(); ++i) {
 <p><code>Plan()</code> turns one <code>PlanRequestMsg</code> into one <code>PlanResponseMsg</code>. Job expansion is the loop in the middle of it. Around the loop, <code>Plan()</code> does this:</p>
 <ol>
   <li><strong>Build the starting point.</strong> <code>ValidateBaseState()</code> turns <code>request_data.base_state</code> into a <code>DiscreteGarageState</code>. Entities used by actions that are already executing (<code>request_data.base_schedule</code>) are marked disabled. A fresh <code>ScheduleContext</code> is created: <code>plan_ctx</code>, with an empty event DAG and an empty <code>scheduled_jobs</code> list.</li>
-  <li><strong>Expand every pending job</strong> (this section). The job method writes its events <strong>directly into</strong> <code>plan_ctx->events</code> (it does not return them) and returns only success or failure. On success, <code>Plan()</code> appends the job to <code>plan_ctx->scheduled_jobs</code>; on failure, it reports the job in <code>result.scheduled_jobs</code>. Which arguments are read and which are changed is shown in 14.3.</li>
-  <li><strong>Plan all successful jobs together</strong>: tray assignment, AGV assignment, <code>Reduce()</code>, sanity check, motion planning (sections <a class="ref" href="#bg-tray-assignment-dotrayassignments">16</a> to <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>). From here on the jobs are no longer separate: one DAG holds all their events, and the later stages see and optimise all of them at once.</li>
-  <li><strong>Write the response.</strong> Every motion becomes an <code>ActionNode</code> labelled with its job's <code>guid</code>. Each successful job gets <code>state = STATE_EXECUTING</code> and <code>node_indices</code> (the positions of its actions), and is appended to <code>result.scheduled_jobs</code> after the failed ones.</li>
+  <li><strong>Expand every pending job</strong> (this section). The job method writes its events <strong>directly into</strong> <code>plan_ctx->events</code> (it does not return them) and returns only success or failure. On success, <code>Plan()</code> appends the job to <code>plan_ctx->scheduled_jobs</code>; on failure, it reports the job in <code>result.scheduled_jobs</code>. Which arguments are read and which are changed is shown in <a class="ref" href="#bg-the-shape-of-every-job-method">15.3</a>.</li>
+  <li><strong>Plan all successful jobs together</strong>: tray assignment, AGV assignment, <code>Reduce()</code>, sanity check, motion planning (sections <a class="ref" href="#bg-tray-assignment-dotrayassignments">16</a> to <a class="ref" href="#bg-chugg-the-motion-planner">21</a>). From here on the jobs are no longer separate: one DAG holds all their events, and the later stages see and optimise all of them at once.</li>
+  <li><strong>Write the response.</strong> Every motion that changes something becomes an <code>ActionNode</code> labelled with its job's <code>guid</code> (waits are dropped, VRC commands are added; <a class="ref" href="#bg-from-trajectories-to-the-response">section 25</a>). Each successful job gets <code>state = STATE_EXECUTING</code> and <code>node_indices</code> (the positions of its actions), and is appended to <code>result.scheduled_jobs</code> after the failed ones.</li>
 </ol>
 <p>The loop itself:</p>
 <pre><code class="language-cpp">// src/scheduler.cpp — inside PlanResponseMsg Scheduler::Plan(const PlanRequestMsg&amp; request_data,
@@ -2976,7 +3142,7 @@ auto process = std::make_shared&lt;BayTransition>(job_index, *bay_opt, cmd);    
 // this : const Scheduler*  (reads layout_, gg_, table_, cost_model_; changes nothing in itself)
 // ctx  : the same ScheduleContextSPtr as plan_ctx in Plan(); the method edits *ctx
 
-// (1) See the garage as all earlier events leave it (14.4)
+// (1) See the garage as all earlier events leave it ("Every job sees the garage ...")
 volley::DiscreteGarageState working_state = ctx->initial_state;     // a copy
 auto [success, message] = ctx->events.Apply(working_state);         // replay the whole DAG
 
@@ -2991,7 +3157,7 @@ if(!bay_opt.has_value() || bay_opt->disabled) {
 // (4) Create events. Fill in what is known now; leave the rest empty for later stages
 auto bay_transition = std::make_shared&lt;volley::BayTransition>(job_index, *bay_opt, cmd);  // cmd: BayCommandMsg
 
-// (5) Add each event and wire its edges (14.5)
+// (5) Add each event and wire its edges ("Where the edges come from")
 ctx->events.AddEvent(bay_transition);
 ctx->UpdateLastEntityEvent(bay_transition->GetGarageEntityId().value(), bay_transition);  // rule A
 ctx->UpdateLeafDependencies(bay_transition, job_index);                                   // rule B
@@ -3137,7 +3303,7 @@ return std::make_pair(true, "");
   <li><strong>Some job methods talk to Dispatch.</strong> <code>PlanInsertJob</code> calls <code>reset_bay_state_request_fn_</code>, which <code>SchedulerRos</code> wired to an asynchronous ROS service request (<code>TransitionBayToInsert</code>). It is sent during expansion, before anyone knows whether the whole plan will succeed. <code>Plan()</code> itself calls <code>clean_garage_request_fn_()</code> when an INSERT fails.</li>
 </ul>
 <h4 id="bg-is-this-a-good-design">Is this a good design?</h4>
-<p>It is a common C++ style, and it has real reasons behind it, but it makes the code harder to follow, and it is the root of several gotchas in 14.18. A fair summary:</p>
+<p>It is a common C++ style, and it has real reasons behind it, but it makes the code harder to follow, and it is the root of several gotchas in <a class="ref" href="#bg-gotchas-2">15.18</a>. A fair summary:</p>
 <p><strong>Why it was probably written this way</strong></p>
 <ul>
   <li><strong>One growing structure is convenient.</strong> Every step needs the latest DAG and the latest <code>last_entity_event</code>. Passing one context pointer around is less code than threading inputs and results through every call.</li>
@@ -3273,7 +3439,7 @@ return std::make_pair(true, "");
 <ul>
   <li><strong>Either argument may be missing, not both.</strong> Internal callers use <code>dest = std::nullopt</code> ("move this tray out of the way, anywhere") or <code>tray_id = std::nullopt</code> ("bring any empty tray here"). From <code>Plan()</code> both are always present.</li>
   <li><strong>Heading policy, in two steps.</strong> First, only for a plain parking destination with <code>allow_recip</code>: an empty tray keeps its current heading if the requested one is the same or opposite; a loaded tray gets the node's <em>retrieval heading</em> (the heading that makes a later retrieve fastest), flipped if the car sits backwards on the tray. Second, for every destination of a known tray (parking, bay, VECS or waypoint, whatever <code>allow_recip</code> says), <code>UsePreferredHeading</code> runs: the <code>576_eccles</code> EV-charging exception (nodes 46 and 47), then <code>UseRetrievalHeading</code>, which changes the heading only if the tray is loaded and <code>gg_.GetRetrievalHeading(node)</code> gives a heading the node allows.</li>
-  <li><strong>The tray is looked up in <code>ctx->initial_state</code></strong>, not in <code>working_state</code>. See 14.18.</li>
+  <li><strong>The tray is looked up in <code>ctx->initial_state</code></strong>, not in <code>working_state</code>. See <a class="ref" href="#bg-gotchas-2">15.18</a>.</li>
 </ul>
 <h3 data-num id="bg-type_move_agv--planagvmovejob"><code>TYPE_MOVE_AGV</code> — <code>PlanAgvMoveJob</code></h3>
 <pre><code class="language-cpp">BoolStringPair PlanAgvMoveJob(ScheduleContextSPtr ctx, std::optional&lt;uint16_t> agv_id, GaragePoseMsg dest,
@@ -3661,7 +3827,7 @@ return std::make_pair(true, "");
   <figcaption>An empty tray is planned into B21 (chosen early here: T23), then B21 switches to insert mode.</figcaption>
 </figure>
 <p>In words: the bay must be <code>READY_TO_RETRIEVE</code>. If it is empty, or holds a loaded tray, plan "any empty tray → bay" (a <code>TrayMove</code> with no tray). If the car in the bay asked for charging, plan <code>PlanChargePayloadJob</code> first. Then try to pick the empty tray right away with <code>AssignTrayIdForEmptyMove</code>, and finish with <code>TRANSITION_TO_INSERT</code>.</p>
-<p>This is the only job method that <strong>fills a blank itself</strong>. It replays the DAG once more (<code>fill_state</code>), walks the events in topological order and, for its own trays-to-be, picks the nearest empty tray. If that fails, it only logs a warning; <code>DoTrayAssignments()</code> will try again with the full picture.</p>
+<p>This is the only job method that <strong>fills a blank itself</strong>. It replays the DAG once more (<code>fill_state</code>), walks the events in topological order and, for its own trays-to-be, picks an empty tray with the same search as <code>AssignTrayIdForEmptyMove</code> (cheapest to reach: travel time plus 30 s per tray in the way). If that fails, it only logs a warning; <code>DoTrayAssignments()</code> will try again with the full picture.</p>
 <h3 data-num id="bg-type_ready_for_retrieve--planreadyforretrievejob"><code>TYPE_READY_FOR_RETRIEVE</code> — <code>PlanReadyForRetrieveJob</code></h3>
 <pre><code class="language-cpp">BoolStringPair PlanReadyForRetrieveJob(ScheduleContextSPtr ctx, uint16_t bay_id, size_t job_index) const;
 </code></pre>
@@ -3828,7 +3994,7 @@ return std::make_pair(true, "");
   <img src="figures/46_job_clean_garage.svg" alt="Clean garage job">
   <figcaption>AGVs A and B are hidden under trays (1, 2). Tray T9, left on a waypoint by an earlier plan, is planned back into parking (3).</figcaption>
 </figure>
-<p>In words: if this is <code>job_index</code> 0, ask <code>volley::HideAgvs</code> (from another package) for one hiding pose per AGV and add an <code>AgvMove</code> for each AGV that is not already there. Then <code>PlanUnstashWaypointTraysJob</code> adds a destination-less <code>TrayMove</code> for every tray standing on a <code>TYPE_WAYPOINT</code> node. Only the hiding step (or the initial replay of the DAG) can fail the job.</p>
+<p>In words: if this is <code>job_index</code> 0, ask <code>volley::HideAgvs</code> (<code>motion_planner</code>; <a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a>) for one hiding pose per AGV and add an <code>AgvMove</code> for each AGV that is not already there. Then <code>PlanUnstashWaypointTraysJob</code> adds a destination-less <code>TrayMove</code> for every tray standing on a <code>TYPE_WAYPOINT</code> node. Only the hiding step (or the initial replay of the DAG) can fail the job.</p>
 <h3 data-num id="bg-type_rebalance_garage--planrebalancegaragejob"><code>TYPE_REBALANCE_GARAGE</code> — <code>PlanRebalanceGarageJob</code></h3>
 <pre><code class="language-cpp">BoolStringPair PlanRebalanceGarageJob(ScheduleContextSPtr ctx, size_t job_index) const;
 </code></pre>
@@ -3949,12 +4115,6 @@ return std::make_pair(true, "");
     <li>The ODP check lives in <code>PlanBayTransitionJob</code>; INSERT uses <code>PlanOpenBayDoor</code>, which does not check it.</li>
   </ol>
 </details>
-<h2 data-num id="bg-the-whole-journey-of-one-job">The whole journey of one job</h2>
-<p>Before the details of each stage, here is one retrieve followed through all three passes over the event DAG.</p>
-<figure id="bg-fig-26_retrieve_walkthrough">
-  <img src="figures/26_retrieve_walkthrough.svg" alt="Retrieve walkthrough">
-  <figcaption>One <code>TYPE_RETRIEVE</code> job on Pecos, stage by stage. Map numbers match event ids. Band 1: job expansion creates intent, including a move of the empty tray T21 out of the bay with no destination. Band 2: tray assignment gives T21 a destination and inserts a move for blocker T15, which sits on T17's critical path. Band 3: AGV assignment wraps every <code>TrayMove</code> in move → lift → carry → lower, and <code>AddDepsAfterAmiga</code> ties the bay transitions to the right lift and lower. Destinations and AGV order are illustrative.</figcaption>
-</figure>
 <h2 data-num id="bg-tray-assignment-dotrayassignments">Tray assignment: <code>DoTrayAssignments</code></h2>
 <h3 id="bg-the-problem-this-stage-solves">The problem this stage solves</h3>
 <p>Job expansion (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 14</a>) turns each job into events, but those events describe <em>intent</em>, not a finished plan. Two things are still missing when expansion ends.</p>
@@ -4027,7 +4187,7 @@ return std::make_pair(true, "");
     <tr>
       <td><code>EmptyTraySearchEnvironment</code></td>
       <td><code>AssignTrayIdForEmptyMove</code></td>
-      <td>the nearest tray without a payload, searching outward from the destination</td>
+      <td>the tray without a payload that is cheapest to bring, searching outward from the destination (travel time + 30 s per tray crossed)</td>
     </tr>
     <tr>
       <td><code>OpenSpaceSearchEnvironment</code></td>
@@ -4048,7 +4208,7 @@ return std::make_pair(true, "");
 </figure>
 <p>This is what happens to a <code>TrayMove</code> that has both a tray id and a destination, such as “R: <code>P17</code> → <code>B21</code>”. The loop is long in the source (about 450 lines), but it does five things in order:</p>
 <ol>
-  <li><strong>Check the destination</strong> (<code>:2622</code>–<code>:2648</code>). Build a filter that ignores <em>every</em> tray and AGV (trays will be moved, AGVs will drive away) and check that the destination vertex is enabled. If it is not, the job fails with “… but it's occupied, or not enabled.” “Occupied” here means something that will not move out of the way: a disabled node, a disabled tray or AGV, or a static object; ordinary trays and AGVs are ignored.</li>
+  <li><strong>Check the destination</strong> (<code>:2622</code>–<code>:2648</code>). Build a filter that ignores <em>every</em> tray and AGV (trays will be moved, AGVs will drive away) and check that the destination vertex is enabled. If it is not, the job fails with “… but it's occupied, or not enabled.” “Occupied” here means something that will not move out of the way: a disabled node, a disabled tray or AGV (its node is blocked at the largest footprint even though it is in the ignore set), or a bay that is not <code>READY_TO_RETRIEVE</code> (the call passes no bays to ignore, so a closed bay's door area is blocked); ordinary trays and AGVs are ignored.</li>
   <li><strong>Find the critical path</strong> (<code>:2660</code>–<code>:2706</code>). Search from the root tray to the destination with <code>BlockingTraySearchEnvironment</code>. Unlike a normal path search, this one may pass <em>through</em> trays; it records them. The result is the <strong>critical path</strong> (the nodes R will travel over) and <code>blocking_trays</code>, the trays on it, in path order.</li>
   <li><strong>Resolve blockers one at a time</strong> (<code>while(!blocking_trays.empty())</code>, <code>:2717</code>). For the first blocker, ask <code>ResolveBlockingTrays</code> for a new home that is not on the critical path and does not require moving R. Two fallbacks follow if that fails (below).</li>
   <li><strong>Turn the answer into events</strong> (<code>:2928</code>–<code>:2990</code>). Add each required move and the blocker's own move to the DAG, chained in order, with <code>freeing_moves</code> edges along their paths, and finally an edge “blocker move → root move”. Then re-scan the rest of the critical path for blockers and repeat step 3.</li>
@@ -4083,7 +4243,7 @@ while(!blocking_trays.empty()) {
   // recompute blocking_trays for the rest of the path
 }
 </code></pre>
-<p>The snippet calls seven functions and builds about a dozen local variables. Each function has its own table below, in the order the snippet calls them, followed by one table for the variables. <code>BlockingTraySearchEnvironment</code>, <code>SingleSourceSearch</code>, <code>GetStaticFilter</code> and the search solution come from <code>motion_planner</code>, which is not in this snapshot. Their types are inferred from how <code>scheduler.cpp</code> uses them and are marked <em>(inferred)</em>.</p>
+<p>The snippet calls seven functions and builds about a dozen local variables. Each function has its own table below, in the order the snippet calls them, followed by one table for the variables. <code>BlockingTraySearchEnvironment</code>, <code>SingleSourceSearch</code>, <code>GetStaticFilter</code> and the search solution come from <code>motion_planner</code>; their declarations are in the hover windows, and <a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a> compares all the searches.</p>
 <p><strong>Function 1 · <code>gg_.GetVertexFromPose(pose)</code></strong>: turn a garage pose into a search-graph vertex. Called twice: once for the start, once for the goal.</p>
 <table>
   <thead>
@@ -4141,7 +4301,7 @@ while(!blocking_trays.empty()) {
     <tr>
       <td>in</td>
       <td><code>entity</code></td>
-      <td><code>volley::CollisionEntityId_t</code></td>
+      <td><code>size_t</code> (the parameter is <code>collision_id</code>)</td>
       <td>The root tray's footprint (<code>root_collision_entity</code>). A tray with a car is larger than an empty one, so this changes which trays collide</td>
       <td>R with a car</td>
     </tr>
@@ -4169,22 +4329,22 @@ while(!blocking_trays.empty()) {
     <tr>
       <td>in</td>
       <td><code>cost_model</code></td>
-      <td><code>const cost::MotionCostModel&amp;</code> <em>(inferred)</em></td>
-      <td>Travel cost per edge, so the cheapest path wins, not the shortest</td>
+      <td><code>const cost::MotionCostModel&amp;</code></td>
+      <td>Edge cost: the unloaded trapezoid time of the edge, plus 30 s for every tray that the path newly crosses. The heuristic is zero, so this is Dijkstra on that cost</td>
       <td><code>cost_model_</code></td>
     </tr>
     <tr>
       <td>in</td>
       <td><code>goal</code></td>
-      <td><code>Vertex</code></td>
-      <td>The destination vertex; reaching it ends the search</td>
+      <td><code>std::optional&lt;Vertex></code> (<code>target</code>)</td>
+      <td>The destination vertex; reaching it ends the search. A further optional argument, <code>max_blocking_trays</code>, can cap how many trays a path may cross; tray assignment does not set it</td>
       <td><code>B21</code></td>
     </tr>
     <tr>
       <td>in</td>
       <td><code>filters</code></td>
-      <td><code>volley::GraphFilterProperties</code> <em>(inferred)</em></td>
-      <td>Vertices the tray may not use at all. Built with every tray and AGV ignored, so only permanent obstacles block the search</td>
+      <td><code>std::optional&lt;GraphFilterProperties></code></td>
+      <td>Edges the tray may not use at all (this search tests edge flags only). Built with every tray and AGV ignored, so only permanent obstacles block the search</td>
       <td>from <code>GetStaticFilter</code></td>
     </tr>
     <tr>
@@ -4218,8 +4378,8 @@ while(!blocking_trays.empty()) {
     <tr>
       <td>in</td>
       <td><code>start_time</code></td>
-      <td><code>volley::Interval::Duration</code></td>
-      <td>Time at the start. <code>Duration(0)</code>: tray assignment ignores time, so only costs and topology matter</td>
+      <td><code>volley::Interval::Duration</code> (the parameter is <code>init_cost</code>)</td>
+      <td>The starting cost of the search (A*'s g value at the source), not a clock time. <code>Duration(0)</code>: tray assignment ignores time, so only costs and topology matter</td>
       <td><code>0</code></td>
     </tr>
     <tr>
@@ -4232,7 +4392,7 @@ while(!blocking_trays.empty()) {
     <tr>
       <td>out</td>
       <td>return</td>
-      <td>search solution <em>(inferred: a template type over the state)</em></td>
+      <td><code>SearchSolution&lt;BlockingTrayState, Interval::Duration></code></td>
       <td>Holds the explored states; queried with <code>GetTarget()</code> and <code>GetPath()</code></td>
       <td><code>blocking_solution</code></td>
     </tr>
@@ -4261,7 +4421,7 @@ while(!blocking_trays.empty()) {
       <td>out</td>
       <td>return</td>
       <td><code>std::optional&lt;volley::BlockingTrayState></code></td>
-      <td>The goal state reached, or empty if no path exists even through trays. The real code checks this and fails the job with “Failed to find path for t…”; the snippet calls <code>.value()</code> for brevity</td>
+      <td>The goal state reached, or empty if no path exists even through trays (or the search hit its cap of 5,000,000 expansions). The real code checks this and fails the job with “Failed to find path for t…”; the snippet calls <code>.value()</code> for brevity</td>
       <td>the <code>B21</code> state</td>
     </tr>
   </tbody>
@@ -4296,7 +4456,7 @@ while(!blocking_trays.empty()) {
       <td>out</td>
       <td>return</td>
       <td><code>std::optional&lt;std::vector&lt;std::pair&lt;BlockingTrayState, …>>></code></td>
-      <td>States from start to goal, in order. The second element of each pair (a cost or time) is ignored here (<code>_</code>). Each state has <code>.vert</code> and <code>.blocking_trays</code>, the trays whose footprint collides with R's at that vertex</td>
+      <td>States from start to goal, in order. The second element of each pair (the step cost) is ignored here (<code>_</code>). Each state has <code>.vert</code> and <code>.blocking_trays</code>: the trays collected so far along the path, each added when R's footprint, swept along an edge, overlaps it. States compare by vertex only, so the first set that settles a vertex wins</td>
       <td><code>P17 → P15 → … → B21</code>; the <code>P15</code> state lists K</td>
     </tr>
   </tbody>
@@ -4476,10 +4636,10 @@ while(!blocking_trays.empty()) {
     </tr>
     <tr>
       <td><code>filters</code></td>
-      <td><code>volley::GraphFilterProperties</code> <em>(inferred)</em></td>
+      <td><code>volley::GraphFilterProperties</code></td>
       <td><code>GetStaticFilter(TRAY, gg_, working_state, table_, all trays, all AGVs, {})</code></td>
-      <td>Usable vertices when every tray and AGV is ignored</td>
-      <td>all non-disabled vertices</td>
+      <td>Usable edges when every tray and AGV is ignored (closed bays and disabled entities still block)</td>
+      <td>all edges except near disabled nodes and closed bays</td>
     </tr>
     <tr>
       <td><code>source</code></td>
@@ -4608,16 +4768,16 @@ BoolStringPair Scheduler::AssignTrayIdForEmptyMove(
 <p>How it works, step by step:</p>
 <ol>
   <li><strong>Require a destination.</strong> A move with neither field set cannot be resolved: <code>{false, "Can't resolve a tray move with no tray id or dest"}</code>.</li>
-  <li><strong>Start the search at the destination.</strong> The question is “which empty tray is closest <em>to where one is needed</em>”, so the source vertex is the destination pose (<code>{node_id: 21, heading: -90}</code>, B21: B21 lists heading 90 with <code>faces_reciprocal: true</code>, so its inbound heading is −90), not any tray. The code calls this “basically the inverse OpenSpaceSearch”.</li>
-  <li><strong>Ignore everything movable.</strong> <code>GetStaticFilter(TRAY, gg_, working_state, table_, all trays, all agvs, {})</code> makes every tray and AGV transparent. Only static obstacles (disabled nodes, nodes the tray footprint cannot use) block the search, so the nearest empty tray can be found even if it is buried; the main loop will clear the way afterwards.</li>
-  <li><strong>Search.</strong> <code>EmptyTraySearchEnvironment(gg_, table_, working_state, cost_model_, filters)</code> treats a vertex as a goal when it holds a tray with no payload. <code>SingleSourceSearch</code> expands vertices by cost, so the first goal reached is the cheapest to reach, not necessarily the fewest hops. No goal → <code>{false, "Failed to find empty tray to move to &lt;dest>"}</code>.</li>
+  <li><strong>Start the search at the destination.</strong> The question is “which empty tray is cheapest to bring <em>to where one is needed</em>”, so the source vertex is the destination pose (<code>{node_id: 21, heading: -90}</code>, B21: B21 lists heading 90 with <code>faces_reciprocal: true</code>, so its inbound heading is −90), not any tray. The code calls this “basically the inverse OpenSpaceSearch”.</li>
+  <li><strong>Ignore everything movable.</strong> <code>GetStaticFilter(TRAY, gg_, working_state, table_, all trays, all agvs, {})</code> makes every tray and AGV transparent. Only static obstacles (disabled nodes and entities, closed bays, nodes the tray footprint cannot use) block the search, so a buried empty tray can still be chosen; the main loop will clear the way afterwards.</li>
+  <li><strong>Search.</strong> <code>EmptyTraySearchEnvironment(gg_, table_, working_state, cost_model_, filters)</code> treats a vertex as a goal when it holds a tray with no payload. The environment inherits the blocking-tray search's costs: each edge costs its trapezoid time plus 30 s for every tray it crosses. <code>SingleSourceSearch</code> expands vertices by cost, so the first goal reached is the cheapest to reach, not necessarily the fewest hops. No goal → <code>{false, "Failed to find empty tray to move to &lt;dest>"}</code>.</li>
   <li><strong>Read the tray.</strong> <code>working_state.GetTrayOnNode(node_id_of(target))</code> → <code>move.SetTrayId(tray.id)</code>.</li>
   <li><strong>Avoid pointless rotation.</strong> If the tray's heading is the destination heading or its reciprocal (<code>IsAngleOrReciprocal</code>) but not equal, the destination heading is changed to the tray's heading (an empty tray has no front), then <code>UseEvChargeHeading</code> restores the heading if the destination is an EV-charging spot that needs a specific one.</li>
 </ol>
 <p>Three consequences are easy to miss:</p>
 <ul>
   <li><strong>Nothing is reserved.</strong> The helper does not apply the move or touch <code>freeing_moves</code>. T23 is “taken” only because <code>DoTrayAssignments</code> continues straight into the main loop and applies the move to <code>working_state</code> there; a later event will then see T23 in the bay.</li>
-  <li><strong>Distance is measured from the bay, not from the AGV.</strong> The chosen tray is the one cheapest to reach from the destination, ignoring how many blockers sit on its path. A TODO in the code suggests preferring a tray that will be a blocker anyway.</li>
+  <li><strong>Distance is measured from the bay, not from the AGV.</strong> The chosen tray minimises travel time from the destination plus 30 s per tray in the way, so a near tray behind several blockers can lose to a farther free one. Where the AGV is does not matter. A TODO in the code suggests preferring a tray that will be a blocker anyway.</li>
   <li><strong>The search repeats work.</strong> The main loop runs a second search (the critical path) over roughly the same ground; the source comment calls this a future optimisation.</li>
 </ul>
 <h3 id="bg-filling-a-blank-destination-assigndestforuntargetedmove">Filling a blank destination: <code>AssignDestForUntargetedMove</code></h3>
@@ -4698,7 +4858,7 @@ BoolStringPair Scheduler::AssignDestForUntargetedMove(volley::TrayMove* move, Sc
 </table>
 <figure id="bg-fig-56_assign_dest_untargeted">
   <img src="figures/56_assign_dest_untargeted.svg" alt="AssignDestForUntargetedMove">
-  <figcaption><code>AssignDestForUntargetedMove</code> on a <code>RETRIEVE</code> job. Before the car can come out, the empty tray T21 must leave bay <code>B21</code>, but the job did not say where to, so the event is <code>T21: B21 → ?</code>. <code>ResolveBlockingTrays</code> searches for open space from the bay. Its first answer, <code>P24</code> (red), is behind T23, so it first moves the blocker T23 one stall <strong>deeper</strong> into <code>P24</code> (2), then searches again and finds <code>P23</code> free and close (3). The helper writes <code>P23</code> into the original event, adds T23's move as a new event, and adds the edge “T23's move → T21's move”. T9, stashed on waypoint <code>W25</code> by an earlier plan, is the tier-2 case described below. Search results are illustrative: the real costs come from <code>motion_planner</code>.</figcaption>
+  <figcaption><code>AssignDestForUntargetedMove</code> on a <code>RETRIEVE</code> job. Before the car can come out, the empty tray T21 must leave bay <code>B21</code>, but the job did not say where to, so the event is <code>T21: B21 → ?</code>. <code>ResolveBlockingTrays</code> searches for open space from the bay. Its first answer, <code>P24</code> (red), is behind T23, so it first moves the blocker T23 one stall <strong>deeper</strong> into <code>P24</code> (2), then searches again and finds <code>P23</code> free and close (3). The helper writes <code>P23</code> into the original event, adds T23's move as a new event, and adds the edge “T23's move → T21's move”. T9, stashed on waypoint <code>W25</code> by an earlier plan, is the tier-2 case described below. Search results are illustrative; the real cost of a path is its trapezoid travel time plus 30 s per tray crossed (<a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a>).</figcaption>
 </figure>
 <p>The helper is a thin wrapper; the real work is done by <code>ResolveBlockingTrays</code>. In order:</p>
 <ol>
@@ -4801,7 +4961,7 @@ BoolStringPair Scheduler::AssignDestForUntargetedMove(volley::TrayMove* move, Sc
 </table>
 <p>Its loop, <code>while(!dest)</code>:</p>
 <ol>
-  <li><strong>Search for open space for the tray</strong>: <code>FindOpenSpaceForRootTray(...)</code> (<code>:1850</code>). Tier 1 accepts only parking nodes. If nothing is found and stashing is allowed, tier 2 retries accepting waypoints (with <code>enforce_retrieval_heading = false</code>). Like the critical-path search, this search may pass through any tray not in <code>immobile_trays</code> and reports the trays it passed through. It also returns <code>blocking_tray_illegal_poses</code>: <code>illegal_poses</code> plus every intermediate vertex of the tray's path, so the blockers will not be parked in its way. The target itself is left legal on purpose (the source comment explains it avoids a cycle). Nothing found → return <code>{nullopt, {}}</code>.</li>
+  <li><strong>Search for open space for the tray</strong>: <code>FindOpenSpaceForRootTray(...)</code> (<code>:1850</code>). Tier 1 accepts only free parking and EV-charge nodes (“free” meaning no tray on the node). If nothing is found and stashing is allowed, tier 2 retries accepting waypoints (with <code>enforce_retrieval_heading = false</code>). Like the critical-path search, this search may pass through any tray not in <code>immobile_trays</code> and reports the trays it passed through. It also returns <code>blocking_tray_illegal_poses</code>: <code>illegal_poses</code> plus every intermediate vertex of the tray's path, so the blockers will not be parked in its way. The target itself is left legal on purpose (the source comment explains it avoids a cycle). Nothing found → return <code>{nullopt, {}}</code>.</li>
   <li><strong>No blockers on the way?</strong> Then this is the destination: <code>dest = target</code>, and the loop ends.</li>
   <li><strong>Otherwise move one blocker.</strong> For each blocker of that target, in order, call <code>TryFindBlockingTrayResolution(...)</code> (<code>:1895</code>) until one succeeds. It searches open space for the blocker (parking first, then waypoints). If the blocker's best spot is free, it returns that spot and the path. If the blocker is itself blocked, it <strong>recurses</strong> into <code>ResolveBlockingTrays</code> for the blocker with the current tray added to <code>immobile_trays</code> (so the chain cannot loop back), and returns the recursion's moves as <code>prereq_moves</code> with an empty <code>path</code>. No blocker can be resolved → return <code>{nullopt, {}}</code>.</li>
   <li><strong>Apply the result to the private copy</strong>: each prerequisite move, then a new <code>TrayMove(job_index)</code> for the blocker to its spot. Append them to <code>required_moves</code> and go back to step 1.</li>
@@ -4834,7 +4994,7 @@ BoolStringPair Scheduler::AssignDestForUntargetedMove(volley::TrayMove* move, Sc
 </figure>
 <p>The cost of assigning AGV <strong><span class="math">i</span></strong> to tray move <strong><span class="math">j</span></strong> is</p>
 <div class="math">c_{ij}=\max\!\left(t_i^{\mathrm{occupied}}-t_j^{\mathrm{ready}},\,0\right)+t_{ij}^{\mathrm{approach}}+t_{ij}^{\mathrm{lift}},</div>
-<p>where cost <strong><span class="math">c_{ij}</span></strong> [s] is the estimated time until the tray is lifted, <strong><span class="math">t_i^{\mathrm{occupied}}</span></strong> [s] is how long AGV <strong><span class="math">i</span></strong> is already busy (<code>agv_occupied_durations</code>), <strong><span class="math">t_j^{\mathrm{ready}}</span></strong> [s] is the earliest time move <strong><span class="math">j</span></strong> can start given its parents (<code>event_occupied_durations</code>, filled by <code>PropagateEventCostToChildren</code>), <strong><span class="math">t_{ij}^{\mathrm{approach}}</span></strong> [s] is <code>GetJustMovingCost</code> from the AGV's pose to the tray's pose, and <strong><span class="math">t_{ij}^{\mathrm{lift}}</span></strong> [s] is the lift-up time when the AGV is not already holding the tray. <strong>Caveat:</strong> <code>GetAgvOccupiedDuration()</code> returns zero (a <code>TODO(isabel)</code>), so the occupied term only reflects work assigned earlier in the same call.</p>
+<p>where cost <strong><span class="math">c_{ij}</span></strong> [s] is the estimated time until the tray is lifted, <strong><span class="math">t_i^{\mathrm{occupied}}</span></strong> [s] is how long AGV <strong><span class="math">i</span></strong> is already busy (<code>agv_occupied_durations</code>), <strong><span class="math">t_j^{\mathrm{ready}}</span></strong> [s] is the earliest time move <strong><span class="math">j</span></strong> can start given its parents (<code>event_occupied_durations</code>, filled by <code>PropagateEventCostToChildren</code>), <strong><span class="math">t_{ij}^{\mathrm{approach}}</span></strong> [s] is <code>GetJustMovingCost</code> from the AGV's pose to the tray's pose, and <strong><span class="math">t_{ij}^{\mathrm{lift}}</span></strong> [s] is the lift-up time when the AGV is not already holding the tray. <strong>Caveats:</strong> <code>GetAgvOccupiedDuration()</code> returns zero (a <code>TODO(isabel)</code>), so the occupied term only reflects work assigned earlier in the same call. The approach time is a single-AGV estimate (<code>GetPosePath</code> + <code>ConvertPosePathToTrajectory</code>, <a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a>): it ignores waiting for other AGVs and wheel turns, which only CHUGG accounts for (<a class="ref" href="#bg-the-cost-model">section 23.2</a>).</p>
 <figure id="bg-fig-15_agv_approach_and_pickup">
   <img src="figures/15_agv_approach_and_pickup.svg" alt="AGV approach">
   <figcaption>Unloaded approach example. A hypothetical AGV at charger <code>C10</code> approaches tray T15 at <code>P3</code> via <code>10 → 9 → 11 → 6 → 3</code>, driving under the empty stall <code>P6</code>. The strip restates the intent as simplified events. The route is a graph walk, not a recorded run.</figcaption>
@@ -4874,7 +5034,7 @@ for(const auto&amp; [agv_id, root_event_opt] : ordered_matching) {
 <p>This pass exists because <code>DoAgvAssignments</code> builds dependencies in its own serial assignment order, which can differ from the order the DAG is eventually replayed in. The source comments in <code>MoveAgvToTrayPose</code> describe an earlier, proactive attempt that both missed real blockers and added spurious edges.</p>
 <p><code>AddDepsAfterAmiga(ctx, event, node_id)</code> runs last for every bay and VECS transition. It moves dependencies from tray moves onto the AGV's lift and lower events: a transition that waited for a tray to arrive now waits for the <strong>lower</strong> after it, and a tray move out of the bay waits for the transition before its <strong>lift</strong>.</p>
 <h2 data-num id="bg-reduce-and-sanitycheckevents"><code>Reduce()</code> and <code>SanityCheckEvents</code></h2>
-<p>Back in <code>Plan()</code>, <code>plan_ctx->events.Reduce()</code> removes redundant edges (a <code>TODO(any)</code> notes that planning may fail without it, probably inside CHUGG). Then <code>SanityCheckEvents(ctx)</code> replays the DAG in topological order on a fresh copy of <code>initial_state</code> and checks each event <strong>before</strong> applying it:</p>
+<p>Back in <code>Plan()</code>, <code>plan_ctx->events.Reduce()</code> removes redundant edges (a <code>TODO(any)</code> notes that planning may fail without it; <a class="ref" href="#bg-inside-solvesequential">section 21.1</a> shows a code path in CHUGG that would explain this). Then <code>SanityCheckEvents(ctx)</code> replays the DAG in topological order on a fresh copy of <code>initial_state</code> and checks each event <strong>before</strong> applying it:</p>
 <table>
   <thead>
     <tr>
@@ -4901,25 +5061,40 @@ for(const auto&amp; [agv_id, root_event_opt] : ordered_matching) {
     </tr>
   </tbody>
 </table>
-<p>The comment explains the motivation: “The motion planner doesn't fail in the most graceful ways”, so a cheap discrete replay catches most problems with a readable message first.</p>
-<h2 data-num id="bg-motion-planning-and-the-response">Motion planning and the response</h2>
-<h3 id="bg-where-motion-planning-sits">Where motion planning sits: MAPF, then the ADG</h3>
-<p>The scheduler has two DAGs, and only the second one is an action dependency graph. The order is the one in the literature: motion planning first, then the ADG, then execution.</p>
+<p>The comment explains the motivation: “The motion planner doesn't fail in the most graceful ways”, so a cheap discrete replay catches most problems with a readable message first. It is the last step of Part III: from here the event DAG is final, and Part IV hands it to CHUGG (<a class="ref" href="#bg-motion-planning-and-the-response">section 20</a>). CHUGG replays it once more in <code>InitializeEventOrder</code> and throws, rather than failing gracefully, if that replay breaks.</p>
+<h2 data-num id="bg-bays-vecs-and-vrcs">Bays, VECS and VRCs</h2>
+<h3 id="bg-bays-and-rebalancing">Bays and rebalancing</h3>
+<figure id="bg-fig-33_bay_logic">
+  <img src="figures/33_bay_logic.svg" alt="Bay logic">
+  <figcaption>The three bay commands the scheduler issues, the <code>ClassifyBay</code> rules from <code>utils.cpp</code>, and a worked example of <code>ComputeBayRebalancingActions</code>. Other bay states are reached through bay or customer activity outside this package.</figcaption>
+</figure>
+<p><code>bay_readiness_ratio</code> is the fraction of usable bays that should be ready for insert. <code>CalculateDesiredBaySplit</code> rounds up (it biases towards insert because arriving customers cannot be detected), clamps, and never asks for more insert-ready bays than there are empty trays. <code>ComputeBayRebalancingActions</code> first counts bays already moving towards a state (<code>WILL_BE_*</code>), then keeps bays already in a wanted state, and only then picks bays to change, in <code>bay_prioritization</code> order for insert and reverse order for retrieve. Bays left in an invalid state fall back to ready-for-retrieve.</p>
+<h3 id="bg-vecs-ev-charging">VECS (EV charging)</h3>
+<p>A VECS sits on a node of type <code>TYPE_EV_CHARGE</code> (6, a node type of its own; its VECS id is the node id). Moving a tray off a VECS that is <code>CHARGING</code> first adds <code>VecsTransition CHARGING -> READY_TO_CHARGE</code>; moving onto one is refused unless it is <code>READY_TO_CHARGE</code>. <code>PlanChargePayloadJob</code> finds a VECS with <code>ResolveBlockingTrays</code>: for a payload with <code>ev_charge_requested</code>, the open-space search accepts only <code>EV_CHARGE</code> nodes at a heading between 0 and 90 (<a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a>); it does not look at the VECS state, and the job afterwards only checks that the node has a VECS before adding <code>READY_TO_CHARGE -> CHARGING</code>. A VECS in another state is therefore caught only when the events are replayed (the move onto it is refused).</p>
+<h3 id="bg-vrcs-lifts-between-floors">VRCs (lifts between floors)</h3>
+<figure id="bg-fig-14_vrc_floors">
+  <img src="figures/14_vrc_floors.svg" alt="VRC conceptual transfer">
+  <figcaption>Conceptual VRC connecting two floors, as a side elevation. The Pecos YAML has no VRC; this shows general code-supported behaviour.</figcaption>
+</figure>
+<p>In this package VRCs are handled at the <strong>action</strong> level, after motion planning: <code>InsertVrcActionsIntoDag</code> (in <code>utils.cpp</code>) walks AGV actions in topological order, simulates the carriage floor per VRC, and inserts a <code>TYPE_VRC_COMMAND</code> <em>approach</em> when the carriage is on the wrong floor for the AGV's next action, plus a <em>move</em> command that replaces each cross-floor AGV action. Each command's duration is door close + carriage transit + door open. Consecutive cross-floor motions are first collapsed into one motion in <code>CollectAndCollapseTrajectoryMotions</code>. <code>VrcTransition</code> (in <code>planner_core</code>, <a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>) exists, but the scheduler never creates one, and CHUGG's planning loop has no branch for it (<a class="ref" href="#bg-inside-solvesequential">section 21.1</a>). Where the VRC commands enter the action DAG is shown in <a class="ref" href="#bg-from-trajectories-to-the-response">section 25</a>.</p>
+<h2 data-num id="bg-motion-planning-and-the-response">After the event DAG: motion planning, the action DAG and execution</h2>
+<p>Part IV follows the finished event DAG through stages 4 and 5 of the pipeline and into execution. The pipeline has two DAGs (besides the working copies some stages make), and only the second one is an action dependency graph. The order is the one in the literature: motion planning first, then the ADG, then execution.</p>
 <figure id="bg-fig-91_planning_pipeline">
   <img src="figures/91_planning_pipeline.svg" alt="Event DAG, CHUGG, action DAG">
   <figcaption>Textbook pipeline above, the scheduler below. The event DAG (step 1) is the planner's <em>input</em>: a precedence graph of events, with no times and no paths. CHUGG (step 2) turns it into timed trajectories. The action DAG (step 3) is the ADG, built from those trajectories; it also inherits every event-DAG edge.</figcaption>
 </figure>
 <ol>
-  <li><strong>Event DAG: what, and in which order.</strong> <code>Plan*Job</code>, tray assignment and AGV assignment add <code>ScheduleEvent</code>s and edges to <code>ctx->events</code> (sections <a class="ref" href="#bg-directed-acyclic-graphs-then-scheduleeventdag">13</a> to <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>). A vertex is a discrete change (“AGV 3 drives from node 10 to node 9”, “bay 1 opens”); an edge says one change must finish before another starts. Nothing in it says <em>when</em>, or which intermediate poses a move passes through.</li>
+  <li><strong>Event DAG: what, and in which order.</strong> <code>Plan*Job</code>, tray assignment and AGV assignment add <code>ScheduleEvent</code>s and edges to <code>ctx->events</code> (sections <a class="ref" href="#bg-directed-acyclic-graphs-then-scheduleeventdag">12</a> and <a class="ref" href="#bg-the-whole-journey-of-one-job">14</a> to <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>). A vertex is a discrete change (“AGV 3 drives from node 10 to node 9”, “bay 1 opens”); an edge says one change must finish before another starts. Nothing in it says <em>when</em>, or which intermediate poses a move passes through.</li>
   <li><strong>CHUGG: when and where.</strong> <code>PlanMotions</code> hands the event DAG to <code>Chugg::SolveSequential</code>, which returns a <code>ContinuousState</code>: for every entity, a timeline of motions. This is the multi-agent path finding (MAPF) step.</li>
   <li><strong>Action DAG: the ADG.</strong> <code>ResponseFromTrajectories</code> cuts the timelines into actions (one per motion that changes something), orders actions that use the same space, copies the event-DAG edges across, and writes the result to <code>Schedule.nodes</code>. Doc 05 builds this step from first principles (<a class="ref" href="#ad-two-dags-two-jobs">section 7.1</a> there).</li>
-  <li><strong>Dispatch</strong> runs <code>Schedule.nodes</code> by their <code>parents</code>. It is outside the snapshots.</li>
+  <li><strong>Dispatch</strong> starts each action of <code>Schedule.nodes</code> as soon as all its <code>parents</code> are done. It is outside the snapshots; doc 05 explains the rule and why it is safe (<a class="ref" href="#ad-executing-an-adg">section 4</a> there) and what happens to a schedule that is still running when the next plan arrives (<a class="ref" href="#ad-persistent-planning-base-schedule-and-the-split">section 7.5</a> there).</li>
 </ol>
 <p><strong>Why it can look like “ADG, then MAPF”.</strong> The event DAG resembles an ADG: its vertices are discrete changes and its edges mean “before”, and a few of its edges are spatial (<code>AddNodeArrivalDeps</code> orders two AGVs that use the same node; path repair adds edges for AGVs in the way). But it is built before any timing exists, and its edges come from the jobs (“the tray must arrive before the bay opens”), not from the planned paths. Its job is to be the <em>task</em> input of the motion planner.</p>
-<p><strong>What is unusual is the MAPF input, not the order.</strong> Classic MAPF gives each robot one start and one goal and asks for collision-free paths. CHUGG's input instead is a set of goals for many entities (AGVs, bays, VECS, VRCs) with a partial order <em>across</em> entities: AGV 2 may only pick up the tray after the bay has closed, and so on. The research name for this is MAPF with precedence constraints, MAPF-PC (Zhang, Chen, Li, Williams and Koenig, “<a href="https://idm-lab.org/bib/abstracts/Koen22c.html">Multi-Agent Path Finding for Precedence-Constrained Goal Sequences</a>”, AAMAS 2022). CHUGG solves it the simple way: it takes the events in one topological order of the event DAG and plans each one against everything already planned, never revising earlier choices (prioritized planning, with SIPP as the single-AGV search; <a href="#bg-inside-solvesequential">details below</a>). The ADG afterwards makes the result robust to delays, exactly as in the textbook.</p>
+<p><strong>What is unusual is the MAPF input, not the order.</strong> Classic MAPF gives each robot one start and one goal and asks for collision-free paths. CHUGG's input instead is a set of goals for many entities (AGVs, bays, VECS) with a partial order <em>across</em> entities: AGV 2 may only pick up the tray after the bay has closed, and so on. The research name for this is MAPF with precedence constraints, MAPF-PC (Zhang, Chen, Li, Williams and Koenig, “<a href="https://idm-lab.org/bib/abstracts/Koen22c.html">Multi-Agent Path Finding for Precedence-Constrained Goal Sequences</a>”, AAMAS 2022). CHUGG solves it the simple way: it takes the events in one topological order of the event DAG and plans each one against everything already planned, never revising earlier choices (prioritized planning, with SIPP as the single-AGV search; <a class="ref" href="#bg-inside-solvesequential">section 21.1</a>). The ADG afterwards makes the result robust to delays, exactly as in the textbook.</p>
 <p><strong>The event edges reach execution twice.</strong> CHUGG respects them when it picks start times. Then <code>TransferEventDagDepsToActionDag</code> copies each event edge into the action DAG (last action of the earlier event before the first action of the later one). The copy is needed because some precedences involve no shared space (a bay command waiting for a tray's arrival), so the occupancy rule alone would not recover them.</p>
-<h3 id="bg-chugg-the-motion-planner">CHUGG, the motion planner</h3>
-<p><strong>The name.</strong> <code>chugg.hpp</code> spells it out: “CHUGG (Constrained Huge Unknown Graph alGorithm) uses conflict-based search to deconflict agents and their motions. The low-level motion planner it uses, SIPP (Safe Interval Path Planning), keeps track of the when locations are free or not free by computing and updating safe time intervals.” The header describes the intended design. What runs today is the simpler of its two solvers: the scheduler calls <code>SolveSequential</code>, which logs “CHUGG: Solving with sequential planning (not CBS)”. The conflict-based search (CBS) solver, <code>SolveCbs</code>, is unfinished (<a href="#bg-what-can-be-configured">below</a>).</p>
+<p><strong>The rest of Part IV.</strong> <a class="ref" href="#bg-chugg-the-motion-planner">Section 21</a> opens CHUGG: its inputs, the sequential algorithm it actually runs, and SIPP. <a class="ref" href="#bg-the-motion-planner-toolbox">Section 22</a> lists the single-agent searches that the earlier stages borrow from the same package. <a class="ref" href="#bg-timing-parameters-and-the-cost-model">Section 23</a> covers every parameter and the timing model behind all durations. <a class="ref" href="#bg-continuousstate-the-timeline">Section 24</a> is CHUGG's output, and <a class="ref" href="#bg-from-trajectories-to-the-response">section 25</a> turns it into the action DAG.</p>
+<h2 data-num id="bg-chugg-the-motion-planner">CHUGG, the motion planner</h2>
+<p><strong>The name.</strong> <code>chugg.hpp</code> spells it out: “CHUGG (Constrained Huge Unknown Graph alGorithm) uses conflict-based search to deconflict agents and their motions. The low-level motion planner it uses, SIPP (Safe Interval Path Planning), keeps track of the when locations are free or not free by computing and updating safe time intervals.” The header describes the intended design. What runs today is the simpler of its two solvers: the scheduler calls <code>SolveSequential</code>, which logs “CHUGG: Solving with sequential planning (not CBS)”. The conflict-based search (CBS) solver, <code>SolveCbs</code>, is unfinished (<a class="ref" href="#bg-what-can-be-configured">section 23.1</a>).</p>
 <p><strong>What it does.</strong> Everything before it decides <em>what</em> must happen and <em>in which order</em>: the event DAG. CHUGG decides <em>when</em> and <em>where along the graph</em>: for every AGV (and every bay, VECS and VRC) it produces a timed trajectory, a sequence of motions with start and end times, such that the event order is respected and no two bodies overlap at the same time (overlap as defined by the <code>CollisionTable</code>, <a class="ref" href="#bg-the-physical-garage-and-its-coordinate-system">section 3</a>).</p>
 <figure id="bg-fig-72_chugg_io">
   <img src="figures/72_chugg_io.svg" alt="CHUGG inputs and outputs">
@@ -4985,7 +5160,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
 <p>The scheduler shapes its DAG for CHUGG in three places, all covered earlier: node-arrival edges (<code>AddNodeArrivalDeps</code>), AGV path repair (<code>EnsureAgvMovePathsClear</code>), and <code>Reduce()</code> right before the sanity check (sections <a class="ref" href="#bg-agv-assignment-doagvassignments">17</a> and <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>). A test comment adds a known limit: “CHUGG can't handle rando AGVs strewn about yet”.</p>
 <p><strong>Output.</strong> <code>ContinuousState::GetTrajectories()</code> maps each entity to its list of <code>Motion</code>s. The response code uses these accessors: <code>GetEntityId()</code>, <code>GetInterval()</code> (start and end time), <code>GetCollisionId()</code> (which footprint: a bare AGV, an AGV carrying a tray of some size, ...), <code>GetActionId()</code> (the vertex of the event in <code>ctx->events</code> that the motion implements), <code>GetSourcePose()</code> / <code>GetLocation()</code>, <code>GetDelta()</code> (the discrete change, if the motion has one) and <code>IsIdle()</code>. <code>CollectAndCollapseTrajectoryMotions</code> merges all trajectories into one set ordered by start time, then action id, and collapses multi-step VRC floor traversals into one motion.</p>
 <p><strong>Failure.</strong> <code>SolveSequential</code> returning <code>std::nullopt</code> means no collision-free timing exists for this DAG; every job fails with “CHUGG failed to find a solution, event dag may be infeasible”. Some problems are not reported that way: the constructor and the planning loop <em>throw</em> <code>std::logic_error</code> for a DAG they cannot replay (no topological order, a <code>TrayMove</code> whose AGV is not under the tray, a dependency without any motion), and <code>PlanMotions</code> does not catch exceptions. With <code>cost_audit</code> on (the default), <code>PlanMotions</code> also logs one CSV row per cost segment (<code>audit_csv,index,seconds,cumulative,description</code>) so the time breakdown can be pasted into a spreadsheet.</p>
-<h3 id="bg-inside-solvesequential">Inside SolveSequential: one event at a time</h3>
+<h3 data-num id="bg-inside-solvesequential">Inside SolveSequential: one event at a time</h3>
 <p><code>SolveSequential</code> is <em>prioritized planning</em>: it plans one event at a time, each against everything planned before it, and never goes back. The priority order is not a ranking of robots, as in most prioritized MAPF planners, but the topological order of the event DAG.</p>
 <figure id="bg-fig-93_chugg_sequential">
   <img src="figures/93_chugg_sequential.svg" alt="SolveSequential step by step">
@@ -4993,7 +5168,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
 </figure>
 <p><strong>Setup</strong> (constructor, <code>SolveInitialization</code>, <code>MakeRootNode</code>):</p>
 <ol>
-  <li><strong>Event order.</strong> <code>InitializeEventOrder</code> takes <code>event_dag.GetTopologicalOrdering()</code> and replays every event on the start state, checking a few invariants (a <code>TrayMove</code> has a tray, an AGV and a destination, and the AGV is under the tray). Any failure throws.</li>
+  <li><strong>Event order.</strong> <code>InitializeEventOrder</code> takes <code>event_dag.GetTopologicalOrdering()</code> and replays every event on the start state, checking a few invariants (a <code>TrayMove</code> has a tray, an AGV and a destination, and the AGV is under the tray) and that every <code>Apply</code> succeeds. Any failure throws.</li>
   <li><strong>Who moves.</strong> Every AGV that is not disabled is <em>movable</em> and gets its own planner, a <code>SippAgv</code>, even if no event mentions it. Trays, bays and VECS that appear in an event are <em>dynamic</em>. <code>planning_start_</code> is the earliest time a movable AGV is free, which is <code>ctx->start_time</code>.</li>
   <li><strong>Static obstacles.</strong> <code>GetAllStaticFilters</code> builds, per footprint type, a <code>GraphFilterProperties</code> that switches off every vertex and edge blocked by something that never moves in this plan (parked trays not in any event, disabled AGVs, bays without events) or disabled in the layout state.</li>
   <li><strong>Initial reservations.</strong> Every motion of the initial <code>ContinuousState</code> is carved out of each AGV's safe-interval table. A closed bay or parked tray without events is reserved from its last motion until the end of time.</li>
@@ -5018,7 +5193,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
     </tr>
     <tr>
       <td><code>BayTransition</code></td>
-      <td>One motion with a fixed duration (<a href="#bg-what-can-be-configured">table below</a>). A closing transition (or <code>PROCESS_RETRIEVE</code>) first waits until the last already-planned motion that would collide with the door area (<code>BAY_ODP</code>) has ended.</td>
+      <td>One motion with a fixed duration (<a class="ref" href="#bg-what-can-be-configured">section 23.1</a>). A closing transition (or <code>PROCESS_RETRIEVE</code>) first waits until the last already-planned motion that would collide with the door area (<code>BAY_ODP</code>) has ended.</td>
     </tr>
     <tr>
       <td><code>VecsTransition</code></td>
@@ -5033,13 +5208,13 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
 <p>After the loop, <code>ContinuousState::CheckCollisions</code> compares every pair of new motions (all pairs across all trajectories). Any collision means <code>std::nullopt</code>; otherwise the new motions are appended to the initial state and returned.</p>
 <p><strong>What follows from this design.</strong></p>
 <ul>
-  <li><strong>The event order is the priority order.</strong> <code>GetTopologicalOrdering</code> returns one of possibly many orders, and an event planned earlier gets first claim on space and time. Two equivalent DAGs can therefore give different plans, or one can fail where the other succeeds.</li>
+  <li><strong>The event order is the priority order.</strong> CHUGG calls <code>ScheduleEventDag</code>'s own <code>GetTopologicalOrdering</code>, which is deterministic: among the events that are ready, the one with the lowest job index goes first (<a class="ref" href="#bg-the-operations">section 12.5</a>). An event planned earlier gets first claim on space and time, so earlier jobs in the request get priority, and adding or removing an edge, which changes when an event becomes ready, can change the whole plan or make it fail.</li>
   <li><strong>No backtracking.</strong> If SIPP finds no path for an event, the whole call fails; earlier events are not re-planned to make room. Prioritized planning is incomplete in exactly this way.</li>
-  <li><strong>Why <code>AddNodeArrivalDeps</code> is needed.</strong> Under the sequential assumption an AGV that has not yet been planned to leave a node sits there forever. If AGV B's arrival at that node comes before AGV A's departure in the order, B's goal can never be completed: an arrival counts only if the vertex stays safe forever afterwards. The scheduler's edge “A leaves before B arrives” forces the order that works.</li>
+  <li><strong>Why <code>AddNodeArrivalDeps</code> is needed.</strong> Under the sequential assumption an AGV that has not yet been planned to leave a node sits there forever. If AGV B's arrival at that node comes before AGV A's departure in the order, B's goal can never be completed: an arrival counts only if the vertex stays safe forever afterwards. The scheduler's edge “A leaves before B arrives” forces the order that works. The scheduler's own comment gives the other half of the reason: without the edge, <code>InitializeEventOrder</code>'s replay can try to apply B's arrival while A is still on the node, which fails with “two AGVs at the same node” and throws.</li>
   <li><strong>The <code>Reduce()</code> TODO.</strong> The scheduler suspects <code>GetDependencyCompletionTime</code>. In the code, a redundant edge only adds one more term to a maximum. What does throw is a dependency that left no motion with its id, for example an <code>AgvMove</code> to the pose the AGV is already at (SIPP returns an empty path). <code>Reduce()</code> can remove such an edge when it is redundant, which would explain the observation. This is a reading of the code, not a reproduced failure.</li>
   <li><strong>Waits belong to the next event.</strong> A wait for dependencies carries the id of the event it precedes, so in <code>Motion</code> terms an AGV “works on” an event while it waits for it.</li>
 </ul>
-<h3 id="bg-sipp-the-single-agv-search">SIPP, the single-AGV search</h3>
+<h3 data-num id="bg-sipp-the-single-agv-search">SIPP, the single-AGV search</h3>
 <p>Safe Interval Path Planning (Phillips and Likhachev, ICRA 2011) searches over <em>safe intervals</em> instead of time steps: for each place, the maximal stretches of time during which nothing else is there. An AGV can wait inside one safe interval, so the search only needs one state per (place, interval) pair rather than one per time step.</p>
 <ul>
   <li><strong>The table.</strong> Each <code>SippAgv</code> owns a <code>SafeIntervalTable</code>: for each (footprint type, vertex) and (footprint type, edge), an <code>IntervalSet</code> of safe times. A missing entry means “always safe”. <code>AddDeconflictConstraints(motion)</code> asks the collision table which poses and edges conflict with that motion's footprint and carves the motion's interval out of each, for every footprint this AGV will use.</li>
@@ -5047,10 +5222,66 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
   <li><strong>Neighbors.</strong> From a state, each out-edge whose target fits the footprint and is enabled by the static filters is tried. If the edge and its target are safe now, the move is a neighbor; otherwise a wait-then-move neighbor is added for the next safe window. Waits are not chained.</li>
   <li><strong>Edge time.</strong> A move from rest pays the full trapezoid time from <code>edge_durations</code> (<a href="#bg-the-cost-model">the cost model</a>). A move that continues the previous one in the same direction (same-direction locomote or strafe, same-sign rotation at a node, same-direction VRC ride) pays only cruise time, <code>length / speed</code> (the “run-extension” cost, “Ring 3b” in the comments); this is exact only when the run's first edge reached full speed. Any change among locomote, strafe and rotate adds <code>agv_wheel_turn</code> seconds before the move.</li>
   <li><strong>Goals.</strong> An arrival goal is met only if the AGV can stay at the target <em>forever</em> afterwards (the comment explains: otherwise an AGV could “complete” a goal by parking in the path of an already planned event). A lift is a wait goal of <code>agv_lift_up</code> or <code>agv_lift_down</code> seconds.</li>
-  <li><strong>Search cost is not travel time.</strong> Each step costs its duration plus wheel-turn time plus 3 s × (steps so far) (<code>kMagicPredecessorCost</code>). The extra term grows with path length, so A* prefers short paths in steps even when they arrive later. The heuristic sums all-pairs travel times over the remaining goals.</li>
+  <li><strong>Search cost is not travel time.</strong> Each move costs its duration plus wheel-turn time plus 3 s × (steps so far) (<code>kMagicPredecessorCost</code>); a wait costs half its duration plus the same 3 s × (steps so far). The extra term grows with path length, so A* prefers short paths in steps even when they arrive later. The heuristic sums all-pairs travel times over the remaining goals.</li>
   <li><strong>A* engine.</strong> <code>SingleSourceSearch</code> is a generic A* with a Fibonacci-heap open list and a closed set, capped at 5,000,000 expansions (<code>kMaxExpansions</code>). Every other search in this package uses the same function.</li>
 </ul>
-<h3 id="bg-what-can-be-configured">What can be configured</h3>
+<h2 data-num id="bg-the-motion-planner-toolbox">The single-agent searches in <code>motion_planner</code></h2>
+<p>CHUGG is the only <em>multi-agent</em> planner, and it runs once, at the end. Earlier stages call single-agent searches from the same package to cost and check moves while the event DAG is being built. They ignore everyone else's timing and only see static obstacles through filters. All of them run on <code>SingleSourceSearch</code>; the <em>environment</em> object supplies neighbors, costs, a heuristic and the stopping test.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Tool</th>
+      <th>What it answers, and how</th>
+      <th>Used by</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Chugg::SolveSequential</code></td>
+      <td>Timed, collision-free trajectories for every entity, respecting the event DAG (<a class="ref" href="#bg-chugg-the-motion-planner">section 21</a>)</td>
+      <td><code>PlanMotions</code></td>
+    </tr>
+    <tr>
+      <td><code>GetPosePath</code> + <code>ConvertPosePathToTrajectory</code></td>
+      <td>A pose path for one AGV over the static graph (Dijkstra with <code>GarageGraphEnvironment</code>), minimising the sum of per-edge trapezoids, as if stopping at every node; a comment notes this is used “only to discover topology”. Then <code>ConvertPosePathToTrajectory</code> times the chosen path properly, with one trapezoid per run of same-direction edges, loaded or not, but without wheel-turn time</td>
+      <td><code>GetPosePath</code>: <code>GetJustMovingCost</code> (AGV assignment costs), <code>IsMovePossible</code> (sanity check), <code>MoveAgvToTrayPose</code>, <code>TryClearBlockedAgvMove</code>, <code>InitRetrievalHeadings</code> (reachability). <code>ConvertPosePathToTrajectory</code>: <code>GetJustMovingCost</code> only</td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>BlockingTraySearchEnvironment</code></td>
+      <td>Cheapest path for a tray to a target, where each edge costs its unloaded trapezoid time and each tray whose footprint the path newly crosses adds 30 s and is collected in the state. Zero heuristic. Only edge flags of the filter are tested</td>
+      <td><code>DoTrayAssignments</code></td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>OpenSpaceSearchEnvironment</code></td>
+      <td>Cheapest-to-reach (same cost as above) parking or EV-charge node with no tray on it, searching outward from the tray. Skips illegal poses; checks the retrieval heading if asked; for an EV-charge payload requires an <code>EV_CHARGE</code> node and a heading of 0 to 90 (the VECS state itself is not checked); checks the payload's height; optionally accepts a waypoint as a temporary stash</td>
+      <td>Blocking-tray resolution, reparking, EV charging</td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>EmptyTraySearchEnvironment</code></td>
+      <td>An empty tray that is cheapest to bring to a pose (same cost: time plus 30 s per tray crossed), searching outward from the pose (the inverse of the open-space search)</td>
+      <td><code>AssignTrayIdForEmptyMove</code></td>
+    </tr>
+    <tr>
+      <td><code>HideAgvs</code></td>
+      <td>A hiding spot under a tray for every AGV: depth-first, nearest spot first per AGV (nearest in edges: every edge costs 1 s, “TODO: Use graph edge costs”), backtracking when a later AGV has none. The header promises “the least amount of AGV moves”; the code returns the first assignment that works</td>
+      <td><code>PlanCleanGarageJob</code></td>
+    </tr>
+    <tr>
+      <td><code>GetStaticFilter</code>, <code>GetDisabledEntitiesFilters</code> → <code>GraphFilterProperties</code></td>
+      <td>Per footprint type, which vertices and edges are usable given parked trays (as <code>TRAY_LEGS</code> for a bare AGV), AGVs, bays not ready to retrieve (minus the ones the caller is willing to move), disabled nodes and entities (blocked at the node's largest footprint), and nodes too small for a payload</td>
+      <td>All of the above; <code>ctx->disabledness_filters</code>; CHUGG's static obstacles</td>
+    </tr>
+    <tr>
+      <td><code>GetEdgeDurations</code>, <code>GetAllPairsMinCost</code></td>
+      <td>Trapezoid time per edge, and all-pairs travel times from it</td>
+      <td><code>PlanMotions</code> (CHUGG's inputs)</td>
+    </tr>
+  </tbody>
+</table>
+<p>This split matters for the refactor: tray and AGV assignment choose destinations and agents with single-agent costs that ignore waiting, and only CHUGG discovers the waiting. An assignment that looks cheap can therefore produce a slow plan.</p>
+<h2 data-num id="bg-timing-parameters-and-the-cost-model">Timing: parameters and the cost model</h2>
+<p>Every duration in a plan, from an AGV crossing one edge to a bay door closing, comes from one parameter set and one timing model. This section lists what can be configured and then derives the timing model with worked numbers.</p>
+<h3 data-num id="bg-what-can-be-configured">What can be configured</h3>
 <p><strong>Two solvers, one usable.</strong> <code>Chugg</code> has <code>SolveSequential</code> and <code>SolveCbs</code>. <code>SolveCbs</code> plans sequentially first, then returns <code>std::nullopt</code> on any collision; the branching code after that point is unreachable, only handles AGV-against-AGV conflicts, and never re-plans its branches (“TODO (mark): remove this when cbs is done”). No parameter selects between them; <code>PlanMotions</code> calls <code>SolveSequential</code>.</p>
 <p><strong>ROS parameters.</strong> <code>SchedulerComponent</code> reads these into <code>SchedulerParams</code>; the motion ones go through <code>ReadParams</code> into <code>cost::MotionCostParams</code> and from there into the <code>cost::MotionCostModel</code> that CHUGG and the single-agent searches use. Linear speeds are m/s and accelerations m/s²; rotation uses rad/s and rad/s²; event times are seconds. The defaults are the struct's initialisers, which its comment says “match the values in launcher/params/params.yaml” (that file is not in the snapshots, so a site may override them).</p>
 <table>
@@ -5121,7 +5352,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
       <td><code>agv.wheel_turn_time</code></td>
       <td><code>motion_cost.events.agv_wheel_turn</code></td>
       <td>1.5 s (“90 deg at 60 deg/s”)</td>
-      <td>Delay when an AGV changes drive mode (three different rules, <a href="#bg-the-cost-model">see the cost model</a>)</td>
+      <td>Delay when an AGV changes drive mode (three different rules, <a class="ref" href="#bg-the-cost-model">section 23.2</a>)</td>
     </tr>
     <tr>
       <td><code>scheduler.cost_audit</code></td>
@@ -5131,7 +5362,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
     </tr>
   </tbody>
 </table>
-<p><strong>Loaded speeds.</strong> CHUGG never uses <code>loaded_speed</code>; every planned move is timed as if the AGV were empty (<a href="#bg-the-cost-model">the cost model</a> below quantifies this).</p>
+<p><strong>Loaded speeds.</strong> CHUGG never uses <code>loaded_speed</code>; every planned move is timed as if the AGV were empty (<a class="ref" href="#bg-the-cost-model">section 23.2</a> quantifies this).</p>
 <p><code>scheduler.bay_readiness_ratio</code> and <code>layout</code> are read in the same place but are not motion settings: the first feeds bay rebalancing, the second selects the layout file that <code>gg_</code> and <code>table_</code> are built from.</p>
 <p><strong>Fixed in code.</strong> These values change plans but are not parameters:</p>
 <table>
@@ -5151,7 +5382,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
     <tr>
       <td>3 s per step</td>
       <td><code>kMagicPredecessorCost</code>, SIPP</td>
-      <td>Step penalty in the search cost (above)</td>
+      <td>Step penalty in SIPP's search cost (<a class="ref" href="#bg-sipp-the-single-agv-search">section 21.2</a>)</td>
     </tr>
     <tr>
       <td>5,000,000</td>
@@ -5176,7 +5407,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
   <li><strong>The start state.</strong> Everything stands still until <code>ctx->start_time</code>. Actions still running from an earlier plan are not in the timeline; instead <code>Plan()</code> disables the AGVs, bays, VECS and nodes that <code>base_schedule</code> uses (doc 05, <a class="ref" href="#ad-persistent-planning-base-schedule-and-the-split">section 7.5</a>), so CHUGG treats them as static obstacles.</li>
   <li><strong>The event DAG's shape.</strong> The order CHUGG plans in comes from the DAG, so node-arrival edges, path repair and <code>Reduce()</code> are, in effect, how the scheduler steers the planner.</li>
 </ul>
-<h3 id="bg-the-cost-model">The cost model: how long a move takes</h3>
+<h3 data-num id="bg-the-cost-model">The cost model: how long a move takes</h3>
 <p>Every duration in the planner comes from <code>cost_functions</code>, which calls itself the “single source of truth for all cost and duration estimates used in motion planning and simulation”. The basic unit is a <strong>trapezoidal velocity profile</strong>: start at rest, accelerate at <span class="math">a</span> up to speed <span class="math">v</span>, cruise, decelerate to rest. Covering a distance <span class="math">d</span> (metres, or radians for a turn) takes</p>
 <div class="math">T(d) = \frac{v}{a} + \frac{d}{v} \quad \text{if } d \ge \frac{v^2}{a}, \qquad T(d) = 2\sqrt{\frac{d}{a}} \quad \text{otherwise (a triangle: } v \text{ is never reached)}</div>
 <p>(<code>Trapezoid(distance, vmax, amax)</code>). The threshold <span class="math">v^2/a</span> is the distance needed to reach full speed and stop again. With the default parameters it is 5.0 m for driving, 1.8 m for strafing, 0.83 rad (47°) for turning and 0.32 m for a VRC. The most common edge in the Pecos layout is 2.29 m long, so <strong>a single driving edge never reaches full speed</strong>: its time is set by acceleration alone.</p>
@@ -5296,61 +5527,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
   </tbody>
 </table>
 <p>So CHUGG charges 1.5 s for a strafe-then-turn that the cost model says is free, and the assignment stage ignores wheel turns entirely. Each difference is small, but they add up along paths with many mode changes, and they make the assignment cost and CHUGG's timing disagree in a consistent direction. A refactor that moves cost estimation behind one interface would be the natural place to pick one rule.</p>
-<h3 id="bg-the-motion-planner-toolbox">The rest of the motion_planner toolbox</h3>
-<p>CHUGG is the only <em>multi-agent</em> planner, and it runs once, at the end. Earlier stages call single-agent searches from the same package to cost and check moves while the event DAG is being built. They ignore everyone else's timing and only see static obstacles through filters. All of them run on <code>SingleSourceSearch</code>; the <em>environment</em> object supplies neighbors, costs, a heuristic and the stopping test.</p>
-<table>
-  <thead>
-    <tr>
-      <th>Tool</th>
-      <th>What it answers, and how</th>
-      <th>Used by</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>Chugg::SolveSequential</code></td>
-      <td>Timed, collision-free trajectories for every entity, respecting the event DAG (above)</td>
-      <td><code>PlanMotions</code></td>
-    </tr>
-    <tr>
-      <td><code>GetPosePath</code> + <code>ConvertPosePathToTrajectory</code></td>
-      <td>Fastest pose path for one AGV over the static graph (Dijkstra: zero heuristic, <code>GarageGraphEnvironment</code>), then its duration with one trapezoid per run of same-direction edges, loaded or not, without wheel-turn time</td>
-      <td><code>GetPosePath</code>: <code>GetJustMovingCost</code> (AGV assignment costs), <code>IsMovePossible</code> (sanity check), <code>MoveAgvToTrayPose</code>, <code>TryClearBlockedAgvMove</code>. <code>ConvertPosePathToTrajectory</code>: <code>GetJustMovingCost</code> only</td>
-    </tr>
-    <tr>
-      <td><code>SingleSourceSearch</code> + <code>BlockingTraySearchEnvironment</code></td>
-      <td>Path for a tray to a target with the fewest blocking trays: each tray whose footprint the path crosses adds 30 s to the cost and is collected in the state</td>
-      <td><code>DoTrayAssignments</code></td>
-    </tr>
-    <tr>
-      <td><code>SingleSourceSearch</code> + <code>OpenSpaceSearchEnvironment</code></td>
-      <td>Nearest free parking (or charge) node the tray fits on, outward from the tray (zero heuristic). Checks the retrieval heading if asked, a VECS for an EV-charge payload, the payload's height, and optionally accepts a waypoint as a temporary stash</td>
-      <td>Blocking-tray resolution, reparking, EV charging</td>
-    </tr>
-    <tr>
-      <td><code>SingleSourceSearch</code> + <code>EmptyTraySearchEnvironment</code></td>
-      <td>An empty tray that can be brought to a pose with the fewest blocking trays, searching outward from the pose (the inverse of the open-space search)</td>
-      <td><code>AssignTrayIdForEmptyMove</code></td>
-    </tr>
-    <tr>
-      <td><code>HideAgvs</code></td>
-      <td>A hiding spot under a tray for every AGV: depth-first, nearest spot first per AGV, backtracking when a later AGV has none. The header promises “the least amount of AGV moves”; the code returns the first assignment that works</td>
-      <td><code>PlanCleanGarageJob</code></td>
-    </tr>
-    <tr>
-      <td><code>GetStaticFilter</code>, <code>GetDisabledEntitiesFilters</code> → <code>GraphFilterProperties</code></td>
-      <td>Per footprint type, which vertices and edges are usable given parked trays, AGVs and bays (minus the ones the caller is willing to move) and disabled nodes</td>
-      <td>All of the above; <code>ctx->disabledness_filters</code>; CHUGG's static obstacles</td>
-    </tr>
-    <tr>
-      <td><code>GetEdgeDurations</code>, <code>GetAllPairsMinCost</code></td>
-      <td>Trapezoid time per edge, and all-pairs travel times from it</td>
-      <td><code>PlanMotions</code> (CHUGG's inputs)</td>
-    </tr>
-  </tbody>
-</table>
-<p>This split matters for the refactor: tray and AGV assignment choose destinations and agents with single-agent costs that ignore waiting, and only CHUGG discovers the waiting. An assignment that looks cheap can therefore produce a slow plan.</p>
-<h3 id="bg-continuousstate-the-timeline">ContinuousState: the timeline CHUGG reads and writes</h3>
+<h2 data-num id="bg-continuousstate-the-timeline"><code>ContinuousState</code>: the timeline CHUGG reads and writes</h2>
 <p>“Continuous” refers to time, not space. A <code>DiscreteGarageState</code> is one snapshot: where every AGV, tray, bay, VECS and VRC is <em>now</em>. A <code>ContinuousState</code> is a <code>Trajectory</code> per entity (a <code>std::unordered_map&lt;GarageEntityIdMsg, Trajectory></code>), and a trajectory is a time-ordered <code>std::set</code> of <code>Motion</code>s that may not overlap (<code>AddMotion</code> returns <code>false</code> if one would). Times are <code>std::chrono::system_clock</code> time points.</p>
 <p><strong>What a <code>Motion</code> is.</strong> An entity, an <code>Interval</code>, a footprint (<code>collision_id</code>), an <code>action_id</code>, a location (a <code>Pose</code> or an <code>Edge</code> of two poses), and optionally a <em>delta</em>, the serialized discrete change it causes. The constructor decides which:</p>
 <table>
@@ -5419,9 +5596,17 @@ auto [action_nodes_opt, message] = scheduler.ResponseFromTrajectories(ctx, cont_
 </code></pre>
 <p>Two details worth knowing. The test's comment calls the fourth argument <code>JobId</code>, but everywhere in CHUGG and the response code it is the event's vertex in the event DAG; with one event per job in this test the two coincide. And because a <code>Motion</code> stores the footprint (<code>GetCollisionId()</code>), the response code can tell a loaded AGV from an empty one without replaying the discrete state.</p>
 <p><strong>Still reconstructed.</strong> The shared utility code (<code>stdx</code>, <code>BoolStringPair</code>, <code>common/types.hpp</code>) is not in the snapshots; those hover windows show sketches from call sites, marked as such.</p>
-<h3 id="bg-from-trajectories-to-the-response">From trajectories to the response</h3>
+<h2 data-num id="bg-from-trajectories-to-the-response">From trajectories to the action DAG and the response</h2>
 <p>The action DAG built here is an <em>action dependency graph</em>. Doc 05 explains the idea from scratch: the construction rule, why executing it is safe, how timing works on it, and how this code relates to the textbook version (<a class="ref" href="#ad-the-adg-in-our-software">section 7</a> there).</p>
-<p><code>ResponseFromTrajectories(ctx, final_state)</code> then turns trajectories into the wire format:</p>
+<p><code>ResponseFromTrajectories(ctx, final_state)</code> is stage 5 of the pipeline. Its steps, in order:</p>
+<ol>
+  <li><strong>Collect motions</strong> from the <code>ContinuousState</code> (<a class="ref" href="#bg-continuousstate-the-timeline">section 24</a>): drop waits and idle state changes, merge each multi-floor VRC ride into one motion, and order them by start time (<code>CollectAndCollapseTrajectoryMotions</code>).</li>
+  <li><strong>One action per motion</strong>, labelled with its job's <code>guid</code> (<code>ToActionNode</code>, below).</li>
+  <li><strong>Edges, three kinds</strong> (<code>BuildActionDagFromMotions</code>, <code>TransferEventDagDepsToActionDag</code>): the previous action of the same entity; the previous occupant of every pose an action uses (<code>freeing_moves</code>, the same occupancy idea as in tray assignment, <a class="ref" href="#bg-tray-assignment-dotrayassignments">section 16</a>); and every event-DAG edge, copied from the last action of one event to the first action of the next.</li>
+  <li><strong><code>Reduce()</code>, add VRC commands, <code>Reduce()</code> again</strong> (<code>InsertVrcActionsIntoDag</code>; <a href="#bg-vrcs-lifts-between-floors">VRCs</a> in section <a class="ref" href="#bg-bays-vecs-and-vrcs">19</a>).</li>
+  <li><strong>Write the array</strong> in topological order with parent indices (<code>BuildScheduledActionsArray</code>), and fill each job's <code>node_indices</code> (<a href="#bg-scheduledjobdatamsg-what-one-entry-holds">ScheduledJobDataMsg</a> in section <a class="ref" href="#bg-ros-messages-and-services">7</a>).</li>
+</ol>
+<p>Doc 05 compares these edges with the textbook Type 1 and Type 2 rules (<a class="ref" href="#ad-our-edges-versus-type-1-and-type-2">section 7.3</a> there).</p>
 <figure id="bg-fig-32_motions_to_actions">
   <img src="figures/32_motions_to_actions.svg" alt="Motions to actions">
   <figcaption>From timed trajectories to <code>ActionNode[]</code>. Every motion with a delta (pose change, lift change, bay / VECS / VRC state change) becomes one <code>ActionNode</code>; waits are dropped. Actions are chained per entity, ordered by occupancy, given the event-level dependencies, reduced, extended with VRC commands, and finally written out in topological order with integer parent indices. Times are illustrative; the shape matches the <code>RetrieveJob</code> test.</figcaption>
@@ -5438,21 +5623,6 @@ if(delta->type == "AgvPoseChanged") {
 // BayTransition's own command; "VecsStateChanged" -> start/stop charging; "VrcStateChanged" -> VRC move.
 </code></pre>
 <p>Finally <code>Plan()</code> marks every planned job <code>STATE_EXECUTING</code>, and for <code>TYPE_RETRIEVE</code> jobs records the bay and the <code>PROCESS_RETRIEVE</code> action in <code>bay_id</code> and <code>bay_arrival_node_guid</code>.</p>
-<h2 data-num id="bg-bays-vecs-and-vrcs">Bays, VECS and VRCs</h2>
-<h3 id="bg-bays-and-rebalancing">Bays and rebalancing</h3>
-<figure id="bg-fig-33_bay_logic">
-  <img src="figures/33_bay_logic.svg" alt="Bay logic">
-  <figcaption>The three bay commands the scheduler issues, the <code>ClassifyBay</code> rules from <code>utils.cpp</code>, and a worked example of <code>ComputeBayRebalancingActions</code>. Other bay states are reached through bay or customer activity outside this package.</figcaption>
-</figure>
-<p><code>bay_readiness_ratio</code> is the fraction of usable bays that should be ready for insert. <code>CalculateDesiredBaySplit</code> rounds up (it biases towards insert because arriving customers cannot be detected), clamps, and never asks for more insert-ready bays than there are empty trays. <code>ComputeBayRebalancingActions</code> first counts bays already moving towards a state (<code>WILL_BE_*</code>), then keeps bays already in a wanted state, and only then picks bays to change, in <code>bay_prioritization</code> order for insert and reverse order for retrieve. Bays left in an invalid state fall back to ready-for-retrieve.</p>
-<h3 id="bg-vecs-ev-charging">VECS (EV charging)</h3>
-<p>A VECS sits on a node of type <code>TYPE_EV_CHARGE</code> (6, a node type of its own; its VECS id is the node id). Moving a tray off a VECS that is <code>CHARGING</code> first adds <code>VecsTransition CHARGING -> READY_TO_CHARGE</code>; moving onto one is refused unless it is <code>READY_TO_CHARGE</code>. <code>PlanChargePayloadJob</code> finds a VECS with <code>ResolveBlockingTrays</code> (the open-space search knows about VECS nodes) and then adds <code>READY_TO_CHARGE -> CHARGING</code>.</p>
-<h3 id="bg-vrcs-lifts-between-floors">VRCs (lifts between floors)</h3>
-<figure id="bg-fig-14_vrc_floors">
-  <img src="figures/14_vrc_floors.svg" alt="VRC conceptual transfer">
-  <figcaption>Conceptual VRC connecting two floors, as a side elevation. The Pecos YAML has no VRC; this shows general code-supported behaviour.</figcaption>
-</figure>
-<p>In this package VRCs are handled at the <strong>action</strong> level, after motion planning: <code>InsertVrcActionsIntoDag</code> (in <code>utils.cpp</code>) walks AGV actions in topological order, simulates the carriage floor per VRC, and inserts a <code>TYPE_VRC_COMMAND</code> <em>approach</em> when the carriage is on the wrong floor for the AGV's next action, plus a <em>move</em> command that replaces each cross-floor AGV action. Each command's duration is door close + carriage transit + door open. Consecutive cross-floor motions are first collapsed into one motion in <code>CollectAndCollapseTrajectoryMotions</code>. <code>VrcTransition</code> (in <code>planner_core</code>, <a class="ref" href="#bg-event-types-and-polymorphism">section 12</a>) exists, but the scheduler never creates one.</p>
 <h2 data-num id="bg-packages-build-system-and-dependencies">Packages, build system and dependencies</h2>
 <table>
   <thead>
@@ -5480,12 +5650,12 @@ if(delta->type == "AgvPoseChanged") {
     </tr>
   </tbody>
 </table>
-<p><code>package.xml</code> lists these dependencies: <code>common</code>, <code>common_ros</code>, <code>cost_functions</code>, <code>interfaces</code>, <code>motion_planner</code>, <code>planner_core</code>, <code>task_planner</code>, <code>vrc_interfaces</code>, <code>rclcpp</code>, <code>rclcpp_components</code>, <code>rclcppx</code>, <code>std_srvs</code>, <code>stdx</code>, <code>backward_ros</code> and Boost. The build uses ROS 2 <code>ament_cmake</code> with the repository's <code>volley_cmake</code> macros (<code>volley_package</code>, <code>volley_add_library</code>, <code>volley_add_component</code>, <code>volley_add_gtest</code>, <code>volley_ament_auto_package</code>). The dependency direction is <code>scheduler → planner_core, motion_planner, task_planner, cost_functions, common_ros</code>; nothing in the snapshot depends on <code>scheduler</code>.</p>
+<p><code>package.xml</code> lists these dependencies: <code>common</code>, <code>common_ros</code>, <code>cost_functions</code>, <code>interfaces</code>, <code>motion_planner</code>, <code>planner_core</code>, <code>task_planner</code>, <code>vrc_interfaces</code>, <code>rclcpp</code>, <code>rclcpp_components</code>, <code>rclcppx</code>, <code>std_srvs</code>, <code>stdx</code>, <code>backward_ros</code> and Boost. The build uses ROS 2 <code>ament_cmake</code> with the repository's <code>volley_cmake</code> macros (<code>volley_package</code>, <code>volley_add_library</code>, <code>volley_add_component</code>, <code>volley_add_gtest</code>, <code>volley_ament_auto_package</code>). The dependency direction is <code>scheduler → planner_core, motion_planner, task_planner, cost_functions, common_ros</code>; nothing in the snapshots depends on <code>scheduler</code>. Of these, <code>planner_core</code>, <code>common_ros</code>, <code>motion_planner</code>, <code>cost_functions</code> and the interface packages are in the snapshots; <code>task_planner</code> (<code>BottleneckAssignment</code>), <code>common</code> and <code>stdx</code> are not.</p>
 <h2 data-num id="bg-debugging-and-testing">Debugging and testing</h2>
 <ul>
   <li><strong>Logs.</strong> <code>Plan()</code> logs the initial DGS, each job as it is planned, the topological order after tray and after AGV assignment, and why things fail. Set the logger to DEBUG to also get every planned trajectory.</li>
   <li><strong>DAG pictures.</strong> Call the <code>debug/printdags</code> service (or set the <code>printdags</code> parameter) to log the event DAG after each stage and the action DAG after each <code>Reduce()</code>; it needs <code>libgraph-easy-perl</code>.</li>
-  <li><strong>Cost audit.</strong> <code>scheduler.cost_audit</code> (default <code>true</code>) prints a CSV breakdown of CHUGG's cost per segment.</li>
+  <li><strong>Cost audit.</strong> <code>scheduler.cost_audit</code> (default <code>true</code>) prints a CSV breakdown of CHUGG's cost per segment: one row per AGV motion, wheel-turn gap, bay door, VECS and VRC event (<a class="ref" href="#bg-what-can-be-configured">section 23.1</a>). CHUGG also logs every event it plans and each new trajectory segment at INFO level, and SIPP logs its goals when a search fails.</li>
   <li><strong>Tests.</strong> 72 active GoogleTest cases in four files (<code>DoubleRetrieveDodgeAgv</code> is commented out). Unit tests build a <code>DiscreteGarageState</code> from inline YAML, construct a <code>Scheduler</code> with a named test layout (<code>tiny_lot</code>, <code>triple_pick_lot</code>, <code>576_eccles_half</code>, <code>1355_fulton</code>), and call one stage directly. Job tests build a full <code>PlanRequestMsg</code> and call <code>Plan()</code>. <a href="#doc-verification">03</a> maps every test to the stage it exercises.</li>
 </ul>
 <pre><code class="language-bash">colcon build --packages-up-to scheduler
@@ -5579,7 +5749,7 @@ colcon test-result --verbose
   <li><strong>Time runs downwards.</strong> Row 12 happens after row 11.</li>
   <li><strong>Indentation is call depth.</strong> A row indented under another is called <em>from</em> it. The grey line under a call runs down past all the calls it makes, like the bars in a flame chart turned on their side.</li>
   <li><strong>Each row is one function.</strong> The box holds its signature (as written in the source, long parameter lists shortened with <code>...</code>) and a one-line note. The right column gives <strong>where it is defined</strong> (<code>file:line</code>) and <strong>where it is called from</strong>.</li>
-  <li><strong>Colours say where the code lives.</strong> Teal for the ROS layer, blue for <code>Scheduler</code> methods, light blue for free functions in <code>scheduler.cpp</code>, green for <code>ScheduleContext</code> in <code>scheduler.hpp</code>, violet for <code>utils.cpp</code>. Dashed grey boxes are in other packages (<code>planner_core</code>, <code>common_ros</code>, <code>motion_planner</code>, <code>task_planner</code>); of these, only <code>motion_planner</code> and <code>task_planner</code> are not in the snapshots.</li>
+  <li><strong>Colours say where the code lives.</strong> Teal for the ROS layer, blue for <code>Scheduler</code> methods, light blue for free functions in <code>scheduler.cpp</code>, green for <code>ScheduleContext</code> in <code>scheduler.hpp</code>, violet for <code>utils.cpp</code>. Dashed grey boxes are in other packages (<code>planner_core</code>, <code>common_ros</code>, <code>motion_planner</code>, <code>task_planner</code>); of these, only <code>task_planner</code> is not in the snapshots.</li>
   <li><strong>Amber "loop:" rows</strong> mark loops; the calls under them repeat.</li>
 </ul>
 <p>Line numbers are those of the files inside <code>sources/repomix-scheduler.xml</code>. If your branch has moved on, search for the signature instead of trusting the number.</p>
@@ -5643,7 +5813,7 @@ colcon test-result --verbose
       <td>7</td>
       <td>The last stages</td>
       <td><code>SanityCheckEvents</code> <code>:3841</code>, <code>PlanMotions</code> <code>:4005</code>, <code>ResponseFromTrajectories</code> <code>:4069</code> and its helpers <code>:28</code>–<code>:340</code></td>
-      <td>Sections <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a> and <a class="ref" href="#bg-motion-planning-and-the-response">19</a></td>
+      <td>Sections <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>, <a class="ref" href="#bg-chugg-the-motion-planner">21</a> and <a class="ref" href="#bg-from-trajectories-to-the-response">25</a></td>
     </tr>
     <tr>
       <td>8</td>
@@ -5656,6 +5826,12 @@ colcon test-result --verbose
       <td>The event classes and the DAG (<code>planner_core</code>)</td>
       <td><code>schedule_events.hpp</code>: <code>ScheduleEvent</code> <code>:36</code>, <code>TrayMove</code> <code>:125</code>; <code>schedule_events.cpp</code>: <code>TrayMove::Apply</code> <code>:187</code>; <code>event_dag.hpp</code>: <code>DagBase</code> <code>:28</code>, <code>ScheduleEventDag</code> <code>:565</code>; <code>event_dag.cpp</code>: <code>GetTopologicalOrdering</code> <code>:50</code></td>
       <td>Sections <a class="ref" href="#bg-event-types-and-polymorphism">11</a> and <a class="ref" href="#bg-directed-acyclic-graphs-then-scheduleeventdag">12</a>; <code>Reduce</code> (<code>event_dag.hpp:318</code>) and <code>RemoveVertexHelper</code> (<code>:525</code>) have the comments worth reading</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>The motion planner and the cost model (<code>motion_planner</code>, <code>cost_functions</code>)</td>
+      <td><code>chugg_common.cpp</code> (<code>InitializeEventOrder</code>, <code>MakeRootNode</code>, <code>GetDependencyCompletionTime</code>), <code>chugg_sequential.cpp</code> (<code>PlanNodeSequential</code>, <code>SetEventSafeIntervals</code>), <code>sipp_agv.cpp</code>, <code>safe_interval_path_planning.cpp</code> (<code>GetNeighbors</code>), <code>continuous_state.cpp</code>; <code>motion_cost_model.cpp</code>, <code>cost_functions.cpp</code> (<code>Trapezoid</code>)</td>
+      <td>Sections <a class="ref" href="#bg-chugg-the-motion-planner">21</a>, <a class="ref" href="#bg-timing-parameters-and-the-cost-model">23</a> and <a class="ref" href="#bg-continuousstate-the-timeline">24</a>; read <code>chugg.hpp</code>'s member list first</td>
     </tr>
   </tbody>
 </table>
@@ -5730,14 +5906,14 @@ colcon test-result --verbose
   <li><strong>Turn on the DAG dumps.</strong> The <code>debug/printdags</code> service (<a class="ref" href="#bg-debugging-and-testing">section 22</a>) prints the event DAG after each stage, which shows what the calls in the second figure built.</li>
 </ul>
 <h2 data-num id="bg-faq-design-questions">FAQ: design questions</h2>
-<p>Questions new engineers ask once they have read sections <a class="ref" href="#bg-one-plan-call-step-by-step">10</a> to <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>. The answers separate what the code does (with evidence) from opinion (marked as such).</p>
+<p>Questions new engineers ask once they have read sections <a class="ref" href="#bg-one-plan-call-step-by-step">10</a> to <a class="ref" href="#bg-from-trajectories-to-the-response">25</a>. The answers separate what the code does (with evidence) from opinion (marked as such).</p>
 <h3 id="bg-is-events-plus-a-dag-a-common-way-to-model-this-problem">Is "events plus a DAG" a common way to model this problem?</h3>
 <p>Yes. Two established ideas are combined here:</p>
 <ol>
   <li><strong>Precedence-constrained scheduling.</strong> Activities with "finish before start" constraints form a DAG. This is the standard model in project scheduling (critical-path networks) and shop scheduling. The event DAG built in job expansion is exactly this: "the bay must open before the tray goes in".</li>
-  <li><strong>Action dependency graphs for multi-robot execution.</strong> Hönig et al. (<a href="https://act.usc.edu/publications/Hoenig_RAL2019.pdf">RA-L 2019</a>) turn a time-stamped multi-robot plan into a DAG of actions. One kind of edge chains the actions of one robot; the other kind orders actions of different robots that use the same location. Robots then run at their own speed and wait only on edges, which makes execution robust to delays. Later work describes it as "a directed acyclic graph representing the temporal dependencies between actions" (<a href="https://arxiv.org/html/2412.01277v1">Streamlining the ADG framework, 2024</a>). The scheduler's response is close to this: <code>ActionNode[]</code> where each node lists its <code>parents</code>, chained per entity and ordered by occupancy (<a class="ref" href="#bg-motion-planning-and-the-response">section 19</a>).</li>
+  <li><strong>Action dependency graphs for multi-robot execution.</strong> Hönig et al. (<a href="https://act.usc.edu/publications/Hoenig_RAL2019.pdf">RA-L 2019</a>) turn a time-stamped multi-robot plan into a DAG of actions. One kind of edge chains the actions of one robot; the other kind orders actions of different robots that use the same location. Robots then run at their own speed and wait only on edges, which makes execution robust to delays. Later work describes it as "a directed acyclic graph representing the temporal dependencies between actions" (<a href="https://arxiv.org/html/2412.01277v1">Streamlining the ADG framework, 2024</a>). The scheduler's response is close to this: <code>ActionNode[]</code> where each node lists its <code>parents</code>, chained per entity and ordered by occupancy (<a class="ref" href="#bg-from-trajectories-to-the-response">section 25</a>; doc 05 builds the idea from scratch).</li>
 </ol>
-<p>What is more specific to this code base is that the DAG exists <strong>before</strong> any motion is planned and is handed to the motion planner as input (<code>volley::Chugg motion_planner(gg_, table_, ctx->events, ...)</code> in <code>PlanMotions</code>). The DAG first carries task logic (which tray must move before which) and only at the end becomes an execution policy.</p>
+<p>The scheduler uses <strong>both</strong>, as two separate graphs (<a class="ref" href="#bg-motion-planning-and-the-response">section 20</a>). The event DAG is the first kind: it exists <strong>before</strong> any motion is planned and is handed to the motion planner as input (<code>volley::Chugg motion_planner(gg_, table_, ctx->events, ...)</code> in <code>PlanMotions</code>), which makes the motion-planning problem MAPF with precedence constraints. The action DAG is the second kind, built from CHUGG's trajectories; it inherits the event DAG's edges, so the task logic ends up in the execution policy without the event DAG ever becoming it.</p>
 <h3 id="bg-open-rmfs-rmf_traffic-has-no-dag-it-is-a-database-updated-by-events-why-is-this-different">Open-RMF's <code>rmf_traffic</code> has no DAG; it is a database updated by events. Why is this different?</h3>
 <p>The two systems solve different problems.</p>
 <table>
@@ -5794,12 +5970,12 @@ colcon test-result --verbose
   <li><strong>Input: one DAG</strong>, not several. The lanes are only a way of drawing it; the bay edges and the occupancy edge connect them. (Even a DAG with no edges between lanes would be fine: it would simply mean nothing waits for anything.)</li>
   <li><strong>The topological sort produces a list</strong>, <code>std::optional&lt;VertexVec></code>. It neither creates nor removes parallelism; it only guarantees that every node comes after its parents. The scheduler uses this list to replay events on a <code>DiscreteGarageState</code> and to number the actions.</li>
   <li><strong>The response keeps both the list and the edges.</strong> <code>BuildScheduledActionsArray</code> walks the action DAG in topological order, gives each action its position in <code>Schedule.nodes</code>, and fills <code>parents</code> from its in-edges plus the previous action of the same AGV, bay or VRC. So the "sorted graph" is exactly this: a sorted array in which every node points back to its parents, always at smaller indices.</li>
-  <li><strong>Execution is driven by <code>parents</code>, not by array order.</strong> A node can start as soon as all its parents are done; nodes without a path between them run at the same time. The times themselves come from motion planning: in the <code>ContinuousStateToSchedule</code> test, AGV 1 and AGV 2 both have motions starting at <code>t = 0</code>. How Dispatch's executor consumes <code>parents</code> is outside this package.</li>
+  <li><strong>Execution is driven by <code>parents</code>, not by array order</strong> (doc 05, <a class="ref" href="#ad-executing-an-adg">section 4</a>, explains why that is safe). A node can start as soon as all its parents are done; nodes without a path between them run at the same time. The times themselves come from motion planning: in the <code>ContinuousStateToSchedule</code> test, AGV 1 and AGV 2 both have motions starting at <code>t = 0</code>. How Dispatch's executor consumes <code>parents</code> is outside this package.</li>
 </ol>
 <p>Parallelism is still lost wherever an edge exists. Some edges are physical (one AGV does one thing at a time; a tray is in one place). Others are choices: rule B orders every step of a job even when two steps could overlap, and REBALANCE_GARAGE runs its bays one after another because they share a job index (<a class="ref" href="#bg-gotchas-2">section 14.18</a>). Those are fair targets for improvement.</p>
 <h3 id="bg-the-logic-feels-convoluted-is-it">The logic feels convoluted. Is it?</h3>
 <p>Partly. It helps to separate what the problem forces from what the code adds.</p>
-<p><strong>What the problem forces.</strong> Trays block each other, an AGV must fetch a tray before carrying it, bays and VECS have modes, and every job's plan depends on where earlier jobs leave things. Some precedence structure is unavoidable. Separating <em>what must happen in which order</em> (the event DAG) from <em>how and when robots move</em> (CHUGG) is a sound and common split.</p>
+<p><strong>What the problem forces.</strong> Trays block each other, an AGV must fetch a tray before carrying it, bays and VECS have modes, and every job's plan depends on where earlier jobs leave things. Some precedence structure is unavoidable. Separating <em>what must happen in which order</em> (the event DAG) from <em>how and when robots move</em> (CHUGG) and from <em>in which order the robots may use shared space</em> (the action DAG) is a sound and common split: task planning, multi-agent path finding, then an action dependency graph for execution.</p>
 <p><strong>What the code adds</strong> (evidence from <code>scheduler.cpp</code>):</p>
 <ul>
   <li><strong>One mutable DAG, edited by three passes.</strong> Job expansion leaves blanks (<code>T21 -> ?</code>), tray assignment fills them and adds blocker moves, AGV assignment adds approach, lift and lower events. To know what an event looks like you need to know which pass you are in.</li>
@@ -5844,11 +6020,13 @@ colcon test-result --verbose
 </ul>
 <p>The three rules are not the whole story. They only order what the job methods know about. Geometric conflicts (a tray in the way, two AGVs on one node) are turned into edges later by tray and AGV assignment (sections <a class="ref" href="#bg-tray-assignment-dotrayassignments">16</a> and <a class="ref" href="#bg-agv-assignment-doagvassignments">17</a>).</p>
 <h2 data-num id="bg-known-limitations-and-reading-checkpoint">Known limitations and reading checkpoint</h2>
-<p>Limits of this guide: the search environments, <code>GetStaticFilter</code> and <code>GraphFilterProperties</code>, <code>BottleneckAssignment</code>, CHUGG, the cost model and the <code>common</code> utilities (the code of <code>volley::Wrap</code>, footprint dimensions) live in packages that were not in the snapshots. <code>planner_core</code> (events, event DAG), <code>common_ros</code> (garage state, layout, graphs, collision table) and the <code>interfaces</code> messages were. Dispatch, AGV firmware and the Pecos garage's real occupancy were not supplied. Do not infer those details from a schematic figure.</p>
-<p>Limits of the code worth remembering: <code>GetAgvOccupiedDuration</code> returns zero; failed jobs can leave events in the DAG; any failure after expansion fails all jobs in the request; <code>Reduce()</code> placement is load-bearing; <code>UseEvChargeHeading</code> contains a hard-coded site rule.</p>
+<p>Limits of this guide: <code>BottleneckAssignment</code> (in <code>task_planner</code>) and the <code>common</code> utilities (<code>stdx</code>, <code>volley::Wrap</code>, <code>AreSameDirection</code>, footprint dimensions) live in packages that were not in the snapshots, and neither were the packages' tests outside <code>scheduler</code> or <code>launcher/params/params.yaml</code>. <code>planner_core</code> (events, event DAG), <code>common_ros</code> (garage state, layout, graphs, collision table), <code>motion_planner</code> (CHUGG, SIPP, the searches and filters), <code>cost_functions</code> (the timing model) and the <code>interfaces</code> messages were. Dispatch, AGV firmware and the Pecos garage's real occupancy were not supplied. Do not infer those details from a schematic figure.</p>
+<p>Limits of the code worth remembering: <code>GetAgvOccupiedDuration</code> returns zero; failed jobs can leave events in the DAG; any failure after expansion fails all jobs in the request, except CHUGG's exceptions, which nothing in the scheduler catches; <code>Reduce()</code> placement is load-bearing; <code>UseEvChargeHeading</code> contains a hard-coded site rule; CHUGG plans loaded moves at unloaded speed and three places disagree on wheel-turn time (<a class="ref" href="#bg-the-cost-model">section 23.2</a>); <code>PROCESS_RETRIEVE</code> is a hard-coded 60 s.</p>
 <p><strong>Before reading <a href="#doc-proposal">02</a>, check you can answer:</strong></p>
 <ol>
-  <li>What is the difference between a job, an event, a motion and an action?</li>
+  <li>What is the difference between a job, an event, a motion and an action, and which graph holds each?</li>
+  <li>Which DAG does CHUGG take as input, which DAG does Dispatch execute, and how do edges get from the first to the second?</li>
+  <li>In which order does CHUGG plan events, and why can adding one edge change the whole plan?</li>
   <li>In <code>Scheduler::Plan</code>, what is <code>this</code>, what is <code>plan_ctx</code>, and why can a <code>const</code> method still change the plan?</li>
   <li>Why does every <code>Plan&lt;Type>Job</code> start by copying <code>ctx->initial_state</code> and calling <code>ctx->events.Apply</code>?</li>
   <li>What makes a <code>TrayMove</code> incomplete, and which stage completes each missing part?</li>
@@ -5866,9 +6044,11 @@ colcon test-result --verbose
   <li><code>include/scheduler/scheduler_ros.hpp</code>, <code>src/scheduler_ros.cpp</code>, <code>src/scheduler_component.cpp</code>: ROS wiring and parameters</li>
   <li><code>test/*.cpp</code>, <code>test/garage_states/double_retrieve_garage_state.yaml</code>: 72 active tests and one fixture</li>
   <li><code>CMakeLists.txt</code>, <code>package.xml</code>: targets and dependencies</li>
-  <li><code>sources/repomix-scheduler.xml</code>: the snapshot all of the above was read from</li>
+  <li><code>sources/repomix-scheduler.xml</code>: the snapshot the files above were read from</li>
   <li><code>sources/repomix-planner-core.xml</code>: <code>planner_core</code>, the event classes and the event DAG</li>
   <li><code>sources/repomix-common-ros.xml</code>: <code>common_ros</code>, the garage state, layout, pose graph, garage graph and collision table</li>
+  <li><code>sources/repomix-motion-planner.xml</code>: <code>motion_planner</code>, CHUGG, SIPP and the safe-interval table, <code>ContinuousState</code>, <code>Trajectory</code>, the single-agent searches and static filters</li>
+  <li><code>sources/repomix-cost-functions.xml</code>: <code>cost_functions</code>, the trapezoid model, <code>MotionCostModel</code> with its parameter defaults, motion runs</li>
   <li><code>sources/repomix-interfaces.xml</code>: every <code>.msg</code> and <code>.srv</code> of <code>interfaces</code>, <code>vrc_interfaces</code>, <code>bay_interfaces</code> and <code>agv_interfaces</code></li>
   <li><code>sources/5675_pecos_combined.yaml</code>: coordinates, node metadata and edges for the Pecos figures</li>
 </ul>

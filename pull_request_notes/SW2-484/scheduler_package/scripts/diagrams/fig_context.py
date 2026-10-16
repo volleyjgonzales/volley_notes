@@ -111,12 +111,12 @@ def schedule_context_anatomy():
     rx = ctx.x1 + 90
     M = 11.5
     dgs = uml_class(d, rx, field_y["initial_state"] - 40, "DiscreteGarageState", accent=INP,
-                    stereo="value type · section 5", size=M,
+                    stereo="value type · DiscreteGarageState", size=M,
                     attrs=["agvs, trays, payloads,", "bays, vecs, vrcs,", "disabled nodes"])
-    dag = uml_class(d, rx, dgs.y1 + 30, "ScheduleEventDag", accent=PLAN, stereo="planner_core · section 12", size=M,
+    dag = uml_class(d, rx, dgs.y1 + 30, "ScheduleEventDag", accent=PLAN, stereo="planner_core · event DAG", size=M,
                     attrs=["vertices: shared_ptr<ScheduleEvent>", "edge u -> v: u finishes first"],
                     methods=["AddEvent, AddDependency", "GetTopologicalOrdering, Reduce"])
-    sjd = uml_class(d, rx, dag.y1 + 30, "ScheduledJobDataMsg", accent=PLAN, stereo="ROS message · section 7", size=M,
+    sjd = uml_class(d, rx, dag.y1 + 30, "ScheduledJobDataMsg", accent=PLAN, stereo="ROS message", size=M,
                     attrs=["job: SchedulerJob", "node_indices: action positions", "bay_id, bay_arrival_node_guid"])
     ev = uml_class(d, rx, sjd.y1 + 30, "ScheduleEventSPtr", accent=BOOK, stereo="shared_ptr<ScheduleEvent>", size=M,
                    attrs=["the SAME object as in events", "(map value = pointer, not copy)"])
@@ -552,7 +552,8 @@ def chugg_io():
               "    CompletionTime), then plan it:",
               "  AGV / tray: SIPP on this AGV's safe-",
               "    interval table, others frozen in place",
-              "  bay / VECS: fixed duration from the params",
+              "  bay / VECS: fixed duration (params; 60 s",
+              "    hard-coded for PROCESS_RETRIEVE)",
               "  commit; carve into every other AGV's table",
               "pairwise collision check of all new motions"]
     for i, ln in enumerate(inside):
@@ -579,7 +580,7 @@ def chugg_io():
     d.rect(rb.x0, rb.y0, rb.w, rb.h, rx=10, fill=T.card, stroke=T.violet, sw=1.4)
     d.text(ox + 14, rb.y0 + 20, "ResponseFromTrajectories", size=12.5, family="mono", weight=700, fill=T.violet)
     d.text(ox + 14, rb.y0 + 42, "one ActionNode per motion with a delta;", size=11, fill=T.fg2)
-    d.text(ox + 14, rb.y0 + 60, "action id -> event -> job guid (section 6)", size=11, fill=T.fg2)
+    d.text(ox + 14, rb.y0 + 60, "action id -> event -> job guid", size=11, fill=T.fg2)
     connect(d, [(ox + 190, cy0 + 230), (ox + 190, rb.y0)], kind="flow", color=T.violet, size=8)
     frame(d, title="CHUGG: what goes in, what comes out",
           subtitle="The scheduler decides WHAT happens and in which order (the event DAG). CHUGG decides WHEN and "

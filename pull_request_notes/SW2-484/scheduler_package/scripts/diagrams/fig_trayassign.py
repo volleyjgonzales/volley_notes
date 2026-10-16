@@ -31,8 +31,8 @@ def assign_tray_id():
         "closest to where it is needed?'.",
         "Build the graph filter for a tray footprint with every tray and AGV left out, so occupied nodes do not "
         "stop the search; only disabled or static obstacles do.",
-        "Run the search. The environment's goal is a node that holds a tray with no payload. Cost comes from "
-        "the motion cost model; the code comment calls it a BFS.",
+        "Run the search. The environment's goal is a node that holds a tray with no payload. Each edge costs its "
+        "trapezoid time plus 30 s for every tray it crosses, so a near tray behind blockers can lose to a farther one.",
         "If no empty tray is reachable, the whole tray assignment fails with this message.",
         "Take the tray on the node the search reached and write its id into the existing event. The event "
         "object is edited in place; nothing is added to the DAG.",
@@ -106,7 +106,7 @@ def assign_tray_id():
                ("Not reserved", "Nothing marks T23 as taken. Later moves see it in B21 because DoTrayAssignments "
                 "applies each move to working_state before the next event. A TODO in the code suggests choosing a "
                 "tray that is a future blocker anyway.", T.amber),
-               ("Same helper, two callers", "PlanReadyForInsertJob calls it early (best effort, section 13.13); "
+               ("Same helper, two callers", "PlanReadyForInsertJob calls it early (best effort, PlanReadyForInsertJob); "
                 "DoTrayAssignments calls it for every move still blank, with the full picture of all jobs.",
                 T.border)],
         legend_override=LEGEND, bw=330)
@@ -213,6 +213,6 @@ def assign_dest():
                ("Two copies of the garage", "Steps 4 to 7 work on ResolveBlockingTrays' own copy. Step 9 applies "
                 "the same moves again to the caller's working_state, which later events will see.", T.sky),
                ("Waypoint stash", "If no parking spot is reachable at all, tier 2 may return a waypoint (T9 on W25 "
-                "is such a leftover). A later CLEAN_GARAGE job puts stashed trays back (section 13.16).",
+                "is such a leftover). A later CLEAN_GARAGE job puts stashed trays back (PlanCleanGarageJob).",
                 T.amber)],
         legend_override=LEGEND, bw=330)

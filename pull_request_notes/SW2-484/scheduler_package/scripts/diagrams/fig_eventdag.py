@@ -1,4 +1,4 @@
-"""ScheduleEventDag figures for doc 01 section 12: class family, storage and identity, the operations
+"""ScheduleEventDag figures for doc 01 ("Directed acyclic graphs, then ScheduleEventDag"): class family, storage and identity, the operations
 on a small example, and the shallow copy used as a work queue in DoAgvAssignments.
 Types from sources/repomix-planner-core.xml and the interfaces .msg files."""
 from __future__ import annotations

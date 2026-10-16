@@ -1,4 +1,4 @@
-"""Motion planning figures for doc 01 section 20: where CHUGG sits between the two DAGs, and what a
+"""Motion planning figures for doc 01 (Part IV, motion planning): where CHUGG sits between the two DAGs, and what a
 ContinuousState holds (the ContinuousStateToSchedule test, drawn as a timeline)."""
 from __future__ import annotations
 

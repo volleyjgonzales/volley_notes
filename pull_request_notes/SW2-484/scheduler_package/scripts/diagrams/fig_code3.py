@@ -55,7 +55,7 @@ def tray_flow():
     connect(d, [(cx, q1.y1), (cx, q2.y0)], kind="flow", color=T.faint, size=7, label="yes",
             label_at=(cx + 18, (q1.y1 + q2.y0) / 2))
     a1 = _box(d, cx + 160, q2.cy - 34, 330, "AssignTrayIdForEmptyMove()",
-              ["EmptyTraySearch: BFS from the destination", "for the nearest empty tray"], col=TRAY, title_col=TRAY)
+              ["EmptyTraySearch from the destination: cheapest", "empty tray (time + 30 s per blocker)"], col=TRAY, title_col=TRAY)
     connect(d, [(q2.x1, q2.cy), (a1.x0, q2.cy)], kind="flow", color=T.faint, size=7, label="no",
             label_at=((q2.x1 + a1.x0) / 2, q2.cy - 12))
     q3 = _diamond(d, cx, q2.y1 + 70, "has destination?", w=210)

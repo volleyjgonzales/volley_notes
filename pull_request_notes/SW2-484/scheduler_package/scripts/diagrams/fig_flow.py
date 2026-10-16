@@ -40,78 +40,109 @@ def _mini_dag(doc: Doc, x0, y0, w, h, nodes, edges, *, square=False):
 
 @figure("01_pipeline", "Scheduler::Plan pipeline", "01-software-background.html")
 def pipeline():
-    d = Doc("01_pipeline", "Scheduler::Plan — four principal stages",
-            "PlanRequest flows through job expansion, tray assignment, AGV assignment and motion planning; "
-            "each stage enriches the same ScheduleContext event DAG.")
-    cw, gap, ch = 218, 40, 178
+    d = Doc("01_pipeline", "Scheduler::Plan: from jobs to an action DAG",
+            "PlanRequest flows through job expansion, tray assignment and AGV assignment, which build the event DAG "
+            "(task level); CHUGG plans timed motions from it (MAPF); the response builds a new graph, the action "
+            "DAG (an action dependency graph), which Dispatch executes.")
+    cw, gap, ch = 210, 38, 178
     stages = [
-        ("Job expansion", "Validate base state, create ScheduleContext, expand each pending job.",
-         ["PlanInsertJob()", "PlanRetrieveJob()", "PlanCleanGarageJob()"], ACT),
-        ("Tray assignment", "Fill missing tray IDs and destinations; insert blocker relocations.",
-         ["DoTrayAssignments(ctx)", "ResolveBlockingTrays()", "+ DAG dependencies"], TRAY),
-        ("AGV assignment", "Pick a feasible AGV per tray move; add reposition and lift events.",
-         ["DoAgvAssignments(ctx)", "cost: occupied+approach", "+ occupancy edges"], AGV),
-        ("Motion planning", "Reduce and sanity-check, then plan timed motions and emit actions.",
-         ["Reduce()", "PlanMotions(ctx)", "ResponseFromTrajectories"], BAY),
+        ("Job expansion", "Validate the base state, create ScheduleContext, expand each pending job into events.",
+         ["Plan<Type>Job()", "+ rule A/B/C edges"], ACT),
+        ("Tray assignment", "Fill missing tray ids and destinations; insert moves for blocking trays.",
+         ["DoTrayAssignments(ctx)", "+ freeing_moves edges"], TRAY),
+        ("AGV assignment", "Match AGVs to tray moves; add approach, lift and lower events; Reduce + check.",
+         ["DoAgvAssignments(ctx)", "Reduce(), SanityCheck"], AGV),
+        ("Motion planning", "CHUGG: plan every event in topological order with SIPP, collision-free in time.",
+         ["PlanMotions(ctx)", "-> ContinuousState"], BAY),
+        ("Action DAG", "One action per motion that changes something; order shared space; copy event edges.",
+         ["ResponseFromTrajectories", "-> Schedule.nodes"], T.green),
     ]
-    top = 70
+    top = 96
     boxes = []
     for i, (title, sub, lines, col) in enumerate(stages):
         x = i * (cw + gap)
         boxes.append(card(d, x, top, cw, ch, title=title, accent=col, lines=lines, sub=sub, num=i + 1,
                           line_size=12))
-    for i in range(3):
+    for i in range(4):
         a, b = boxes[i], boxes[i + 1]
         connect(d, [(a.x1 + 6, a.cy), (b.x0 - 4, a.cy)], kind="flow", color=T.muted, sw=2, size=11)
-    # request / response rails
-    rail = 22
-    total_w = boxes[-1].x1
-    d.line(boxes[0].cx, rail + 14, boxes[0].cx, top - 4, stroke=T.muted, sw=2)
-    d.arrowhead((boxes[0].cx, top - 2), (boxes[0].cx, rail), kind="filled", color=T.muted, size=10)
-    chip(d, boxes[0].cx, rail, "PlanRequest", T.sky, anchor="middle", size=12.5)
-    d.line(boxes[-1].cx, top - 2, boxes[-1].cx, rail + 16, stroke=T.muted, sw=2)
-    d.arrowhead((boxes[-1].cx, rail + 13), (boxes[-1].cx, top), kind="filled", color=T.muted, size=10)
-    chip(d, boxes[-1].cx, rail, "PlanResponse · Schedule", T.green, anchor="middle", size=12.5)
-    mid_x0 = boxes[0].cx + 70
-    mid_x1 = boxes[-1].cx - 110
-    d.line(mid_x0, rail, mid_x1, rail, stroke=T.border, sw=1.2, dash="2 4")
-    label_pill(d, (mid_x0 + mid_x1) / 2, rail, "Scheduler::Plan(request)", color=T.fg2, size=12.5, bg=T.bg)
+    # dispatcher (outside the package)
+    dx = boxes[-1].x1 + gap
+    d.rect(dx, top, 170, ch, rx=10, fill=T.card, stroke=T.sky, sw=1.5, dash="6 4")
+    d.text(dx + 16, top + 26, "Dispatch", size=15, weight=600, fill=T.fg)
+    for j, ln in enumerate(["executes actions", "whose parents are", "done (the executor;", "not in this package)"]):
+        d.text(dx + 16, top + 54 + j * 19, ln, size=S.small + 0.5, fill=T.muted)
+    connect(d, [(boxes[-1].x1 + 6, boxes[-1].cy), (dx - 4, boxes[-1].cy)], kind="flow", color=T.muted, sw=2,
+            size=11)
+    label_pill(d, (boxes[-1].x1 + dx) / 2, boxes[-1].y1 + 22, "PlanResponse", color=T.green, size=11, bg=T.bg)
+    # research vocabulary brackets
+    def bracket(x0, x1, text, col):
+        y = top - 22
+        d.line(x0, y, x1, y, stroke=col, sw=2)
+        d.line(x0, y, x0, y + 8, stroke=col, sw=2)
+        d.line(x1, y, x1, y + 8, stroke=col, sw=2)
+        label_pill(d, (x0 + x1) / 2, y - 14, text, color=col, size=12, bg=T.bg, family="sans")
+    bracket(boxes[0].x0, boxes[2].x1, "build the event DAG: WHAT happens, in which order (task planning)", ACT)
+    bracket(boxes[3].x0, boxes[3].x1, "MAPF: WHEN and WHERE", BAY)
+    bracket(boxes[4].x0, boxes[4].x1, "ADG: safe execution order", T.green)
+    bracket(dx, dx + 170, "executor", T.sky)
+    chip(d, boxes[0].x0, 18, "PlanRequest", T.sky, size=12.5)
+    connect(d, [(boxes[0].x0 + 12, 32), (boxes[0].x0 + 12, top - 2)], kind="flow", color=T.muted, sw=2, size=10)
 
-    # DAG evolution strip
+    # representation strip
     sy = top + ch + 46
-    sh = 128
-    d.text(0, sy - 20, "ctx->events  ·  the same ScheduleEventDag, enriched stage by stage", size=12.5,
-           family="mono", fill=T.muted)
+    sh = 142
+    d.text(0, sy - 20, "what exists after each stage", size=12.5, family="mono", fill=T.muted)
     dags = [
         ({"b0": (.18, .3, BAY, "solid"), "t0": (.5, .3, TRAY, "hollow"), "b1": (.82, .3, BAY, "solid"),
           "t1": (.5, .78, TRAY, "hollow")},
-         [("b0", "t0"), ("t0", "b1")], "abstract events; some TrayMoves are incomplete"),
+         [("b0", "t0"), ("t0", "b1")], "event DAG: abstract events; some TrayMoves incomplete"),
         ({"b0": (.18, .3, BAY, "solid"), "t0": (.5, .3, TRAY, "solid"), "b1": (.82, .3, BAY, "solid"),
           "t1": (.5, .78, TRAY, "solid"), "x": (.18, .78, TRAY, "new")},
-         [("b0", "t0"), ("t0", "b1"), ("x", "t0"), ("x", "t1")], "IDs + destinations filled; blocker inserted"),
+         [("b0", "t0"), ("t0", "b1"), ("x", "t0"), ("x", "t1")], "same DAG: ids and destinations filled; blocker added"),
         ({"b0": (.12, .3, BAY, "solid"), "t0": (.58, .3, TRAY, "solid"), "b1": (.88, .3, BAY, "solid"),
           "t1": (.58, .78, TRAY, "solid"), "x": (.35, .78, TRAY, "solid"), "a0": (.12, .78, AGV, "new"),
           "a1": (.35, .3, AGV, "new")},
          [("b0", "a1"), ("a1", "t0"), ("t0", "b1"), ("x", "t0"), ("x", "t1"), ("a0", "x")],
-         "AgvMove reposition / lift + occupancy edges"),
-        ({f"n{i}": (.1 + i * .16, .3 if i % 2 == 0 else .78, ACT, "solid") for i in range(6)},
-         [("n0", "n1"), ("n1", "n2"), ("n0", "n2"), ("n2", "n3"), ("n3", "n4"), ("n4", "n5")],
-         "ActionNode[] with integer parent indices"),
+         "same DAG: AgvMoves and occupancy edges added, then reduced"),
     ]
     for i, (nodes, edges, cap) in enumerate(dags):
         x = boxes[i].x0
         d.rect(x, sy, cw, sh, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
-        _mini_dag(d, x + 14, sy + 14, cw - 28, 64, nodes, edges, square=(i == 3))
+        _mini_dag(d, x + 14, sy + 14, cw - 28, 64, nodes, edges)
         for j, ln in enumerate(wrap(cap, cw - 24, S.small, "sans")):
             d.text(x + cw / 2, sy + 96 + j * 16, ln, size=S.small, fill=T.muted, anchor="middle")
-    frame(d, title="Scheduler::Plan — four principal stages",
-          subtitle="Every stage refines the result of the previous one. Simplified: several checks and branches "
-                   "are omitted, and this is not a ROS executor or thread schedule.",
+    # stage 4: timeline
+    x = boxes[3].x0
+    d.rect(x, sy, cw, sh, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
+    lanes = [(AGV, [(0.00, 0.35, False), (0.35, 0.55, True), (0.55, 0.9, False)]),
+             (AGV, [(0.00, 0.25, True), (0.25, 0.6, False), (0.6, 0.8, False)]),
+             (BAY, [(0.00, 0.6, True), (0.6, 0.75, False)])]
+    for k, (col, segs) in enumerate(lanes):
+        y = sy + 16 + k * 22
+        for (f0, f1, wait) in segs:
+            bx0 = x + 14 + f0 * (cw - 28)
+            bw = (f1 - f0) * (cw - 28) - 3
+            d.rect(bx0, y, bw, 15, rx=3, fill=T.bg_deep if wait else T.tint(col, 0.35, T.bg), stroke=col, sw=1,
+                   dash="3 2" if wait else None)
+    for j, ln in enumerate(wrap("ContinuousState: a timed trajectory per entity", cw - 24, S.small, "sans")):
+        d.text(x + cw / 2, sy + 96 + j * 16, ln, size=S.small, fill=T.muted, anchor="middle")
+    # stage 5: action DAG
+    x = boxes[4].x0
+    d.rect(x, sy, cw, sh, rx=10, fill=T.bg_deep, stroke=T.border_soft, sw=1)
+    _mini_dag(d, x + 14, sy + 14, cw - 28, 64,
+              {f"n{i}": (.1 + i * .16, .3 if i % 2 == 0 else .78, T.green, "solid") for i in range(6)},
+              [("n0", "n1"), ("n1", "n2"), ("n0", "n2"), ("n2", "n3"), ("n3", "n4"), ("n4", "n5")], square=True)
+    for j, ln in enumerate(wrap("a NEW graph: ActionNode[] with parent indices", cw - 24, S.small, "sans")):
+        d.text(x + cw / 2, sy + 96 + j * 16, ln, size=S.small, fill=T.muted, anchor="middle")
+    frame(d, title="Scheduler::Plan: from jobs to an action DAG",
+          subtitle="Stages 1-3 build one event DAG; CHUGG turns it into timed trajectories; the response builds a second "
+                   "DAG, of actions, from those trajectories. Simplified: checks and failure paths are omitted.",
           badge_key="as-built",
           legend=[("dot", BAY, "BayTransition"), ("dot", TRAY, "TrayMove"), ("dot", AGV, "AgvMove"),
-                  ("fill", ACT, "ActionNode"), ("hollow", TRAY, "incomplete TrayMove"), ("ring", T.muted, "added in this stage"),
-                  ("arrow", T.faint, "must precede")],
-          legend_title="Event DAG")
+                  ("hollow", TRAY, "incomplete TrayMove"), ("ring", T.muted, "added in this stage"),
+                  ("fill", T.green, "ActionNode"), ("arrow", T.faint, "must precede")],
+          legend_title="Graphs")
     return d
 
 

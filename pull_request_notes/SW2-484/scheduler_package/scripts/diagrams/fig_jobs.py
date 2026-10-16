@@ -271,7 +271,7 @@ GENERAL = {
 ],
 "46_job_clean_garage": [
     REPLAY,
-    "Only the first successful job of a request hides AGVs: ask HideAgvs (another package) for one hiding pose "
+    "Only the first successful job of a request hides AGVs: ask HideAgvs (motion_planner) for one hiding pose "
     "per AGV.",
     "If no hiding assignment exists, the job fails.",
     "Add one AgvMove per AGV that is not already hidden, chained per AGV (and per bay when hiding in a bay).",
@@ -282,7 +282,7 @@ GENERAL = {
 "47_job_rebalance_garage": [
     REPLAY,
     "Ask which bays should switch to insert mode and which to retrieve mode, given the readiness ratio "
-    "(section 19).",
+    "('Bays, VECS and VRCs').",
     "Run the READY_FOR_INSERT recipe for each bay that should accept cars, under this job's index.",
     "Run the READY_FOR_RETRIEVE recipe for each bay that should hand cars out, under this job's index.",
     "Report success; failures of individual bays are only logged.",
@@ -314,7 +314,7 @@ GENERAL = {
     "Find the car and the tray it is on.",
     "If the tray already sits on an EV charging node whose VECS is ready, no move is needed.",
     "Otherwise search for a reachable VECS spot, reusing the open-space search of ResolveBlockingTrays.",
-    "The search must have found a node, and that node must have a VECS.",
+    "The search must have found a node, and that node must have a VECS (an EV_CHARGE node).",
     "Plan the tray onto the VECS (reuses PlanReparkTrayJob).",
     "Start charging once the tray is there.",
 ],
@@ -1089,7 +1089,7 @@ def job_clean_garage():
         steps=[
             ("working_state = ctx->initial_state;\nctx->events.Apply(working_state);", "Empty DAG.", "replay", "ok"),
             ("if(job_index == 0):\n  [ok, hide] = volley::HideAgvs(working_state, table_)",
-             "First job, so AGVs are hidden. HideAgvs comes from another package and returns one hiding pose per "
+             "First job, so AGVs are hidden. HideAgvs (motion_planner) returns the first assignment it finds, one hiding pose per "
              "AGV (A -> P24, B -> P15 here, illustrative).", "hiding spots", "ok"),
             ("hiding failed -> return {false, ...}", "It succeeded.", "skipped", "skip"),
             ("for each (agv, dest) with agv.pose != dest:\n  AgvMove; rule A (AGV);\n"
@@ -1107,7 +1107,7 @@ def job_clean_garage():
                 "If the hiding spot is a bay, the bay's next transition waits for the AGV (rule A on the bay).",
                 T.green),
                ("Waypoint stash", "When ResolveBlockingTrays() finds no parking it may leave a blocker on a "
-                "waypoint (tier 2, section 15). CLEAN_GARAGE is what puts it back.", T.border)],
+                "waypoint (tier 2, 'Tray assignment'). CLEAN_GARAGE is what puts it back.", T.border)],
         bw=300)
 
 
@@ -1145,7 +1145,7 @@ def job_rebalance():
             ("working_state = ctx->initial_state;\nctx->events.Apply(working_state);", "Empty DAG.", "replay", "ok"),
             ("[to_insert, to_retrieve] = ComputeBayRebalancingActions(\n  working_state,\n"
              "  layout_->GetBayPrioritization(), bay_readiness_ratio_)",
-             "Illustrative result: B7 should become insert-ready, B21 retrieve-ready. Section 19 explains the "
+             "Illustrative result: B7 should become insert-ready, B21 retrieve-ready. 'Bays, VECS and VRCs' explains the "
              "classification and the ratio.", "[B7], [B21]", "ok"),
             ("for bay in to_insert:\n  PlanReadyForInsertJob(ctx, bay, job_index)\n  failure -> log and continue",
              "Empty tray T5 (nearest, illustrative) into B7, then B7 to insert mode.", "adds 1, 2", "event"),
@@ -1212,7 +1212,7 @@ def job_charge_agv():
         notes=[("Composite job", "Two of the three events come from other job methods. That is why the matrix "
                 "of building blocks shows AgvMove and BayTrans calls on this row.", T.teal),
                ("Cost, not distance", "GetJustMovingCost() asks the motion cost model for the travel time, using "
-                "static filters so a path must exist. Section 16 uses the same helper.", T.green),
+                "static filters so a path must exist. AGV assignment uses the same helper.", T.green),
                ("Not checked", "Whether the charger area is free of trays or other conflicts (a TODO in the "
                 "code).", T.border)],
         bw=300)

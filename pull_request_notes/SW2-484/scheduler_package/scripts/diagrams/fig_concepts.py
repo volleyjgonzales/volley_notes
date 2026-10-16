@@ -310,10 +310,10 @@ def collision_table():
     y = max(q2.y1, ids.y1) + 34
     d.text(0, y, "Who uses it", size=14, weight=600, fill=T.fg)
     uses = [("GetStaticFilter(id, gg_, working_state, table_, ...)",
-             "For one entity, mark the graph vertices where it would conflict with what is in working_state (the id "
-             "sets passed in are left out). Returns GraphFilterProperties; callers test filters.IsEnabled(vertex).", T.green),
+             "For one footprint, switch off the graph vertices and edges where it would conflict with what is in working_state "
+             "(the id sets passed in are left out). Returns GraphFilterProperties; callers test filters.IsEnabled(v or e).", T.green),
             ("GetDisabledEntitiesFilters(gg_, initial_state, table_)",
-             "Once per Plan(), from another package: ctx->disabledness_filters, one GraphFilterProperties per collision id, "
+             "Once per Plan(), from motion_planner: ctx->disabledness_filters, one GraphFilterProperties per collision id, "
              "reflecting what initial_state marks as disabled.",
              T.violet),
             ("table_.Query(...) in DoTrayAssignments",
@@ -421,7 +421,7 @@ def topological_ordering():
     edge("e", "f")
     edge("a", "c", via=(-30, 38, -40))
     edge("a", "d", via=(30, 22, 0))
-    d.text(pos["e"].x0, pos["e"].y1 + 22, "Job 0 is the retrieve from section 13; jobs 1 and 2 repark T19 twice "
+    d.text(pos["e"].x0, pos["e"].y1 + 22, "Job 0 is the retrieve from 'Job expansion'; jobs 1 and 2 repark T19 twice "
            "(rule A: e -> f). Nothing links job 0 to jobs 1 and 2.", size=11, fill=T.muted)
     dag_bottom = pos["e"].y1 + 34
 
@@ -446,7 +446,7 @@ def topological_ordering():
     nt = note(d, 680, y0 + 14, W - 680,
               "When several events are ready (steps 1 to 4: a and e), any choice gives a valid order. "
               "ScheduleEventDag::GetTopologicalOrdering() takes the lowest job index, exactly as here; among "
-              "events of the same job its heap decides (section 12.5).",
+              "events of the same job its heap decides ('The operations').",
               title="Ties", accent=T.sky)
     # ---- valid / invalid orders ----
     y1 = max(yy, nt.y1) + 34
@@ -466,7 +466,7 @@ def topological_ordering():
     label_pill(d, (p.x1 + q.x0) / 2, p.y1 + 16, "added by mistake", color=T.red, size=10)
     bottom = max(yc, q.y1 + 34)
     cp = code_panel(d, 0, bottom + 10, W, [
-        "// planner_core, as called from the scheduler (see the table in section 12.5)",
+        "// planner_core, as called from the scheduler (see the table in 'The operations')",
         "std::optional<VertexVec> order = ctx->events.GetTopologicalOrdering();  // VertexVec = std::vector<Vertex>",
         "if(!order.has_value()) return {false, \"Failed to get total ordering\"};     // the DAG has a cycle",
         "for(Vertex v : order.value()) { auto event = ctx->events.GetEventFromVertex(v).value(); ... }",
