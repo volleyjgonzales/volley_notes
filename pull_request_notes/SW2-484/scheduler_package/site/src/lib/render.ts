@@ -307,6 +307,11 @@ interface DeclEntry {
   parts: string[];
   title?: string;
   only_h2?: string[];
+  /** limit to sections whose h2 id starts with this (e.g. "pr-" for doc 02) */
+  only_prefix?: string | string[];
+  /** For code that is not in any snapshot: a sketch reconstructed from call sites, shown with `note`. */
+  sketch?: string;
+  note?: string;
 }
 export interface Decl {
   id: string;
@@ -315,17 +320,38 @@ export interface Decl {
   lang: 'cpp' | 'msg';
   code: string;
   lines: number;
+  note?: string;
 }
 interface DeclRule {
   decl: Decl;
-  only?: Set<string>;
+  only?: { has(h2: string): boolean };
 }
 export type DeclIndex = Map<string, DeclRule[]>;
 
 const DECL_MAX_LINES = 160;
 const snapshots = new Map<string, string>();
 
+const onlyOf = (e: DeclEntry): DeclRule['only'] =>
+  e.only_h2 ? new Set(e.only_h2) : e.only_prefix
+      ? { has: (h2: string) => [e.only_prefix!].flat().some((p) => h2.startsWith(p)) }
+      : undefined;
+
+const unescapeHtml = (x: string) =>
+  x.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+
 function snapshotFile(from: string, file: string): string {
+  if (from === 'repo') {
+    const f = path.join(REPO_ROOT, file);
+    if (!fs.existsSync(f)) throw new BuildError(`definitions: ${f} not found`);
+    return fs.readFileSync(f, 'utf8');
+  }
+  if (from === 'content') {
+    // proposed code that exists only in a doc: all its C++ code blocks, in order
+    const f = path.join(SITE_ROOT, 'src/content', file);
+    if (!fs.existsSync(f)) throw new BuildError(`definitions: content file ${f} not found`);
+    const html = fs.readFileSync(f, 'utf8');
+    return [...html.matchAll(/<pre><code class="language-cpp">([\s\S]*?)<\/code><\/pre>/g)].map((m) => unescapeHtml(m[1])).join('\n');
+  }
   let s = snapshots.get(from);
   if (s === undefined) {
     const f = path.join(REPO_ROOT, 'sources', `repomix-${from}.xml`);
@@ -376,6 +402,14 @@ function loadDecls(): DeclIndex {
     index.set(name, list);
   };
   for (const e of cfg.cpp) {
+    if (e.sketch !== undefined) {
+      if (!e.note) throw new BuildError(`definitions: sketch for ${e.names[0]} needs a note`);
+      const code = e.sketch.replace(/\s+$/, '');
+      const title = e.title ?? e.names[0];
+      const decl: Decl = { id: declId(title), title, src: e.file, lang: 'cpp', code, lines: code.split('\n').length, note: e.note };
+      for (const n of e.names) add(n, { decl, only: onlyOf(e) });
+      continue;
+    }
     const src = snapshotFile(e.from, e.file);
     const blocks = e.parts.map((pfx) => extractDecl(src, pfx, `${e.from}:${e.file}`));
     let lines = blocks.flatMap((b, k) => (k ? ['', ...b] : b));
@@ -384,8 +418,9 @@ function loadDecls(): DeclIndex {
       lines = [...lines.slice(0, DECL_MAX_LINES), `// ... ${total - DECL_MAX_LINES} more lines in ${e.file}`];
     }
     const title = e.title ?? e.names[0];
-    const decl: Decl = { id: declId(title), title, src: e.file, lang: 'cpp', code: lines.join('\n'), lines: total };
-    const rule: DeclRule = { decl, only: e.only_h2 ? new Set(e.only_h2) : undefined };
+    const src_ = e.from === 'content' ? `proposed code in ${e.file}` : e.file;
+    const decl: Decl = { id: declId(title), title, src: src_, lang: 'cpp', code: lines.join('\n'), lines: total };
+    const rule: DeclRule = { decl, only: onlyOf(e) };
     for (const n of e.names) add(n, rule);
   }
   const all = (() => {
@@ -404,8 +439,32 @@ function loadDecls(): DeclIndex {
   return index;
 }
 
-function declFor(index: DeclIndex, name: string, h2: string): DeclRule | undefined {
+function declExact(index: DeclIndex, name: string, h2: string): DeclRule | undefined {
   return index.get(name)?.find((r) => !r.only || r.only.has(h2));
+}
+
+const WRAPPERS = /^(?:const\s+)?(?:std::(?:optional|shared_ptr|unique_ptr|vector|set|unordered_set|reference_wrapper)<(.*)>)$/;
+
+/** Exact spelling first; then the same type with decorations removed: `const`, `&`, `*`, `[]`,
+ *  std wrappers, lower-case namespace qualifiers, template arguments, and finally `Type::member`
+ *  falls back to `Type` (the class shows the member's declaration). */
+function declFor(index: DeclIndex, name: string, h2: string): DeclRule | undefined {
+  const exact = declExact(index, name, h2);
+  if (exact) return exact;
+  if (!/^[\w:<>,\s&*\[\]]+$/.test(name) || !/[A-Z]/.test(name)) return undefined;
+  let n = name.trim().replace(/^const\s+/, '').replace(/(?:\s*[&*]|\[\])+$/, '');
+  for (let m = WRAPPERS.exec(n); m; m = WRAPPERS.exec(n)) n = m[1].trim().replace(/(?:\s*[&*])+$/, '');
+  const tries: string[] = [n];
+  const unq = n.replace(/^(?:[a-z_][a-z0-9_]*::)+/, '');
+  tries.push(unq, unq.replace(/<.*>$/, ''), unq.replace(/<.*?>/g, ''));
+  const parts = unq.replace(/<.*?>/g, '').split('::');
+  for (let k = parts.length - 1; k >= 1; k--) tries.push(parts.slice(0, k).join('::'));
+  for (const t of tries) {
+    if (!t || !/^[A-Z]/.test(t)) continue;
+    const r = declExact(index, t, h2);
+    if (r) return r;
+  }
+  return undefined;
 }
 
 /** ROS .msg highlighting: field types and comments (Shiki has no grammar for it). */
@@ -435,11 +494,12 @@ function declTree(decls: Decl[]): Root {
           ? h('pre.decl-msg', [h('code', msgCode(d.code))])
           : h('pre', [h('code.language-cpp', d.code)]);
       const head = h('div.decl-head', [h('code', d.title), h('span', d.src)]);
+      const note = d.note ? [h('p.decl-note', d.note)] : [];
       const body =
         d.lines > DECL_OPEN_LINES
           ? h('details.decl-more', [h('summary', `Show definition (${d.lines} lines)`), pre])
           : pre;
-      return h('div.decl', { 'data-decl': d.id }, [head, body]);
+      return h('div.decl', { 'data-decl': d.id }, [head, ...note, body]);
     }),
   };
 }

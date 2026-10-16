@@ -67,6 +67,7 @@ python3 scripts/diagrams/build.py 13 15_   # only figures whose file name starts
 | `fig_proposal.py` | 58 tray-assignment data flow today vs proposed, 59 tray call tree today (UML), 60 proposed `tray_assignment` module (UML), 83 naming and the ROS boundary (doc 02) |
 | `fig_naming.py` | 82 one concept, many names today (doc 04) |
 | `fig_adg.py` | 84 why a timed plan needs an ADG, 85 building an ADG, 86 earliest start, critical path and slack, 87 the action DAG the scheduler builds, 88 executing an ADG: statuses over time, 89 where parallelism comes from, 90 topological orders and parallelism (doc 05) |
+| `fig_motion.py` | 91 event DAG, CHUGG and the action DAG in pipeline order, 92 a ContinuousState as a timeline (doc 01) |
 | `fig_context.py` | 61 `ScheduleContext` anatomy, 62 lifecycle across the `Plan()` stages, 69 `scheduled_jobs`, 70 `last_entity_event`, 71 `first_tray_event`, 72 CHUGG inputs and outputs, 73 `ScheduledJobData` UML, 74 `ScheduledJobData` on the Pecos map (doc 01) |
 | `fig_eventdag.py` | 63 `DagBase` / `ScheduleEventDag` classes, 64 storage and event identity, 65 the operations on one example, 66 the shallow copy as a work queue, 67 `TrayMove::Apply` branch by branch, 68 the job-index topological sort (doc 01) |
 | `svgkit.py`, `components.py`, `facility.py`, `theme.py` | SVG engine, shared components (UML boxes, event boxes, code panels, legends), YAML map renderer, colour tokens |

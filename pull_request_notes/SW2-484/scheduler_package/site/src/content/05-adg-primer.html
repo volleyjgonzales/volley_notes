@@ -60,8 +60,15 @@
 </ul>
 <figure id="ad-fig-90_adg_topo_vs_parallel">
   <img src="figures/90_adg_topo_vs_parallel.svg" alt="Topological orders and parallelism">
-  <figcaption><strong>Listing versus running.</strong> (1) The example ADG; <span class="math">a^1_1</span> and <span class="math">a^3_1</span> are unordered. (2) Its two topological orders as arrays. Parent indices point backwards, and the two unordered actions swap places. (3) Running by dependencies finishes at 10 with two robots moving at the start; running the array one entry at a time finishes at 12. (4) The ready set after each completion, which is what a dispatcher acts on.</figcaption>
+  <figcaption><strong>Listing versus running.</strong> (1) The example ADG; <span class="math">a^1_1</span> and <span class="math">a^3_1</span> are unordered. (2) Its two topological orders as arrays. Every dependency edge runs parent → child, so in a topological order the arrows always point forward (left to right). Each entry also stores <code>p</code>, the indices of its parents, which are always smaller than its own. The two unordered actions swap places between the orders. (3) Running by dependencies finishes at 10 with two robots moving at the start; running the array one entry at a time finishes at 12. (4) The ready set after each completion, which is what a dispatcher acts on.</figcaption>
 </figure>
+<p><strong>Edges point forward; the stored indices point back.</strong> A dependency always runs from parent to child, so in a topological order every edge points forward. That is the definition. The <em>wire format</em> stores each edge at its child end: <code>ActionNode.parents</code> lists the indices of the node's parents, which are earlier in the array. This is a representation choice, not a different kind of edge. An edge list, a parent list or a child list all describe the same graph; Boost's <code>bidirectionalS</code> keeps both in-edges and out-edges for the same reason. Storing parents suits this format for three reasons:</p>
+<ul>
+  <li><strong>Readiness is a question about parents.</strong> "May this action start?" means "are all its parents finished?", so a node that carries its parents can answer by itself.</li>
+  <li><strong>The array can be written and read in one pass.</strong> When <code>BuildScheduledActionsArray</code> writes a node, its parents have already been written, so their indices are known (<code>action_node_to_index</code>). Child indices would be forward references to entries not yet written.</li>
+  <li><strong>Acyclicity is checkable on receipt.</strong> If every parent index is smaller than the node's own index, the graph cannot contain a cycle.</li>
+</ul>
+<p>A dispatcher that wants the other direction ("which actions might become ready when this one finishes?") inverts the parent lists into child lists once, in <span class="math">O(|V| + |E|)</span>.</p>
 <p>So what is a single topological order <em>for</em>? Every use is about processing the graph, never about executing it:</p>
 <ul>
   <li><strong>Checking for cycles.</strong> If no order exists, the graph has a cycle.</li>
@@ -262,8 +269,8 @@ output: ADG G = (V, E), or "cycle" if the plan needs synchronous moves
 <p><strong>Why the sweep gives the same order.</strong> Take three robots that pass through cell B in turn: visits <span class="math">v_1, v_2, v_3</span>. The pairwise rule adds <span class="math">\mathrm{leave}(v_1) \to \mathrm{enter}(v_2)</span>, <span class="math">\mathrm{leave}(v_2) \to \mathrm{enter}(v_3)</span> and <span class="math">\mathrm{leave}(v_1) \to \mathrm{enter}(v_3)</span>. The sweep adds only the first two. The third is implied:</p>
 <div class="math">\mathrm{leave}(v_1) \to \mathrm{enter}(v_2) \to \dots \to \mathrm{leave}(v_2) \to \mathrm{enter}(v_3)</div>
 <p>The middle part is robot 2's own Type 1 chain, since it must enter B before it can leave. By induction, every pairwise edge is implied by consecutive hand-overs, so both versions have the same reachability. The two error checks also validate the plan: a correct space-time table never has two robots in one cell at once.</p>
-<p><strong>The C++ version.</strong> The file <code>examples/adg/space_time_to_adg.cpp</code> in this repository builds with nothing but C++17 and header-only Boost.Graph:</p>
-<pre><code class="language-bash">g++ -std=c++17 -O2 -Wall -Wextra -o space_time_to_adg examples/adg/space_time_to_adg.cpp &amp;&amp; ./space_time_to_adg
+<p><strong>The C++ version.</strong> The file <code>examples/adg/space_time_to_adg.cpp</code> in this repository builds with nothing but C++20 and header-only Boost.Graph. C++20 is needed only for designated initializers (<code>Action {.robot = i, .index = k, ...}</code>), which name every field at the point of construction:</p>
+<pre><code class="language-bash">g++ -std=c++20 -O2 -Wall -Wextra -o space_time_to_adg examples/adg/space_time_to_adg.cpp &amp;&amp; ./space_time_to_adg
 </code></pre>
 <p>The graph type is the same shape as the scheduler's <code>DagBase</code>, with an <code>Action</code> bundle on each vertex and a <code>Dependency</code> bundle on each edge (the modern bundled-property style, doc 01, <a href="#bg-reading-the-boost-adjacency-list-type">reading the type</a>):</p>
 <pre><code class="language-cpp">// examples/adg/space_time_to_adg.cpp (excerpt; the file also has Step 2, AddVertices, and a demo main)
@@ -294,7 +301,13 @@ std::vector&lt;std::vector&lt;Action&gt;&gt; ExtractActions(const SpaceTimeTable
     const auto&amp; row = table[i];
     for(int t = 0; t + 1 &lt; static_cast&lt;int&gt;(row.size()); ++t) {
       if(row[t] != row[t + 1]) {
-        actions[i].push_back(Action {i, static_cast&lt;int&gt;(actions[i].size()) + 1, t, row[t], row[t + 1]});
+        actions[i].push_back(Action {
+            .robot = i,
+            .index = static_cast&lt;int&gt;(actions[i].size()) + 1,
+            .start_time = t,
+            .from = row[t],
+            .to = row[t + 1],
+        });
       }
     }
   }
@@ -305,7 +318,7 @@ std::vector&lt;std::vector&lt;Action&gt;&gt; ExtractActions(const SpaceTimeTable
 void AddType1Edges(Adg&amp; g, const std::vector&lt;std::vector&lt;Vertex&gt;&gt;&amp; ids) {
   for(const auto&amp; chain : ids) {
     for(std::size_t k = 0; k + 1 &lt; chain.size(); ++k) {
-      boost::add_edge(chain[k], chain[k + 1], Dependency {EdgeType::kType1}, g);
+      boost::add_edge(chain[k], chain[k + 1], Dependency {.type = EdgeType::kType1}, g);
     }
   }
 }
@@ -319,7 +332,7 @@ void AddType2EdgesPairwise(Adg&amp; g) {
       const Action&amp; leave = g[*u];
       const Action&amp; enter = g[*v];
       if(leave.robot != enter.robot &amp;&amp; leave.from == enter.to &amp;&amp; leave.start_time &lt;= enter.start_time) {
-        boost::add_edge(*u, *v, Dependency {EdgeType::kType2}, g);
+        boost::add_edge(*u, *v, Dependency {.type = EdgeType::kType2}, g);
       }
     }
   }
@@ -340,13 +353,13 @@ struct Visit {
 void AddType2EdgesSweep(Adg&amp; g, const SpaceTimeTable&amp; table, const std::vector&lt;std::vector&lt;Vertex&gt;&gt;&amp; ids) {
   std::map&lt;Cell, std::vector&lt;Visit&gt;&gt; visits;
   for(int i = 0; i &lt; static_cast&lt;int&gt;(ids.size()); ++i) {
-    Visit current {-1, i, std::nullopt, std::nullopt};
+    Visit current {.arrival = -1, .robot = i, .enter = std::nullopt, .leave = std::nullopt};
     Cell here = table[i].front();
     for(Vertex v : ids[i]) {
       current.leave = v;                                   // this action leaves `here`
       visits[here].push_back(current);
       here = g[v].to;
-      current = Visit {g[v].start_time + 1, i, v, std::nullopt};  // ... and enters its goal at t + 1
+      current = Visit {.arrival = g[v].start_time + 1, .robot = i, .enter = v, .leave = std::nullopt};  // goal at t+1
     }
     visits[here].push_back(current);                       // the last stay never ends
   }
@@ -366,7 +379,7 @@ void AddType2EdgesSweep(Adg&amp; g, const SpaceTimeTable&amp; table, const std::
       if(g[*prev.leave].start_time &gt; g[*next.enter].start_time) {
         throw std::runtime_error("invalid plan: robots overlap in cell " + cell);
       }
-      boost::add_edge(*prev.leave, *next.enter, Dependency {EdgeType::kType2}, g);
+      boost::add_edge(*prev.leave, *next.enter, Dependency {.type = EdgeType::kType2}, g);
     }
   }
 }

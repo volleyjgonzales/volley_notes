@@ -766,16 +766,17 @@ def adg_topo_vs_parallel():
             sym(d, x + 22, y, "a", str(key[0]), str(key[1]), size=14, sup_italic=False, sub_italic=False)
             par = sorted(idx[u] for u in preds[key])
             d.text(x + 46, y - 6, f"[{n}]", size=10.5, family="mono", fill=T.muted)
-            d.text(x + 46, y + 9, "p " + (",".join(map(str, par)) if par else "-"), size=10.5, family="mono",
+            d.text(x + 46, y + 9, "p=" + (",".join(map(str, par)) if par else "-"), size=10.5, family="mono",
                    fill=T.fg2)
             for p_ in par:
                 x0_ = ox + p_ * (cw + 10) + cw / 2
                 x1_ = x + cw / 2
-                connect(d, [(x1_ - 6, y + 20), (x1_ - 6, y + 36 + 8 * (n - p_)), (x0_ + 6, y + 36 + 8 * (n - p_)),
-                            (x0_ + 6, y + 20)], kind="flow", color=T.faint, sw=1, size=6, radius=4)
-    d.text(ox, 340, "Parents always point back (to smaller indices). Both arrays are valid; the order of",
+                # dependency edge parent -> child: always points forward (left to right) in a topological order
+                connect(d, [(x0_ + 6, y + 20), (x0_ + 6, y + 36 + 8 * (n - p_)), (x1_ - 6, y + 36 + 8 * (n - p_)),
+                            (x1_ - 6, y + 20)], kind="flow", color=T.fg2, sw=1.1, size=6, radius=4)
+    d.text(ox, 340, "Edges (arrows) run parent -> child, always left to right. Each entry also stores p = its parents' indices,",
            size=12, fill=T.fg2)
-    d.text(ox, 356, "unordered actions is arbitrary. The edges, not the array order, carry the constraints.",
+    d.text(ox, 356, "all smaller than its own (ActionNode.parents). The order of unordered actions is arbitrary.",
            size=12, fill=T.fg2)
     # ---- 3. execution ----
     gx = 0
@@ -842,7 +843,7 @@ def adg_topo_vs_parallel():
           subtitle="A topological order is a way to list a DAG, not a way to run it. The list keeps every edge "
                    "(as parent indices); execution follows the edges, so unordered actions still run together.",
           badge_key="illustrative",
-          legend=[("arrow", T1, "Type 1"), ("dasharrow", T2, "Type 2"), ("arrow", T.faint, "parent index"),
+          legend=[("arrow", T1, "Type 1"), ("dasharrow", T2, "Type 2"), ("arrow", T.fg2, "dependency (parent -> child)"),
                   ("line", T.green, "by dependencies"), ("line", RED, "array order (wrong)")],
           footnote="Durations as in the critical-path figure. The serial chart is what would happen if a consumer "
                    "ignored parents and ran Schedule.nodes in index order.")

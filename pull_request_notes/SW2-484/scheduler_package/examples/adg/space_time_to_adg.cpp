@@ -1,7 +1,8 @@
 // space_time_to_adg.cpp — build an action dependency graph (ADG) from a space-time table.
 //
-// Companion to doc 05 ("From a timed plan to an ADG"). Self-contained: C++17 and header-only Boost.Graph.
-//   g++ -std=c++17 -O2 -Wall -Wextra -o space_time_to_adg space_time_to_adg.cpp && ./space_time_to_adg
+// Companion to doc 05 ("From a timed plan to an ADG"). Self-contained: C++20 (for designated
+// initializers) and header-only Boost.Graph.
+//   g++ -std=c++20 -O2 -Wall -Wextra -o space_time_to_adg space_time_to_adg.cpp && ./space_time_to_adg
 //
 // Input: a space-time table, table[robot][t] = the location (cell) robot occupies at integer time t.
 // Output: the ADG. One vertex per action (a move between two different cells); Type 1 edges chain each
@@ -58,7 +59,13 @@ std::vector<std::vector<Action>> ExtractActions(const SpaceTimeTable& table) {
     const auto& row = table[i];
     for(int t = 0; t + 1 < static_cast<int>(row.size()); ++t) {
       if(row[t] != row[t + 1]) {
-        actions[i].push_back(Action {i, static_cast<int>(actions[i].size()) + 1, t, row[t], row[t + 1]});
+        actions[i].push_back(Action {
+            .robot = i,
+            .index = static_cast<int>(actions[i].size()) + 1,
+            .start_time = t,
+            .from = row[t],
+            .to = row[t + 1],
+        });
       }
     }
   }
@@ -80,7 +87,7 @@ std::vector<std::vector<Vertex>> AddVertices(Adg& g, const std::vector<std::vect
 void AddType1Edges(Adg& g, const std::vector<std::vector<Vertex>>& ids) {
   for(const auto& chain : ids) {
     for(std::size_t k = 0; k + 1 < chain.size(); ++k) {
-      boost::add_edge(chain[k], chain[k + 1], Dependency {EdgeType::kType1}, g);
+      boost::add_edge(chain[k], chain[k + 1], Dependency {.type = EdgeType::kType1}, g);
     }
   }
 }
@@ -94,7 +101,7 @@ void AddType2EdgesPairwise(Adg& g) {
       const Action& leave = g[*u];
       const Action& enter = g[*v];
       if(leave.robot != enter.robot && leave.from == enter.to && leave.start_time <= enter.start_time) {
-        boost::add_edge(*u, *v, Dependency {EdgeType::kType2}, g);
+        boost::add_edge(*u, *v, Dependency {.type = EdgeType::kType2}, g);
       }
     }
   }
@@ -115,13 +122,13 @@ struct Visit {
 void AddType2EdgesSweep(Adg& g, const SpaceTimeTable& table, const std::vector<std::vector<Vertex>>& ids) {
   std::map<Cell, std::vector<Visit>> visits;
   for(int i = 0; i < static_cast<int>(ids.size()); ++i) {
-    Visit current {-1, i, std::nullopt, std::nullopt};
+    Visit current {.arrival = -1, .robot = i, .enter = std::nullopt, .leave = std::nullopt};
     Cell here = table[i].front();
     for(Vertex v : ids[i]) {
       current.leave = v;                                   // this action leaves `here`
       visits[here].push_back(current);
       here = g[v].to;
-      current = Visit {g[v].start_time + 1, i, v, std::nullopt};  // ... and enters its goal at t + 1
+      current = Visit {.arrival = g[v].start_time + 1, .robot = i, .enter = v, .leave = std::nullopt};  // goal at t+1
     }
     visits[here].push_back(current);                       // the last stay never ends
   }
@@ -141,7 +148,7 @@ void AddType2EdgesSweep(Adg& g, const SpaceTimeTable& table, const std::vector<s
       if(g[*prev.leave].start_time > g[*next.enter].start_time) {
         throw std::runtime_error("invalid plan: robots overlap in cell " + cell);
       }
-      boost::add_edge(*prev.leave, *next.enter, Dependency {EdgeType::kType2}, g);
+      boost::add_edge(*prev.leave, *next.enter, Dependency {.type = EdgeType::kType2}, g);
     }
   }
 }

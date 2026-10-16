@@ -238,6 +238,7 @@
   text: [CHUGG]
   to: bg-chugg-the-motion-planner
   def: The motion planner - turns the event DAG into timed, collision-free trajectories.
+  decl: Chugg
 
 - term: Building the response
   code: [ResponseFromTrajectories, BuildActionDagFromMotions, BuildScheduledActionsArray]
@@ -252,6 +253,7 @@
 - term: BoolStringPair
   code: [BoolStringPair]
   to: pr-errors-stdxexpected-instead-of-boolstringpair
+  decl: BoolStringPair
   def: The (bool, message) return convention of most planning methods; doc 02 proposes stdx::Expected instead.
 
 - term: stdx::Expected
@@ -278,3 +280,20 @@
   to: ad-timing-critical-path-and-slack
   def: "The longest path through a DAG weighted by durations; it fixes the makespan"
 
+
+- term: ContinuousState
+  code: [ContinuousState, "volley::ContinuousState", Trajectory, "volley::Trajectory", Motion, "volley::Motion", Interval, "volley::Interval"]
+  to: bg-continuousstate-the-timeline
+  def: Every entity's trajectory over continuous time - the timeline CHUGG extends and the response code reads.
+  decl: ContinuousState
+
+- term: Motion cost parameters
+  code: [MotionCostParams, "cost::MotionCostParams", MotionCostModel, "cost::MotionCostModel", cost_model_]
+  to: bg-what-can-be-configured
+  def: Speeds, accelerations and event durations from ROS parameters; the only knobs of the motion planner.
+  decl: MotionCostParams
+
+- term: motion_planner toolbox
+  code: [SingleSourceSearch, "volley::SingleSourceSearch", GetPosePath, "volley::GetPosePath", GetStaticFilter, "volley::GetStaticFilter", HideAgvs, GraphFilterProperties, "volley::GraphFilterProperties"]
+  to: bg-the-motion-planner-toolbox
+  def: Single-agent searches and filters used while the event DAG is built; CHUGG is the only multi-agent planner.

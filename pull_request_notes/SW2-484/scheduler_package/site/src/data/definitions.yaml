@@ -12,9 +12,18 @@
 #           with that prefix (plus the comment / template lines directly above it) and ends at the
 #           first ';' outside braces. Parts are joined with a blank line.
 # The build fails if a file or prefix is missing.
+#
+# Other sources:
+#   from: content   C++ blocks of a doc in src/content (proposed code); pair with only_prefix (e.g. "pr-")
+#   from: repo      any file in the repository (e.g. examples/adg/space_time_to_adg.cpp)
+#   sketch + note   no source available: a reconstruction from call sites, shown with the note as a warning
+# Lookup tries the exact spelling, then strips const/&/*/[], std wrappers, lower-case namespaces and
+# template arguments, then falls back from Type::member to Type.
 
 bare_msgs: [GaragePose, GarageNode, GeometricPose, SizedPose, Guid, ActionNode, ScheduledJobData,
-  SchedulerJob, PlanRequest, PlanResponse, GarageEntityId, ParkingWindow, DiscreteBayState]
+  SchedulerJob, PlanRequest, PlanResponse, GarageEntityId, ParkingWindow, DiscreteBayState,
+  AgvCommand, AgvGoal, BayCommand, VecsCommand, VrcCommand, AgvPoseChanged, AgvLiftChanged,
+  BayStateChanged, VecsStateChanged, VrcStateChanged, DiscreteAgvState, BayState]
 
 cpp:
   # ---- common_ros: the garage model
@@ -128,3 +137,359 @@ cpp:
     from: scheduler
     file: include/scheduler/scheduler.hpp
     parts: ["class Scheduler {"]
+  - names: [CollistionFilterMap, GarageEntityEventMap]
+    title: "ScheduleContext aliases"
+    from: scheduler
+    file: include/scheduler/scheduler.hpp
+    parts: ["using CollistionFilterMap", "using GarageEntityEventMap"]
+  - names: [OpenSpaceSearchResult]
+    from: scheduler
+    file: include/scheduler/scheduler.hpp
+    parts: ["struct OpenSpaceSearchResult {"]
+  - names: [BlockingTrayResolution]
+    from: scheduler
+    file: include/scheduler/scheduler.hpp
+    parts: ["struct BlockingTrayResolution {"]
+  - names: [SchedulerSPtr]
+    from: scheduler
+    file: include/scheduler/scheduler.hpp
+    parts: ["using SchedulerSPtr"]
+  - names: [AgvAssignmentEdgeKey]
+    from: scheduler
+    file: include/scheduler/scheduler.hpp
+    parts: ["using AgvAssignmentEdgeKey"]
+  - names: [SchedulerComponent]
+    from: scheduler
+    file: src/scheduler_component.cpp
+    parts: ["static void ReadParams(", "class SchedulerComponent : public volley::Component {"]
+  - names: [MotionScheduleOrder]
+    from: scheduler
+    file: src/scheduler.cpp
+    parts: ["struct MotionScheduleOrder {"]
+  - names: [ScheduleEventType]
+    from: planner-core
+    file: include/planner_core/schedule_events.hpp
+    parts: ["enum class ScheduleEventType"]
+  - names: [VertexVec]
+    title: "DagBase<T>::VertexVec"
+    from: planner-core
+    file: include/planner_core/event_dag.hpp
+    parts: ["using VertexVec"]
+  - names: ["CollisionTable::Edge", "CollisionTable::Pose", PoseOrEdge, EdgeSet, PoseSet, ResMap, PosePoseMap, PoseEdgeMap, EdgePoseMap, EdgeEdgeMap]
+    title: "CollisionTable aliases"
+    from: common-ros
+    file: include/common_ros/collision_geometry.hpp
+    parts: ["using Pose = GaragePoseMsg", "using Edge = std::array<Pose", "using PoseOrEdge", "using PoseSet", "using EdgeSet", "using ResMap", "using PosePoseMap", "using PoseEdgeMap", "using EdgePoseMap", "using EdgeEdgeMap"]
+  - names: [EdgeVectorPropertyMap, "EdgeVectorPropertyMap<T>", VertexVectorPropertyMap, "VertexVectorPropertyMap<T>"]
+    title: "GarageGraph property maps"
+    from: common-ros
+    file: include/common_ros/garage_graph.hpp
+    parts: ["using VertexVectorPropertyMap", "using EdgeVectorPropertyMap"]
+
+  # ---- motion_planner, cost_functions and the shared utility library are NOT in the snapshots.
+  # These sketches are reconstructed from how scheduler.cpp and its tests call them, so they show
+  # only members we have seen used, with guessed spellings for parameter names. Replace each with a
+  # snapshot extract once the real headers are supplied.
+  - names: [ContinuousState, "volley::ContinuousState", "std::optional<volley::ContinuousState>", "ContinuousState::GetTrajectories"]
+    file: "motion_planner/continuous_state.hpp (not supplied)"
+    note: "Reconstructed from call sites in scheduler.cpp and scheduler_tests.cpp; members not used there are missing and parameter names are guesses."
+    sketch: |
+      // Continuous TIME (not continuous space): every entity's motion along the garage graph,
+      // as a timeline. The discrete counterpart is DiscreteGarageState (one snapshot).
+      class ContinuousState {
+      public:
+        // Every entity of `state` stands still at its pose from `start` on
+        // (PlanMotions: "all elements just stay at their initial state until right now").
+        ContinuousState(const DiscreteGarageState& state, const CollisionTable& table,
+                        const Layout& layout, Interval::Timepoint start);
+        ContinuousState(const DiscreteGarageState& state, const CollisionTable& table,
+                        const Layout& layout);                         // tests: start = Timepoint{}
+
+        void SetTrajectory(GarageEntityIdMsg entity, Trajectory trajectory);   // tests
+        // entity -> its Trajectory; iterated as `for (const auto& [entity_id, traj] : ...)`
+        const /* map<GarageEntityIdMsg, Trajectory> */ auto& GetTrajectories() const;
+      };
+  - names: [Trajectory, "volley::Trajectory"]
+    file: "motion_planner/trajectory.hpp (not supplied)"
+    note: "Reconstructed from call sites in scheduler.cpp and scheduler_tests.cpp; members not used there are missing."
+    sketch: |
+      // One entity's motions, back to back in time; iterable as a sequence of Motion.
+      class Trajectory {
+      public:
+        void AddMotion(Motion motion);                    // appended in time order (tests)
+        std::optional<Interval> GetInterval() const;      // [first begin, last end]; empty if no motions
+        // begin() / end() over Motion
+      };
+
+      // single-agent helper: timed trajectory for a pose path at the cost model's speeds
+      Trajectory ConvertPosePathToTrajectory(const std::vector<GaragePoseMsg>& path,
+          const GarageGraph& gg, const cost::MotionCostModel& cost, Interval::Timepoint start,
+          GarageEntityIdMsg entity, CollisionEntityId_t collision_id, size_t action_id,
+          /* ? */ void* audit, bool loaded);
+  - names: [Motion, "volley::Motion", "const volley::Motion&", MotionHasher]
+    file: "motion_planner/trajectory.hpp (not supplied)"
+    note: "Reconstructed from call sites in scheduler.cpp and scheduler_tests.cpp; members not used there are missing."
+    sketch: |
+      // One step of one entity: a time interval spent either at a pose (wait / lift / state change)
+      // or on an edge (moving pose -> pose), with the footprint it occupies meanwhile.
+      class Motion {
+      public:
+        Motion(GarageEntityIdMsg entity, Interval interval, CollisionEntityId_t collision_id,
+               size_t action_id,                          // vertex of the ScheduleEvent it implements
+               CollisionTable::PoseOrEdge location);      // a Pose, or an Edge {from, to}
+
+        GarageEntityIdMsg   GetEntityId() const;
+        Interval            GetInterval() const;
+        CollisionEntityId_t GetCollisionId() const;       // AGV, AGV + tray of a size, bay, ...
+        size_t              GetActionId() const;          // ScheduleEventDag::Vertex, as an integer
+        CollisionTable::PoseOrEdge GetLocation() const;
+        GaragePoseMsg       GetSourcePose() const;        // the pose, or the edge's first pose
+        // The discrete change this motion causes, serialized; .type is the ROS message name
+        // ("AgvPoseChanged", "AgvLiftChanged", "BayStateChanged", "VecsStateChanged",
+        //  "VrcStateChanged"); empty for a plain wait.
+        std::optional</* serialized message */> GetDelta() const;
+        bool IsIdle() const;
+      };
+      struct MotionHasher { size_t operator()(const Motion&) const; };
+  - names: [Interval, "volley::Interval", "Interval::Duration", "Interval::Timepoint", "volley::Interval::Duration", "volley::Interval::Timepoint"]
+    file: "motion_planner/interval.hpp (not supplied)"
+    note: "Reconstructed from call sites in scheduler.cpp and scheduler_tests.cpp; the clock type is a guess (durations are nanoseconds: the code divides count() by 1e9)."
+    sketch: |
+      class Interval {
+      public:
+        using Duration  = std::chrono::nanoseconds;               // count() / 1e9 -> seconds
+        using Timepoint = std::chrono::time_point</*clock*/, Duration>;
+
+        Interval(Timepoint begin, Duration length);               // tests: Interval(start, 3s)
+        Interval(Timepoint begin, Timepoint end);                 // collapsing VRC traversals
+        Timepoint GetBegin() const;
+        std::pair<Timepoint, Timepoint> GetTimes() const;         // {begin, end}
+        Duration GetDuration() const;
+      };
+  - names: [Chugg, "volley::Chugg", SolveSequential, "Chugg::SolveSequential", "volley::Chugg::SolveSequential"]
+    file: "motion_planner/chugg.hpp (not supplied)"
+    note: "Reconstructed from the one call in Scheduler::PlanMotions; everything inside is unknown."
+    sketch: |
+      // "This is CHUGG v0.1" (PlanMotions). Constructed fresh for every Plan() call.
+      class Chugg {
+      public:
+        Chugg(const GarageGraph& gg,                    // where entities can go
+              const CollisionTable& table,              // what overlapping means
+              const ScheduleEventDag& events,           // what must happen, in which order
+              const ContinuousState& initial,           // everyone parked from start_time
+              /* per-edge durations */ edge_durations,  // GetEdgeDurations(gg, cost_model)
+              /* all-pairs cost-to-go */ heuristics,    // GetAllPairsMinCost(...), A* heuristic
+              const cost::MotionCostModel& cost_model,
+              rclcpp::Logger logger);
+
+        // nullopt: no collision-free timing found for this event DAG.
+        // audit != nullptr: fills one entry per cost segment (scheduler.cost_audit).
+        std::optional<ContinuousState> SolveSequential(cost::CostVector* audit);
+      };
+  - names: [MotionCostModel, "cost::MotionCostModel", "volley::cost::MotionCostModel", "const cost::MotionCostModel&"]
+    file: "cost_functions/motion_cost_model.hpp (not supplied)"
+    note: "Reconstructed from call sites; only Params() is used directly by the scheduler."
+    sketch: |
+      namespace volley::cost {
+      class MotionCostModel {
+      public:
+        explicit MotionCostModel(MotionCostParams params);   // built from SchedulerParams::motion_cost
+        const MotionCostParams& Params() const;              // e.g. Params().events.agv_lift_up
+        // edge / path timing used by GetEdgeDurations, GetPosePath, ConvertPosePathToTrajectory
+      };
+      using SecondsF = std::chrono::duration<float>;         // cost::SecondsF(lift_seconds)
+      }
+  - names: [MotionCostParams, "cost::MotionCostParams", "volley::cost::MotionCostParams"]
+    file: "cost_functions/motion_cost_model.hpp (not supplied)"
+    note: "Field names are exact (from ReadParams in scheduler_component.cpp); the nested struct names and the units are inferred from the ROS parameter names."
+    sketch: |
+      namespace volley::cost {
+      struct MotionCostParams {
+        struct Profile { float speed, loaded_speed, accel; };      // trapezoid: accelerate, cruise, brake
+        Profile locomote;   // agv.performance_limits.locomote.{speed,loaded_speed,accel}  drive along heading
+        Profile strafe;     // agv.performance_limits.strafe.*                              sideways
+        Profile rotate;     // agv.performance_limits.rotate.*                              turn in place
+        struct { float speed, accel; } vrc_transit;   // vrc.performance_limits.transit.{speed,accel}
+        struct {                                      // fixed durations, seconds
+          float agv_lift_up, agv_lift_down;           // agv.lift.{up,down}_time
+          float bay_door_open, bay_door_close;        // bay.door.{open,close}_time
+          float bay_wait_to_open;                     // bay.door.wait_to_open_time
+          float vecs_transition;                      // vecs.transition_time
+          float vrc_door_open, vrc_door_close;        // vrc.door.{open,close}_time
+          float agv_wheel_turn;                       // agv.wheel_turn_time
+        } events;
+      };
+      }
+  - names: [CostVector, "cost::CostVector", "cost::CostVector*"]
+    file: "cost_functions (not supplied)"
+    note: "Reconstructed from the cost-audit code in Scheduler::PlanMotions."
+    sketch: |
+      namespace volley::cost {
+      struct CostVector {
+        struct Entry { SecondsF duration_; std::string explanation_; };
+        std::vector<Entry> entries_;      // one per cost segment, filled by Chugg::SolveSequential
+        void eval();                      // computes the total
+        SecondsF value() const;           // the total, after eval()
+      };
+      }
+  - names: [GraphFilterProperties, "volley::GraphFilterProperties", "std::optional<volley::GraphFilterProperties>", GetStaticFilter, "volley::GetStaticFilter", GetDisabledEntitiesFilters]
+    file: "motion_planner/static_graph_filtering.hpp (not supplied)"
+    note: "Reconstructed from call sites in scheduler.cpp."
+    sketch: |
+      // Which vertices and edges of the GarageGraph a given footprint may use right now.
+      class GraphFilterProperties {
+      public:
+        bool IsEnabled(GarageGraph::Vertex v) const;
+        bool IsEnabled(GarageGraph::Edge e) const;
+      };
+
+      // Static obstacles for one footprint: trays and AGVs NOT listed in `movable_trays` /
+      // `movable_agvs` block the graph (scheduler passes the ones it is willing to move).
+      GraphFilterProperties GetStaticFilter(CollisionEntityId_t footprint, const GarageGraph& gg,
+          const DiscreteGarageState& state, const CollisionTable& table,
+          const std::unordered_set<uint16_t>& movable_trays,
+          const std::unordered_set<uint16_t>& movable_agvs, /* extra */ {});
+
+      // Disabled nodes per footprint; stored in ScheduleContext::disabledness_filters.
+      std::unordered_map<CollisionEntityId_t, GraphFilterProperties>
+      GetDisabledEntitiesFilters(const GarageGraph& gg, const DiscreteGarageState& state,
+                                 const CollisionTable& table);
+  - names: [SingleSourceSearch, "volley::SingleSourceSearch", BlockingTrayState, "volley::BlockingTrayState", OpenSpaceSearchEnvironment, "volley::OpenSpaceSearchEnvironment", BlockingTraySearchEnvironment, "volley::BlockingTraySearchEnvironment", EmptyTraySearchEnvironment, "volley::EmptyTraySearchEnvironment"]
+    title: "SingleSourceSearch and its environments"
+    file: "motion_planner/blocking_tray_search.hpp (not supplied)"
+    note: "Reconstructed from call sites in scheduler.cpp. One generic best-first search, specialised by an 'environment' that defines neighbours, costs and what counts as a target."
+    sketch: |
+      struct BlockingTrayState { GarageGraph::Vertex vert; /* ... */ };   // search node
+
+      template <typename Env>
+      /* Solution */ SingleSourceSearch(BlockingTrayState source, Interval::Duration start_cost,
+                                        Env& env);
+      //   solution.GetTarget() -> std::optional<BlockingTrayState>   best target found
+      //   solution.GetPath(t)  -> std::optional<sequence of (state, cost)> back to source
+
+      // Where can this tray go? (repark, root tray's open space; may allow waypoint stash)
+      OpenSpaceSearchEnvironment(tray_id, footprint, gg, table, state, cost_model,
+                                 illegal_poses, filters, /* nullopt */, enforce_retrieval_heading,
+                                 allow_waypoint_stash);
+      // Which trays are in the way of moving this tray to dest?
+      BlockingTraySearchEnvironment(tray_id, footprint, gg, table, state, cost_model,
+                                    dest_vertex, filters);
+      // Nearest empty tray to a pose (the inverse of the open-space search)
+      EmptyTraySearchEnvironment(gg, table, state, cost_model, filters);
+  - names: [GetPosePath, "volley::GetPosePath", GetEdgeDurations, "volley::GetEdgeDurations", GetAllPairsMinCost, "volley::GetAllPairsMinCost", HideAgvs, "volley::HideAgvs"]
+    title: "Single-agent path helpers"
+    file: "motion_planner/garage_graph_pathing.hpp, agv_hiding_search.hpp (not supplied)"
+    note: "Reconstructed from call sites in scheduler.cpp."
+    sketch: |
+      // Shortest pose path for ONE entity, ignoring everyone else's timing (empty if none).
+      std::vector<GaragePoseMsg> GetPosePath(const GarageGraph& gg, GaragePoseMsg from,
+          GaragePoseMsg to, const cost::MotionCostModel& cost,
+          std::optional<GraphFilterProperties> filters);
+
+      // Traversal time of every edge ("full Trapezoid": accelerate, cruise, brake).
+      /* edge -> Interval::Duration */ GetEdgeDurations(const GarageGraph& gg,
+                                                        const cost::MotionCostModel& cost);
+
+      // Cost-to-go between all vertex pairs, used as CHUGG's A* heuristic.
+      /* (from, to) -> Duration */ GetAllPairsMinCost(const GarageGraph& gg, edge_durations,
+                                                      Interval::Duration lo, Interval::Duration hi);
+
+      // Clean-garage: send every AGV to a hiding spot under a tray.
+      std::pair<bool, /* agv_id -> GaragePoseMsg */> HideAgvs(const DiscreteGarageState& state,
+                                                              const CollisionTable& table);
+  - names: [BoolStringPair]
+    file: "shared utility library (not supplied)"
+    note: "Inferred from use: every Plan* helper returns std::make_pair(bool, std::string)."
+    sketch: |
+      using BoolStringPair = std::pair<bool, std::string>;   // {success, message}
+  - names: ["stdx::Expected", "stdx::Expected<T>", "stdx::Expected<bool>", "stdx::Result", "stdx::Unexpected", Expected]
+    title: "stdx::Expected / stdx::Result"
+    file: "shared utility library (not supplied)"
+    note: "Inferred from use: value-or-error like C++23 std::expected, with string errors (.error() is passed back into Unexpected)."
+    sketch: |
+      namespace stdx {
+      template <typename T> using Expected = /* std::expected<T, std::string>-like */;
+      using Result = Expected<void>;                       // success, or an error message
+      /* Unexpected(std::string) */                        // return stdx::Unexpected("...")
+      }
+
+  # ---- proposed code (doc 02): extracted from the doc's own C++ blocks, shown only inside doc 02
+  - names: [GarageServices]
+    title: "GarageServices (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["struct GarageServices {"]
+  - names: [Input, "tray_assignment::Input"]
+    title: "tray_assignment::Input (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["struct Input {"]
+  - names: [TrayFill]
+    title: "TrayFill (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["struct TrayFill {"]
+  - names: [DagEdit, AddEvent, AddDependency]
+    title: "DagEdit (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["struct AddEvent", "struct AddDependency", "using DagEdit"]
+  - names: [Result, "tray_assignment::Result", "stdx::Expected<Result>"]
+    title: "tray_assignment::Result (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["struct Result {"]
+  - names: [Solver, "tray_assignment::Solver"]
+    title: "tray_assignment::Solver (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["class Solver {"]
+  - names: [DefaultSolver, "DefaultSolver::Solve", Pass, "DefaultSolver::Pass"]
+    title: "DefaultSolver (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["class DefaultSolver final", "class DefaultSolver::Pass {"]
+  - names: [TrayChoice, PlannedTrayMove, BlockingResolution, ResolveRequest, ParkingPlan]
+    title: "detail search types (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["struct TrayChoice", "struct PlannedTrayMove", "struct BlockingResolution", "struct ResolveRequest {", "struct ParkingPlan"]
+  - names: [AssetType, AssetId, AssetIdHash]
+    title: "AssetId (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["enum class AssetType", "struct AssetId {", "struct AssetIdHash {"]
+  - names: [ScheduledJob]
+    title: "ScheduledJob (proposed)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["struct ScheduledJob {"]
+  - names: [Pose]
+    title: "Pose (proposed alias)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: "pr-"
+    parts: ["using Pose                = GaragePoseMsg"]
+  - names: [BayStateChange]
+    title: "BayStateChange (proposed rename)"
+    from: content
+    file: 02-issue-and-proposal.html
+    only_prefix: ["pr-", "nm-"]
+    parts: ["class BayStateChange : public ScheduleEvent", "using BayTransition [[deprecated"]
+  # ---- doc 05's compiled example
+  - names: [Action, Dependency, Adg]
+    title: "Action, Dependency, Adg (doc 05 example)"
+    from: repo
+    file: examples/adg/space_time_to_adg.cpp
+    only_prefix: "ad-"
+    parts: ["struct Action {", "struct Dependency {", "using Adg = "]

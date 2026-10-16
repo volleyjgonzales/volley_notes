@@ -4903,6 +4903,21 @@ for(const auto&amp; [agv_id, root_event_opt] : ordered_matching) {
 </table>
 <p>The comment explains the motivation: “The motion planner doesn't fail in the most graceful ways”, so a cheap discrete replay catches most problems with a readable message first.</p>
 <h2 data-num id="bg-motion-planning-and-the-response">Motion planning and the response</h2>
+<h3 id="bg-where-motion-planning-sits">Where motion planning sits: MAPF, then the ADG</h3>
+<p>The scheduler has two DAGs, and only the second one is an action dependency graph. The order is the one in the literature: motion planning first, then the ADG, then execution.</p>
+<figure id="bg-fig-91_planning_pipeline">
+  <img src="figures/91_planning_pipeline.svg" alt="Event DAG, CHUGG, action DAG">
+  <figcaption>Textbook pipeline above, the scheduler below. The event DAG (step 1) is the planner's <em>input</em>: a precedence graph of events, with no times and no paths. CHUGG (step 2) turns it into timed trajectories. The action DAG (step 3) is the ADG, built from those trajectories; it also inherits every event-DAG edge.</figcaption>
+</figure>
+<ol>
+  <li><strong>Event DAG: what, and in which order.</strong> <code>Plan*Job</code>, tray assignment and AGV assignment add <code>ScheduleEvent</code>s and edges to <code>ctx->events</code> (sections <a class="ref" href="#bg-directed-acyclic-graphs-then-scheduleeventdag">13</a> to <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>). A vertex is a discrete change (“AGV 3 drives from node 10 to node 9”, “bay 1 opens”); an edge says one change must finish before another starts. Nothing in it says <em>when</em>, or which intermediate poses a move passes through.</li>
+  <li><strong>CHUGG: when and where.</strong> <code>PlanMotions</code> hands the event DAG to <code>Chugg::SolveSequential</code>, which returns a <code>ContinuousState</code>: for every entity, a timeline of motions. This is the multi-agent path finding (MAPF) step.</li>
+  <li><strong>Action DAG: the ADG.</strong> <code>ResponseFromTrajectories</code> cuts the timelines into actions (one per motion that changes something), orders actions that use the same space, copies the event-DAG edges across, and writes the result to <code>Schedule.nodes</code>. Doc 05 builds this step from first principles (<a class="ref" href="#ad-two-dags-two-jobs">section 7.1</a> there).</li>
+  <li><strong>Dispatch</strong> runs <code>Schedule.nodes</code> by their <code>parents</code>. It is outside the snapshots.</li>
+</ol>
+<p><strong>Why it can look like “ADG, then MAPF”.</strong> The event DAG resembles an ADG: its vertices are discrete changes and its edges mean “before”, and a few of its edges are spatial (<code>AddNodeArrivalDeps</code> orders two AGVs that use the same node; path repair adds edges for AGVs in the way). But it is built before any timing exists, and its edges come from the jobs (“the tray must arrive before the bay opens”), not from the planned paths. Its job is to be the <em>task</em> input of the motion planner.</p>
+<p><strong>What is unusual is the MAPF input, not the order.</strong> Classic MAPF gives each robot one start and one goal and asks for collision-free paths. CHUGG's input instead is a set of goals for many entities (AGVs, bays, VECS, VRCs) with a partial order <em>across</em> entities: AGV 2 may only pick up the tray after the bay has closed, and so on. The research name for this is MAPF with precedence constraints, MAPF-PC (Zhang, Chen, Li, Williams and Koenig, “<a href="https://idm-lab.org/bib/abstracts/Koen22c.html">Multi-Agent Path Finding for Precedence-Constrained Goal Sequences</a>”, AAMAS 2022). As far as its comments show, CHUGG solves it the simple way: take the events in a topological order of the event DAG and plan each one against everything already planned (prioritized planning with SIPP). The ADG afterwards makes the result robust to delays, exactly as in the textbook.</p>
+<p><strong>The event edges reach execution twice.</strong> CHUGG respects them when it picks start times. Then <code>TransferEventDagDepsToActionDag</code> copies each event edge into the action DAG (last action of the earlier event before the first action of the later one). The copy is needed because some precedences involve no shared space (a bay command waiting for a tray's arrival), so the occupancy rule alone would not recover them.</p>
 <h3 id="bg-chugg-the-motion-planner">CHUGG, the motion planner</h3>
 <p><strong>What the name stands for:</strong> neither snapshot says. The scheduler refers to it as the class <code>volley::Chugg</code> in <code>motion_planner/chugg.hpp</code>, as “CHUGG” in log messages, and as “CHUGG v0.1” in one comment, but no comment or file in <code>scheduler</code> or <code>planner_core</code> spells the acronym out, and <code>motion_planner</code> itself was not supplied. Ask the <code>motion_planner</code> owners rather than guessing; this guide only uses the name.</p>
 <p><strong>What it does</strong> is clear from how it is called. Everything before it decides <em>what</em> must happen and <em>in which order</em>: the event DAG. CHUGG decides <em>when</em> and <em>where along the graph</em>: for every AGV (and every bay, VECS and VRC) it produces a timed trajectory, a sequence of motions with start and end times, such that the event order is respected and no two bodies overlap at the same time (overlap as defined by the <code>CollisionTable</code>, <a class="ref" href="#bg-the-physical-garage-and-its-coordinate-system">section 3</a>).</p>
@@ -4977,6 +4992,162 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
 <p>The scheduler shapes its DAG for CHUGG in three places, all covered earlier: node-arrival edges (<code>AddNodeArrivalDeps</code>), AGV path repair (<code>EnsureAgvMovePathsClear</code>), and <code>Reduce()</code> right before the sanity check (sections <a class="ref" href="#bg-agv-assignment-doagvassignments">17</a> and <a class="ref" href="#bg-reduce-and-sanitycheckevents">18</a>). A test comment adds a known limit: “CHUGG can't handle rando AGVs strewn about yet”.</p>
 <p><strong>Output.</strong> <code>ContinuousState::GetTrajectories()</code> maps each entity to its list of <code>Motion</code>s. The response code uses these accessors: <code>GetEntityId()</code>, <code>GetInterval()</code> (start and end time), <code>GetCollisionId()</code> (which footprint: a bare AGV, an AGV carrying a tray of some size, ...), <code>GetActionId()</code> (the vertex of the event in <code>ctx->events</code> that the motion implements), <code>GetSourcePose()</code> / <code>GetLocation()</code>, <code>GetDelta()</code> (the discrete change, if the motion has one) and <code>IsIdle()</code>. <code>CollectAndCollapseTrajectoryMotions</code> merges all trajectories into one set ordered by start time, then action id, and collapses multi-step VRC floor traversals into one motion.</p>
 <p><strong>Failure.</strong> <code>SolveSequential</code> returning <code>std::nullopt</code> means no collision-free timing exists for this DAG; every job fails with “CHUGG failed to find a solution, event dag may be infeasible”. With <code>cost_audit</code> on (the default), <code>PlanMotions</code> also logs one CSV row per cost segment (<code>audit_csv,index,seconds,cumulative,description</code>) so the time breakdown can be pasted into a spreadsheet.</p>
+<h3 id="bg-what-can-be-configured">What can be configured</h3>
+<p><strong>There is no choice of planner.</strong> <code>PlanMotions</code> always constructs <code>volley::Chugg</code> and calls <code>SolveSequential</code>; no parameter selects another algorithm, a time limit, or an optimality target. What can be changed is the cost model (all ROS parameters, read once at start-up) and, in code, the inputs <code>PlanMotions</code> builds.</p>
+<p><strong>ROS parameters.</strong> <code>SchedulerComponent</code> reads these into <code>SchedulerParams</code>; the motion ones go through <code>ReadParams</code> into <code>cost::MotionCostParams</code> and from there into the <code>cost::MotionCostModel</code> that CHUGG and every single-agent helper use. The units are not stated in the snapshots; the field names suggest m/s, m/s² and seconds.</p>
+<table>
+  <thead>
+    <tr>
+      <th>ROS parameter</th>
+      <th>Field</th>
+      <th>Affects</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>agv.performance_limits.locomote.{speed, loaded_speed, accel}</code></td>
+      <td><code>motion_cost.locomote</code></td>
+      <td>Driving along the heading (<code>LOCOMOTE</code> edges); <code>loaded_speed</code> when carrying a tray. Speed and acceleration give the “trapezoid” edge time: accelerate, cruise, brake.</td>
+    </tr>
+    <tr>
+      <td><code>agv.performance_limits.strafe.*</code></td>
+      <td><code>motion_cost.strafe</code></td>
+      <td>Sideways moves (<code>STRAFE</code> edges)</td>
+    </tr>
+    <tr>
+      <td><code>agv.performance_limits.rotate.*</code></td>
+      <td><code>motion_cost.rotate</code></td>
+      <td>Turning in place (<code>ROTATION</code> edges)</td>
+    </tr>
+    <tr>
+      <td><code>vrc.performance_limits.transit.{speed, accel}</code></td>
+      <td><code>motion_cost.vrc_transit</code></td>
+      <td>Riding a VRC between floors (<code>VRC_TRANSITION</code> edges)</td>
+    </tr>
+    <tr>
+      <td><code>agv.lift.up_time</code>, <code>agv.lift.down_time</code></td>
+      <td><code>motion_cost.events.agv_lift_up</code>, <code>agv_lift_down</code></td>
+      <td>Lift events; also used directly by AGV assignment to cost a pickup</td>
+    </tr>
+    <tr>
+      <td><code>bay.door.open_time</code>, <code>close_time</code>, <code>wait_to_open_time</code></td>
+      <td><code>motion_cost.events.bay_door_*</code>, <code>bay_wait_to_open</code></td>
+      <td>Bay state changes</td>
+    </tr>
+    <tr>
+      <td><code>vecs.transition_time</code></td>
+      <td><code>motion_cost.events.vecs_transition</code></td>
+      <td>Start / stop charging</td>
+    </tr>
+    <tr>
+      <td><code>vrc.door.open_time</code>, <code>close_time</code></td>
+      <td><code>motion_cost.events.vrc_door_*</code></td>
+      <td>VRC doors</td>
+    </tr>
+    <tr>
+      <td><code>agv.wheel_turn_time</code></td>
+      <td><code>motion_cost.events.agv_wheel_turn</code></td>
+      <td>Presumably the pause when an AGV switches between driving and strafing</td>
+    </tr>
+    <tr>
+      <td><code>scheduler.cost_audit</code> (default <code>true</code>)</td>
+      <td><code>SchedulerParams::cost_audit</code></td>
+      <td>Pass a <code>cost::CostVector</code> to <code>SolveSequential</code> and log the per-segment CSV; does not change the plan</td>
+    </tr>
+  </tbody>
+</table>
+<p><code>scheduler.bay_readiness_ratio</code> and <code>layout</code> are read in the same place but are not motion settings: the first feeds bay rebalancing, the second selects the layout file that <code>gg_</code> and <code>table_</code> are built from.</p>
+<p><strong>Choices made in code.</strong> Three things in <code>PlanMotions</code> are design decisions rather than parameters:</p>
+<ul>
+  <li><strong>The heuristic.</strong> <code>GetAllPairsMinCost</code> over the full trapezoid edge times: fast but, per the comment, inadmissible under the current “run-extension” cost, so paths may be suboptimal. The alternative named in the comment, <code>GetEdgeMarginalDurations</code>, is admissible but “too loose” (slow search). A tighter admissible heuristic is listed as future work.</li>
+  <li><strong>The start state.</strong> Everything is parked from <code>ctx->start_time</code>. Actions still running from an earlier plan are not in the timeline; instead <code>Plan()</code> disables the AGVs, bays, VECS and nodes that <code>base_schedule</code> uses (doc 05, <a class="ref" href="#ad-persistent-planning-base-schedule-and-the-split">section 7.5</a>), so CHUGG simply cannot use them.</li>
+  <li><strong>The event DAG's shape.</strong> CHUGG takes events in its own topological order, so any ordering it must respect has to be an edge; this is why the scheduler adds node-arrival edges and runs <code>Reduce()</code> first.</li>
+</ul>
+<h3 id="bg-the-motion-planner-toolbox">The rest of the motion_planner toolbox</h3>
+<p>CHUGG is the only <em>multi-agent</em> planner, and it runs once, at the end. Earlier stages call single-agent tools from the same <code>motion_planner</code> package to cost and check moves while the event DAG is still being built. They ignore everyone else's timing; they only see static obstacles through filters.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Tool</th>
+      <th>What it answers</th>
+      <th>Used by</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Chugg::SolveSequential</code></td>
+      <td>Timed, collision-free trajectories for every entity, respecting the event DAG</td>
+      <td><code>PlanMotions</code></td>
+    </tr>
+    <tr>
+      <td><code>GetPosePath</code> + <code>ConvertPosePathToTrajectory</code></td>
+      <td>Shortest pose path for one AGV, and how long it takes at the cost model's speeds</td>
+      <td><code>GetPosePath</code>: <code>GetJustMovingCost</code> (AGV assignment costs), <code>IsMovePossible</code> (sanity check), <code>MoveAgvToTrayPose</code>, <code>TryClearBlockedAgvMove</code>. <code>ConvertPosePathToTrajectory</code>: <code>GetJustMovingCost</code> only</td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>OpenSpaceSearchEnvironment</code></td>
+      <td>Where can this tray go? (best free parking spot reachable, optionally a waypoint stash)</td>
+      <td>Blocking-tray resolution, reparking</td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>BlockingTraySearchEnvironment</code></td>
+      <td>Which trays are in the way of moving this tray to its destination?</td>
+      <td><code>DoTrayAssignments</code></td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>EmptyTraySearchEnvironment</code></td>
+      <td>Nearest empty tray to a pose (the inverse of the open-space search)</td>
+      <td><code>AssignTrayIdForEmptyMove</code></td>
+    </tr>
+    <tr>
+      <td><code>HideAgvs</code></td>
+      <td>A hiding spot under a tray for every AGV</td>
+      <td><code>PlanCleanGarageJob</code></td>
+    </tr>
+    <tr>
+      <td><code>GetStaticFilter</code>, <code>GetDisabledEntitiesFilters</code> → <code>GraphFilterProperties</code></td>
+      <td>Which vertices and edges a footprint may use, given parked trays and AGVs or disabled nodes</td>
+      <td>All of the above; <code>ctx->disabledness_filters</code></td>
+    </tr>
+    <tr>
+      <td><code>GetEdgeDurations</code>, <code>GetAllPairsMinCost</code></td>
+      <td>Edge times and all-pairs cost-to-go</td>
+      <td><code>PlanMotions</code> (CHUGG's inputs)</td>
+    </tr>
+  </tbody>
+</table>
+<p>This split matters for the refactor: tray and AGV assignment choose destinations and agents with single-agent costs that ignore waiting, and only CHUGG discovers the waiting. An assignment that looks cheap can therefore produce a slow plan.</p>
+<h3 id="bg-continuousstate-the-timeline">ContinuousState: the timeline CHUGG reads and writes</h3>
+<p>“Continuous” refers to time, not space. A <code>DiscreteGarageState</code> is one snapshot: where every AGV, tray, bay, VECS and VRC is <em>now</em>. A <code>ContinuousState</code> is every entity's <code>Trajectory</code> over time, and a trajectory is a list of back-to-back <code>Motion</code>s. A motion is either a wait at a pose (also used for lifts and state changes) or a move along one graph edge, with a time <code>Interval</code>, the footprint it occupies meanwhile, and the event it implements.</p>
+<figure id="bg-fig-92_continuous_state">
+  <img src="figures/92_continuous_state.svg" alt="ContinuousState as a timeline">
+  <figcaption>The <code>ContinuousStateToSchedule</code> test drawn as swimlanes. AGV 2 waits at node 6 until AGV 1 has passed through node 9. In the action DAG the wait disappears (it changes nothing) and becomes an occupancy edge instead: AGV 2's move into 9 depends on AGV 1's move out of it. This is how an ADG keeps the plan's safety without its timing.</figcaption>
+</figure>
+<p><strong>Its life in one <code>Plan()</code> call:</strong></p>
+<ol>
+  <li><strong>Built from the snapshot.</strong> <code>ContinuousState(ctx->initial_state, table_, *layout_, ctx->start_time)</code> gives every entity a trajectory that stands still at its initial pose (“all elements just stay at their initial state until right now”). The collision table and layout are passed so the state knows each entity's footprint.</li>
+  <li><strong>Extended by CHUGG.</strong> It is CHUGG's reservation table: a new motion may only use a pose or edge during a time when no planned motion's footprint conflicts with it. <code>SolveSequential</code> appends motions event by event and returns the finished state (or <code>std::nullopt</code>).</li>
+  <li><strong>Read by the response code.</strong> <code>CollectAndCollapseTrajectoryMotions</code> walks <code>GetTrajectories()</code>, drops waits, merges consecutive floor-traversal motions of a VRC ride into one, and orders everything with <code>MotionScheduleOrder</code> (start time, then action id). <code>BuildActionDagFromMotions</code> turns each remaining motion into an <code>ActionNode</code>; <code>GetActionId()</code> is cast back to a <code>ScheduleEventDag::Vertex</code> to find the event and therefore the job.</li>
+  <li><strong>Thrown away.</strong> Only <code>Schedule.nodes</code> leaves the scheduler; the times survive only as each <code>ActionNode.duration</code>.</li>
+</ol>
+<p>Tests skip CHUGG and write the state by hand, which shows the whole API the scheduler needs:</p>
+<pre><code class="language-cpp">// scheduler_tests.cpp, TEST(Scheduler, ContinuousStateToSchedule), abridged
+volley::ContinuousState cont_state(state, scheduler.GetCollisionTable(), *(scheduler.GetLayout()));
+Trajectory a1_traj;
+Interval::Timepoint start_time {};
+a1_traj.AddMotion(Motion(volley::AgvId(1), Interval(start_time, 3s),              // [0 s, 3 s]
+    common::EnumInteger(volley::CollisionEntityId::AGV),                          // bare AGV footprint
+    0u,                                                                           // event vertex 0
+    volley::CollisionTable::Edge {ConstructGaragePose(10, 0), ConstructGaragePose(9, 0)}));
+// a waiting motion: a single pose instead of an edge
+a2_traj.AddMotion(Motion(volley::AgvId(2), Interval(start_time, 6s),
+    common::EnumInteger(volley::CollisionEntityId::AGV), 1u, ConstructGaragePose(6, 0)));
+cont_state.SetTrajectory(volley::AgvId(1u), a1_traj);
+cont_state.SetTrajectory(volley::AgvId(2u), a2_traj);
+auto [action_nodes_opt, message] = scheduler.ResponseFromTrajectories(ctx, cont_state);
+</code></pre>
+<p>Two details worth knowing. The test's comment calls the fourth argument <code>JobId</code>, but the response code reads it as the event's vertex; with one event per job in this test the two coincide. And because a <code>Motion</code> stores the footprint (<code>GetCollisionId()</code>), the response code can tell a loaded AGV from an empty one without replaying the discrete state.</p>
+<p><strong>What the hover windows show.</strong> <code>motion_planner</code>, <code>cost_functions</code> and the shared utility library (<code>stdx</code>, <code>BoolStringPair</code>) are not in the snapshots. Their hover windows show sketches reconstructed from how the scheduler calls them, marked as such; members the scheduler never uses are missing. With <code>motion_planner/{chugg, continuous_state, trajectory, interval, static_graph_filtering, blocking_tray_search, garage_graph_pathing, agv_hiding_search}.hpp</code> and <code>cost_functions/motion_cost_model.hpp</code>, these become real extracts, and the guesses in this section (SIPP, prioritized order, units) can be checked.</p>
 <h3 id="bg-from-trajectories-to-the-response">From trajectories to the response</h3>
 <p>The action DAG built here is an <em>action dependency graph</em>. Doc 05 explains the idea from scratch: the construction rule, why executing it is safe, how timing works on it, and how this code relates to the textbook version (<a class="ref" href="#ad-the-adg-in-our-software">section 7</a> there).</p>
 <p><code>ResponseFromTrajectories(ctx, final_state)</code> then turns trajectories into the wire format:</p>
