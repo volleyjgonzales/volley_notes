@@ -22,7 +22,7 @@ cpp:
     from: common-ros
     file: include/common_ros/garage_graph.hpp
     parts: ["struct Transition {", "enum class TransitionType"]
-  - names: [TransitionType, LOCOMOTE, STRAFE, ROTATION, VRC_TRANSITION, "TransitionType::VRC_TRANSITION"]
+  - names: [TransitionType, LOCOMOTE, STRAFE, ROTATION, VRC_TRANSITION, "TransitionType::VRC_TRANSITION", TRANSLATE_LONGITUDINAL, TRANSLATE_LATERAL, RIDE_VRC]
     from: common-ros
     file: include/common_ros/garage_graph.hpp
     parts: ["enum class TransitionType"]
@@ -42,7 +42,7 @@ cpp:
     from: common-ros
     file: include/common_ros/garage_graph.hpp
     parts: ["using Vertex = ", "using Edge = ", "using BoostPoseGraph"]
-  - names: [GarageGraph, "volley::GarageGraph"]
+  - names: [GarageGraph, "volley::GarageGraph", MotionGraph]
     from: common-ros
     file: include/common_ros/garage_graph.hpp
     parts: ["class GarageGraph {"]
@@ -58,7 +58,7 @@ cpp:
     from: common-ros
     file: include/common_ros/layout.hpp
     parts: ["struct Vrc {"]
-  - names: [PoseGraph]
+  - names: [PoseGraph, PoseLattice]
     from: common-ros
     file: include/common_ros/pose_graph.hpp
     parts: ["class PoseGraph {"]
@@ -70,7 +70,7 @@ cpp:
     from: common-ros
     file: include/common_ros/collision_geometry.hpp
     parts: ["class CollisionTable {"]
-  - names: [CollisionEntityId, CollisionEntityId_t, "volley::CollisionEntityId_t", VertexCollisionIdMap, BAY_ODP, TRAY_LEGS]
+  - names: [CollisionEntityId, CollisionEntityId_t, "volley::CollisionEntityId_t", VertexCollisionIdMap, BAY_ODP, TRAY_LEGS, FootprintId, FootprintType, FootprintIdByVertex]
     from: common-ros
     file: include/common_ros/collision_geometry.hpp
     parts: ["using CollisionEntityId_t", "enum class CollisionEntityId", "using VertexCollisionIdMap"]
@@ -111,12 +111,12 @@ cpp:
     from: planner-core
     file: include/planner_core/event_dag.hpp
     parts: ["class DagBase {"]
-  - names: [ScheduleEventDag, "volley::ScheduleEventDag", "ScheduleEventDag&"]
+  - names: [ScheduleEventDag, "volley::ScheduleEventDag", "ScheduleEventDag&", EventDag]
     from: planner-core
     file: include/planner_core/event_dag.hpp
     parts: ["class ScheduleEventDag : public DagBase<ScheduleEvent>"]
   # ---- scheduler
-  - names: [ScheduleContext, ScheduleContextSPtr, "std::shared_ptr<ScheduleContext>"]
+  - names: [ScheduleContext, ScheduleContextSPtr, "std::shared_ptr<ScheduleContext>", PlanContext, PlanContextSPtr]
     from: scheduler
     file: include/scheduler/scheduler.hpp
     parts: ["class ScheduleContext {", "using ScheduleContextSPtr"]

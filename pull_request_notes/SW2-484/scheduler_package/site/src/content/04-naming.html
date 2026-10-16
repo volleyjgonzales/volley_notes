@@ -6,6 +6,7 @@
 -->
 <h1>04 — Naming and small struct refactors</h1>
 <p>This is a working list to keep open while refactoring. It covers the whole stack the scheduler touches: the ROS messages in <code>interfaces</code>, the garage model in <code>common_ros</code>, the events and DAG in <code>planner_core</code>, and the <code>scheduler</code> package itself. Each row gives the current name, the proposed one, where it lives, how expensive the change is, and why. The rules in <a class="ref" href="#nm-naming-rules">section 2</a> produce the proposals, so a name not listed here can be decided the same way.</p>
+<blockquote><p><strong>Scope decided for the refactor.</strong> Doc 02 adopts the rows for <code>scheduler</code> and <code>planner_core</code> (<a class="ref" href="#pr-naming-and-the-ros-boundary">section 7</a> there). Rows for <code>common_ros</code> and the ROS interfaces are not renamed yet: the scheduler reaches them through one translation header and its own internal types, so its code can use the good names now and drop the translation when <code>common_ros</code> catches up.</p></blockquote>
 <p>These are recommendations, not decisions. The few that need a team decision are collected in <a class="ref" href="#nm-decisions-for-review">section 9</a>. Everything is taken from the four source snapshots (<code>sources/repomix-*.xml</code>); where the snapshots do not show something, the row says so.</p>
 
 <h2 data-num id="nm-how-to-read-this-list">How to read this list</h2>
@@ -558,6 +559,12 @@
       <td><code>BoostMotionGraph</code>, <code>boost_graph_</code></td>
       <td><span class="tier tier-b">B</span></td>
       <td>"Base" already means something else (<code>base_state</code>, <code>base_schedule</code>); this is the Boost object</td>
+    </tr>
+    <tr>
+      <td>Edge properties <code>boost::property&lt;boost::edge_index_t, std::size_t, Transition></code></td>
+      <td>a bundled struct <code>TransitionEdge {std::size_t index; Transition transition;}</code>, with <code>EdgeVectorPropertyMap&lt;T></code> built over <code>get(&amp;TransitionEdge::index, g)</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>The current Boost style; one mechanism instead of two. Changes the public <code>EdgeVectorPropertyMap</code> type and <code>base_graph_[e]</code>, so every caller is affected (doc 01, <a href="#bg-reading-the-boost-adjacency-list-type">reading the type</a>)</td>
     </tr>
     <tr>
       <td><code>pose_to_vertex_</code></td>
@@ -1141,8 +1148,8 @@ Edge[] edges   # Edge: node_id_a, node_id_b, int16[] disallowed_headings (0:179,
 
 <h2 data-num id="nm-decisions-for-review">Decisions for review</h2>
 <ol>
-  <li><strong><code>GarageGraph</code> → <code>MotionGraph</code>, and <code>PoseGraph</code> → <code>PoseLattice</code>?</strong> If yes, members become <code>motion_graph_</code> everywhere. If no, use <code>garage_graph_</code> and <code>pose_graph_</code>. Decide before renaming any member, so each member changes once.</li>
-  <li><strong>Should doc 02's <code>GarageServices</code> fields follow the member names?</strong> Today they are <code>graph</code>, <code>collisions</code>, <code>costs</code>, <code>layout</code>. The same-name rule (<a class="ref" href="#nm-rule-same-object-same-name">section 2.9</a>) gives <code>motion_graph</code>, <code>collision_table</code>, <code>cost_model</code>, <code>layout</code>.</li>
+  <li><strong><code>GarageGraph</code> → <code>MotionGraph</code>, and <code>PoseGraph</code> → <code>PoseLattice</code>?</strong> Inside the scheduler this is settled by doc 02: the translation header aliases the classes, and members are <code>motion_graph_</code>. The <code>common_ros</code> class rename itself is still open; when it happens, the alias line is deleted and no scheduler code changes.</li>
+  <li><strong>Should doc 02's <code>GarageServices</code> fields follow the member names?</strong> <em>Done:</em> doc 02 now uses <code>motion_graph</code>, <code>collision_table</code>, <code>cost_model</code> and <code>layout</code>, following the same-name rule (<a class="ref" href="#nm-rule-same-object-same-name">section 2.9</a>).</li>
   <li><strong><code>TransitionType</code> values.</strong> <code>TRANSLATE_LONGITUDINAL</code> and <code>TRANSLATE_LATERAL</code>, or shorter <code>DRIVE</code> and <code>CRAB</code>? Pick whatever the AGV team says out loud.</li>
   <li><strong>"Size class" for parking windows, resource windows and resource sizes.</strong> Confirm with the layout owners, who write these in YAML.</li>
   <li><strong>The interface version.</strong> Which tier C items go into it, and how stored <code>DiscreteGarageEvent</code> buffers are migrated or read.</li>

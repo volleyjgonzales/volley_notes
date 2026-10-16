@@ -751,19 +751,72 @@ private:
     </tr>
   </tbody>
 </table>
-<p><strong>Why the vertex is not a <code>GaragePoseMsg</code>.</strong> It is natural to read the fourth argument as "the vertex type", but Boost's name for it is <em>VertexProperties</em>: data attached to each vertex. The vertex itself is always <code>vertex_descriptor</code>, and Boost derives that from parameter 2, not from parameter 4. This is how BGL works for every graph, not a Volley choice, and it has three practical consequences:</p>
+<p><strong>Why the vertex is not a <code>GaragePoseMsg</code>.</strong> The fourth argument is not the vertex type. Boost calls it <em>VertexProperties</em>: the data stored with each vertex. The graph names its vertices with a separate type, <code>vertex_descriptor</code>, which Boost derives from parameter 2. With <code>VertexList = boost::vecS</code> it is a <code>std::size_t</code>, and the valid vertices are exactly the contiguous range <span class="math">[0, \text{num\_vertices}(g))</span>. So a vertex and its pose are two different things:</p>
+<pre><code class="language-cpp">using Vertex = BoostPoseGraph::vertex_descriptor;   // std::size_t
+Vertex v = 44;                                       // a descriptor: just a number, not a pose
+GaragePoseMsg&amp; pose = base_graph_[v];               // the payload stored with it: {node_id: 22, heading: 90}
+</code></pre>
+<p>This is how BGL works for every graph, not a Volley choice. It has five practical consequences:</p>
+<ol>
+  <li><strong>Algorithms work on descriptors.</strong> <code>breadth_first_search</code>, <code>dijkstra_shortest_paths</code> and <code>topological_sort</code> take descriptors, not application payloads. They keep their working data (distance, predecessor, colour) per vertex, and with <code>vecS</code> a descriptor can index a plain vector directly: <code>dist[v]</code>. <code>MakeVertexVectorPropertyMap&lt;T>()</code> builds such a vector.</li>
+  <li><strong>Finding a vertex from its payload needs a separate lookup.</strong> BGL builds no index from a <code>GaragePoseMsg</code> to a descriptor. <code>GarageGraph</code> therefore keeps <code>pose_to_vertex_</code>, a <code>std::unordered_map</code> from pose to vertex.</li>
+  <li><strong>Descriptors are cheap, but they are stable only while no vertex is removed.</strong> A descriptor is 8 bytes on a 64-bit build. With <code>vecS</code>, removing a vertex renumbers every later vertex, which invalidates stored descriptors and any table built from them (<code>pose_to_vertex_</code> included). <code>GarageGraph</code> never removes a vertex after construction, so its descriptors are safe to keep. <code>ScheduleEventDag</code> does remove vertices, and the same renumbering applies there (<a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">section 12.4</a>).</li>
+  <li><strong>The payload type and the graph shape are independent.</strong> <code>DagBase&lt;T></code> uses <code>adjacency_list&lt;vecS, vecS, bidirectionalS, std::shared_ptr&lt;T>></code>. Its vertices are also <code>std::size_t</code> descriptors, and the payload is the event pointer (<a class="ref" href="#bg-the-class-dagbaset-and-scheduleeventdag">section 12.3</a>).</li>
+  <li><strong>Edges have their own identity and their own properties.</strong> An edge is named by an <code>edge_descriptor</code> (the <code>Edge</code> alias). <code>GarageGraph</code> stores two things with each edge: a tagged edge index and a <code>Transition</code> payload. Unlike vertex numbers, edge indices are not assigned by BGL; the application has to maintain them, and <code>AddEdge</code> does.</li>
+</ol>
+<p>A summary of what represents what:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Concept</th>
+      <th>Representation</th>
+      <th>What it is for</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Vertex identity</td>
+      <td><code>Vertex</code> = <code>std::size_t</code></td>
+      <td>Names a vertex within this graph</td>
+    </tr>
+    <tr>
+      <td>Vertex payload</td>
+      <td><code>GaragePoseMsg</code>, read with <code>base_graph_[v]</code></td>
+      <td>The physical pose</td>
+    </tr>
+    <tr>
+      <td>Edge identity</td>
+      <td><code>Edge</code> = <code>edge_descriptor</code></td>
+      <td>Names one directed transition</td>
+    </tr>
+    <tr>
+      <td>Edge payload</td>
+      <td><code>Transition</code>, read with <code>base_graph_[e]</code></td>
+      <td>The transition's type and length</td>
+    </tr>
+    <tr>
+      <td>Edge index</td>
+      <td><code>std::size_t</code>, read with <code>edge_index_[e]</code></td>
+      <td>Numbers edges 0 to <span class="math">E-1</span> so per-edge data can live in vectors</td>
+    </tr>
+    <tr>
+      <td>Pose lookup</td>
+      <td><code>pose_to_vertex_</code></td>
+      <td>Physical pose → vertex</td>
+    </tr>
+    <tr>
+      <td>Edge lookup</td>
+      <td><code>edge_index_to_vertices_</code></td>
+      <td>Edge index → its two endpoint vertices</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>The edge argument.</strong> The fifth parameter is the data stored with each edge. BGL has two ways to write it, and <code>BoostPoseGraph</code> combines them:</p>
 <ul>
-  <li><strong>Algorithms take descriptors.</strong> <code>breadth_first_search</code>, <code>dijkstra_shortest_paths</code> and <code>topological_sort</code> are written against descriptors and keep their working data (distance, colour, predecessor) per vertex. With <code>vecS</code> the descriptor is an index, so that data is a plain vector: <code>dist[v]</code>. <code>MakeVertexVectorPropertyMap&lt;T>()</code> builds exactly that.</li>
-  <li><strong>An index is cheap; a pose needs a hash.</strong> A <code>Vertex</code> is 8 bytes, copied and compared in one instruction. Finding the vertex for a pose needs a lookup, which is why <code>GarageGraph</code> adds <code>pose_to_vertex_</code>: Boost keeps no index from payload to vertex.</li>
-  <li><strong>The same shape carries any payload.</strong> <code>DagBase&lt;T></code> uses <code>adjacency_list&lt;vecS, vecS, bidirectionalS, std::shared_ptr&lt;T>></code>: its fourth argument is the event pointer, and its <code>Vertex</code> is also a <code>std::size_t</code> (<a class="ref" href="#bg-the-class-dagbaset-and-scheduleeventdag">section 12.3</a>).</li>
+  <li><strong>Bundled properties</strong> (the current Boost documentation's recommended style). An ordinary struct holds the edge's data, and you read it with member access: <code>g[e].index</code>, <code>g[e].transition</code>. BGL can also build a property map from a pointer to a member, <code>get(&amp;EdgeProperties::index, g)</code>, so algorithms read bundled data directly. Bundled properties are not new: they have been in BGL for about two decades.</li>
+  <li><strong>Tagged (interior) properties</strong>, the older style. <code>boost::property&lt;Tag, T, Base></code> stores a value of type <code>T</code> under a tag. Here <code>Tag = boost::edge_index_t</code> (a tag Boost predefines to mean "edge index"), <code>T = std::size_t</code>, and <code>Base = Transition</code>. When the last link of the chain is a plain struct rather than another <code>property&lt;...></code>, Boost treats it as the bundled payload. So <code>get(boost::edge_index, g)</code> reads the index, and <code>g[e]</code> returns the <code>Transition&amp;</code>.</li>
 </ul>
-<p><strong>The edge argument.</strong> <code>boost::property&lt;Tag, T, Base></code> is Boost's older way to attach <em>named</em> properties. It is a short chain, read left to right:</p>
-<ul>
-  <li><code>Tag = boost::edge_index_t</code>: the property's name, a tag type Boost predefines to mean "edge index";</li>
-  <li><code>T = std::size_t</code>: the type of the value stored under that name;</li>
-  <li><code>Base = Transition</code>: the rest of the chain. When the last link is a plain struct rather than another <code>property&lt;...></code>, Boost treats it as the bundled edge property, so <code>base_graph_[e]</code> returns a <code>Transition&amp;</code>.</li>
-</ul>
-<p>In memory each edge therefore carries roughly <code>{m_value: std::size_t, m_base: Transition}</code>, and the two parts are read in two different ways:</p>
+<p>In memory each edge carries roughly <code>{m_value: std::size_t, m_base: Transition}</code>, and the two parts are read in two different ways:</p>
 <pre><code class="language-cpp">// common_ros/src/garage_graph.cpp, GarageGraph::AddEdge (abridged)
 size_t next_edge_index = boost::num_edges(base_graph_);   // edges are numbered 0, 1, 2, ... as they are added
 std::tie(e, added) = boost::add_edge(pose_to_vertex_[src], pose_to_vertex_[dst],
@@ -772,10 +825,26 @@ std::tie(e, added) = boost::add_edge(pose_to_vertex_[src], pose_to_vertex_[dst],
 boost::put(edge_index_, e, next_edge_index);              // writes the same index again
 
 // reading an edge e
-std::size_t i = edge_index_[e];           // the named part: edge_index_ = boost::get(boost::edge_index, base_graph_)
+std::size_t i = edge_index_[e];           // the tagged part: edge_index_ = boost::get(boost::edge_index, base_graph_)
 Transition&amp; t = base_graph_[e];          // the bundled part; for edge 44 -> 59: {type: LOCOMOTE, length: 2.857}
 </code></pre>
-<p><strong>Why an edge index at all.</strong> With <code>vecS</code> vertices Boost numbers vertices for free, but it does not number edges. An <code>edge_descriptor</code> (the <code>Edge</code> alias) is a small struct, <code>{m_source, m_target, m_eproperty}</code>: the two vertex numbers and a pointer to the edge's stored properties. That is enough to read the edge, but it cannot index a vector. <code>AddEdge</code> therefore stores <code>num_edges()</code> at insertion time as the edge's index, so edges are numbered 0 to <span class="math">E-1</span> in the order they were added. <code>MakeEdgeVectorPropertyMap&lt;T>()</code> and <code>edge_index_to_vertices_</code> use that number to keep per-edge data in plain vectors, the same pattern as for vertices.</p>
+<p><strong>Why an edge index at all.</strong> An <code>edge_descriptor</code> is a small struct, <code>{m_source, m_target, m_eproperty}</code>: the two vertex numbers and a pointer to the edge's stored properties. That is enough to read the edge, but it cannot index a vector. <code>AddEdge</code> therefore stores <code>num_edges()</code> at insertion time as the edge's index, so edges are numbered 0 to <span class="math">E-1</span> in the order they were added. <code>MakeEdgeVectorPropertyMap&lt;T>()</code> and <code>edge_index_to_vertices_</code> use that number to keep per-edge data in plain vectors, the same pattern as for vertices.</p>
+<p><strong>The modern equivalent, and why it is not a drop-in change here.</strong> Written in the bundled style, the same graph is:</p>
+<pre><code class="language-cpp">// the bundled-property style (not what common_ros does today)
+struct TransitionEdge {
+  std::size_t index;       // maintained by AddEdge, exactly as now
+  Transition transition;
+};
+using BoostPoseGraph = boost::adjacency_list&lt;boost::vecS, boost::vecS, boost::bidirectionalS,
+                                             GaragePoseMsg, TransitionEdge>;
+
+auto [e, added] = boost::add_edge(u, v, TransitionEdge{.index = next_edge_index, .transition = t}, g);
+std::size_t i = g[e].index;                              // or get(&amp;TransitionEdge::index, g)[e]
+const Transition&amp; tr = g[e].transition;
+auto index_map = get(&amp;TransitionEdge::index, g);         // a property map from a member pointer
+boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_edges(g), index_map);
+</code></pre>
+<p>The two styles look up the index through different mechanisms: <code>get(boost::edge_index, g)</code> only exists with the tagged property. <code>GarageGraph</code> exposes the tagged form in its public API: <code>EdgeVectorPropertyMap&lt;T></code> is defined as a <code>vector_property_map</code> over <code>property_map&lt;BoostPoseGraph, boost::edge_index_t>::type</code>, and <code>MakeEdgeVectorPropertyMap&lt;T>()</code> returns it. Switching to the bundled struct therefore changes a public <code>common_ros</code> type, and every caller outside the snapshots (the motion planner, for example) has to be checked. It also changes <code>base_graph_[e]</code> from a <code>Transition&amp;</code> to the struct, so readers would write <code>base_graph_[e].transition</code>. It is a sensible cleanup, but one for <code>common_ros</code>; doc 04 lists it (<a class="ref" href="#nm-garagegraph">section 6.1</a>).</p>
 <figure id="bg-fig-81_boost_pose_graph">
   <img src="figures/81_boost_pose_graph.svg" alt="Inside BoostPoseGraph: template parameters and storage">
   <figcaption>Inside <code>BoostPoseGraph</code>. Top: the seven template parameters, with Boost's names and what <code>BoostPoseGraph</code> passes; 6 and 7 are defaults. Middle: what Boost stores for Vertex 44 (<code>{node_id: 22, heading: 90}</code>). <code>m_vertices[44]</code> holds the pose and two lists of edge iterators. The edge 44 → 59 (to <code>{node_id: 41, heading: 90}</code>) is one node in the graph-wide <code>m_edges</code> list, holding the edge index and the <code>Transition</code>. Vertex 44's out-edge list and Vertex 59's in-edge list both point at that node. Bottom: the public calls that read each part. Boost member names are simplified.</figcaption>
