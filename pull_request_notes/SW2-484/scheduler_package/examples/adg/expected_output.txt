@@ -1,0 +1,32 @@
+Pairwise rule: 5 vertices, 4 edges
+  Type 1  a1.1 (A->B @0)  ->  a1.2 (B->C @1)
+  Type 1  a2.1 (D->B @2)  ->  a2.2 (B->E @3)
+  Type 2  a1.2 (B->C @1)  ->  a2.1 (D->B @2)
+  Type 2  a3.1 (C->F @0)  ->  a1.2 (B->C @1)
+Sweep: 5 vertices, 4 edges
+  Type 1  a1.1 (A->B @0)  ->  a1.2 (B->C @1)
+  Type 1  a2.1 (D->B @2)  ->  a2.2 (B->E @3)
+  Type 2  a1.2 (B->C @1)  ->  a2.1 (D->B @2)
+  Type 2  a3.1 (C->F @0)  ->  a1.2 (B->C @1)
+Same order (same reachability): true
+One topological order:  a3.1 (C->F @0)  a1.1 (A->B @0)  a1.2 (B->C @1)  a2.1 (D->B @2)  a2.2 (B->E @3)
+Depth levels (each level can run in parallel):
+  level 0:  a1.1 (A->B @0)  a3.1 (C->F @0)
+  level 1:  a1.2 (B->C @1)
+  level 2:  a2.1 (D->B @2)
+  level 3:  a2.2 (B->E @3)
+Corridor, pairwise rule: 6 vertices, 6 edges
+  Type 1  a1.1 (A->B @0)  ->  a1.2 (B->C @1)
+  Type 1  a2.1 (D->B @1)  ->  a2.2 (B->E @2)
+  Type 1  a3.1 (F->B @2)  ->  a3.2 (B->G @3)
+  Type 2  a1.2 (B->C @1)  ->  a2.1 (D->B @1)
+  Type 2  a1.2 (B->C @1)  ->  a3.1 (F->B @2)
+  Type 2  a2.2 (B->E @2)  ->  a3.1 (F->B @2)
+Corridor, sweep: 6 vertices, 5 edges
+  Type 1  a1.1 (A->B @0)  ->  a1.2 (B->C @1)
+  Type 1  a2.1 (D->B @1)  ->  a2.2 (B->E @2)
+  Type 1  a3.1 (F->B @2)  ->  a3.2 (B->G @3)
+  Type 2  a1.2 (B->C @1)  ->  a2.1 (D->B @1)
+  Type 2  a2.2 (B->E @2)  ->  a3.1 (F->B @2)
+Same order (same reachability): true
+Rotation: not a DAG (the plan needs synchronous moves)

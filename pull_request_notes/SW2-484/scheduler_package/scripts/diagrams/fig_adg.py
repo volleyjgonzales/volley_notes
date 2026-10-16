@@ -621,3 +621,229 @@ def adg_in_scheduler():
                    "event-level edge e0 -> e1 maps to a1 -> a2, which already exists. The order shown is one valid "
                    "topological order.")
     return d
+
+
+# ======================================================================================
+# 89 — where parallelism comes from
+# ======================================================================================
+
+def _par_panel(d: Doc, x0, y0, title, verts, edges, redundant=(), *, w=330):
+    """verts: name -> (robot, duration, (dx, dy)); edges kept after reduction; redundant edges drawn dashed red."""
+    d.text(x0, y0, title, size=13.5, weight=600, fill=T.fg)
+    preds = {v: [u for u, w_ in edges if w_ == v] for v in verts}
+    order, seen = [], set()
+    while len(order) < len(verts):
+        for v in verts:
+            if v not in seen and all(u in seen for u in preds[v]):
+                order.append(v)
+                seen.add(v)
+    S, C = {}, {}
+    for v in order:
+        S[v] = max([C[u] for u in preds[v]], default=0)
+        C[v] = S[v] + verts[v][1]
+    L = max(C.values())
+    W = sum(dv for _, dv, _ in verts.values())
+    # width: brute force largest set of pairwise unordered vertices
+    reach = {v: set() for v in verts}
+    for v in reversed(order):
+        for u, w_ in edges:
+            if u == v:
+                reach[v] |= {w_} | reach[w_]
+    names = list(verts)
+    width = 1
+    from itertools import combinations
+    for r in range(2, len(names) + 1):
+        for comb in combinations(names, r):
+            if all(b not in reach[a] and a not in reach[b] for a, b in combinations(comb, 2)):
+                width = r
+    B = {}
+    for v, (rb, dv, (dx, dy)) in verts.items():
+        cx, cy = x0 + dx, y0 + 50 + dy
+        bb = BBox(cx - 34, cy - 20, cx + 34, cy + 20)
+        d.rect(bb.x0, bb.y0, bb.w, bb.h, rx=8, fill=T.card, stroke=ACOL[rb], sw=1.5)
+        mathline(d, bb.x0 + 10, cy, [("sym", v, None, None), f"  d={dv}"], size=13, fill=T.fg)
+        B[v] = bb
+    for u, v in edges:
+        arrow(d, B[u], B[v], T.fg2, sw=1.5)
+    for u, v in redundant:
+        arrow(d, B[u], B[v], RED, dash="4 3", sw=1.3,
+              via=[(B[u].x1 + 18, B[u].cy), (B[u].x1 + 18, B[v].cy)])
+    # gantt
+    gy = y0 + 330
+    px = (w - 70) / max(L, 1)
+    robots = sorted({rb for rb, _, _ in verts.values()})
+    for j, rb in enumerate(robots):
+        yy = gy + j * 32
+        d.text(x0, yy, f"AGV {rb}", size=11.5, family="mono", weight=600, fill=ACOL[rb])
+        for v, (r_, dv, _) in verts.items():
+            if r_ == rb:
+                bx = x0 + 62 + S[v] * px
+                d.rect(bx, yy - 12, dv * px, 24, rx=5, fill=T.tint(ACOL[rb], 0.24, T.bg), stroke=ACOL[rb], sw=1.2)
+                sym(d, bx + dv * px / 2, yy, v, size=13, anchor="middle")
+    ay = gy + len(robots) * 32 - 6
+    d.line(x0 + 62, ay, x0 + 62 + L * px, ay, stroke=T.border)
+    for t in range(0, L + 1, 2):
+        d.text(x0 + 62 + t * px, ay + 13, str(t), size=10, family="mono", fill=T.muted, anchor="middle")
+    sy = gy + 110
+    rows = [f"work W = sum of d = {W}", f"span L = critical path = {L}",
+            f"average parallelism W / L = {W / L:.2f}", f"width (most at once) = {width}"]
+    for k, r_ in enumerate(rows):
+        d.text(x0, sy + k * 18, r_, size=12, fill=T.green if (k >= 2 and width > 1) else T.fg2)
+    return W, L, width
+
+
+@figure("89_adg_parallelism", "Where parallelism comes from", DOC5)
+def adg_parallelism():
+    d = Doc("89_adg_parallelism", "Where parallelism comes from",
+            "Four small ADGs: a single chain, a fork and join, two independent chains, and a graph whose extra "
+            "edge only looks like a fork. Each has its earliest-start Gantt chart, work, span and width.")
+    P = 380
+    _par_panel(d, 0, 0, "1  One chain: nothing runs in parallel",
+               {"u": (1, 2, (40, 0)), "v": (2, 2, (40, 60)), "w": (1, 2, (40, 120)), "x": (2, 2, (40, 180))},
+               [("u", "v"), ("v", "w"), ("w", "x")])
+    _par_panel(d, P, 0, "2  Fork and join",
+               {"r": (1, 2, (130, 0)), "p": (1, 3, (50, 80)), "q": (2, 2, (210, 80)), "j": (2, 2, (130, 160))},
+               [("r", "p"), ("r", "q"), ("p", "j"), ("q", "j")])
+    _par_panel(d, 2 * P, 0, "3  Two roots, no shared space",
+               {"p": (1, 3, (50, 20)), "q": (1, 3, (50, 120)), "m": (2, 2, (210, 20)), "n": (2, 2, (210, 120))},
+               [("p", "q"), ("m", "n")])
+    _par_panel(d, 3 * P, 0, "4  Looks like a fork, is a chain",
+               {"a": (1, 2, (60, 0)), "b": (2, 2, (60, 80)), "c": (1, 2, (60, 160))},
+               [("a", "b"), ("b", "c")], redundant=[("a", "c")])
+    d.text(3 * P + 150, 80, "a has two children,", size=11.5, fill=RED)
+    d.text(3 * P + 150, 96, "but a -> c is implied", size=11.5, fill=RED)
+    d.text(3 * P + 150, 112, "by a -> b -> c:", size=11.5, fill=RED)
+    d.text(3 * P + 150, 128, "Reduce() removes it", size=11.5, fill=RED)
+    frame(d, title="Where parallelism comes from",
+          subtitle="Two actions can run at the same time only if neither reaches the other. A graph whose "
+                   "transitive reduction is one chain is a strict sequence, however many robots it involves.",
+          badge_key="illustrative",
+          legend=[("box", A1, "AGV 1"), ("box", A2, "AGV 2"), ("arrow", T.fg2, "dependency"),
+                  ("dasharrow", RED, "implied edge (removed by Reduce)")],
+          footnote="Durations invented. Gantt charts are earliest-start schedules (every action starts as soon as "
+                   "its predecessors finish). Width = largest set of pairwise unordered actions, computed by brute force.")
+    return d
+
+
+# ======================================================================================
+# 90 — topological orders do not remove parallelism
+# ======================================================================================
+
+@figure("90_adg_topo_vs_parallel", "Topological orders and parallelism", DOC5)
+def adg_topo_vs_parallel():
+    d = Doc("90_adg_topo_vs_parallel", "Topological orders and parallelism",
+            "The example ADG, its two topological orders as arrays with parent indices, execution by "
+            "dependencies (parallel) versus executing the array one entry at a time (serial), and the ready "
+            "sets as the dispatcher sees them.")
+    dur = {(1, 1): 3, (3, 1): 2, (1, 2): 3, (2, 1): 2, (2, 2): 2}
+    preds = {(1, 1): [], (3, 1): [], (1, 2): [(1, 1), (3, 1)], (2, 1): [(1, 2)], (2, 2): [(2, 1)]}
+    move = {(1, 1): "A -> B", (1, 2): "B -> C", (3, 1): "C -> F", (2, 1): "D -> B", (2, 2): "B -> E"}
+    # ---- 1. the ADG ----
+    d.text(0, 0, "1  One ADG (the example)", size=14, weight=600, fill=T.fg)
+    pos = {(1, 1): (80, 60), (3, 1): (80, 140), (1, 2): (250, 100), (2, 1): (250, 190), (2, 2): (250, 270)}
+    B = {}
+    for key, (x, y) in pos.items():
+        B[key] = BBox(x - 52, y - 22, x + 52, y + 22)
+        d.rect(B[key].x0, B[key].y0, B[key].w, B[key].h, rx=8, fill=T.card, stroke=ACOL[key[0]], sw=1.5)
+        mathline(d, B[key].x0 + 12, y, [("sym", "a", str(key[0]), str(key[1])), f"  d = {dur[key]}"], size=13)
+    for v, us in preds.items():
+        for u in us:
+            arrow(d, B[u], B[v], T1 if u[0] == v[0] else T2, dash=None if u[0] == v[0] else "6 4", sw=1.5)
+    mtext(d, 0, 330, "a[1,1] and a[3,1] are unordered:", size=12, fill=T.fg2)
+    d.text(0, 346, "no path between them", size=12, fill=T.fg2)
+    # ---- 2. two topological orders ----
+    ox = 400
+    d.text(ox, 0, "2  Its two topological orders, written as arrays", size=14, weight=600, fill=T.fg)
+    orders = [[(1, 1), (3, 1), (1, 2), (2, 1), (2, 2)], [(3, 1), (1, 1), (1, 2), (2, 1), (2, 2)]]
+    for oi, order in enumerate(orders):
+        y = 70 + oi * 150
+        d.text(ox, y - 38, f"order {oi + 1}", size=12, weight=600, fill=T.muted)
+        idx = {key: n for n, key in enumerate(order)}
+        cw = 92
+        for n, key in enumerate(order):
+            x = ox + n * (cw + 10)
+            d.rect(x, y - 20, cw, 40, rx=6, fill=T.card, stroke=ACOL[key[0]], sw=1.3)
+            sym(d, x + 22, y, "a", str(key[0]), str(key[1]), size=14, sup_italic=False, sub_italic=False)
+            par = sorted(idx[u] for u in preds[key])
+            d.text(x + 46, y - 6, f"[{n}]", size=10.5, family="mono", fill=T.muted)
+            d.text(x + 46, y + 9, "p " + (",".join(map(str, par)) if par else "-"), size=10.5, family="mono",
+                   fill=T.fg2)
+            for p_ in par:
+                x0_ = ox + p_ * (cw + 10) + cw / 2
+                x1_ = x + cw / 2
+                connect(d, [(x1_ - 6, y + 20), (x1_ - 6, y + 36 + 8 * (n - p_)), (x0_ + 6, y + 36 + 8 * (n - p_)),
+                            (x0_ + 6, y + 20)], kind="flow", color=T.faint, sw=1, size=6, radius=4)
+    d.text(ox, 340, "Parents always point back (to smaller indices). Both arrays are valid; the order of",
+           size=12, fill=T.fg2)
+    d.text(ox, 356, "unordered actions is arbitrary. The edges, not the array order, carry the constraints.",
+           size=12, fill=T.fg2)
+    # ---- 3. execution ----
+    gx = 0
+    gy = 430
+    d.text(gx, gy, "3  Executing it", size=14, weight=600, fill=T.fg)
+    px = 52
+    x0 = 150
+
+    def gantt(y, title, sched, color_title):
+        d.text(gx, y, title, size=12.5, weight=600, fill=color_title)
+        rows = [1, 3, 2]
+        for j, rb in enumerate(rows):
+            yy = y + 30 + j * 30
+            d.text(gx, yy, f"AGV {rb}", size=11.5, family="mono", weight=600, fill=ACOL[rb])
+            for key, (s0, c0) in sched.items():
+                if key[0] == rb:
+                    d.rect(x0 + s0 * px, yy - 11, (c0 - s0) * px, 22, rx=5, fill=T.tint(ACOL[rb], 0.24, T.bg),
+                           stroke=ACOL[rb], sw=1.2)
+                    sym(d, x0 + (s0 + c0) / 2 * px, yy, "a", str(key[0]), str(key[1]), size=13, anchor="middle",
+                        sup_italic=False, sub_italic=False)
+        end = max(c for _, c in sched.values())
+        ay = y + 30 + 3 * 30 - 8
+        d.line(x0, ay, x0 + 12 * px, ay, stroke=T.border)
+        for t in range(0, 13, 2):
+            d.text(x0 + t * px, ay + 13, str(t), size=10, family="mono", fill=T.muted, anchor="middle")
+        d.line(x0 + end * px, y + 14, x0 + end * px, ay, stroke=color_title, sw=1.6, dash="4 3")
+        d.text(x0 + end * px + 6, y + 18, f"done at {end}", size=11.5, fill=color_title)
+
+    S, C = {}, {}
+    for key in orders[0]:
+        S[key] = max([C[u] for u in preds[key]], default=0)
+        C[key] = S[key] + dur[key]
+    gantt(gy + 30, "By dependencies: start each action when its parents are done", {k: (S[k], C[k]) for k in S},
+          T.green)
+    t = 0
+    ser = {}
+    for key in orders[0]:
+        ser[key] = (t, t + dur[key])
+        t += dur[key]
+    gantt(gy + 190, "Wrong: run the array one entry at a time", ser, RED)
+    # ---- 4. ready sets ----
+    rx = 830
+    d.text(rx, gy, "4  The ready set (actions whose parents are all finished)", size=14, weight=600, fill=T.fg)
+    steps = [
+        ("t = 0", "ready: a(1,1), a(3,1)", "both start: two robots move at once"),
+        ("t = 2: a(3,1) done", "ready: (none new)", "a(1,2) still waits for a(1,1)"),
+        ("t = 3: a(1,1) done", "ready: a(1,2)", ""),
+        ("t = 6: a(1,2) done", "ready: a(2,1)", ""),
+        ("t = 8: a(2,1) done", "ready: a(2,2)", ""),
+    ]
+    for n, (when, ready, note_) in enumerate(steps):
+        yy = gy + 40 + n * 46
+        mtext(d, rx, yy, when.replace("a(", "a[").replace(")", "]"), size=12.5, fill=T.fg)
+        mtext(d, rx + 170, yy, ready.replace("a(", "a[").replace(")", "]"), size=12.5, fill=T.green)
+        if note_:
+            mtext(d, rx + 170, yy + 18, note_.replace("a(", "a[").replace(")", "]"), size=11.5, fill=T.muted)
+    d.text(rx, gy + 280, "This is Kahn's algorithm run live: \"remove a vertex\" happens when a robot", size=12,
+           fill=T.fg2)
+    d.text(rx, gy + 296, "reports completion, and every vertex whose last parent was removed joins", size=12,
+           fill=T.fg2)
+    d.text(rx, gy + 312, "the ready set. Its size is the parallelism available at that moment.", size=12,
+           fill=T.fg2)
+    frame(d, title="Topological orders do not remove parallelism",
+          subtitle="A topological order is a way to list a DAG, not a way to run it. The list keeps every edge "
+                   "(as parent indices); execution follows the edges, so unordered actions still run together.",
+          badge_key="illustrative",
+          legend=[("arrow", T1, "Type 1"), ("dasharrow", T2, "Type 2"), ("arrow", T.faint, "parent index"),
+                  ("line", T.green, "by dependencies"), ("line", RED, "array order (wrong)")],
+          footnote="Durations as in the critical-path figure. The serial chart is what would happen if a consumer "
+                   "ignored parents and ran Schedule.nodes in index order.")
+    return d

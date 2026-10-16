@@ -50,6 +50,27 @@
   <li><code>DagBase::GetTopologicalOrdering</code> uses <code>boost::topological_sort</code> (a depth-first search) and returns <code>std::nullopt</code> if the graph has a cycle. That is how the scheduler detects one.</li>
 </ul>
 
+<h3 data-num id="ad-topological-orders-and-parallelism">Topological orders and parallelism</h3>
+<p>A topological order is a single sequence, so it is natural to worry that using one turns parallel work into serial work. It does not, because a topological order is a way to <strong>list</strong> a DAG, not a way to <strong>run</strong> it. Execution never follows the list; it follows the edges.</p>
+<ul>
+  <li><strong>The list keeps every edge.</strong> When a DAG is written out in topological order, each vertex carries its predecessors. <code>Schedule.nodes</code> does this with <code>parents</code>, indices that always point backwards in the array. Nothing is lost: the graph can be rebuilt exactly from the list.</li>
+  <li><strong>Unordered actions can appear in either order.</strong> In <a class="ref" href="#ad-fig-90_adg_topo_vs_parallel">Figure 2</a> the example ADG has two topological orders. <span class="math">a^1_1</span> and <span class="math">a^3_1</span> swap places between them because neither constrains the other. In general, <span class="math">u \parallel v</span> exactly when some topological order puts <span class="math">u</span> first and another puts <span class="math">v</span> first. A partial order equals the intersection of all its topological orders (Szpilrajn, 1930). So the parallelism is visible in the <em>set</em> of topological orders, and any one of them is an arbitrary tie-break.</li>
+  <li><strong>Execution is driven by readiness, not position.</strong> The dispatcher starts every action whose predecessors are done, whatever its index. That is Kahn's algorithm run live: "remove a vertex" happens when a robot reports completion, and every vertex whose last predecessor has gone joins the <em>ready set</em>. The size of the ready set is the parallelism available at that moment. At <span class="math">t = 0</span> in the example it holds <span class="math">a^1_1</span> and <span class="math">a^3_1</span>, and both robots move.</li>
+  <li><strong>Running the array in index order would be wrong.</strong> A consumer that ignored <code>parents</code> and executed <code>Schedule.nodes</code> one entry at a time would turn the example's makespan of 10 into 12 (the lower chart of <a class="ref" href="#ad-fig-90_adg_topo_vs_parallel">Figure 2</a>). It would be safe but needlessly slow, and it is a misreading of the format.</li>
+</ul>
+<figure id="ad-fig-90_adg_topo_vs_parallel">
+  <img src="figures/90_adg_topo_vs_parallel.svg" alt="Topological orders and parallelism">
+  <figcaption><strong>Listing versus running.</strong> (1) The example ADG; <span class="math">a^1_1</span> and <span class="math">a^3_1</span> are unordered. (2) Its two topological orders as arrays. Parent indices point backwards, and the two unordered actions swap places. (3) Running by dependencies finishes at 10 with two robots moving at the start; running the array one entry at a time finishes at 12. (4) The ready set after each completion, which is what a dispatcher acts on.</figcaption>
+</figure>
+<p>So what is a single topological order <em>for</em>? Every use is about processing the graph, never about executing it:</p>
+<ul>
+  <li><strong>Checking for cycles.</strong> If no order exists, the graph has a cycle.</li>
+  <li><strong>One-pass computations.</strong> Any value that depends only on predecessors (earliest start, the reachability matrix in <code>Reduce()</code>, depth levels) can be computed in a single sweep in topological order, because every predecessor has been handled before the vertex itself.</li>
+  <li><strong>Serialising.</strong> <code>Schedule.nodes</code> is written in topological order so that a receiver can rebuild the graph in one pass, with every parent already seen.</li>
+  <li><strong>Deciding in a fixed order.</strong> Tray assignment and CHUGG walk the <em>event</em> DAG in topological order. That is the order they make decisions in, one event at a time, not the order robots move in. CHUGG plans events "sequentially" but gives them times that overlap whenever the footprints allow, and the action DAG built from those times keeps the overlap.</li>
+</ul>
+<p>Another serialisation that does show the parallelism is the <strong>depth level</strong>. Let <span class="math">\mathrm{depth}(v)</span> be the number of edges on the longest path ending at <span class="math">v</span>. An edge <span class="math">u \to v</span> forces <span class="math">\mathrm{depth}(v) \gt \mathrm{depth}(u)</span>, so vertices of equal depth are pairwise unordered and can run together. Listing level by level gives a topological order grouped into parallel batches. The C++ example in <a class="ref" href="#ad-from-a-space-time-table-to-an-adg">section 3.5</a> prints them.</p>
+
 <h3 data-num id="ad-transitive-reduction">Transitive reduction</h3>
 <p>Many edge sets give the same order. If <span class="math">u \to v \to w</span>, adding <span class="math">u \to w</span> changes nothing: it is <strong>implied</strong>. The <strong>transitive reduction</strong> <span class="math">G^-</span> of a DAG is the graph with the same reachability and as few edges as possible. For a finite DAG it is <strong>unique</strong>: it is exactly the set of edges <span class="math">u \to v</span> for which no other path from <span class="math">u</span> to <span class="math">v</span> exists (Aho, Garey and Ullman, 1972).</p>
 <div class="math">E^- = \{(u, v) \in E : \text{there is no path } u \rightsquigarrow v \text{ that avoids the edge } (u, v)\}</div>
@@ -161,6 +182,253 @@
 </table>
 <p>The construction compares every pair of actions, so it takes <span class="math">O(|V|^2)</span> time. Faster constructions skip pairs that cannot give an edge (see <a class="ref" href="#ad-beyond-the-basic-adg">section 6</a>).</p>
 
+<h3 data-num id="ad-from-a-space-time-table-to-an-adg">From a space-time table to an ADG: the algorithm</h3>
+<p>Multi-agent planners usually return a <strong>space-time table</strong>: one row per robot, one column per time step, and in each cell the location the robot occupies at that moment. Time is discrete. A robot that changes cell between columns <span class="math">t</span> and <span class="math">t + 1</span> makes one move starting at <span class="math">t</span>; a robot that stays put is waiting. The example of <a class="ref" href="#ad-fig-85_adg_construction">Figure 3</a> as a table:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Robot</th>
+      <th><span class="math">t = 0</span></th>
+      <th><span class="math">t = 1</span></th>
+      <th><span class="math">t = 2</span></th>
+      <th><span class="math">t = 3</span></th>
+      <th><span class="math">t = 4</span></th>
+      <th>Actions extracted</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>AGV 1</td>
+      <td>A</td>
+      <td>B</td>
+      <td>C</td>
+      <td>C</td>
+      <td>C</td>
+      <td><span class="math">a^1_1</span>: A → B at 0; <span class="math">a^1_2</span>: B → C at 1</td>
+    </tr>
+    <tr>
+      <td>AGV 2</td>
+      <td>D</td>
+      <td>D</td>
+      <td>D</td>
+      <td>B</td>
+      <td>E</td>
+      <td><span class="math">a^2_1</span>: D → B at 2; <span class="math">a^2_2</span>: B → E at 3</td>
+    </tr>
+    <tr>
+      <td>AGV 3</td>
+      <td>C</td>
+      <td>F</td>
+      <td>F</td>
+      <td>F</td>
+      <td>F</td>
+      <td><span class="math">a^3_1</span>: C → F at 0</td>
+    </tr>
+  </tbody>
+</table>
+<p>The algorithm has five steps. Waits are not turned into actions: they never need to be dispatched, and the dependencies already make every real wait happen. Step 4 has two versions. The <strong>pairwise</strong> version is the rule exactly as written in <a class="ref" href="#ad-type-2-edges">section 3.3</a>. The <strong>sweep</strong> version links only consecutive visitors of each cell and gives the same order with fewer edges.</p>
+<pre><code class="language-text">input:  table[i][t] = cell occupied by robot i at time t,   t = 0 .. T
+output: ADG G = (V, E), or "cycle" if the plan needs synchronous moves
+
+1. Extract actions
+   for each robot i:
+     k = 0
+     for t = 0 .. T-1:
+       if table[i][t] != table[i][t+1]:            # a move; equal cells are a wait
+         k = k + 1
+         a[i][k] = (t, from = table[i][t], to = table[i][t+1])
+
+2. Vertices: one per action                        V = { a[i][k] }
+
+3. Type 1 edges
+   for each robot i, for k = 1 .. n_i - 1:   add a[i][k] -> a[i][k+1]
+
+4a. Type 2 edges, pairwise (Hönig et al.)          O(|V|^2)
+   for each pair of actions (u of robot i, v of robot j), i != j:
+     if u.from == v.to and u.t <= v.t:   add u -> v   # u leaves the cell v enters, no later than v starts
+
+4b. Type 2 edges, sweep per cell                   O(|V| log |V|)
+   for each robot, split its timeline into visits:
+     visit = (cell, arrival time, entering action or none, leaving action or none)
+   for each cell:
+     sort its visits by arrival time
+     for each consecutive pair (prev, next) of different robots:
+       if prev never leaves or next never enters:  error "two robots stay in the cell"
+       if prev.leave.t > next.enter.t:              error "robots overlap in the cell"
+       add prev.leave -> next.enter
+
+5. Topological sort; if it fails, the plan contains a cycle (synchronous moves)
+</code></pre>
+<p><strong>Why the sweep gives the same order.</strong> Take three robots that pass through cell B in turn: visits <span class="math">v_1, v_2, v_3</span>. The pairwise rule adds <span class="math">\mathrm{leave}(v_1) \to \mathrm{enter}(v_2)</span>, <span class="math">\mathrm{leave}(v_2) \to \mathrm{enter}(v_3)</span> and <span class="math">\mathrm{leave}(v_1) \to \mathrm{enter}(v_3)</span>. The sweep adds only the first two. The third is implied:</p>
+<div class="math">\mathrm{leave}(v_1) \to \mathrm{enter}(v_2) \to \dots \to \mathrm{leave}(v_2) \to \mathrm{enter}(v_3)</div>
+<p>The middle part is robot 2's own Type 1 chain, since it must enter B before it can leave. By induction, every pairwise edge is implied by consecutive hand-overs, so both versions have the same reachability. The two error checks also validate the plan: a correct space-time table never has two robots in one cell at once.</p>
+<p><strong>The C++ version.</strong> The file <code>examples/adg/space_time_to_adg.cpp</code> in this repository builds with nothing but C++17 and header-only Boost.Graph:</p>
+<pre><code class="language-bash">g++ -std=c++17 -O2 -Wall -Wextra -o space_time_to_adg examples/adg/space_time_to_adg.cpp &amp;&amp; ./space_time_to_adg
+</code></pre>
+<p>The graph type is the same shape as the scheduler's <code>DagBase</code>, with an <code>Action</code> bundle on each vertex and a <code>Dependency</code> bundle on each edge (the modern bundled-property style, doc 01, <a href="#bg-reading-the-boost-adjacency-list-type">reading the type</a>):</p>
+<pre><code class="language-cpp">// examples/adg/space_time_to_adg.cpp (excerpt; the file also has Step 2, AddVertices, and a demo main)
+using Cell = std::string;
+using SpaceTimeTable = std::vector&lt;std::vector&lt;Cell&gt;&gt;;  // [robot][t] -&gt; cell
+
+struct Action {                 // vertex payload: a^i_k in the text
+  int robot = 0;                // i
+  int index = 0;                // k, counting from 1 in the robot's plan
+  int start_time = 0;           // t^i_k: the move starts at t and arrives at t + 1
+  Cell from;                    // s^i_k
+  Cell to;                      // g^i_k
+};
+
+enum class EdgeType { kType1, kType2 };
+struct Dependency {             // edge payload
+  EdgeType type = EdgeType::kType1;
+};
+
+// vecS/vecS: vertices and out-edge lists in std::vector, so a Vertex is a std::size_t index.
+// bidirectionalS: keep in-edges too, so in_degree()/in_edges() are cheap (predecessors = parents).
+using Adg = boost::adjacency_list&lt;boost::vecS, boost::vecS, boost::bidirectionalS, Action, Dependency&gt;;
+using Vertex = Adg::vertex_descriptor;
+
+std::vector&lt;std::vector&lt;Action&gt;&gt; ExtractActions(const SpaceTimeTable&amp; table) {
+  std::vector&lt;std::vector&lt;Action&gt;&gt; actions(table.size());
+  for(int i = 0; i &lt; static_cast&lt;int&gt;(table.size()); ++i) {
+    const auto&amp; row = table[i];
+    for(int t = 0; t + 1 &lt; static_cast&lt;int&gt;(row.size()); ++t) {
+      if(row[t] != row[t + 1]) {
+        actions[i].push_back(Action {i, static_cast&lt;int&gt;(actions[i].size()) + 1, t, row[t], row[t + 1]});
+      }
+    }
+  }
+  return actions;
+}
+
+// Step 3: Type 1 edges, a^i_k -&gt; a^i_{k+1}.
+void AddType1Edges(Adg&amp; g, const std::vector&lt;std::vector&lt;Vertex&gt;&gt;&amp; ids) {
+  for(const auto&amp; chain : ids) {
+    for(std::size_t k = 0; k + 1 &lt; chain.size(); ++k) {
+      boost::add_edge(chain[k], chain[k + 1], Dependency {EdgeType::kType1}, g);
+    }
+  }
+}
+
+// Step 4a: Type 2 edges by the pairwise rule:
+//   a^i_k -&gt; a^j_l  if  i != j,  s^i_k == g^j_l,  t^i_k &lt;= t^j_l
+void AddType2EdgesPairwise(Adg&amp; g) {
+  const auto [first, last] = boost::vertices(g);
+  for(auto u = first; u != last; ++u) {
+    for(auto v = first; v != last; ++v) {
+      const Action&amp; leave = g[*u];
+      const Action&amp; enter = g[*v];
+      if(leave.robot != enter.robot &amp;&amp; leave.from == enter.to &amp;&amp; leave.start_time &lt;= enter.start_time) {
+        boost::add_edge(*u, *v, Dependency {EdgeType::kType2}, g);
+      }
+    }
+  }
+}
+
+// Step 4b: Type 2 edges by a sweep per cell. A "visit" is one stay of one robot in one cell: it begins with
+// the action that enters the cell (none for the robot's start cell) and ends with the action that leaves it
+// (none if the robot never leaves). Sorted by arrival time, each visit must end before the next one by a
+// different robot begins; that hand-over is exactly one Type 2 edge. Edges to later visitors are implied
+// through the next visitor's own Type 1 chain, so they are not needed.
+struct Visit {
+  int arrival = -1;                   // -1: the robot starts here
+  int robot = 0;
+  std::optional&lt;Vertex&gt; enter;        // the action whose goal is this cell
+  std::optional&lt;Vertex&gt; leave;        // the action whose start is this cell
+};
+
+void AddType2EdgesSweep(Adg&amp; g, const SpaceTimeTable&amp; table, const std::vector&lt;std::vector&lt;Vertex&gt;&gt;&amp; ids) {
+  std::map&lt;Cell, std::vector&lt;Visit&gt;&gt; visits;
+  for(int i = 0; i &lt; static_cast&lt;int&gt;(ids.size()); ++i) {
+    Visit current {-1, i, std::nullopt, std::nullopt};
+    Cell here = table[i].front();
+    for(Vertex v : ids[i]) {
+      current.leave = v;                                   // this action leaves `here`
+      visits[here].push_back(current);
+      here = g[v].to;
+      current = Visit {g[v].start_time + 1, i, v, std::nullopt};  // ... and enters its goal at t + 1
+    }
+    visits[here].push_back(current);                       // the last stay never ends
+  }
+  for(auto&amp; [cell, list] : visits) {
+    std::sort(list.begin(), list.end(), [](const Visit&amp; a, const Visit&amp; b) {
+      return std::tie(a.arrival, a.robot) &lt; std::tie(b.arrival, b.robot);
+    });
+    for(std::size_t n = 0; n + 1 &lt; list.size(); ++n) {
+      const Visit&amp; prev = list[n];
+      const Visit&amp; next = list[n + 1];
+      if(prev.robot == next.robot) {
+        continue;                                          // ordered by that robot's Type 1 chain
+      }
+      if(!prev.leave || !next.enter) {
+        throw std::runtime_error("invalid plan: two robots occupy cell " + cell + " for good");
+      }
+      if(g[*prev.leave].start_time &gt; g[*next.enter].start_time) {
+        throw std::runtime_error("invalid plan: robots overlap in cell " + cell);
+      }
+      boost::add_edge(*prev.leave, *next.enter, Dependency {EdgeType::kType2}, g);
+    }
+  }
+}
+
+// Step 5: an ADG must be acyclic. boost::topological_sort throws boost::not_a_dag on a cycle; it writes
+// vertices in reverse topological order, so reverse the result.
+std::vector&lt;Vertex&gt; TopologicalOrder(const Adg&amp; g) {
+  std::vector&lt;Vertex&gt; order;
+  boost::topological_sort(g, std::back_inserter(order));
+  std::reverse(order.begin(), order.end());
+  return order;
+}
+</code></pre>
+<p>Its output for the example, plus a corridor that three robots cross in turn and the three-robot rotation:</p>
+<pre><code class="language-text">Pairwise rule: 5 vertices, 4 edges
+  Type 1  a1.1 (A-&gt;B @0)  -&gt;  a1.2 (B-&gt;C @1)
+  Type 1  a2.1 (D-&gt;B @2)  -&gt;  a2.2 (B-&gt;E @3)
+  Type 2  a1.2 (B-&gt;C @1)  -&gt;  a2.1 (D-&gt;B @2)
+  Type 2  a3.1 (C-&gt;F @0)  -&gt;  a1.2 (B-&gt;C @1)
+Sweep: 5 vertices, 4 edges
+  Type 1  a1.1 (A-&gt;B @0)  -&gt;  a1.2 (B-&gt;C @1)
+  Type 1  a2.1 (D-&gt;B @2)  -&gt;  a2.2 (B-&gt;E @3)
+  Type 2  a1.2 (B-&gt;C @1)  -&gt;  a2.1 (D-&gt;B @2)
+  Type 2  a3.1 (C-&gt;F @0)  -&gt;  a1.2 (B-&gt;C @1)
+Same order (same reachability): true
+One topological order:  a3.1 (C-&gt;F @0)  a1.1 (A-&gt;B @0)  a1.2 (B-&gt;C @1)  a2.1 (D-&gt;B @2)  a2.2 (B-&gt;E @3)
+Depth levels (each level can run in parallel):
+  level 0:  a1.1 (A-&gt;B @0)  a3.1 (C-&gt;F @0)
+  level 1:  a1.2 (B-&gt;C @1)
+  level 2:  a2.1 (D-&gt;B @2)
+  level 3:  a2.2 (B-&gt;E @3)
+Corridor, pairwise rule: 6 vertices, 6 edges
+  Type 1  a1.1 (A-&gt;B @0)  -&gt;  a1.2 (B-&gt;C @1)
+  Type 1  a2.1 (D-&gt;B @1)  -&gt;  a2.2 (B-&gt;E @2)
+  Type 1  a3.1 (F-&gt;B @2)  -&gt;  a3.2 (B-&gt;G @3)
+  Type 2  a1.2 (B-&gt;C @1)  -&gt;  a2.1 (D-&gt;B @1)
+  Type 2  a1.2 (B-&gt;C @1)  -&gt;  a3.1 (F-&gt;B @2)
+  Type 2  a2.2 (B-&gt;E @2)  -&gt;  a3.1 (F-&gt;B @2)
+Corridor, sweep: 6 vertices, 5 edges
+  Type 1  a1.1 (A-&gt;B @0)  -&gt;  a1.2 (B-&gt;C @1)
+  Type 1  a2.1 (D-&gt;B @1)  -&gt;  a2.2 (B-&gt;E @2)
+  Type 1  a3.1 (F-&gt;B @2)  -&gt;  a3.2 (B-&gt;G @3)
+  Type 2  a1.2 (B-&gt;C @1)  -&gt;  a2.1 (D-&gt;B @1)
+  Type 2  a2.2 (B-&gt;E @2)  -&gt;  a3.1 (F-&gt;B @2)
+Same order (same reachability): true
+Rotation: not a DAG (the plan needs synchronous moves)
+</code></pre>
+<p>Four things to notice in the output:</p>
+<ul>
+  <li>For the example, both rules give the same four edges: each cell there has at most two visitors.</li>
+  <li>For the corridor, the pairwise rule adds <span class="math">a^1_2 \to a^3_1</span>, which the sweep omits. The reachability check confirms the orders are identical.</li>
+  <li>The depth levels show the parallelism directly: level 0 holds <span class="math">a^1_1</span> and <span class="math">a^3_1</span>.</li>
+  <li>The rotation fails the topological sort.</li>
+</ul>
+<p><strong>How this maps to the scheduler.</strong> <code>BuildActionDagFromMotions</code> (<a class="ref" href="#ad-how-the-action-dag-is-built">section 7.2</a>) is the pairwise rule, generalised in three ways:</p>
+<ul>
+  <li>Its input is CHUGG's continuous-time motions rather than a table.</li>
+  <li>The visits are kept in a <code>GarageOccupancyChecker</code> keyed by pose and by motion-graph edge, not by cell.</li>
+  <li>"Same cell" becomes "conflicting footprints", via the collision table.</li>
+</ul>
+<p>Because occupancy is never cleared, every earlier occupant becomes a predecessor, as in step 4a, and <code>Reduce()</code> removes the implied edges afterwards. A sweep version would add fewer edges and make <code>Reduce()</code> cheaper. It is harder there, though, because a footprint conflicts with a <em>set</em> of locations, so "the previous visitor" has to be tracked per conflict set rather than per cell.</p>
+
 <h3 data-num id="ad-cycles">Cycles mean "only with perfect timing"</h3>
 <p>Suppose three robots rotate around a triangle at the same instant: <span class="math">\mathrm{X} \to \mathrm{Y}</span>, <span class="math">\mathrm{Y} \to \mathrm{Z}</span>, <span class="math">\mathrm{Z} \to \mathrm{X}</span>, all at <span class="math">t = 0</span>. Each action leaves a location another one enters at the same time, and <span class="math">t \le t</span> holds, so the rule adds three edges that form a cycle. Each robot waits for another to leave. The plan is only safe if all three move in perfect lockstep, which real robots cannot guarantee. Hönig et al. call such transitions unsafe, and point out that they show up as cycles in the ADG. A planner whose output must run on an ADG must therefore avoid them. In the scheduler, a cycle in the action DAG makes <code>GetTopologicalOrdering()</code> fail, and the response reports "Failed to get final ordering for action DAG!".</p>
 
@@ -214,6 +482,38 @@
 </ul>
 <p>Delays on critical actions hurt one-for-one. Delays on actions with slack are absorbed up to the slack. Unordered actions never affect each other.</p>
 <p><strong>Two things the ADG cannot do.</strong> It cannot make a schedule faster than its order allows: if the order the planner chose was poor, the ADG keeps it. That is what switchable ADGs address (next section). And it does not recover from a robot leaving its path or failing outright; that needs a replan.</p>
+
+<h3 data-num id="ad-where-parallelism-comes-from">Where the parallelism comes from</h3>
+<p>A natural reading of an ADG: robots move in parallel only where the graph branches, at several roots or at a vertex with several children. If the graph is one chain, one root and one child after another down to a single leaf, every action waits for the one before it and nothing runs at the same time. That reading is right, with two refinements.</p>
+<p><strong>The rule.</strong> Two actions can be in progress at the same time only if they are <em>unordered</em> (<span class="math">u \parallel v</span>, <a class="ref" href="#ad-dags-are-partial-orders">section 2.2</a>). If <span class="math">u \prec v</span>, there is a path <span class="math">u \to x_1 \to \dots \to v</span>, and every edge on it forces "finish before start". A Type 1 edge allows the next action to be <em>queued</em> early, but the robot still runs its queue one action at a time. So <span class="math">v</span> starts after <span class="math">u</span> has finished, whatever the delays. Unordered actions <em>may</em> overlap; whether they do depends on durations and delays.</p>
+<p><strong>Refinement 1: judge the reduced graph, not the edges as built.</strong> All actions are mutually ordered (a <em>total order</em>, a strict sequence) exactly when the transitive reduction is a single path. A vertex with two children is not enough to give parallelism if one child reaches the other: in panel 4 of <a class="ref" href="#ad-fig-89_adg_parallelism">Figure 5</a>, <span class="math">a</span> has edges to <span class="math">b</span> and to <span class="math">c</span>, but <span class="math">a \to c</span> is implied by <span class="math">a \to b \to c</span>. The scheduler's builder adds many such implied edges on purpose (<a class="ref" href="#ad-how-the-action-dag-is-built">section 7.2</a>), so look at the schedule <em>after</em> <code>Reduce()</code>.</p>
+<p><strong>Refinement 2: branches can start anywhere.</strong> Several roots is one way to start parallel work: branches that begin at time 0. A fork at any vertex (out-degree 2 or more in the reduced graph) starts parallel branches later, and a join (in-degree 2 or more) ends them. Panel 2 has one root and one leaf, but its middle runs in parallel. Put together: the reduced ADG allows parallelism exactly when it is not a single path, that is, when it has two or more roots, or some vertex with two or more parents or children.</p>
+<figure id="ad-fig-89_adg_parallelism">
+  <img src="figures/89_adg_parallelism.svg" alt="Where parallelism comes from">
+  <figcaption><strong>Shape decides parallelism.</strong> (1) One chain over two AGVs: they take turns, the span equals the total work, width 1. (2) One root and one leaf, but a fork and a join: <span class="math">p</span> and <span class="math">q</span> run at the same time. (3) Two independent chains (two roots, no shared space): the AGVs never wait for each other. (4) <span class="math">a</span> appears to have two children, but the extra edge is implied, so the graph is a chain. Each panel shows the earliest-start schedule, the work <span class="math">W</span>, the span <span class="math">L</span>, their ratio and the width.</figcaption>
+</figure>
+<p><strong>How much parallelism.</strong> Three numbers describe it:</p>
+<ul>
+  <li><strong>Work</strong> <span class="math">W = \sum_v d(v)</span>: the total time of all actions.</li>
+  <li><strong>Span</strong> <span class="math">L</span>: the length of the critical path, which is the earliest-start makespan (<a class="ref" href="#ad-timing-critical-path-and-slack">section 4.4</a>). Always <span class="math">L \le W</span>, with equality exactly for a chain: in a chain the makespan is the sum of all durations.</li>
+  <li><strong>Width</strong> <span class="math">\omega</span>: the largest number of pairwise unordered actions, an upper bound on how many can be in progress at once. By Dilworth's theorem, <span class="math">\omega</span> is also the smallest number of chains that cover all the vertices.</li>
+</ul>
+<p>The ratio <span class="math">W / L</span> is the average parallelism. It is 1 for a chain and grows with the number of actions that genuinely overlap. One bound follows directly from Type 1 edges: each robot's actions form a chain, so those chains cover the graph, and <span class="math">\omega \le</span> the number of robots. An ADG never asks one robot to do two things at once. For the example of <a class="ref" href="#ad-fig-86_adg_critical_path">Figure 4</a>, <span class="math">W = 12</span>, <span class="math">L = 10</span> and <span class="math">\omega = 2</span>. The only overlap is at the start, where <span class="math">a^1_1</span> and <span class="math">a^3_1</span> run together; everything after that is a chain through cell B and cell C.</p>
+<p><strong>What a chain still gives you.</strong> Even with no parallelism, the ADG keeps execution safe under delays: each action waits for its predecessor's completion instead of a clock. A long chain across several robots usually means the plan itself is sequential, for example every route passes one narrow aisle, one VRC or one bay. The ADG does not add parallelism the plan does not have; it only stops the clock from destroying the parallelism that is there.</p>
+<p><strong>In the scheduler.</strong> Parallel actions in <code>Schedule.nodes</code> come from AGVs, bays and VRCs whose motions neither overlap in footprint nor are linked through the event DAG. Things that serialise them:</p>
+<ul>
+  <li><strong>Shared space.</strong> Every pair of actions with conflicting footprints is ordered, however far apart in time. That is required for safety, not a flaw.</li>
+  <li><strong>Event-level edges.</strong> Each event-DAG edge orders <em>all</em> of one event's actions before <em>all</em> of the next one's. Edges added for CHUGG's benefit (<code>AddNodeArrivalDeps</code>, <code>EnsureAgvMovePathsClear</code>) therefore also serialise execution.</li>
+  <li><strong>The VECS chain quirk.</strong> All VECS commands are chained into one sequence (<a class="ref" href="#ad-our-edges-versus-type-1-and-type-2">section 7.3</a>).</li>
+  <li><strong>The committed schedule.</strong> Actions in <code>base_schedule</code> keep running in parallel with the new plan, but their AGVs and nodes are excluded from it (<a class="ref" href="#ad-persistent-planning-base-schedule-and-the-split">section 7.5</a>).</li>
+</ul>
+<p><strong>Measuring it.</strong> These numbers are cheap to compute from every <code>PlanResponse</code>, and worth recording next to the timing benchmarks in doc 03:</p>
+<ul>
+  <li><span class="math">W</span> is the sum of <code>duration</code>.</li>
+  <li><span class="math">L</span> comes from the recurrence over <code>parents</code>, in array order, since the array is topological.</li>
+  <li><span class="math">\omega</span> comes from Dilworth's theorem: <span class="math">\omega = |V| - |M|</span>, where <span class="math">M</span> is a maximum matching in the bipartite graph with an edge <span class="math">(u, v)</span> for every <span class="math">u \prec v</span>. That is a few milliseconds for a few hundred actions.</li>
+</ul>
+<p>A refactor that leaves assignments unchanged should leave all three unchanged. A solver change that improves <span class="math">W / L</span> is one that genuinely lets more robots move at once.</p>
 
 <h2 data-num id="ad-beyond-the-basic-adg">Beyond the basic ADG</h2>
 <ul>
@@ -444,6 +744,11 @@ for(const auto&amp; node : request_data.base_schedule.nodes) {
 <details>
   <summary>5. Two arrays <code>Schedule.nodes</code> from the same input list the actions in different orders. Are the schedules different?</summary>
   <p>Not necessarily. Both may be topological orders of the same DAG. Map actions between the two by content, then compare the reduced edge sets (or the reachability relations). If they are equal, the dispatcher will enforce the same orders.</p>
+</details>
+
+<details>
+  <summary>6. <code>Schedule.nodes</code> is written in one topological order. Does that make the robots move one at a time?</summary>
+  <p>No. The order is only how the graph is listed; each node keeps its <code>parents</code>, and execution starts a node as soon as its parents are done, whatever its index. Two unordered actions can be listed either way round and still run together. Only a consumer that ignored <code>parents</code> and walked the array would serialise them.</p>
 </details>
 
 <h2 data-num id="ad-references">References</h2>
