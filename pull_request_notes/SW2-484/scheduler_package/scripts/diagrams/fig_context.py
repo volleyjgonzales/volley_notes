@@ -543,15 +543,18 @@ def chugg_io():
     d.rect(cx0, cy0, cw, ch, rx=12, fill=T.tint(T.amber, 0.06, T.bg), stroke=T.amber, sw=1.6)
     d.text(cx0 + 16, cy0 + 22, "volley::Chugg  (motion_planner/chugg.hpp)", size=13, family="mono", weight=700,
            fill=T.amber)
-    d.text(cx0 + 16, cy0 + 42, "\"This is CHUGG v0.1\"  ·  SolveSequential(audit_ptr)", size=11, family="mono",
+    d.text(cx0 + 16, cy0 + 42, "Constrained Huge Unknown Graph alGorithm", size=11, family="mono",
            fill=T.fg2)
-    d.rect(cx0 + 16, cy0 + 60, cw - 32, ch - 120, rx=8, fill="none", stroke=T.faint, sw=1.1, dash="5 4")
-    d.text(cx0 + 28, cy0 + 78, "inside: not in the snapshots; from comments only", size=11, fill=T.muted)
-    inside = ["InitializeEventOrder: a topological order of the", "  events; per-AGV chains can interleave",
-              "SippEnvironment: safe-interval path planning", "  per motion, against already-planned ones",
-              "A* with the all-pairs heuristic (inadmissible", "  under the run-extension cost: fast, maybe",
-              "  suboptimal paths)",
-              "GetDependencyCompletionTime: when each", "  event's prerequisites are done"]
+    d.rect(cx0 + 16, cy0 + 60, cw - 32, ch - 120, rx=8, fill="none", stroke=T.amber, sw=1.1)
+    d.text(cx0 + 28, cy0 + 78, "inside (chugg_common.cpp, chugg_sequential.cpp)", size=11, fill=T.muted)
+    inside = ["InitializeEventOrder: one topological order", "  of the event DAG = the priority order",
+              "for each event in that order:", "  wait for dependencies (GetDependency-",
+              "    CompletionTime), then plan it:",
+              "  AGV / tray: SIPP on this AGV's safe-",
+              "    interval table, others frozen in place",
+              "  bay / VECS: fixed duration from the params",
+              "  commit; carve into every other AGV's table",
+              "pairwise collision check of all new motions"]
     for i, ln in enumerate(inside):
         d.text(cx0 + 28, cy0 + 102 + i * 18, ln, size=11, family="mono", fill=T.fg2)
     d.text(cx0 + 16, cy0 + ch - 44, "nullopt -> every job fails:", size=11, fill=T.red)
@@ -581,12 +584,11 @@ def chugg_io():
     frame(d, title="CHUGG: what goes in, what comes out",
           subtitle="The scheduler decides WHAT happens and in which order (the event DAG). CHUGG decides WHEN and "
                    "WHERE along the graph, so that bodies never collide: it returns timed trajectories for every entity.",
-          badge_key="concept",
-          legend=[("box", T.sky, "inputs built in PlanMotions"), ("box", T.amber, "volley::Chugg"),
-                  ("box", T.green, "output"), ("dashbox", T.faint, "internals known only from comments")],
-          footnote="Inputs, the call, the output type and the Motion accessors are from scheduler.cpp (PlanMotions, "
-                   "CollectAndCollapseTrajectoryMotions, BuildActionDagFromMotions). motion_planner itself is not in "
-                   "the snapshots, so everything in the dashed box is from comments and names.")
+          badge_key="as-built",
+          legend=[("box", T.sky, "inputs built in PlanMotions"), ("box", T.amber, "volley::Chugg::SolveSequential"),
+                  ("box", T.green, "output")],
+          footnote="Inputs and the call are from Scheduler::PlanMotions; the inside of the amber box is from motion_planner "
+                   "(chugg_common.cpp, chugg_sequential.cpp); the Motion accessors are from trajectory.hpp.")
     return d
 
 

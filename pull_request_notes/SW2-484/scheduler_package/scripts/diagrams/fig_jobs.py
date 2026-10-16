@@ -1306,8 +1306,8 @@ def job_charge_payload():
             ("tray on a TYPE_EV_CHARGE node whose VECS is\nREADY_TO_CHARGE -> use it, no tray move",
              "P20 is plain parking.", "no", "skip"),
             ("[dest, _] = ResolveBlockingTrays(tray, job_index,\n  working_state)   // unblocking moves discarded",
-             "The open-space search (in motion_planner, not in this snapshot) is expected to return a VECS node "
-             "for this payload: V23 here.", "dest = V23", "ok"),
+             "The open-space search only accepts a spot with a VECS for an EV-charge payload "
+             "(OpenSpaceSearchEnvironment): V23 here.", "dest = V23", "ok"),
             ("no dest -> fail; dest has no VECS -> fail", "V23 is a VECS.", "passes", "ok"),
             ("UseEvChargeHeading(dest);\nPlanReparkTrayJob(ctx, tray, job_index, false, dest)",
              "UseEvChargeHeading only matters on 576_eccles. Adds the TrayMove with rule A (T20); rule C would wait "

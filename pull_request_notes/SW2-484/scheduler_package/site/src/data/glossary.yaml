@@ -237,7 +237,7 @@
   code: [Chugg, "volley::Chugg", PlanMotions, SolveSequential]
   text: [CHUGG]
   to: bg-chugg-the-motion-planner
-  def: The motion planner - turns the event DAG into timed, collision-free trajectories.
+  def: Constrained Huge Unknown Graph alGorithm - the motion planner; plans the event DAG's events one at a time (prioritized planning with SIPP) into timed, collision-free trajectories.
   decl: Chugg
 
 - term: Building the response
@@ -297,3 +297,15 @@
   code: [SingleSourceSearch, "volley::SingleSourceSearch", GetPosePath, "volley::GetPosePath", GetStaticFilter, "volley::GetStaticFilter", HideAgvs, GraphFilterProperties, "volley::GraphFilterProperties"]
   to: bg-the-motion-planner-toolbox
   def: Single-agent searches and filters used while the event DAG is built; CHUGG is the only multi-agent planner.
+
+- term: SIPP
+  code: [SippAgv, "volley::SippAgv", SippEnvironment, SafeIntervalTable, SippState, SippGoal]
+  text: [SIPP, safe intervals, safe interval]
+  to: bg-sipp-the-single-agv-search
+  def: Safe Interval Path Planning - CHUGG's single-AGV search over (place, safe time window) states.
+  decl: SippAgv
+
+- term: Prioritized planning
+  text: [prioritized planning, sequential assumption]
+  to: bg-inside-solvesequential
+  def: Plan one event at a time against everything already planned, in the event DAG's topological order, never revising earlier choices.

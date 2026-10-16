@@ -304,7 +304,8 @@ interface DeclEntry {
   names: string[];
   from: string;
   file: string;
-  parts: string[];
+  /** line prefix, or {start, lines} to take a fixed number of lines (e.g. a template's signature) */
+  parts: (string | { start: string; lines: number })[];
   title?: string;
   only_h2?: string[];
   /** limit to sections whose h2 id starts with this (e.g. "pr-" for doc 02) */
@@ -328,7 +329,7 @@ interface DeclRule {
 }
 export type DeclIndex = Map<string, DeclRule[]>;
 
-const DECL_MAX_LINES = 160;
+const DECL_MAX_LINES = 280;
 const snapshots = new Map<string, string>();
 
 const onlyOf = (e: DeclEntry): DeclRule['only'] =>
@@ -367,7 +368,7 @@ function snapshotFile(from: string, file: string): string {
 
 /** One declaration: from the line starting with `prefix` (plus the comments/template line above it)
  *  to the first ';' outside braces. */
-function extractDecl(src: string, prefix: string, where: string): string[] {
+function extractDecl(src: string, prefix: string, where: string, take?: number): string[] {
   const lines = src.split('\n');
   const i = lines.findIndex((l) => l.trimStart().startsWith(prefix));
   if (i < 0) throw new BuildError(`definitions: "${prefix}" not found in ${where}`);
@@ -375,6 +376,11 @@ function extractDecl(src: string, prefix: string, where: string): string[] {
   while (a > 0 && /^\s*(\/\/|template\s*<)/.test(lines[a - 1])) a--;
   let depth = 0;
   let j = i;
+  if (take !== undefined) {
+    const block = lines.slice(a, i + take);
+    const ind = Math.min(...block.filter((l) => l.trim()).map((l) => /^ */.exec(l)![0].length));
+    return [...block.map((l) => l.slice(ind)), '  // ... (body omitted)'];
+  }
   for (; j < lines.length; j++) {
     const code = lines[j].replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/\/\/.*$/, '');
     for (const ch of code) {
@@ -411,7 +417,11 @@ function loadDecls(): DeclIndex {
       continue;
     }
     const src = snapshotFile(e.from, e.file);
-    const blocks = e.parts.map((pfx) => extractDecl(src, pfx, `${e.from}:${e.file}`));
+    const blocks = e.parts.map((pt) =>
+      typeof pt === 'string'
+        ? extractDecl(src, pt, `${e.from}:${e.file}`)
+        : extractDecl(src, pt.start, `${e.from}:${e.file}`, pt.lines),
+    );
     let lines = blocks.flatMap((b, k) => (k ? ['', ...b] : b));
     const total = lines.length;
     if (total > DECL_MAX_LINES) {

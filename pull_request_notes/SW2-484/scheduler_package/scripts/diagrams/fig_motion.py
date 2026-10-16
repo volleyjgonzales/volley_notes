@@ -51,8 +51,8 @@ def planning_pipeline():
     ours = [
         ("1  Event DAG", ["`ctx->events : ScheduleEventDag`", "built by Plan*Job, tray and", "AGV assignment, Reduce()",
                           "WHAT happens, in which order;", "no times, no paths"], T.violet),
-        ("2  CHUGG", ["`Chugg::SolveSequential`", "MAPF with precedence:", "events in a topological order,",
-                      "each timed against the motions", "already planned (SIPP, A*)"], T.amber),
+        ("2  CHUGG", ["`Chugg::SolveSequential`", "prioritized planning: events", "one at a time in a topological",
+                      "order, each timed against the", "motions already planned (SIPP)"], T.amber),
         ("3  Action DAG = ADG", ["`ResponseFromTrajectories`", "one ActionNode per motion with", "a delta; same-entity,",
                                  "occupancy and event edges", "`-> PlanResponse.schedule.nodes`"], T.green),
         ("4  Dispatch", ["runs Schedule.nodes by", "parents (not in the", "snapshots)"], T.sky),
@@ -82,11 +82,11 @@ def planning_pipeline():
     frame(d, title="Two DAGs around one motion planner",
           subtitle="Order of the pipeline is MAPF -> ADG -> executor, as in the literature. What is different is "
                    "step 1: CHUGG's input is a precedence graph between events of many entities, not one goal per robot.",
-          badge_key="concept",
+          badge_key="as-built",
           legend=[("box", T.violet, "task level: what, in which order"), ("box", T.amber, "motion planning: when, where"),
                   ("box", T.green, "execution graph (ADG)"), ("dashbox", T.sky, "outside the scheduler")],
-          footnote="Stages 1-3 are in scheduler.cpp (Plan, PlanMotions, ResponseFromTrajectories). CHUGG's internals "
-                   "are inferred from comments; motion_planner is not in the snapshots.")
+          footnote="Stages 1 and 3 are in scheduler.cpp (Plan, ResponseFromTrajectories); stage 2 is motion_planner "
+                   "(chugg_common.cpp, chugg_sequential.cpp), called from PlanMotions. Dispatch is not in the snapshots.")
     return d
 
 
@@ -150,9 +150,130 @@ def continuous_state():
     frame(d, title="A ContinuousState is a timeline per entity",
           subtitle="DiscreteGarageState is one snapshot. ContinuousState is every entity's Trajectory over continuous "
                    "time: back-to-back Motions, each a wait at a pose or a move along an edge.",
-          badge_key="concept",
+          badge_key="as-built",
           legend=[("box", T.green, "AGV 1's motions"), ("box", T.sky, "AGV 2's motions"),
                   ("dashbox", T.sky, "wait (no delta: dropped from the action DAG)")],
           footnote="Values from TEST(Scheduler, ContinuousStateToSchedule) in scheduler_tests.cpp. The test's comment "
                    "calls the fourth argument \"JobId\"; ResponseFromTrajectories reads it as the event vertex.")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 93 — SolveSequential step by step, and what a safe-interval table holds
+# --------------------------------------------------------------------------------------
+
+@figure("93_chugg_sequential", "SolveSequential step by step", DOC1)
+def chugg_sequential():
+    d = Doc("93_chugg_sequential", "SolveSequential: prioritized planning over the event DAG",
+            "Setup once, then one pass over the events in topological order. AGV and tray events are planned by "
+            "SIPP on the AGV's safe-interval table with every other entity frozen at its last pose; bay and VECS "
+            "events get fixed durations. A final pairwise collision check returns the ContinuousState or nullopt.")
+    W = 520
+    # setup
+    setup = ["InitializeEventOrder: topological order (= priority); replay checks",
+             "every non-disabled AGV gets a SippAgv planner",
+             "static filters: entities that never move block the graph",
+             "initial motions carved into every AGV's safe-interval table",
+             "one SIPP goal per AgvMove / TrayMove, in that order"]
+    h0 = 34 + 19 * len(setup)
+    d.rect(0, 0, W, h0, rx=10, fill=T.card, stroke=T.violet, sw=1.5)
+    d.text(14, 18, "Setup  (constructor, SolveInitialization, MakeRootNode)", size=12.5, weight=600, fill=T.violet)
+    for i, ln in enumerate(setup):
+        d.text(14, 42 + i * 19, ln, size=11, fill=T.fg2)
+    # loop
+    y1 = h0 + 40
+    connect(d, [(W / 2, h0), (W / 2, y1)], kind="flow", color=T.fg2, size=8)
+    steps = [
+        (T.amber, "for each event in the order", ["start = the entity's current end time"]),
+        (T.amber, "wait for dependencies", ["GetDependencyCompletionTime: latest end of a",
+                                            "dependency's motions; fill the gap with a wait"]),
+    ]
+    y = y1
+    lh = 19
+    boxes = []
+    for col, title, lines in steps:
+        h = 30 + lh * len(lines)
+        d.rect(0, y, W, h, rx=8, fill=T.card, stroke=col, sw=1.3)
+        d.text(14, y + 17, title, size=12, weight=600, fill=col)
+        for i, ln in enumerate(lines):
+            d.text(14, y + 38 + i * lh, ln, size=11, fill=T.fg2)
+        boxes.append(BBox(0, y, W, y + h))
+        y += h + 26
+    connect(d, [(W / 2, boxes[0].y1), (W / 2, boxes[1].y0)], kind="flow", color=T.fg2, size=8)
+    # branch
+    bw = (W - 20) / 2
+    by = y + 10
+    agv = ["1  freeze every other dynamic entity", "    at its last pose, forever",
+           "2  SippAgv::PlanEvents: SIPP for this", "    one event on the AGV's table",
+           "3  unfreeze; append the motions",
+           "4  DeconflictAgvs: carve them into", "    every other AGV's table for good"]
+    bay = ["bay: door close / open + wait /", "    PROCESS_RETRIEVE 60 s; a closing", "    door first waits for the area",
+           "VECS: vecs_transition seconds", "VRC: no branch (never created)"]
+    hb = 34 + lh * max(len(agv), len(bay))
+    d.rect(0, by, bw, hb, rx=8, fill=T.card, stroke=T.sky, sw=1.3)
+    d.text(14, by + 17, "AgvMove / TrayMove", size=12, weight=600, family="mono", fill=T.sky)
+    for i, ln in enumerate(agv):
+        d.text(14, by + 40 + i * lh, ln, size=11, fill=T.fg2)
+    d.rect(bw + 20, by, bw, hb, rx=8, fill=T.card, stroke=T.pink, sw=1.3)
+    d.text(bw + 34, by + 17, "BayTransition / VecsTransition", size=12, weight=600, family="mono", fill=T.pink)
+    for i, ln in enumerate(bay):
+        d.text(bw + 34, by + 40 + i * lh, ln, size=11, fill=T.fg2)
+    mid = boxes[1].y1 + (by - boxes[1].y1) / 2
+    connect(d, [(W / 2, boxes[1].y1), (W / 2, mid), (bw / 2, mid), (bw / 2, by)], kind="flow", color=T.sky, size=8)
+    connect(d, [(W / 2, mid), (bw + 20 + bw / 2, mid), (bw + 20 + bw / 2, by)], kind="flow", color=T.pink, size=8)
+    # loop-back
+    lx = -36
+    yl = by + hb + 18
+    connect(d, [(bw / 2, by + hb), (bw / 2, yl), (lx, yl), (lx, boxes[0].cy), (0, boxes[0].cy)], kind="flow",
+            color=T.amber, size=8, dash="5 4")
+    connect(d, [(bw + 20 + bw / 2, by + hb), (bw + 20 + bw / 2, yl), (bw / 2, yl)], kind="line", color=T.amber,
+            dash="5 4")
+    label_pill(d, lx, (yl + boxes[0].cy) / 2, "next event", color=T.amber, size=10, family="sans")
+    # end
+    ye = yl + 40
+    d.rect(0, ye, W, 64, rx=8, fill=T.card, stroke=T.green, sw=1.4)
+    d.text(14, ye + 18, "after the last event", size=12, weight=600, fill=T.green)
+    d.text(14, ye + 40, "CheckCollisions over every pair of new motions: any hit -> nullopt;", size=11, fill=T.fg2)
+    d.text(14, ye + 57, "else initial ContinuousState + new motions (GetUpdatedContinuousState)", size=11, fill=T.fg2)
+    gx = bw + 20 + bw / 2
+    connect(d, [(gx, yl), (gx, ye)], kind="flow", color=T.green, size=8)
+    label_pill(d, gx + 10, (yl + ye) / 2, "order exhausted", color=T.green, size=10, family="sans", anchor="start")
+
+    # right: safe-interval table rows
+    X0, PX = W + 150, 30
+    ty = 0
+    d.text(X0 - 60, ty + 10, "AGV 2's SafeIntervalTable while planning its 6 -> 9 -> 12 move", size=12.5, weight=600,
+           fill=T.fg)
+    d.text(X0 - 60, ty + 30, "(the Figure 92 example; key = footprint AGV + vertex)", size=11, fill=T.muted)
+    rows = [("vertex 9", [(0, 6, "AGV 1 passes: carved for good", "res")], "safe from 6 s on"),
+            ("vertex 11", [(6, 13, "AGV 1 parked: frozen while planning", "tmp")], "safe until 6 s"),
+            ("vertex 12", [], "always safe (no entry)")]
+    ry = ty + 66
+    for name, blocks, verdict in rows:
+        d.text(X0 - 80, ry + 14, name, size=11.5, family="mono", fill=T.fg2)
+        d.rect(X0, ry, 13 * PX, 28, rx=4, fill=T.tint(T.green, 0.16, T.bg), stroke=T.green, sw=1)
+        for (t0, t1, lab, kind) in blocks:
+            col = T.red if kind == "res" else T.amber
+            d.rect(X0 + t0 * PX, ry, (t1 - t0) * PX, 28, rx=4, fill=T.tint(col, 0.3, T.bg), stroke=col, sw=1.2,
+                   dash="4 3" if kind == "tmp" else None)
+            d.text(X0 + 13 * PX + 12, ry + 14, lab, size=10.5, fill=col)
+        d.text(X0 + 13 * PX + 12, ry + 14 + (16 if blocks else 0), verdict, size=10.5, fill=T.green)
+        ry += 58
+    for t in (0, 3, 6, 9, 12):
+        d.text(X0 + t * PX, ry - 10, f"{t} s", size=10, family="mono", fill=T.muted, anchor="middle")
+    note(d, X0 - 60, ry + 14, 560,
+         "AGV 2 may enter 9 only after 6 s. Its goal is 12, and reaching 12 counts only because 12 stays safe "
+         "forever afterwards. That rule plus the freeze is why an AGV that has not yet been planned to leave a "
+         "node blocks it for every event planned before its departure (AddNodeArrivalDeps).",
+         color=T.muted)
+    frame(d, title="SolveSequential: prioritized planning over the event DAG",
+          subtitle="One pass in topological order, never revisited. Only AGV moves are searched; everything else gets "
+                   "a fixed duration. Safety comes from safe-interval tables, then a final pairwise check.",
+          badge_key="as-built",
+          legend=[("box", T.violet, "once per call"), ("box", T.amber, "per event"), ("box", T.sky, "SIPP search"),
+                  ("box", T.pink, "fixed-duration events"), ("box", T.red, "reservation (permanent)"),
+                  ("dashbox", T.amber, "sequential assumption (removed after the event)")],
+          footnote="From chugg_common.cpp (InitializeEventOrder, SolveInitialization, MakeRootNode, "
+                   "GetDependencyCompletionTime) and chugg_sequential.cpp (PlanNodeSequential, PlanEventSequential, "
+                   "SetEventSafeIntervals). The table on the right is illustrative.")
     return d

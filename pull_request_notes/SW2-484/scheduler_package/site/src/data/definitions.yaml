@@ -186,116 +186,125 @@ cpp:
     file: include/common_ros/garage_graph.hpp
     parts: ["using VertexVectorPropertyMap", "using EdgeVectorPropertyMap"]
 
-  # ---- motion_planner, cost_functions and the shared utility library are NOT in the snapshots.
-  # These sketches are reconstructed from how scheduler.cpp and its tests call them, so they show
-  # only members we have seen used, with guessed spellings for parameter names. Replace each with a
-  # snapshot extract once the real headers are supplied.
-  - names: [ContinuousState, "volley::ContinuousState", "std::optional<volley::ContinuousState>", "ContinuousState::GetTrajectories"]
-    file: "motion_planner/continuous_state.hpp (not supplied)"
-    note: "Reconstructed from call sites in scheduler.cpp and scheduler_tests.cpp; members not used there are missing and parameter names are guesses."
-    sketch: |
-      // Continuous TIME (not continuous space): every entity's motion along the garage graph,
-      // as a timeline. The discrete counterpart is DiscreteGarageState (one snapshot).
-      class ContinuousState {
-      public:
-        // Every entity of `state` stands still at its pose from `start` on
-        // (PlanMotions: "all elements just stay at their initial state until right now").
-        ContinuousState(const DiscreteGarageState& state, const CollisionTable& table,
-                        const Layout& layout, Interval::Timepoint start);
-        ContinuousState(const DiscreteGarageState& state, const CollisionTable& table,
-                        const Layout& layout);                         // tests: start = Timepoint{}
-
-        void SetTrajectory(GarageEntityIdMsg entity, Trajectory trajectory);   // tests
-        // entity -> its Trajectory; iterated as `for (const auto& [entity_id, traj] : ...)`
-        const /* map<GarageEntityIdMsg, Trajectory> */ auto& GetTrajectories() const;
-      };
+  # ---- motion_planner (sources/repomix-motion-planner.xml)
+  - names: [ContinuousState, "volley::ContinuousState", "std::optional<volley::ContinuousState>", "ContinuousState::GetTrajectories", TrajectoryMap, "ContinuousState::TrajectoryMap"]
+    from: motion-planner
+    file: include/motion_planner/continuous_state.hpp
+    parts: ["class ContinuousState {"]
   - names: [Trajectory, "volley::Trajectory"]
-    file: "motion_planner/trajectory.hpp (not supplied)"
-    note: "Reconstructed from call sites in scheduler.cpp and scheduler_tests.cpp; members not used there are missing."
-    sketch: |
-      // One entity's motions, back to back in time; iterable as a sequence of Motion.
-      class Trajectory {
-      public:
-        void AddMotion(Motion motion);                    // appended in time order (tests)
-        std::optional<Interval> GetInterval() const;      // [first begin, last end]; empty if no motions
-        // begin() / end() over Motion
-      };
-
-      // single-agent helper: timed trajectory for a pose path at the cost model's speeds
-      Trajectory ConvertPosePathToTrajectory(const std::vector<GaragePoseMsg>& path,
-          const GarageGraph& gg, const cost::MotionCostModel& cost, Interval::Timepoint start,
-          GarageEntityIdMsg entity, CollisionEntityId_t collision_id, size_t action_id,
-          /* ? */ void* audit, bool loaded);
-  - names: [Motion, "volley::Motion", "const volley::Motion&", MotionHasher]
-    file: "motion_planner/trajectory.hpp (not supplied)"
-    note: "Reconstructed from call sites in scheduler.cpp and scheduler_tests.cpp; members not used there are missing."
-    sketch: |
-      // One step of one entity: a time interval spent either at a pose (wait / lift / state change)
-      // or on an edge (moving pose -> pose), with the footprint it occupies meanwhile.
-      class Motion {
-      public:
-        Motion(GarageEntityIdMsg entity, Interval interval, CollisionEntityId_t collision_id,
-               size_t action_id,                          // vertex of the ScheduleEvent it implements
-               CollisionTable::PoseOrEdge location);      // a Pose, or an Edge {from, to}
-
-        GarageEntityIdMsg   GetEntityId() const;
-        Interval            GetInterval() const;
-        CollisionEntityId_t GetCollisionId() const;       // AGV, AGV + tray of a size, bay, ...
-        size_t              GetActionId() const;          // ScheduleEventDag::Vertex, as an integer
-        CollisionTable::PoseOrEdge GetLocation() const;
-        GaragePoseMsg       GetSourcePose() const;        // the pose, or the edge's first pose
-        // The discrete change this motion causes, serialized; .type is the ROS message name
-        // ("AgvPoseChanged", "AgvLiftChanged", "BayStateChanged", "VecsStateChanged",
-        //  "VrcStateChanged"); empty for a plain wait.
-        std::optional</* serialized message */> GetDelta() const;
-        bool IsIdle() const;
-      };
-      struct MotionHasher { size_t operator()(const Motion&) const; };
+    from: motion-planner
+    file: include/motion_planner/trajectory.hpp
+    parts: ["class Trajectory {"]
+  - names: [Motion, "volley::Motion", "const volley::Motion&", "Motion::Pose", "Motion::Edge"]
+    from: motion-planner
+    file: include/motion_planner/trajectory.hpp
+    parts: ["class Motion {"]
+  - names: [MotionHasher, "volley::MotionHasher"]
+    from: motion-planner
+    file: include/motion_planner/trajectory.hpp
+    parts: ["struct MotionHasher {"]
   - names: [Interval, "volley::Interval", "Interval::Duration", "Interval::Timepoint", "volley::Interval::Duration", "volley::Interval::Timepoint"]
-    file: "motion_planner/interval.hpp (not supplied)"
-    note: "Reconstructed from call sites in scheduler.cpp and scheduler_tests.cpp; the clock type is a guess (durations are nanoseconds: the code divides count() by 1e9)."
-    sketch: |
-      class Interval {
-      public:
-        using Duration  = std::chrono::nanoseconds;               // count() / 1e9 -> seconds
-        using Timepoint = std::chrono::time_point</*clock*/, Duration>;
+    from: motion-planner
+    file: include/motion_planner/interval.hpp
+    parts: ["class Interval {"]
+  - names: [IntervalSet]
+    from: motion-planner
+    file: include/motion_planner/interval.hpp
+    parts: ["class IntervalSet {"]
+  - names: [Chugg, "volley::Chugg", SolveSequential, "Chugg::SolveSequential", "volley::Chugg::SolveSequential", SolveCbs, "Chugg::SolveCbs", "Chugg::Node"]
+    from: motion-planner
+    file: include/motion_planner/chugg.hpp
+    parts: ["class Chugg {"]
+  - names: [SippAgv, "volley::SippAgv"]
+    from: motion-planner
+    file: include/motion_planner/sipp_agv.hpp
+    parts: ["class SippAgv {"]
+  - names: [SippEnvironment, "volley::SippEnvironment", "SippEnvironment::HeuristicMap"]
+    from: motion-planner
+    file: include/motion_planner/safe_interval_path_planning.hpp
+    parts: ["class SippEnvironment : public SearchEnvironment"]
+  - names: [SippState]
+    from: motion-planner
+    file: include/motion_planner/safe_interval_path_planning.hpp
+    parts: ["class SippState {"]
+  - names: [SippGoal]
+    from: motion-planner
+    file: include/motion_planner/safe_interval_path_planning.hpp
+    parts: ["class SippGoal {"]
+  - names: [SafeIntervalTable, "volley::SafeIntervalTable"]
+    from: motion-planner
+    file: include/motion_planner/safe_interval_table.hpp
+    parts: ["class SafeIntervalTable {"]
+  - names: [SearchEnvironment, "SearchEnvironment<State, Cost>"]
+    from: motion-planner
+    file: include/motion_planner/path_search.hpp
+    parts: ["class SearchEnvironment {"]
+  - names: [SingleSourceSearch, "volley::SingleSourceSearch", SearchSolution]
+    title: "SingleSourceSearch (A*)"
+    from: motion-planner
+    file: include/motion_planner/path_search.hpp
+    parts: ["constexpr unsigned int kMaxExpansions", {start: "SearchSolution<State, Cost, StateHash> SingleSourceSearch(", lines: 1}, "class SearchSolution {"]
+  - names: [BlockingTrayState, "volley::BlockingTrayState"]
+    from: motion-planner
+    file: include/motion_planner/blocking_tray_search.hpp
+    parts: ["struct BlockingTrayState {"]
+  - names: [BlockingTraySearchEnvironment, "volley::BlockingTraySearchEnvironment"]
+    from: motion-planner
+    file: include/motion_planner/blocking_tray_search.hpp
+    parts: ["class BlockingTraySearchEnvironment : public"]
+  - names: [OpenSpaceSearchEnvironment, "volley::OpenSpaceSearchEnvironment"]
+    from: motion-planner
+    file: include/motion_planner/blocking_tray_search.hpp
+    parts: ["class OpenSpaceSearchEnvironment : public"]
+  - names: [EmptyTraySearchEnvironment, "volley::EmptyTraySearchEnvironment"]
+    from: motion-planner
+    file: include/motion_planner/blocking_tray_search.hpp
+    parts: ["class EmptyTraySearchEnvironment : public"]
+  - names: [HideAgvs, "volley::HideAgvs", AgvSearchEnvironment]
+    title: "HideAgvs"
+    from: motion-planner
+    file: include/motion_planner/agv_hiding_search.hpp
+    parts: ["std::pair<bool, std::unordered_map<uint16_t, GaragePoseMsg>> HideAgvs(", "class AgvSearchEnvironment : public"]
+  - names: [GetPosePath, "volley::GetPosePath", ConvertPosePathToTrajectory, "volley::ConvertPosePathToTrajectory", GarageGraphEnvironment]
+    title: "GetPosePath, ConvertPosePathToTrajectory"
+    from: motion-planner
+    file: include/motion_planner/garage_graph_pathing.hpp
+    parts: ["std::vector<GaragePoseMsg> GetPosePath(", "Trajectory ConvertPosePathToTrajectory("]
+  - names: [GetEdgeDurations, "volley::GetEdgeDurations", GetEdgeMarginalDurations, "volley::GetEdgeMarginalDurations", GetAllPairsMinCost, "volley::GetAllPairsMinCost"]
+    title: "Edge durations and the all-pairs heuristic"
+    from: motion-planner
+    file: include/motion_planner/garage_graph_pathing.hpp
+    parts: ["volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeDurations(", "volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeMarginalDurations(", {start: "std::vector<std::vector<Cost>> GetAllPairsMinCost(", lines: 3}]
+  - names: [CoalesceTrajectory]
+    from: motion-planner
+    file: include/motion_planner/coalesce_trajectory.hpp
+    parts: ["Trajectory CoalesceTrajectory("]
+  - names: [GraphFilterProperties, "volley::GraphFilterProperties", "std::optional<volley::GraphFilterProperties>"]
+    from: motion-planner
+    file: include/motion_planner/static_graph_filtering.hpp
+    parts: ["class GraphFilterProperties {"]
+  - names: [GetStaticFilter, "volley::GetStaticFilter", GetAllStaticFilters, GetDisabledEntitiesFilters, "volley::GetDisabledEntitiesFilters"]
+    title: "Static filters"
+    from: motion-planner
+    file: include/motion_planner/static_graph_filtering.hpp
+    parts: ["GraphFilterProperties GetStaticFilter(", "std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetAllStaticFilters(", "std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetDisabledEntitiesFilters("]
 
-        Interval(Timepoint begin, Duration length);               // tests: Interval(start, 3s)
-        Interval(Timepoint begin, Timepoint end);                 // collapsing VRC traversals
-        Timepoint GetBegin() const;
-        std::pair<Timepoint, Timepoint> GetTimes() const;         // {begin, end}
-        Duration GetDuration() const;
-      };
-  - names: [Chugg, "volley::Chugg", SolveSequential, "Chugg::SolveSequential", "volley::Chugg::SolveSequential"]
-    file: "motion_planner/chugg.hpp (not supplied)"
-    note: "Reconstructed from the one call in Scheduler::PlanMotions; everything inside is unknown."
-    sketch: |
-      // "This is CHUGG v0.1" (PlanMotions). Constructed fresh for every Plan() call.
-      class Chugg {
-      public:
-        Chugg(const GarageGraph& gg,                    // where entities can go
-              const CollisionTable& table,              // what overlapping means
-              const ScheduleEventDag& events,           // what must happen, in which order
-              const ContinuousState& initial,           // everyone parked from start_time
-              /* per-edge durations */ edge_durations,  // GetEdgeDurations(gg, cost_model)
-              /* all-pairs cost-to-go */ heuristics,    // GetAllPairsMinCost(...), A* heuristic
-              const cost::MotionCostModel& cost_model,
-              rclcpp::Logger logger);
-
-        // nullopt: no collision-free timing found for this event DAG.
-        // audit != nullptr: fills one entry per cost segment (scheduler.cost_audit).
-        std::optional<ContinuousState> SolveSequential(cost::CostVector* audit);
-      };
+  # ---- cost_functions and the shared utility library (common/types.hpp, stdx) are still NOT in the
+  # snapshots. These sketches are reconstructed from call sites (scheduler and motion_planner), so they
+  # show only members seen in use. Replace each with an extract once the headers are supplied.
   - names: [MotionCostModel, "cost::MotionCostModel", "volley::cost::MotionCostModel", "const cost::MotionCostModel&"]
     file: "cost_functions/motion_cost_model.hpp (not supplied)"
-    note: "Reconstructed from call sites; only Params() is used directly by the scheduler."
+    note: "Not in the snapshots; reconstructed from call sites in scheduler.cpp and motion_planner (Params, Duration, Event, VelocityLimitsFor)."
     sketch: |
       namespace volley::cost {
       class MotionCostModel {
       public:
         explicit MotionCostModel(MotionCostParams params);   // built from SchedulerParams::motion_cost
         const MotionCostParams& Params() const;              // e.g. Params().events.agv_lift_up
-        // edge / path timing used by GetEdgeDurations, GetPosePath, ConvertPosePathToTrajectory
+        SecondsF Duration(const Transition& t) const;        // trapezoid time of one edge (GetEdgeDurations)
+        SecondsF Duration(const Transition& t, CostVector& audit, std::string label) const;
+        /* {speed, accel} */ VelocityLimitsFor(TransitionType type, bool is_agv_loaded) const;
+        static void Event(SecondsF seconds, CostVector& audit, std::string label);  // audit row
       };
       using SecondsF = std::chrono::duration<float>;         // cost::SecondsF(lift_seconds)
       }
@@ -322,81 +331,16 @@ cpp:
       }
   - names: [CostVector, "cost::CostVector", "cost::CostVector*"]
     file: "cost_functions (not supplied)"
-    note: "Reconstructed from the cost-audit code in Scheduler::PlanMotions."
+    note: "Not in the snapshots; reconstructed from the cost-audit code in Scheduler::PlanMotions and Chugg::SolveSequential."
     sketch: |
       namespace volley::cost {
       struct CostVector {
         struct Entry { SecondsF duration_; std::string explanation_; };
-        std::vector<Entry> entries_;      // one per cost segment, filled by Chugg::SolveSequential
+        std::vector<Entry> entries_;      // one per segment: AGV motion, wheel-turn gap, bay door, VECS, VRC, lift
         void eval();                      // computes the total
         SecondsF value() const;           // the total, after eval()
       };
       }
-  - names: [GraphFilterProperties, "volley::GraphFilterProperties", "std::optional<volley::GraphFilterProperties>", GetStaticFilter, "volley::GetStaticFilter", GetDisabledEntitiesFilters]
-    file: "motion_planner/static_graph_filtering.hpp (not supplied)"
-    note: "Reconstructed from call sites in scheduler.cpp."
-    sketch: |
-      // Which vertices and edges of the GarageGraph a given footprint may use right now.
-      class GraphFilterProperties {
-      public:
-        bool IsEnabled(GarageGraph::Vertex v) const;
-        bool IsEnabled(GarageGraph::Edge e) const;
-      };
-
-      // Static obstacles for one footprint: trays and AGVs NOT listed in `movable_trays` /
-      // `movable_agvs` block the graph (scheduler passes the ones it is willing to move).
-      GraphFilterProperties GetStaticFilter(CollisionEntityId_t footprint, const GarageGraph& gg,
-          const DiscreteGarageState& state, const CollisionTable& table,
-          const std::unordered_set<uint16_t>& movable_trays,
-          const std::unordered_set<uint16_t>& movable_agvs, /* extra */ {});
-
-      // Disabled nodes per footprint; stored in ScheduleContext::disabledness_filters.
-      std::unordered_map<CollisionEntityId_t, GraphFilterProperties>
-      GetDisabledEntitiesFilters(const GarageGraph& gg, const DiscreteGarageState& state,
-                                 const CollisionTable& table);
-  - names: [SingleSourceSearch, "volley::SingleSourceSearch", BlockingTrayState, "volley::BlockingTrayState", OpenSpaceSearchEnvironment, "volley::OpenSpaceSearchEnvironment", BlockingTraySearchEnvironment, "volley::BlockingTraySearchEnvironment", EmptyTraySearchEnvironment, "volley::EmptyTraySearchEnvironment"]
-    title: "SingleSourceSearch and its environments"
-    file: "motion_planner/blocking_tray_search.hpp (not supplied)"
-    note: "Reconstructed from call sites in scheduler.cpp. One generic best-first search, specialised by an 'environment' that defines neighbours, costs and what counts as a target."
-    sketch: |
-      struct BlockingTrayState { GarageGraph::Vertex vert; /* ... */ };   // search node
-
-      template <typename Env>
-      /* Solution */ SingleSourceSearch(BlockingTrayState source, Interval::Duration start_cost,
-                                        Env& env);
-      //   solution.GetTarget() -> std::optional<BlockingTrayState>   best target found
-      //   solution.GetPath(t)  -> std::optional<sequence of (state, cost)> back to source
-
-      // Where can this tray go? (repark, root tray's open space; may allow waypoint stash)
-      OpenSpaceSearchEnvironment(tray_id, footprint, gg, table, state, cost_model,
-                                 illegal_poses, filters, /* nullopt */, enforce_retrieval_heading,
-                                 allow_waypoint_stash);
-      // Which trays are in the way of moving this tray to dest?
-      BlockingTraySearchEnvironment(tray_id, footprint, gg, table, state, cost_model,
-                                    dest_vertex, filters);
-      // Nearest empty tray to a pose (the inverse of the open-space search)
-      EmptyTraySearchEnvironment(gg, table, state, cost_model, filters);
-  - names: [GetPosePath, "volley::GetPosePath", GetEdgeDurations, "volley::GetEdgeDurations", GetAllPairsMinCost, "volley::GetAllPairsMinCost", HideAgvs, "volley::HideAgvs"]
-    title: "Single-agent path helpers"
-    file: "motion_planner/garage_graph_pathing.hpp, agv_hiding_search.hpp (not supplied)"
-    note: "Reconstructed from call sites in scheduler.cpp."
-    sketch: |
-      // Shortest pose path for ONE entity, ignoring everyone else's timing (empty if none).
-      std::vector<GaragePoseMsg> GetPosePath(const GarageGraph& gg, GaragePoseMsg from,
-          GaragePoseMsg to, const cost::MotionCostModel& cost,
-          std::optional<GraphFilterProperties> filters);
-
-      // Traversal time of every edge ("full Trapezoid": accelerate, cruise, brake).
-      /* edge -> Interval::Duration */ GetEdgeDurations(const GarageGraph& gg,
-                                                        const cost::MotionCostModel& cost);
-
-      // Cost-to-go between all vertex pairs, used as CHUGG's A* heuristic.
-      /* (from, to) -> Duration */ GetAllPairsMinCost(const GarageGraph& gg, edge_durations,
-                                                      Interval::Duration lo, Interval::Duration hi);
-
-      // Clean-garage: send every AGV to a hiding spot under a tray.
-      std::pair<bool, /* agv_id -> GaragePoseMsg */> HideAgvs(const DiscreteGarageState& state,
-                                                              const CollisionTable& table);
   - names: [BoolStringPair]
     file: "shared utility library (not supplied)"
     note: "Inferred from use: every Plan* helper returns std::make_pair(bool, std::string)."
