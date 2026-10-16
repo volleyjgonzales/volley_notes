@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AGV parking-lot functional requirements, illustrated</title>
+<meta name="description" content="Volley's 52 functional requirements for the parking-lot AGV, with HITO's responses, effort estimates and diagrams.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" type="button" aria-controls="sidebar" aria-expanded="false">
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <span>Contents</span>
+  </button>
+  <span class="topbar-title">AGV requirements</span>
+</header>
+
+<aside class="sidebar" id="sidebar" aria-label="Contents">
+  <div class="sidebar-head">
+    <a class="brand" href="#top">
+      <svg class="brand-agv" width="34" height="22" viewBox="0 0 34 22" aria-hidden="true">
+        <rect x="1" y="2" width="31" height="18" rx="3" fill="var(--surface)" stroke="var(--heading)" stroke-width="2"/>
+        <rect x="27" y="4" width="4" height="14" rx="1" fill="var(--accent)"/>
+        <path d="M10 6 L20 11 L10 16 Z" fill="var(--heading)"/>
+      </svg>
+      <span>AGV requirements</span>
+    </a>
+    <label class="filter">
+      <span class="sr-only">Filter contents</span>
+      <input id="toc-filter" type="search" placeholder="Filter, or type an id like 5.3" autocomplete="off">
+    </label>
+    <p class="filter-hit" id="filter-hit" hidden></p>
+  </div>
+  <nav class="route-wrap">
+    <ol class="route" id="route">
+      
+      <li class="stop" data-target="reading-the-diagrams" data-keywords="">
+        <a class="stop-link" href="#reading-the-diagrams">
+          <span class="stop-title">Reading the diagrams</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-1"><a href="#fig-1"><span class="sub-num">Fig. 1</span>How to read the robot, and the drawing scale</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="scale-and-data-structure-conventions" data-keywords="">
+        <a class="stop-link" href="#scale-and-data-structure-conventions">
+          <span class="stop-title">Scale and data structure conventions</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-2"><a href="#fig-2"><span class="sub-num">Fig. 2</span>Where VDA5050 data travels</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="overview" data-keywords="">
+        <a class="stop-link" href="#overview">
+          <span class="stop-title">Overview</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-3"><a href="#fig-3"><span class="sub-num">Fig. 3</span>Status of all 52 requirements</a></li>
+          
+          <li data-target="fig-4"><a href="#fig-4"><span class="sub-num">Fig. 4</span>How long HITO says the work takes</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="group-1" data-keywords="1.1 1.2 1.3 1.4">
+        <a class="stop-link" href="#group-1">
+          <span class="stop-num">1</span><span class="stop-title">Order execution and rotation at nodes</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-5"><a href="#fig-5"><span class="sub-num">Fig. 5</span>Turning on the spot when the order has only one node</a></li>
+          
+          <li data-target="fig-6"><a href="#fig-6"><span class="sub-num">Fig. 6</span>Turning to the final node's heading</a></li>
+          
+          <li data-target="fig-7"><a href="#fig-7"><span class="sub-num">Fig. 7</span>When the 'driving' flag is true</a></li>
+          
+          <li data-target="fig-8"><a href="#fig-8"><span class="sub-num">Fig. 8</span>Message structure for group 1</a></li>
+          
+          <li data-target="table-1"><a href="#table-1">Requirements table</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="group-2" data-keywords="2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9">
+        <a class="stop-link" href="#group-2">
+          <span class="stop-num">2</span><span class="stop-title">MQTT connection, factsheet and action reporting</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-9"><a href="#fig-9"><span class="sub-num">Fig. 9</span>Who tells the fleet manager that an AGV has dropped off</a></li>
+          
+          <li data-target="fig-10"><a href="#fig-10"><span class="sub-num">Fig. 10</span>When an instant action may be reported as finished</a></li>
+          
+          <li data-target="fig-11"><a href="#fig-11"><span class="sub-num">Fig. 11</span>Interface documentation and joint sign-off</a></li>
+          
+          <li data-target="fig-12"><a href="#fig-12"><span class="sub-num">Fig. 12</span>Message structure for group 2</a></li>
+          
+          <li data-target="table-2"><a href="#table-2">Requirements table</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="group-3" data-keywords="3.1 3.2 3.3 3.4 3.5 3.6 3.7">
+        <a class="stop-link" href="#group-3">
+          <span class="stop-num">3</span><span class="stop-title">Cancellation, release horizon and stopping precision</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-13"><a href="#fig-13"><span class="sub-num">Fig. 13</span>Where the AGV stops after its order is cancelled</a></li>
+          
+          <li data-target="fig-14"><a href="#fig-14"><span class="sub-num">Fig. 14</span>Stopping at the edge of the released path</a></li>
+          
+          <li data-target="fig-15"><a href="#fig-15"><span class="sub-num">Fig. 15</span>Off-tape detection only while moving</a></li>
+          
+          <li data-target="fig-16"><a href="#fig-16"><span class="sub-num">Fig. 16</span>How precisely the AGV must stop and turn</a></li>
+          
+          <li data-target="fig-17"><a href="#fig-17"><span class="sub-num">Fig. 17</span>Message structure for group 3</a></li>
+          
+          <li data-target="table-3"><a href="#table-3">Requirements table</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="group-4" data-keywords="4.1 4.2">
+        <a class="stop-link" href="#group-4">
+          <span class="stop-num">4</span><span class="stop-title">Message publishing frequency</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-18"><a href="#fig-18"><span class="sub-num">Fig. 18</span>Making message rates configurable</a></li>
+          
+          <li data-target="table-4"><a href="#table-4">Requirements table</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="group-5" data-keywords="5.1 5.3 5.4 5.5 5.6 5.7 5.8 5.9 5.10 5.11 5.12 5.13 5.14 5.15">
+        <a class="stop-link" href="#group-5">
+          <span class="stop-num">5</span><span class="stop-title">State, commonMessage and error reporting</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-19"><a href="#fig-19"><span class="sub-num">Fig. 19</span>Where commonMessage lives, and the fields requested in it</a></li>
+          
+          <li data-target="fig-20"><a href="#fig-20"><span class="sub-num">Fig. 20</span>How errors should be reported</a></li>
+          
+          <li data-target="fig-21"><a href="#fig-21"><span class="sub-num">Fig. 21</span>Reporting where the AGV actually is</a></li>
+          
+          <li data-target="fig-22"><a href="#fig-22"><span class="sub-num">Fig. 22</span>Message structure for groups 4 and 5</a></li>
+          
+          <li data-target="table-5"><a href="#table-5">Requirements table</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="group-6" data-keywords="6.1 6.2">
+        <a class="stop-link" href="#group-6">
+          <span class="stop-num">6</span><span class="stop-title">Rotation direction set by actions</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-23"><a href="#fig-23"><span class="sub-num">Fig. 23</span>Choosing which way the AGV turns</a></li>
+          
+          <li data-target="fig-24"><a href="#fig-24"><span class="sub-num">Fig. 24</span>Message structure for group 6</a></li>
+          
+          <li data-target="table-6"><a href="#table-6">Requirements table</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="group-7" data-keywords="7.1 7.3 7.4 7.5 7.6 7.7 7.8 7.9">
+        <a class="stop-link" href="#group-7">
+          <span class="stop-num">7</span><span class="stop-title">Magnetic tape tracking and deceleration</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-25"><a href="#fig-25"><span class="sub-num">Fig. 25</span>Following the tape forwards versus sideways</a></li>
+          
+          <li data-target="fig-26"><a href="#fig-26"><span class="sub-num">Fig. 26</span>Tuning the tape-following controller</a></li>
+          
+          <li data-target="fig-27"><a href="#fig-27"><span class="sub-num">Fig. 27</span>How far the AGV may drift from the tape</a></li>
+          
+          <li data-target="fig-28"><a href="#fig-28"><span class="sub-num">Fig. 28</span>Braking early enough for a short last edge</a></li>
+          
+          <li data-target="table-7"><a href="#table-7">Requirements table</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="group-8" data-keywords="8.1 8.2 8.3 8.4 8.5 8.6">
+        <a class="stop-link" href="#group-8">
+          <span class="stop-num">8</span><span class="stop-title">Lidar fields, payload, coupling and remote control</span>
+        </a>
+        
+        <ol class="sub">
+          
+          <li data-target="fig-29"><a href="#fig-29"><span class="sub-num">Fig. 29</span>Choosing and overriding the lidar safety zone</a></li>
+          
+          <li data-target="fig-30"><a href="#fig-30"><span class="sub-num">Fig. 30</span>Confirming the pallet is seated and knowing its weight</a></li>
+          
+          <li data-target="fig-31"><a href="#fig-31"><span class="sub-num">Fig. 31</span>Driving the AGV back onto the tape by remote control</a></li>
+          
+          <li data-target="fig-32"><a href="#fig-32"><span class="sub-num">Fig. 32</span>Message structure for group 8</a></li>
+          
+          <li data-target="table-8"><a href="#table-8">Requirements table</a></li>
+          
+        </ol>
+        
+      </li>
+      
+      <li class="stop" data-target="points-to-raise-with-hito" data-keywords="">
+        <a class="stop-link" href="#points-to-raise-with-hito">
+          <span class="stop-title">Points to raise with HITO</span>
+        </a>
+        
+      </li>
+      
+      <li class="stop" data-target="glossary" data-keywords="">
+        <a class="stop-link" href="#glossary">
+          <span class="stop-title">Glossary</span>
+        </a>
+        
+      </li>
+      
+    </ol>
+    <span class="route-agv" id="route-agv" aria-hidden="true"></span>
+  </nav>
+</aside>
+
+<main id="main">
+  <header class="doc-head" id="top">
+    <h1>AGV parking-lot functional requirements, illustrated</h1>
+    <div class="lede"><p>Companion to <em>Functional_requirements-停车场功能需求20261013_V1_0_1.pdf</em> (13 Oct 2026, v1.0.1). That document lists 52 requirements from <strong>Volley</strong> (the customer) for a magnetic-tape-guided AGV that talks to the fleet manager over <strong>VDA5050 / MQTT</strong>, with <strong>HITO</strong>'s response and effort estimate for each. This document restates every requirement with a diagram, HITO's answer and the quoted effort.</p><p>Estimates are business days, written <em>development + testing</em>. A <code>/</code> means the source gave no number. Field names inside diagrams are illustrative unless the source names them.</p></div>
+    <div class="statbar" role="img" aria-label="Status of 52 requirements">
+      <span class="seg st-works" style="flex:12" title="Works today: 12">12</span><span class="seg st-implement" style="flex:17" title="Will implement: 17">17</span><span class="seg st-conditional" style="flex:8" title="Conditional / to discuss: 8">8</span><span class="seg st-duplicate" style="flex:3" title="Closed as duplicate: 3">3</span><span class="seg st-process" style="flex:6" title="Process / outside AGV: 6">6</span><span class="seg st-blocked" style="flex:3" title="Needs hardware / clarification: 3">3</span><span class="seg st-rejected" style="flex:3" title="Not feasible: 3">3</span>
+    </div>
+    <ul class="statlegend">
+      <li><span class="badge st-works"><span class="badge-dot" aria-hidden="true">W</span><span>Works today</span></span> <strong>12</strong></li><li><span class="badge st-implement"><span class="badge-dot" aria-hidden="true">I</span><span>Will implement</span></span> <strong>17</strong></li><li><span class="badge st-conditional"><span class="badge-dot" aria-hidden="true">C</span><span>Conditional / to discuss</span></span> <strong>8</strong></li><li><span class="badge st-duplicate"><span class="badge-dot" aria-hidden="true">D</span><span>Closed as duplicate</span></span> <strong>3</strong></li><li><span class="badge st-process"><span class="badge-dot" aria-hidden="true">P</span><span>Process / outside AGV</span></span> <strong>6</strong></li><li><span class="badge st-blocked"><span class="badge-dot" aria-hidden="true">B</span><span>Needs hardware / clarification</span></span> <strong>3</strong></li><li><span class="badge st-rejected"><span class="badge-dot" aria-hidden="true">R</span><span>Not feasible</span></span> <strong>3</strong></li>
+    </ul>
+  </header>
+  <article class="doc">
+    
+
+
+<h2 id="reading-the-diagrams">Reading the diagrams</h2>
+<figure class="fig" data-name="robot_key" id="fig-1"><a aria-label="Open figure 1 full size" class="fig-media" href="images/robot_key.svg" rel="noopener" target="_blank"><img alt="Figure 1. How to read the robot, and the drawing scale" height="330" loading="lazy" src="images/robot_key.svg" width="960"/></a><figcaption><span class="fig-label">Figure 1</span><span class="fig-title">How to read the robot, and the drawing scale</span><span class="fig-body"> Every plan view is drawn to the same scale: 1 m = 40 px, with a scale bar in each figure. The AGV is assumed to be 1.8 m × 1.1 m because the source gives no dimensions; change svgkit.AGV_L / AGV_W and rebuild if the real size differs. The orange bumper marks the front, the chevron points forward and the two slots mark the rear. Tape is drawn at its real 50 mm width (never thinner than 2.5 px); nodes and <a class="xref term" href="#g-rfid" title="Floor tags the AGV reads to know exactly which node it is at.">RFID</a> tags are symbols and are drawn larger than real. Millimetre-level details are shown in zoomed insets, marked by an orange magnifier circle with dashed leader lines.</span></figcaption></figure>
+
+<p>Every requirement carries a status taken from HITO's reply. The letter repeats the colour so the meaning survives greyscale printing:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Letter</th>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span aria-label="Works today" class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span></span></td>
+<td>Works today</td>
+<td>HITO says the AGV already behaves this way.</td>
+</tr>
+<tr>
+<td><span aria-label="Will implement" class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span></span></td>
+<td>Will implement</td>
+<td>HITO agrees to build it.</td>
+</tr>
+<tr>
+<td><span aria-label="Conditional / to discuss" class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span></span></td>
+<td>Conditional / to discuss</td>
+<td>Agreed only after testing, discussion, or a counter-proposal.</td>
+</tr>
+<tr>
+<td><span aria-label="Closed as duplicate" class="badge st-duplicate"><span aria-hidden="true" class="badge-dot">D</span></span></td>
+<td>Closed as duplicate</td>
+<td>HITO closed it as a repeat of another item.</td>
+</tr>
+<tr>
+<td><span aria-label="Process / outside AGV" class="badge st-process"><span aria-hidden="true" class="badge-dot">P</span></span></td>
+<td>Process / outside AGV</td>
+<td>Joint approval rule, or behaviour HITO places outside the AGV (<a class="xref term" href="#g-broker" title="The server that receives every published message and forwards it to the subscribers of its topic. It also stores retained messages and publishes Last Will messages.">MQTT broker</a>).</td>
+</tr>
+<tr>
+<td><span aria-label="Needs hardware / clarification" class="badge st-blocked"><span aria-hidden="true" class="badge-dot">B</span></span></td>
+<td>Needs hardware / clarification</td>
+<td>Needs new hardware, or HITO didn't understand it.</td>
+</tr>
+<tr>
+<td><span aria-label="Not feasible" class="badge st-rejected"><span aria-hidden="true" class="badge-dot">R</span></span></td>
+<td>Not feasible</td>
+<td>HITO says the current vehicle can't achieve it.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="scale-and-data-structure-conventions">Scale and data structure conventions</h2>
+<p>All plan views share one scale, 1 m = 40 px, and carry a scale bar. Where a requirement is in millimetres or fractions of a degree, an orange magnifier marks the spot and a zoomed inset shows it at its own stated scale. Numbers labelled <em>example values</em> (speeds, braking rate, field sizes, AGV size) are assumptions for illustration; the source document doesn't specify them.</p>
+<p>Each section that involves <a class="xref term" href="#g-vda5050" title="Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See Figure 2.">VDA5050</a> messages ends with a structure figure in <a class="xref term" href="#g-composition" title="A diagram line with a filled diamond meaning the object on the right only exists inside the object on the left; in JSON, it is a nested object or array.">UML composition</a> style, showing where each relevant field sits inside its message. The field set follows VDA 5050 version 2.0, abbreviated; check it against the version the two companies agree on.</p>
+<figure class="fig" data-name="vda_topics" id="fig-2"><a aria-label="Open figure 2 full size" class="fig-media" href="images/vda_topics.svg" rel="noopener" target="_blank"><img alt="Figure 2. Where VDA5050 data travels" height="480" loading="lazy" src="images/vda_topics.svg" width="960"/></a><figcaption><span class="fig-label">Figure 2</span><span class="fig-title">Where VDA5050 data travels</span><span class="fig-body"> VDA5050 splits communication into separate <a class="xref term" href="#g-mqtt" title="Lightweight publish/subscribe messaging protocol. Clients publish messages to named topics through a broker, and every client subscribed to that topic receives them.">MQTT</a> topics. Each row is one topic: blue arrows are messages from the <a class="xref term" href="#g-fleet-manager" title="The central server that plans routes and sends orders to AGVs. VDA5050 calls it master control; in this project it is Volley's system.">fleet manager</a> to the AGV, green arrows go the other way. The last column lists the requirements that touch each topic. <a class="xref term" href="#g-commonmessage" title="HITO's own extra topic, not part of VDA5050, carrying RFID, tape-sensor and lidar-field values. See Figure 19.">commonMessage</a> (orange) is HITO's own addition and not part of the standard. The topic path follows the pattern interfaceName / majorVersion / manufacturer / serialNumber / topic, for example uagv/v2/HITO/AGV001/state.</span></figcaption></figure>
+
+<h2 id="overview">Overview</h2>
+<figure class="fig" data-name="overview" id="fig-3"><div class="req-grid" role="list"><a class="tile st-implement" href="#req-1-1" role="listitem" title="1.1: Will implement. When the AGV receives an order containing only a single node, and that node is the AGV's current node, if the theta in the order differs from the current theta, the AGV must rotate in place to the commanded theta."><span class="tile-id">1.1</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-works" href="#req-1-2" role="listitem" title="1.2: Works today. When the AGV reaches the final node of an order and that node's theta differs from the current theta, the AGV must rotate to the theta specified for the final node."><span class="tile-id">1.2</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-implement" href="#req-1-3" role="listitem" title="1.3: Will implement. During all edge movements and rotational movements, the AGV must report its driving state as true whenever the commanded wheel speed is non-zero."><span class="tile-id">1.3</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-implement" href="#req-1-4" role="listitem" title="1.4: Will implement. When the commanded wheel speed is zero, the AGV must report its driving state as false."><span class="tile-id">1.4</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-conditional" href="#req-2-1" role="listitem" title="2.1: Conditional / to discuss. The AGV must publish the factsheet message with the MQTT retained flag set to true."><span class="tile-id">2.1</span><span aria-label="Conditional / to discuss" class="tile-letter">C</span></a><a class="tile st-implement" href="#req-2-2" role="listitem" title="2.2: Will implement. The AGV must register an MQTT Last Will message on the connection topic, with connectionState set to CONNECTIONBROKEN."><span class="tile-id">2.2</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-process" href="#req-2-3" role="listitem" title="2.3: Process / outside AGV. When the AGV's main firmware shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN."><span class="tile-id">2.3</span><span aria-label="Process / outside AGV" class="tile-letter">P</span></a><a class="tile st-process" href="#req-2-4" role="listitem" title="2.4: Process / outside AGV. When the AGV's VDA5050 agent shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN."><span class="tile-id">2.4</span><span aria-label="Process / outside AGV" class="tile-letter">P</span></a><a class="tile st-works" href="#req-2-5" role="listitem" title="2.5: Works today. For an instant action, the AGV may report FINISHED only after the firmware has actually executed and applied the request, not merely because the VDA5050 agent received it."><span class="tile-id">2.5</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-implement" href="#req-2-6" role="listitem" title="2.6: Will implement. For the stopPause instant action, the AGV may report FINISHED only after the firmware has returned to the auto-run state."><span class="tile-id">2.6</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-implement" href="#req-2-7" role="listitem" title="2.7: Will implement. HITO must provide updated interface documentation listing all deviations from the current VDA5050 specification."><span class="tile-id">2.7</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-implement" href="#req-2-8" role="listitem" title="2.8: Will implement. HITO must fully document all custom messages, including commonMessage: field names, field types, permitted values and example payloads."><span class="tile-id">2.8</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-process" href="#req-2-9" role="listitem" title="2.9: Process / outside AGV. Any change to the VDA5050 interface or custom messages must be jointly reviewed and approved by Volley and HITO before release."><span class="tile-id">2.9</span><span aria-label="Process / outside AGV" class="tile-letter">P</span></a><a class="tile st-conditional" href="#req-3-1" role="listitem" title="3.1: Conditional / to discuss. When an order is canceled, if the AGV can decelerate to zero at the next node (given speed, deceleration, remaining edge distance), it must stop at the next node."><span class="tile-id">3.1</span><span aria-label="Conditional / to discuss" class="tile-letter">C</span></a><a class="tile st-works" href="#req-3-2" role="listitem" title="3.2: Works today. When an order is canceled and the AGV cannot decelerate to zero at the next node, it must stop at the node after the next node."><span class="tile-id">3.2</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-works" href="#req-3-3" role="listitem" title="3.3: Works today. When the AGV reaches the last released node while the following edge is not yet released, it must stop at that last released node."><span class="tile-id">3.3</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-works" href="#req-3-4" role="listitem" title="3.4: Works today. If the following edge and node are released before the AGV reaches the last released node, the AGV must pass through without stopping."><span class="tile-id">3.4</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-works" href="#req-3-5" role="listitem" title="3.5: Works today. The AGV must perform time-based off-magnetic-tape detection only when the commanded wheel speed is non-zero."><span class="tile-id">3.5</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-works" href="#req-3-6" role="listitem" title="3.6: Works today. At any node where a stop is required, the AGV must stop within a 10 mm radius of the node center and must not overshoot the node center."><span class="tile-id">3.6</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-rejected" href="#req-3-7" role="listitem" title="3.7: Not feasible. After an in-place rotation at a node, the AGV must stop within ±1.5° of the target angle with rotational overshoot of less than 0.5°."><span class="tile-id">3.7</span><span aria-label="Not feasible" class="tile-letter">R</span></a><a class="tile st-conditional" href="#req-4-1" role="listitem" title="4.1: Conditional / to discuss. The AGV must publish visualization messages at the frequency set by parameters in iconfig.yaml."><span class="tile-id">4.1</span><span aria-label="Conditional / to discuss" class="tile-letter">C</span></a><a class="tile st-conditional" href="#req-4-2" role="listitem" title="4.2: Conditional / to discuss. The AGV must publish commonMessage messages at the frequency set by parameters in iconfig.yaml."><span class="tile-id">4.2</span><span aria-label="Conditional / to discuss" class="tile-letter">C</span></a><a class="tile st-implement" href="#req-5-1" role="listitem" title="5.1: Will implement. The AGV must report RFID signal strength in commonMessage, matching the S value on the AGV's screen."><span class="tile-id">5.1</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-conditional" href="#req-5-3" role="listitem" title="5.3: Conditional / to discuss. When the magnetic tape sensor has no reading, the AGV must report it in commonMessage as an empty string or an optional value."><span class="tile-id">5.3</span><span aria-label="Conditional / to discuss" class="tile-letter">C</span></a><a class="tile st-implement" href="#req-5-4" role="listitem" title="5.4: Will implement. The AGV must report all error codes shown on the HMI screen in the errors field of the state message."><span class="tile-id">5.4</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-conditional" href="#req-5-5" role="listitem" title="5.5: Conditional / to discuss. The AGV must use defined string enumeration values for errorType rather than undefined raw strings."><span class="tile-id">5.5</span><span aria-label="Conditional / to discuss" class="tile-letter">C</span></a><a class="tile st-process" href="#req-5-6" role="listitem" title="5.6: Process / outside AGV. The errorType string values must be jointly reviewed and approved by Volley and HITO before release."><span class="tile-id">5.6</span><span aria-label="Process / outside AGV" class="tile-letter">P</span></a><a class="tile st-process" href="#req-5-7" role="listitem" title="5.7: Process / outside AGV. The errorType string values must not change unless both Volley and HITO agree."><span class="tile-id">5.7</span><span aria-label="Process / outside AGV" class="tile-letter">P</span></a><a class="tile st-implement" href="#req-5-8" role="listitem" title="5.8: Will implement. The AGV must populate errorDescription for every reported error."><span class="tile-id">5.8</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-blocked" href="#req-5-9" role="listitem" title="5.9: Needs hardware / clarification. The AGV may populate errorHint for any reported error."><span class="tile-id">5.9</span><span aria-label="Needs hardware / clarification" class="tile-letter">B</span></a><a class="tile st-works" href="#req-5-10" role="listitem" title="5.10: Works today. The AGV must report state-estimated x, y and theta in agvPosition in both state and visualization messages, at a TBD Hz frequency to be agreed."><span class="tile-id">5.10</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-works" href="#req-5-11" role="listitem" title="5.11: Works today. The AGV must continuously update x, y and theta from its state estimate, not update one axis by edge distance while keeping the other unchanged."><span class="tile-id">5.11</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-works" href="#req-5-12" role="listitem" title="5.12: Works today. The AGV must report theta from its state estimate, not a fixed value derived from the first RFID reading."><span class="tile-id">5.12</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-implement" href="#req-5-13" role="listitem" title="5.13: Will implement. The AGV must report the actual RFID reader reading in commonMessage, matching the RFID value on the AGV's screen."><span class="tile-id">5.13</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-works" href="#req-5-14" role="listitem" title="5.14: Works today. The AGV must report velocity in visualization: the derivatives of x, y and theta."><span class="tile-id">5.14</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-implement" href="#req-5-15" role="listitem" title="5.15: Will implement. The AGV must report the currently selected laser protective field in commonMessage."><span class="tile-id">5.15</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-implement" href="#req-6-1" role="listitem" title="6.1: Will implement. The AGV must rotate to a node's theta in the direction given by an action attached to that node with blockingType NONE."><span class="tile-id">6.1</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-process" href="#req-6-2" role="listitem" title="6.2: Process / outside AGV. The action type used to specify rotation direction must be jointly reviewed and approved by Volley and HITO."><span class="tile-id">6.2</span><span aria-label="Process / outside AGV" class="tile-letter">P</span></a><a class="tile st-works" href="#req-7-1" role="listitem" title="7.1: Works today. Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all longitudinal speeds up to its maximum."><span class="tile-id">7.1</span><span aria-label="Works today" class="tile-letter">W</span></a><a class="tile st-rejected" href="#req-7-3" role="listitem" title="7.3: Not feasible. Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all lateral (sideslip / strafe) speeds up to its maximum."><span class="tile-id">7.3</span><span aria-label="Not feasible" class="tile-letter">R</span></a><a class="tile st-implement" href="#req-7-4" role="listitem" title="7.4: Will implement. The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per motion primitive."><span class="tile-id">7.4</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-duplicate" href="#req-7-5" role="listitem" title="7.5: Closed as duplicate. The AGV must schedule tape tracking parameters so a single set covers all payload conditions, not hard-coded per payload weight."><span class="tile-id">7.5</span><span aria-label="Closed as duplicate" class="tile-letter">D</span></a><a class="tile st-rejected" href="#req-7-6" role="listitem" title="7.6: Not feasible. Across all commanded speeds and all payloads, the AGV must keep lateral tape tracking error within 10 mm."><span class="tile-id">7.6</span><span aria-label="Not feasible" class="tile-letter">R</span></a><a class="tile st-conditional" href="#req-7-7" role="listitem" title="7.7: Conditional / to discuss. Regardless of the final edge's length, the AGV must start decelerating early enough to reach zero at the final node without overshooting."><span class="tile-id">7.7</span><span aria-label="Conditional / to discuss" class="tile-letter">C</span></a><a class="tile st-duplicate" href="#req-7-8" role="listitem" title="7.8: Closed as duplicate. The AGV must compute the deceleration start point from the total remaining distance across consecutive edges with the same motion primitive, not only the final edge."><span class="tile-id">7.8</span><span aria-label="Closed as duplicate" class="tile-letter">D</span></a><a class="tile st-duplicate" href="#req-7-9" role="listitem" title="7.9: Closed as duplicate. If the final edge is shorter than the stopping distance, the AGV must begin decelerating on an earlier edge."><span class="tile-id">7.9</span><span aria-label="Closed as duplicate" class="tile-letter">D</span></a><a class="tile st-implement" href="#req-8-1" role="listitem" title="8.1: Will implement. The AGV must use all 64 available laser protective (lidar) fields."><span class="tile-id">8.1</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-conditional" href="#req-8-2" role="listitem" title="8.2: Conditional / to discuss. The AGV must select the lidar field from wheel speed, motion primitive and a runtime-configurable payload size offset. Schema to be agreed."><span class="tile-id">8.2</span><span aria-label="Conditional / to discuss" class="tile-letter">C</span></a><a class="tile st-blocked" href="#req-8-3" role="listitem" title="8.3: Needs hardware / clarification. The AGV must actively confirm whether a pallet is correctly coupled ('pins in cups') and report it via VDA5050."><span class="tile-id">8.3</span><span aria-label="Needs hardware / clarification" class="tile-letter">B</span></a><a class="tile st-implement" href="#req-8-4" role="listitem" title="8.4: Will implement. The AGV must support remote override of a laser protective stop during operation, applied edge by edge."><span class="tile-id">8.4</span><span aria-label="Will implement" class="tile-letter">I</span></a><a class="tile st-blocked" href="#req-8-5" role="listitem" title="8.5: Needs hardware / clarification. The AGV must estimate payload weight from hydraulic pressure and publish it as payload data in state."><span class="tile-id">8.5</span><span aria-label="Needs hardware / clarification" class="tile-letter">B</span></a><a class="tile st-implement" href="#req-8-6" role="listitem" title="8.6: Will implement. The AGV may support remote joystick / remote movement for recovery, e.g. when off the magnetic tape."><span class="tile-id">8.6</span><span aria-label="Will implement" class="tile-letter">I</span></a></div><figcaption><span class="fig-label">Figure 3</span><span class="fig-title">Status of all 52 requirements</span><span class="fig-body"> One tile per requirement, coloured and lettered by how HITO answered it. Read the bar underneath for the totals: 12 already work, 17 will be built, 8 are conditional (they depend on testing, discussion or a counter-proposal), and 15 are closed without new work for different reasons — 3 as duplicates, 6 as process items, 3 blocked on hardware or clarification, and 3 rejected as not feasible.</span></figcaption></figure>
+
+<figure class="fig" data-name="estimates" id="fig-4"><a aria-label="Open figure 4 full size" class="fig-media" href="images/estimates.svg" rel="noopener" target="_blank"><img alt="Figure 4. How long HITO says the work takes" height="712" loading="lazy" src="images/estimates.svg" width="960"/></a><figcaption><span class="fig-label">Figure 4</span><span class="fig-title">How long HITO says the work takes</span><span class="fig-body"> Each bar is one requirement that has an estimate. The solid part is development days, the pale part is testing days. Three items dominate at 30 + 30 days: speed-based tracking parameters (<a class="xref req-ref" href="#req-7-4" title="7.4: The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per motion primitive.">7.4</a>), early braking for a short final edge (<a class="xref req-ref" href="#req-7-7" title="7.7: Regardless of the final edge's length, the AGV must start decelerating early enough to reach zero at the final node without overshooting.">7.7</a>) and remote joystick recovery (<a class="xref req-ref" href="#req-8-6" title="8.6: The AGV may support remote joystick / remote movement for recovery, e.g. when off the magnetic tape.">8.6</a>). Adding every bar end to end gives 244 + 196 days, but the source doesn't say how much can run in parallel, so treat that as an upper bound, not a schedule.</span></figcaption></figure>
+
+<h2 id="group-1"><span class="group-num">1</span>Order execution and rotation at nodes</h2>
+<figure class="fig" data-name="1_1_single_node_rotation" id="fig-5"><a aria-label="Open figure 5 full size" class="fig-media" href="images/1_1_single_node_rotation.svg" rel="noopener" target="_blank"><img alt="Figure 5. Turning on the spot when the order has only one node" height="400" loading="lazy" src="images/1_1_single_node_rotation.svg" width="960"/></a><figcaption><span class="fig-label">Figure 5</span><span class="fig-title">Turning on the spot when the order has only one node</span><span class="fig-body"> Volley wants to send an order that contains only the node the AGV is already standing on, with a new heading, so the AGV simply turns in place. On the left is today's behaviour: the firmware ignores a one-node order and needs a second node before it moves. On the right is the requirement: the same AGV on N1 turns from facing right (0°) to facing up (90°) without driving anywhere.</span></figcaption></figure>
+
+<figure class="fig" data-name="1_2_final_node_theta" id="fig-6"><a aria-label="Open figure 6 full size" class="fig-media" href="images/1_2_final_node_theta.svg" rel="noopener" target="_blank"><img alt="Figure 6. Turning to the final node's heading" height="330" loading="lazy" src="images/1_2_final_node_theta.svg" width="960"/></a><figcaption><span class="fig-label">Figure 6</span><span class="fig-title">Turning to the final node's heading</span><span class="fig-body"> The AGV drives along N1 → N4. When it reaches N4 it is still facing the direction it drove in (0°). If the order says N4's heading is −90° (facing down), the AGV must turn to that heading before the order counts as done. HITO says this already works.</span></figcaption></figure>
+
+<figure class="fig" data-name="1_3_driving_flag" id="fig-7"><a aria-label="Open figure 7 full size" class="fig-media" href="images/1_3_driving_flag.svg" rel="noopener" target="_blank"><img alt="Figure 7. When the 'driving' flag is true" height="430" loading="lazy" src="images/1_3_driving_flag.svg" width="960"/></a><figcaption><span class="fig-label">Figure 7</span><span class="fig-title">When the 'driving' flag is true</span><span class="fig-body"> Time runs left to right. The top trace is the wheel speed the controller commands; the bottom trace is the driving flag the AGV reports. The flag must be true whenever the wheels are commanded to turn — including during an in-place rotation, where the AGV isn't changing position but its wheels are moving (<a class="xref req-ref" href="#req-1-3" title="1.3: During all edge movements and rotational movements, the AGV must report its driving state as true whenever the commanded wheel speed is non-zero.">1.3</a>). It must drop to false as soon as the commanded speed is zero (<a class="xref req-ref" href="#req-1-4" title="1.4: When the commanded wheel speed is zero, the AGV must report its driving state as false.">1.4</a>).</span></figcaption></figure>
+
+<figure class="fig" data-name="uml_1" id="fig-8"><a aria-label="Open figure 8 full size" class="fig-media" href="images/uml_1.svg" rel="noopener" target="_blank"><img alt="Figure 8. Message structure for group 1" height="1188" loading="lazy" src="images/uml_1.svg" width="960"/></a><figcaption><span class="fig-label">Figure 8</span><span class="fig-title">Message structure for group 1</span><span class="fig-body"> How to read these structure figures. The badge above each message shows who publishes it and who receives it: here the <a class="xref term" href="#g-fleet-manager" title="The central server that plans routes and sends orders to AGVs. VDA5050 calls it master control; in this project it is Volley's system.">fleet manager</a> sends order to the AGV, and the AGV sends state back. Each box lists every field of one JSON object with its data type and unit (for example float64 · m). Nested objects are fields too, marked with a small diamond; the ones on the path to a requirement are highlighted in blue, and a line runs from that row to the object's own box. The line is labelled with the JSON key and how many there can be ([ ] means an array). Fields a requirement depends on are highlighted in orange. So <a class="xref req-ref" href="#req-1-1" title="1.1: When the AGV receives an order containing only a single node, and that node is the AGV's current node, if the theta in the order differs from the current theta, the AGV must rotate in place to the commanded theta.">1.1</a> and <a class="xref req-ref" href="#req-1-2" title="1.2: When the AGV reaches the final node of an order and that node's theta differs from the current theta, the AGV must rotate to the theta specified for the final node.">1.2</a> read order → nodes[ ] → nodePosition → <a class="xref term" href="#g-theta" title="Heading angle in radians, measured counter-clockwise from the map's x axis.">theta</a> (float64, radians), and <a class="xref req-ref" href="#req-1-3" title="1.3: During all edge movements and rotational movements, the AGV must report its driving state as true whenever the commanded wheel speed is non-zero.">1.3</a> / <a class="xref req-ref" href="#req-1-4" title="1.4: When the commanded wheel speed is zero, the AGV must report its driving state as false.">1.4</a> read state → driving (boolean).</span></figcaption></figure>
+
+<div class="table-wrap"><table class="req-table" id="table-1">
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>HITO response</th>
+<th>Status</th>
+<th>Effort</th>
+</tr>
+</thead>
+<tbody>
+<tr id="req-1-1">
+<td class="c-id"><a class="self" href="#req-1-1">1.1</a></td>
+<td>When the AGV receives an order containing only a single node, and that node is the AGV's current node, if the theta in the order differs from the current theta, the AGV must rotate in place to the commanded theta.</td>
+<td>Can be implemented. Current logic requires two nodes. Firmware update after successful testing.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">10 + 10</td>
+</tr>
+<tr id="req-1-2">
+<td class="c-id"><a class="self" href="#req-1-2">1.2</a></td>
+<td>When the AGV reaches the final node of an order and that node's theta differs from the current theta, the AGV must rotate to the theta specified for the final node.</td>
+<td>Already how it works.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-1-3">
+<td class="c-id"><a class="self" href="#req-1-3">1.3</a></td>
+<td>During all edge movements and rotational movements, the AGV must report its driving state as true whenever the commanded wheel speed is non-zero.</td>
+<td>Can be implemented.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">4 + 2</td>
+</tr>
+<tr id="req-1-4">
+<td class="c-id"><a class="self" href="#req-1-4">1.4</a></td>
+<td>When the commanded wheel speed is zero, the AGV must report its driving state as false.</td>
+<td>Can be implemented.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">4 + 2</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="group-2"><span class="group-num">2</span>MQTT connection, factsheet and action reporting</h2>
+<figure class="fig" data-name="2_1_mqtt_session" id="fig-9"><a aria-label="Open figure 9 full size" class="fig-media" href="images/2_1_mqtt_session.svg" rel="noopener" target="_blank"><img alt="Figure 9. Who tells the fleet manager that an AGV has dropped off" height="560" loading="lazy" src="images/2_1_mqtt_session.svg" width="960"/></a><figcaption><span class="fig-label">Figure 9</span><span class="fig-title">Who tells the fleet manager that an AGV has dropped off</span><span class="fig-body"> Read top to bottom as a message sequence between four parties. When the <a class="xref term" href="#g-vda5050" title="Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See Figure 2.">VDA5050</a> agent connects, it hands the <a class="xref term" href="#g-broker" title="The server that receives every published message and forwards it to the subscribers of its topic. It also stores retained messages and publishes Last Will messages.">MQTT broker</a> a '<a class="xref term" href="#g-last-will" title="A message a client hands to the broker when it connects. If the client later disconnects without saying goodbye (crash, network loss), the broker publishes that message for it. VDA5050 uses it to announce CONNECTIONBROKEN.">Last Will</a>': a message the broker should publish on its behalf if the connection dies (<a class="xref req-ref" href="#req-2-2" title="2.2: The AGV must register an MQTT Last Will message on the connection topic, with connectionState set to CONNECTIONBROKEN.">2.2</a>). It then publishes the <a class="xref term" href="#g-factsheet" title="The AGV's self-description: type, physical limits, supported features and the custom actions it understands. Structure: Figure 12.">factsheet</a> with the <a class="xref term" href="#g-retained" title="A message published with MQTT's retain flag. The broker keeps the latest one per topic and hands it to any client that subscribes later, so a fleet manager that starts after the AGV still gets the factsheet.">retained flag</a>, so the broker keeps a copy for any subscriber that connects later (<a class="xref req-ref" href="#req-2-1" title="2.1: The AGV must publish the factsheet message with the MQTT retained flag set to true.">2.1</a>). If the firmware or the agent crashes, the connection drops and the broker — not the AGV — publishes CONNECTIONBROKEN (<a class="xref req-ref" href="#req-2-3" title="2.3: When the AGV's main firmware shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN.">2.3</a>, <a class="xref req-ref" href="#req-2-4" title="2.4: When the AGV's VDA5050 agent shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN.">2.4</a>). That's why HITO says <a class="xref req-ref" href="#req-2-3" title="2.3: When the AGV's main firmware shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN.">2.3</a> and <a class="xref req-ref" href="#req-2-4" title="2.4: When the AGV's VDA5050 agent shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN.">2.4</a> aren't its responsibility, and why they only work once <a class="xref req-ref" href="#req-2-2" title="2.2: The AGV must register an MQTT Last Will message on the connection topic, with connectionState set to CONNECTIONBROKEN.">2.2</a> is done.</span></figcaption></figure>
+
+<figure class="fig" data-name="2_5_instant_actions" id="fig-10"><a aria-label="Open figure 10 full size" class="fig-media" href="images/2_5_instant_actions.svg" rel="noopener" target="_blank"><img alt="Figure 10. When an instant action may be reported as finished" height="430" loading="lazy" src="images/2_5_instant_actions.svg" width="960"/></a><figcaption><span class="fig-label">Figure 10</span><span class="fig-title">When an instant action may be reported as finished</span><span class="fig-body"> Each line is the life of one <a class="xref term" href="#g-instant-action" title="An action sent on the instantActions topic rather than attached to a node or edge, so it runs as soon as it arrives.">instant action</a>, left to right. The red cross marks the moment the AGV must not yet say FINISHED; the green tick marks the earliest moment it may. For any instant action (<a class="xref req-ref" href="#req-2-5" title="2.5: For an instant action, the AGV may report FINISHED only after the firmware has actually executed and applied the request, not merely because the VDA5050 agent received it.">2.5</a>), merely receiving the command isn't enough — the firmware has to have actually applied it. For stopPause (<a class="xref req-ref" href="#req-2-6" title="2.6: For the stopPause instant action, the AGV may report FINISHED only after the firmware has returned to the auto-run state.">2.6</a>), the AGV may only report FINISHED once it is back in automatic driving mode, not when the resume was merely requested.</span></figcaption></figure>
+
+<figure class="fig" data-name="2_7_change_control" id="fig-11"><a aria-label="Open figure 11 full size" class="fig-media" href="images/2_7_change_control.svg" rel="noopener" target="_blank"><img alt="Figure 11. Interface documentation and joint sign-off" height="380" loading="lazy" src="images/2_7_change_control.svg" width="960"/></a><figcaption><span class="fig-label">Figure 11</span><span class="fig-title">Interface documentation and joint sign-off</span><span class="fig-body"> The flow chart shows the approval rule both parties agreed to: any change goes through both Volley and HITO before release. The left list names which requirements this rule covers (interface changes, the error-type strings and the rotation action type). The right list shows the two documents HITO owes: a list of every place it departs from the VDA5050 standard (<a class="xref req-ref" href="#req-2-7" title="2.7: HITO must provide updated interface documentation listing all deviations from the current VDA5050 specification.">2.7</a>) and full documentation of its custom messages (<a class="xref req-ref" href="#req-2-8" title="2.8: HITO must fully document all custom messages, including commonMessage: field names, field types, permitted values and example payloads.">2.8</a>). Note HITO's remark that keeping <a class="xref req-ref" href="#req-2-7" title="2.7: HITO must provide updated interface documentation listing all deviations from the current VDA5050 specification.">2.7</a> up to date in future is outside its scope.</span></figcaption></figure>
+
+<figure class="fig" data-name="uml_2" id="fig-12"><a aria-label="Open figure 12 full size" class="fig-media" href="images/uml_2.svg" rel="noopener" target="_blank"><img alt="Figure 12. Message structure for group 2" height="1526" loading="lazy" src="images/uml_2.svg" width="960"/></a><figcaption><span class="fig-label">Figure 12</span><span class="fig-title">Message structure for group 2</span><span class="fig-body"> connection.connectionState carries ONLINE, OFFLINE or CONNECTIONBROKEN; the Last Will registered in <a class="xref req-ref" href="#req-2-2" title="2.2: The AGV must register an MQTT Last Will message on the connection topic, with connectionState set to CONNECTIONBROKEN.">2.2</a> is a connection message with CONNECTIONBROKEN. <a class="xref req-ref" href="#req-2-1" title="2.1: The AGV must publish the factsheet message with the MQTT retained flag set to true.">2.1</a> concerns the whole factsheet message, which is sent with <a class="xref term" href="#g-mqtt" title="Lightweight publish/subscribe messaging protocol. Clients publish messages to named topics through a broker, and every client subscribed to that topic receives them.">MQTT</a>'s retain flag (a transport setting, not a field). For <a class="xref req-ref" href="#req-2-5" title="2.5: For an instant action, the AGV may report FINISHED only after the firmware has actually executed and applied the request, not merely because the VDA5050 agent received it.">2.5</a> and <a class="xref req-ref" href="#req-2-6" title="2.6: For the stopPause instant action, the AGV may report FINISHED only after the firmware has returned to the auto-run state.">2.6</a>, a command sent in instantActions.actions[] is tracked through state.actionStates[]: the actionId matches, and actionStatus may only become FINISHED once the firmware has applied the action.</span></figcaption></figure>
+
+<div class="table-wrap"><table class="req-table" id="table-2">
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>HITO response</th>
+<th>Status</th>
+<th>Effort</th>
+</tr>
+</thead>
+<tbody>
+<tr id="req-2-1">
+<td class="c-id"><a class="self" href="#req-2-1">2.1</a></td>
+<td>The AGV must publish the factsheet message with the MQTT retained flag set to true.</td>
+<td>Factsheet already published (sent twice at startup). Volley to list which topics need the retained flag.</td>
+<td class="c-status"><span class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span><span>Conditional / to discuss</span></span></td>
+<td class="c-effort">10 + 4</td>
+</tr>
+<tr id="req-2-2">
+<td class="c-id"><a class="self" href="#req-2-2">2.2</a></td>
+<td>The AGV must register an MQTT Last Will message on the connection topic, with connectionState set to CONNECTIONBROKEN.</td>
+<td>No issues. Firmware update after successful testing.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">6 + 4</td>
+</tr>
+<tr id="req-2-3">
+<td class="c-id"><a class="self" href="#req-2-3">2.3</a></td>
+<td>When the AGV's main firmware shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN.</td>
+<td>Built-in MQTT broker mechanism, unrelated to AGV firmware shutting down or crashing.</td>
+<td class="c-status"><span class="badge st-process"><span aria-hidden="true" class="badge-dot">P</span><span>Process / outside AGV</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-2-4">
+<td class="c-id"><a class="self" href="#req-2-4">2.4</a></td>
+<td>When the AGV's VDA5050 agent shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN.</td>
+<td>AGV cannot guarantee this; governed by the broker's built-in mechanism.</td>
+<td class="c-status"><span class="badge st-process"><span aria-hidden="true" class="badge-dot">P</span><span>Process / outside AGV</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-2-5">
+<td class="c-id"><a class="self" href="#req-2-5">2.5</a></td>
+<td>For an instant action, the AGV may report FINISHED only after the firmware has actually executed and applied the request, not merely because the VDA5050 agent received it.</td>
+<td>Already how it works.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-2-6">
+<td class="c-id"><a class="self" href="#req-2-6">2.6</a></td>
+<td>For the stopPause instant action, the AGV may report FINISHED only after the firmware has returned to the auto-run state.</td>
+<td>No issues. Firmware update after successful testing.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">4 + 2</td>
+</tr>
+<tr id="req-2-7">
+<td class="c-id"><a class="self" href="#req-2-7">2.7</a></td>
+<td>HITO must provide updated interface documentation listing all deviations from the current VDA5050 specification.</td>
+<td>Future maintenance is outside HITO's scope. Documentation can be updated.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">10 + /</td>
+</tr>
+<tr id="req-2-8">
+<td class="c-id"><a class="self" href="#req-2-8">2.8</a></td>
+<td>HITO must fully document all custom messages, including <a class="xref term" href="#g-commonmessage" title="HITO's own extra topic, not part of VDA5050, carrying RFID, tape-sensor and lidar-field values. See Figure 19.">commonMessage</a>: field names, field types, permitted values and example payloads.</td>
+<td>Documentation already provided; can be updated later.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">4 + /</td>
+</tr>
+<tr id="req-2-9">
+<td class="c-id"><a class="self" href="#req-2-9">2.9</a></td>
+<td>Any change to the VDA5050 interface or custom messages must be jointly reviewed and approved by Volley and HITO before release.</td>
+<td>No issues.</td>
+<td class="c-status"><span class="badge st-process"><span aria-hidden="true" class="badge-dot">P</span><span>Process / outside AGV</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="group-3"><span class="group-num">3</span>Cancellation, release horizon and stopping precision</h2>
+<figure class="fig" data-name="3_1_cancel_stop" id="fig-13"><a aria-label="Open figure 13 full size" class="fig-media" href="images/3_1_cancel_stop.svg" rel="noopener" target="_blank"><img alt="Figure 13. Where the AGV stops after its order is cancelled" height="450" loading="lazy" src="images/3_1_cancel_stop.svg" width="960"/></a><figcaption><span class="fig-label">Figure 13</span><span class="fig-title">Where the AGV stops after its order is cancelled</span><span class="fig-body"> Speed (m/s) against distance (m), using example values: braking at 0.25 m/s², nodes 6 m apart, cancel arriving at 2.5 m. Stopping distance is v² / 2a. The blue AGV at 0.8 m/s needs only 1.3 m, so it keeps going and brakes to stop exactly at the next node N2 (<a class="xref req-ref" href="#req-3-1" title="3.1: When an order is canceled, if the AGV can decelerate to zero at the next node (given speed, deceleration, remaining edge distance), it must stop at the next node.">3.1</a>, HITO will try). The green AGV at 2.0 m/s needs 8 m but only 3.5 m remain before N2, so it passes N2 and stops at N3 instead (<a class="xref req-ref" href="#req-3-2" title="3.2: When an order is canceled and the AGV cannot decelerate to zero at the next node, it must stop at the node after the next node.">3.2</a>, already works).</span></figcaption></figure>
+
+<figure class="fig" data-name="3_3_release_horizon" id="fig-14"><a aria-label="Open figure 14 full size" class="fig-media" href="images/3_3_release_horizon.svg" rel="noopener" target="_blank"><img alt="Figure 14. Stopping at the edge of the released path" height="400" loading="lazy" src="images/3_3_release_horizon.svg" width="960"/></a><figcaption><span class="fig-label">Figure 14</span><span class="fig-title">Stopping at the edge of the released path</span><span class="fig-body"> Fleet managers release a route in pieces: solid edges are released and the AGV may drive them; dashed edges are planned but not yet released. Top row: nothing beyond N4 has been released by the time the AGV gets there, so it must stop at N4 (<a class="xref req-ref" href="#req-3-3" title="3.3: When the AGV reaches the last released node while the following edge is not yet released, it must stop at that last released node.">3.3</a>). Bottom row: the <a class="xref term" href="#g-fleet-manager" title="The central server that plans routes and sends orders to AGVs. VDA5050 calls it master control; in this project it is Volley's system.">fleet manager</a> releases the next stretch before the AGV arrives, so it must drive straight through N4 without stopping (<a class="xref req-ref" href="#req-3-4" title="3.4: If the following edge and node are released before the AGV reaches the last released node, the AGV must pass through without stopping.">3.4</a>). Both already work.</span></figcaption></figure>
+
+<figure class="fig" data-name="3_5_off_tape" id="fig-15"><a aria-label="Open figure 15 full size" class="fig-media" href="images/3_5_off_tape.svg" rel="noopener" target="_blank"><img alt="Figure 15. Off-tape detection only while moving" height="340" loading="lazy" src="images/3_5_off_tape.svg" width="960"/></a><figcaption><span class="fig-label">Figure 15</span><span class="fig-title">Off-tape detection only while moving</span><span class="fig-body"> Time runs left to right. The AGV raises an off-tape fault if it loses the tape for too long, but that timer should only run while the wheels are commanded to move (blue 'armed' blocks). In the middle the AGV is standing still and the sensor briefly loses the tape (red hatched block); because the timer is off, no fault is raised. HITO says this already works.</span></figcaption></figure>
+
+<figure class="fig" data-name="3_6_precision" id="fig-16"><a aria-label="Open figure 16 full size" class="fig-media" href="images/3_6_precision.svg" rel="noopener" target="_blank"><img alt="Figure 16. How precisely the AGV must stop and turn" height="560" loading="lazy" src="images/3_6_precision.svg" width="960"/></a><figcaption><span class="fig-label">Figure 16</span><span class="fig-title">How precisely the AGV must stop and turn</span><span class="fig-body"> Top row: the AGV at true scale, where both tolerances are far too small to see. Left inset (100× zoom, 4 px = 1 mm): the tape is 50 mm wide; the AGV's reference point must end inside the 10 mm circle around the node centre and must never cross the centre line (red hatching), so a stop 6 mm short is valid (<a class="xref req-ref" href="#req-3-6" title="3.6: At any node where a stop is required, the AGV must stop within a 10 mm radius of the node center and must not overshoot the node center.">3.6</a>). Right inset: an angle error is easier to judge as sideways movement of the front bumper, 0.9 m ahead of the turning centre. There ±1.5° becomes ±23.6 mm and 0.5° becomes 7.9 mm. The curve shows the bumper swinging past the target during the turn, peaking under the 7.9 mm overshoot limit and settling inside the ±1.5° band. HITO rejected the 0.5° overshoot limit (<a class="xref req-ref" href="#req-3-7" title="3.7: After an in-place rotation at a node, the AGV must stop within ±1.5° of the target angle with rotational overshoot of less than 0.5°.">3.7</a>).</span></figcaption></figure>
+
+<figure class="fig" data-name="uml_3" id="fig-17"><a aria-label="Open figure 17 full size" class="fig-media" href="images/uml_3.svg" rel="noopener" target="_blank"><img alt="Figure 17. Message structure for group 3" height="1388" loading="lazy" src="images/uml_3.svg" width="960"/></a><figcaption><span class="fig-label">Figure 17</span><span class="fig-title">Message structure for group 3</span><span class="fig-body"> cancelOrder (<a class="xref req-ref" href="#req-3-1" title="3.1: When an order is canceled, if the AGV can decelerate to zero at the next node (given speed, deceleration, remaining edge distance), it must stop at the next node.">3.1</a>, <a class="xref req-ref" href="#req-3-2" title="3.2: When an order is canceled and the AGV cannot decelerate to zero at the next node, it must stop at the node after the next node.">3.2</a>) is an actionType sent through instantActions. The <a class="xref term" href="#g-horizon" title="The released part of an order (base) may be driven. The unreleased part (horizon) is a preview the AGV must not enter until the fleet manager releases it.">release horizon</a> (<a class="xref req-ref" href="#req-3-3" title="3.3: When the AGV reaches the last released node while the following edge is not yet released, it must stop at that last released node.">3.3</a>, <a class="xref req-ref" href="#req-3-4" title="3.4: If the following edge and node are released before the AGV reaches the last released node, the AGV must pass through without stopping.">3.4</a>) is the released flag on each node and edge of the order. <a class="xref term" href="#g-vda5050" title="Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See Figure 2.">VDA5050</a> already has per-node tolerance fields: allowedDeviationXY (metres) and allowedDeviationTheta (radians) in nodePosition, so the 10 mm and 1.5° of <a class="xref req-ref" href="#req-3-6" title="3.6: At any node where a stop is required, the AGV must stop within a 10 mm radius of the node center and must not overshoot the node center.">3.6</a> and <a class="xref req-ref" href="#req-3-7" title="3.7: After an in-place rotation at a node, the AGV must stop within ±1.5° of the target angle with rotational overshoot of less than 0.5°.">3.7</a> can be sent as 0.01 and about 0.026. There is no standard field for the 0.5° overshoot limit.</span></figcaption></figure>
+
+<div class="table-wrap"><table class="req-table" id="table-3">
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>HITO response</th>
+<th>Status</th>
+<th>Effort</th>
+</tr>
+</thead>
+<tbody>
+<tr id="req-3-1">
+<td class="c-id"><a class="self" href="#req-3-1">3.1</a></td>
+<td>When an order is canceled, if the AGV can decelerate to zero at the next node (given speed, deceleration, remaining edge distance), it must stop at the next node.</td>
+<td>May be difficult; will try. Update if testing succeeds.</td>
+<td class="c-status"><span class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span><span>Conditional / to discuss</span></span></td>
+<td class="c-effort">10 + 10</td>
+</tr>
+<tr id="req-3-2">
+<td class="c-id"><a class="self" href="#req-3-2">3.2</a></td>
+<td>When an order is canceled and the AGV cannot decelerate to zero at the next node, it must stop at the node after the next node.</td>
+<td>Already how it works.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-3-3">
+<td class="c-id"><a class="self" href="#req-3-3">3.3</a></td>
+<td>When the AGV reaches the last released node while the following edge is not yet released, it must stop at that last released node.</td>
+<td>Already how it works.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-3-4">
+<td class="c-id"><a class="self" href="#req-3-4">3.4</a></td>
+<td>If the following edge and node are released before the AGV reaches the last released node, the AGV must pass through without stopping.</td>
+<td>Already how it works.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-3-5">
+<td class="c-id"><a class="self" href="#req-3-5">3.5</a></td>
+<td>The AGV must perform time-based off-magnetic-tape detection only when the commanded wheel speed is non-zero.</td>
+<td>Already how it works.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-3-6">
+<td class="c-id"><a class="self" href="#req-3-6">3.6</a></td>
+<td>At any node where a stop is required, the AGV must stop within a 10 mm radius of the node center and must not overshoot the node center.</td>
+<td>Standard operating procedure, achieved with the lateral magnetic strip. Abnormal conditions to be discussed separately.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-3-7">
+<td class="c-id"><a class="self" href="#req-3-7">3.7</a></td>
+<td>After an in-place rotation at a node, the AGV must stop within ±1.5° of the target angle with rotational overshoot of less than 0.5°.</td>
+<td>Overshoot below 0.5° is difficult to achieve. In-place rotation at a node cannot be used for positioning.</td>
+<td class="c-status"><span class="badge st-rejected"><span aria-hidden="true" class="badge-dot">R</span><span>Not feasible</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="group-4"><span class="group-num">4</span>Message publishing frequency</h2>
+<figure class="fig" data-name="4_publish_rates" id="fig-18"><a aria-label="Open figure 18 full size" class="fig-media" href="images/4_publish_rates.svg" rel="noopener" target="_blank"><img alt="Figure 18. Making message rates configurable" height="330" loading="lazy" src="images/4_publish_rates.svg" width="960"/></a><figcaption><span class="fig-label">Figure 18</span><span class="fig-title">Making message rates configurable</span><span class="fig-body"> Each tick mark is one message sent during a one-second window. Volley wants the rates of the visualization message (<a class="xref req-ref" href="#req-4-1" title="4.1: The AGV must publish visualization messages at the frequency set by parameters in iconfig.yaml.">4.1</a>) and of <a class="xref term" href="#g-commonmessage" title="HITO's own extra topic, not part of VDA5050, carrying RFID, tape-sensor and lidar-field values. See Figure 19.">commonMessage</a> (<a class="xref req-ref" href="#req-4-2" title="4.2: The AGV must publish commonMessage messages at the frequency set by parameters in iconfig.yaml.">4.2</a>) read from the AGV's iconfig.yaml file, so they can be tuned without new firmware. Here 10 Hz and 2 Hz are example values. These settings don't exist today; HITO wants to discuss the use case first.</span></figcaption></figure>
+
+<p><em>The message structure for group 4 is shown with group 5, which uses the same messages.</em></p>
+<div class="table-wrap"><table class="req-table" id="table-4">
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>HITO response</th>
+<th>Status</th>
+<th>Effort</th>
+</tr>
+</thead>
+<tbody>
+<tr id="req-4-1">
+<td class="c-id"><a class="self" href="#req-4-1">4.1</a></td>
+<td>The AGV must publish visualization messages at the frequency set by parameters in iconfig.yaml.</td>
+<td>Parameter not currently available. Use case to be discussed.</td>
+<td class="c-status"><span class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span><span>Conditional / to discuss</span></span></td>
+<td class="c-effort">6 + 4</td>
+</tr>
+<tr id="req-4-2">
+<td class="c-id"><a class="self" href="#req-4-2">4.2</a></td>
+<td>The AGV must publish commonMessage messages at the frequency set by parameters in iconfig.yaml.</td>
+<td>Parameter not currently available. Use case to be discussed.</td>
+<td class="c-status"><span class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span><span>Conditional / to discuss</span></span></td>
+<td class="c-effort">6 + 4</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="group-5"><span class="group-num">5</span>State, commonMessage and error reporting</h2>
+<figure class="fig" data-name="5_1_common_message" id="fig-19"><a aria-label="Open figure 19 full size" class="fig-media" href="images/5_1_common_message.svg" rel="noopener" target="_blank"><img alt="Figure 19. Where commonMessage lives, and the fields requested in it" height="666" loading="lazy" src="images/5_1_common_message.svg" width="960"/></a><figcaption><span class="fig-label">Figure 19</span><span class="fig-title">Where commonMessage lives, and the fields requested in it</span><span class="fig-body"> Part 1 answers where the message travels. <a class="xref term" href="#g-commonmessage" title="HITO's own extra topic, not part of VDA5050, carrying RFID, tape-sensor and lidar-field values. See Figure 19.">commonMessage</a> is not one of the six standard <a class="xref term" href="#g-vda5050" title="Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See Figure 2.">VDA5050</a> topics (grey); it is HITO's own extra <a class="xref term" href="#g-topic" title="The address a message is published to, for example uagv/v2/HITO/AGV001/state.">MQTT topic</a> (orange), published by the AGV under the same topic path as the others: uagv / v2 / manufacturer / serialNumber / commonMessage. The source doesn't give the exact topic name or payload format, so both are assumptions until HITO delivers the documentation promised in <a class="xref req-ref" href="#req-2-8" title="2.8: HITO must fully document all custom messages, including commonMessage: field names, field types, permitted values and example payloads.">2.8</a>. Part 2 shows the payload. The dark panel is what the AGV's own screen shows today; the light panel is the JSON message, starting with the same header fields every VDA5050 message carries (assumed), followed by the four new fields. The dashed arrows show which on-screen value each field carries: <a class="xref term" href="#g-rfid" title="Floor tags the AGV reads to know exactly which node it is at.">RFID</a> signal strength (<a class="xref req-ref" href="#req-5-1" title="5.1: The AGV must report RFID signal strength in commonMessage, matching the S value on the AGV's screen.">5.1</a>), the RFID tag read (<a class="xref req-ref" href="#req-5-13" title="5.13: The AGV must report the actual RFID reader reading in commonMessage, matching the RFID value on the AGV's screen.">5.13</a>), the tape sensor reading (<a class="xref req-ref" href="#req-5-3" title="5.3: When the magnetic tape sensor has no reading, the AGV must report it in commonMessage as an empty string or an optional value.">5.3</a>) and the active <a class="xref term" href="#g-protective-field" title="An area watched by the safety laser scanner (lidar). If anything enters the active field, the AGV stops. Larger fields are needed at higher speeds.">laser field</a> (<a class="xref req-ref" href="#req-5-15" title="5.15: The AGV must report the currently selected laser protective field in commonMessage.">5.15</a>). The tape sensor reads nothing here, so the field is an empty string, as Volley asked. The note explains HITO's different proposal. The structure figure at the end of section 5 shows commonMessage next to state and visualization.</span></figcaption></figure>
+
+<figure class="fig" data-name="5_4_errors" id="fig-20"><a aria-label="Open figure 20 full size" class="fig-media" href="images/5_4_errors.svg" rel="noopener" target="_blank"><img alt="Figure 20. How errors should be reported" height="470" loading="lazy" src="images/5_4_errors.svg" width="960"/></a><figcaption><span class="fig-label">Figure 20</span><span class="fig-title">How errors should be reported</span><span class="fig-body"> Every error code shown on the AGV's screen (left) must also appear in the state message sent to the <a class="xref term" href="#g-fleet-manager" title="The central server that plans routes and sends orders to AGVs. VDA5050 calls it master control; in this project it is Volley's system.">fleet manager</a> (<a class="xref req-ref" href="#req-5-4" title="5.4: The AGV must report all error codes shown on the HMI screen in the errors field of the state message.">5.4</a>). Each error entry should use an agreed name from a fixed list rather than free text (<a class="xref req-ref" href="#req-5-5" title="5.5: The AGV must use defined string enumeration values for errorType rather than undefined raw strings.">5.5</a>), always include a readable description (<a class="xref req-ref" href="#req-5-8" title="5.8: The AGV must populate errorDescription for every reported error.">5.8</a>), and may include a hint for the operator (<a class="xref req-ref" href="#req-5-9" title="5.9: The AGV may populate errorHint for any reported error.">5.9</a>). The fixed list of names can only change if both companies agree (<a class="xref req-ref" href="#req-5-6" title="5.6: The errorType string values must be jointly reviewed and approved by Volley and HITO before release.">5.6</a>, <a class="xref req-ref" href="#req-5-7" title="5.7: The errorType string values must not change unless both Volley and HITO agree.">5.7</a>). HITO said it didn't understand what errorHint means.</span></figcaption></figure>
+
+<figure class="fig" data-name="5_10_pose" id="fig-21"><a aria-label="Open figure 21 full size" class="fig-media" href="images/5_10_pose.svg" rel="noopener" target="_blank"><img alt="Figure 21. Reporting where the AGV actually is" height="470" loading="lazy" src="images/5_10_pose.svg" width="960"/></a><figcaption><span class="fig-label">Figure 21</span><span class="fig-title">Reporting where the AGV actually is</span><span class="fig-body"> Both panels show an AGV following a curved stretch of tape; dots are the positions it reports, and the short line on each dot is the heading it reports. Left, the wrong way: the AGV only adds the distance travelled to x and keeps y and the heading frozen at whatever the first RFID tag said, so its reported track runs in a straight line away from where it really is. Right, the required way: x, y and heading all come from the AGV's position estimate, so the reported dots follow the real path. Velocity is then the rate of change of those values. HITO says all of this already works; only the reporting rate is still to be agreed.</span></figcaption></figure>
+
+<figure class="fig" data-name="uml_5" id="fig-22"><a aria-label="Open figure 22 full size" class="fig-media" href="images/uml_5.svg" rel="noopener" target="_blank"><img alt="Figure 22. Message structure for groups 4 and 5" height="1927" loading="lazy" src="images/uml_5.svg" width="960"/></a><figcaption><span class="fig-label">Figure 22</span><span class="fig-title">Message structure for groups 4 and 5</span><span class="fig-body"> Position appears twice: state.agvPosition and visualization.agvPosition, both holding x, y and <a class="xref term" href="#g-theta" title="Heading angle in radians, measured counter-clockwise from the map's x axis.">theta</a> from the <a class="xref term" href="#g-state-estimate" title="The AGV's best estimate of its position and heading, fused from wheel odometry, RFID reads and the tape sensor.">state estimate</a> (<a class="xref req-ref" href="#req-5-10" title="5.10: The AGV must report state-estimated x, y and theta in agvPosition in both state and visualization messages, at a TBD Hz frequency to be agreed.">5.10</a>–<a class="xref req-ref" href="#req-5-12" title="5.12: The AGV must report theta from its state estimate, not a fixed value derived from the first RFID reading.">5.12</a>). Velocity for <a class="xref req-ref" href="#req-5-14" title="5.14: The AGV must report velocity in visualization: the derivatives of x, y and theta.">5.14</a> sits in visualization.velocity as vx, vy and omega. Each error in <a class="xref req-ref" href="#req-5-4" title="5.4: The AGV must report all error codes shown on the HMI screen in the errors field of the state message.">5.4</a>–<a class="xref req-ref" href="#req-5-9" title="5.9: The AGV may populate errorHint for any reported error.">5.9</a> is one entry in state.errors[], with errorType, errorDescription and the optional errorHint, which comes from a newer revision of the standard. The visualization rate (<a class="xref req-ref" href="#req-4-1" title="4.1: The AGV must publish visualization messages at the frequency set by parameters in iconfig.yaml.">4.1</a>) and the whole commonMessage (<a class="xref req-ref" href="#req-4-2" title="4.2: The AGV must publish commonMessage messages at the frequency set by parameters in iconfig.yaml.">4.2</a>, <a class="xref req-ref" href="#req-5-1" title="5.1: The AGV must report RFID signal strength in commonMessage, matching the S value on the AGV's screen.">5.1</a>, <a class="xref req-ref" href="#req-5-3" title="5.3: When the magnetic tape sensor has no reading, the AGV must report it in commonMessage as an empty string or an optional value.">5.3</a>, <a class="xref req-ref" href="#req-5-13" title="5.13: The AGV must report the actual RFID reader reading in commonMessage, matching the RFID value on the AGV's screen.">5.13</a>, <a class="xref req-ref" href="#req-5-15" title="5.15: The AGV must report the currently selected laser protective field in commonMessage.">5.15</a>) are on separate topics; commonMessage is HITO's own format, so its field names here are placeholders.</span></figcaption></figure>
+
+<div class="table-wrap"><table class="req-table" id="table-5">
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>HITO response</th>
+<th>Status</th>
+<th>Effort</th>
+</tr>
+</thead>
+<tbody>
+<tr id="req-5-1">
+<td class="c-id"><a class="self" href="#req-5-1">5.1</a></td>
+<td>The AGV must report RFID signal strength in commonMessage, matching the S value on the AGV's screen.</td>
+<td>Not currently available but can be added.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">6 + 4</td>
+</tr>
+<tr id="req-5-3">
+<td class="c-id"><a class="self" href="#req-5-3">5.3</a></td>
+<td>When the <a class="xref term" href="#g-magnetic-tape" title="A strip on the floor, here assumed 50 mm wide, that the AGV's sensor array follows to stay on its path.">magnetic tape</a> sensor has no reading, the AGV must report it in commonMessage as an empty string or an optional value.</td>
+<td>Counter-proposal: a value that stays at 0 for 1 second means the sensor has no reading.</td>
+<td class="c-status"><span class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span><span>Conditional / to discuss</span></span></td>
+<td class="c-effort">6 + 4</td>
+</tr>
+<tr id="req-5-4">
+<td class="c-id"><a class="self" href="#req-5-4">5.4</a></td>
+<td>The AGV must report all error codes shown on the <a class="xref term" href="#g-hmi" title="Human-machine interface: the AGV's own on-board screen.">HMI</a> screen in the errors field of the state message.</td>
+<td>Missing information will be added later.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">10 + 4</td>
+</tr>
+<tr id="req-5-5">
+<td class="c-id"><a class="self" href="#req-5-5">5.5</a></td>
+<td>The AGV must use defined string enumeration values for errorType rather than undefined raw strings.</td>
+<td>Can be added after discussion and agreement.</td>
+<td class="c-status"><span class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span><span>Conditional / to discuss</span></span></td>
+<td class="c-effort">6 + 4</td>
+</tr>
+<tr id="req-5-6">
+<td class="c-id"><a class="self" href="#req-5-6">5.6</a></td>
+<td>The errorType string values must be jointly reviewed and approved by Volley and HITO before release.</td>
+<td>No issues.</td>
+<td class="c-status"><span class="badge st-process"><span aria-hidden="true" class="badge-dot">P</span><span>Process / outside AGV</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-5-7">
+<td class="c-id"><a class="self" href="#req-5-7">5.7</a></td>
+<td>The errorType string values must not change unless both Volley and HITO agree.</td>
+<td>No issues.</td>
+<td class="c-status"><span class="badge st-process"><span aria-hidden="true" class="badge-dot">P</span><span>Process / outside AGV</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-5-8">
+<td class="c-id"><a class="self" href="#req-5-8">5.8</a></td>
+<td>The AGV must populate errorDescription for every reported error.</td>
+<td>No issues; can be added later. (No estimate given.)</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-5-9">
+<td class="c-id"><a class="self" href="#req-5-9">5.9</a></td>
+<td>The AGV may populate errorHint for any reported error.</td>
+<td>HITO does not understand what this means.</td>
+<td class="c-status"><span class="badge st-blocked"><span aria-hidden="true" class="badge-dot">B</span><span>Needs hardware / clarification</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-5-10">
+<td class="c-id"><a class="self" href="#req-5-10">5.10</a></td>
+<td>The AGV must report state-estimated x, y and theta in agvPosition in both state and visualization messages, at a TBD Hz frequency to be agreed.</td>
+<td>Already how it works. (Frequency still TBD.)</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-5-11">
+<td class="c-id"><a class="self" href="#req-5-11">5.11</a></td>
+<td>The AGV must continuously update x, y and theta from its state estimate, not update one axis by edge distance while keeping the other unchanged.</td>
+<td>Already how it works.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-5-12">
+<td class="c-id"><a class="self" href="#req-5-12">5.12</a></td>
+<td>The AGV must report theta from its state estimate, not a fixed value derived from the first RFID reading.</td>
+<td>Already how it works.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-5-13">
+<td class="c-id"><a class="self" href="#req-5-13">5.13</a></td>
+<td>The AGV must report the actual RFID reader reading in commonMessage, matching the RFID value on the AGV's screen.</td>
+<td>No issues; can be added later.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">6 + 4</td>
+</tr>
+<tr id="req-5-14">
+<td class="c-id"><a class="self" href="#req-5-14">5.14</a></td>
+<td>The AGV must report velocity in visualization: the derivatives of x, y and theta.</td>
+<td>Already available.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-5-15">
+<td class="c-id"><a class="self" href="#req-5-15">5.15</a></td>
+<td>The AGV must report the currently selected laser protective field in commonMessage.</td>
+<td>No issues; can be added later.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">6 + 4</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="group-6"><span class="group-num">6</span>Rotation direction set by actions</h2>
+<figure class="fig" data-name="6_rotation_direction" id="fig-23"><a aria-label="Open figure 23 full size" class="fig-media" href="images/6_rotation_direction.svg" rel="noopener" target="_blank"><img alt="Figure 23. Choosing which way the AGV turns" height="480" loading="lazy" src="images/6_rotation_direction.svg" width="960"/></a><figcaption><span class="fig-label">Figure 23</span><span class="fig-title">Choosing which way the AGV turns</span><span class="fig-body"> Both rows show the AGV turning from 0° to 180° on the same spot, but in opposite directions. Turning clockwise it passes through facing down; turning counter-clockwise it passes through facing up. Volley wants to pick the direction by attaching an action to the node (example on the right) — useful when one side of the AGV would hit something during the turn. '<a class="xref term" href="#g-blockingtype" title="Says whether an action stops other things while it runs: NONE (nothing waits), SOFT (driving waits) or HARD (everything waits).">blockingType</a> NONE' means the action doesn't pause anything else. The action's name and fields still have to be agreed (<a class="xref req-ref" href="#req-6-2" title="6.2: The action type used to specify rotation direction must be jointly reviewed and approved by Volley and HITO.">6.2</a>).</span></figcaption></figure>
+
+<figure class="fig fig-wide" data-name="uml_6" id="fig-24"><a aria-label="Open figure 24 full size" class="fig-media" href="images/uml_6.svg" rel="noopener" target="_blank"><img alt="Figure 24. Message structure for group 6" height="1148" loading="lazy" src="images/uml_6.svg" width="1288"/></a><figcaption><span class="fig-label">Figure 24</span><span class="fig-title">Message structure for group 6</span><span class="fig-body"> The rotation-direction request of <a class="xref req-ref" href="#req-6-1" title="6.1: The AGV must rotate to a node's theta in the direction given by an action attached to that node with blockingType NONE.">6.1</a> is an action inside the node: order.nodes[i].actions[j], with blockingType NONE and the direction passed as a key/value pair in actionParameters[]. The action's name is custom, so <a class="xref req-ref" href="#req-6-2" title="6.2: The action type used to specify rotation direction must be jointly reviewed and approved by Volley and HITO.">6.2</a> asks both sides to agree it. <a class="xref term" href="#g-vda5050" title="Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See Figure 2.">VDA5050</a> expects the AGV to advertise every custom action it supports in <a class="xref term" href="#g-factsheet" title="The AGV's self-description: type, physical limits, supported features and the custom actions it understands. Structure: Figure 12.">factsheet</a>.protocolFeatures.agvActions[].</span></figcaption></figure>
+
+<div class="table-wrap"><table class="req-table" id="table-6">
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>HITO response</th>
+<th>Status</th>
+<th>Effort</th>
+</tr>
+</thead>
+<tbody>
+<tr id="req-6-1">
+<td class="c-id"><a class="self" href="#req-6-1">6.1</a></td>
+<td>The AGV must rotate to a node's <a class="xref term" href="#g-theta" title="Heading angle in radians, measured counter-clockwise from the map's x axis.">theta</a> in the direction given by an action attached to that node with blockingType NONE.</td>
+<td>Can be added; released after successful testing. (No estimate given.)</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-6-2">
+<td class="c-id"><a class="self" href="#req-6-2">6.2</a></td>
+<td>The action type used to specify rotation direction must be jointly reviewed and approved by Volley and HITO.</td>
+<td>No issues.</td>
+<td class="c-status"><span class="badge st-process"><span aria-hidden="true" class="badge-dot">P</span><span>Process / outside AGV</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="group-7"><span class="group-num">7</span>Magnetic tape tracking and deceleration</h2>
+<figure class="fig" data-name="7_1_tracking_direction" id="fig-25"><a aria-label="Open figure 25 full size" class="fig-media" href="images/7_1_tracking_direction.svg" rel="noopener" target="_blank"><img alt="Figure 25. Following the tape forwards versus sideways" height="420" loading="lazy" src="images/7_1_tracking_direction.svg" width="960"/></a><figcaption><span class="fig-label">Figure 25</span><span class="fig-title">Following the tape forwards versus sideways</span><span class="fig-body"> Each row is one load condition: no load, an empty pallet (dashed box), and the heaviest allowed load (filled box). Left column: the AGV drives forwards along the tape, which must stay stable up to full speed in every case — HITO says it already does (<a class="xref req-ref" href="#req-7-1" title="7.1: Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all longitudinal speeds up to its maximum.">7.1</a>). Right column: the AGV is turned crossways and slides sideways along the tape (<a class="xref term" href="#g-strafe" title="Moving sideways without turning, possible on vehicles with omnidirectional wheels.">strafing</a>). HITO says this vehicle can't do that stably at high speed (<a class="xref req-ref" href="#req-7-3" title="7.3: Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all lateral (sideslip / strafe) speeds up to its maximum.">7.3</a>).</span></figcaption></figure>
+
+<figure class="fig" data-name="7_4_gain_scheduling" id="fig-26"><a aria-label="Open figure 26 full size" class="fig-media" href="images/7_4_gain_scheduling.svg" rel="noopener" target="_blank"><img alt="Figure 26. Tuning the tape-following controller" height="560" loading="lazy" src="images/7_4_gain_scheduling.svg" width="960"/></a><figcaption><span class="fig-label">Figure 26</span><span class="fig-title">Tuning the tape-following controller</span><span class="fig-body"> Each row is one load condition, drawn on the left as a side view of the AGV: empty, carrying an empty pallet, and carrying a full load. The grid shows which controller settings (K1 to K5) the AGV uses at each combination of commanded speed (columns) and load (rows). Moving left to right, the settings change with speed, which is <a class="xref req-ref" href="#req-7-4" title="7.4: The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per motion primitive.">7.4</a>. Moving top to bottom they stay the same whatever the load, which is <a class="xref req-ref" href="#req-7-5" title="7.5: The AGV must schedule tape tracking parameters so a single set covers all payload conditions, not hard-coded per payload weight.">7.5</a>. The two requirements constrain different directions of the grid, so meeting one doesn't guarantee the other, even though HITO closed <a class="xref req-ref" href="#req-7-5" title="7.5: The AGV must schedule tape tracking parameters so a single set covers all payload conditions, not hard-coded per payload weight.">7.5</a> as a duplicate. The note explains why one set for all loads is the only practical option: the AGV can't weigh its load (<a class="xref req-ref" href="#req-8-5" title="8.5: The AGV must estimate payload weight from hydraulic pressure and publish it as payload data in state.">8.5</a>).</span></figcaption></figure>
+
+<figure class="fig" data-name="7_6_lateral_error" id="fig-27"><a aria-label="Open figure 27 full size" class="fig-media" href="images/7_6_lateral_error.svg" rel="noopener" target="_blank"><img alt="Figure 27. How far the AGV may drift from the tape" height="610" loading="lazy" src="images/7_6_lateral_error.svg" width="960"/></a><figcaption><span class="fig-label">Figure 27</span><span class="fig-title">How far the AGV may drift from the tape</span><span class="fig-body"> Top: 20 m of tape and the AGV at true scale. A 10 mm error would be 0.4 px here, which is why the requirement can't be seen at this scale. The inset zooms in on the tape sensor at the front of the AGV (4 px = 1 mm) and plots its sideways error along the whole 20 m run. The blue band is the ±10 mm limit; the grey dotted lines are the tape edges at ±25 mm, beyond which the sensor would lose the tape altogether. In this illustrative trace the error grows as speed rises from 0.3 to 1.5 m/s and breaks the limit near the end. HITO says it can't guarantee ±10 mm at every speed and load.</span></figcaption></figure>
+
+<figure class="fig" data-name="7_7_deceleration" id="fig-28"><a aria-label="Open figure 28 full size" class="fig-media" href="images/7_7_deceleration.svg" rel="noopener" target="_blank"><img alt="Figure 28. Braking early enough for a short last edge" height="500" loading="lazy" src="images/7_7_deceleration.svg" width="960"/></a><figcaption><span class="fig-label">Figure 28</span><span class="fig-title">Braking early enough for a short last edge</span><span class="fig-body"> Drawn to scale with example values: speed 1.2 m/s, braking 0.25 m/s², which gives a 2.9 m stopping distance (orange bracket). The final edge N3 → N4 is only 1.5 m. The chart above plots speed against the same distance axis. Red dashed: today the AGV brakes only once it reaches the final edge, so it stops 1.4 m past N4. Blue: the requirement is to start braking at 14.6 m, back on edge 2, so speed reaches zero exactly at N4 (<a class="xref req-ref" href="#req-7-7" title="7.7: Regardless of the final edge's length, the AGV must start decelerating early enough to reach zero at the final node without overshooting.">7.7</a>). That needs the stopping point worked out across several edges, not just the last one (<a class="xref req-ref" href="#req-7-8" title="7.8: The AGV must compute the deceleration start point from the total remaining distance across consecutive edges with the same motion primitive, not only the final edge.">7.8</a>, <a class="xref req-ref" href="#req-7-9" title="7.9: If the final edge is shorter than the stopping distance, the AGV must begin decelerating on an earlier edge.">7.9</a>).</span></figcaption></figure>
+
+<p><em>Group 7 is internal control behaviour and adds no <a class="xref term" href="#g-vda5050" title="Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See Figure 2.">VDA5050</a> fields, so it has no structure figure.</em></p>
+<div class="table-wrap"><table class="req-table" id="table-7">
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>HITO response</th>
+<th>Status</th>
+<th>Effort</th>
+</tr>
+</thead>
+<tbody>
+<tr id="req-7-1">
+<td class="c-id"><a class="self" href="#req-7-1">7.1</a></td>
+<td>Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all longitudinal speeds up to its maximum.</td>
+<td>Expected behavior under normal conditions.</td>
+<td class="c-status"><span class="badge st-works"><span aria-hidden="true" class="badge-dot">W</span><span>Works today</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-7-3">
+<td class="c-id"><a class="self" href="#req-7-3">7.3</a></td>
+<td>Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all lateral (sideslip / strafe) speeds up to its maximum.</td>
+<td>Cannot be implemented: current vehicle model can't do stable high-speed lateral movement.</td>
+<td class="c-status"><span class="badge st-rejected"><span aria-hidden="true" class="badge-dot">R</span><span>Not feasible</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-7-4">
+<td class="c-id"><a class="self" href="#req-7-4">7.4</a></td>
+<td>The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per <a class="xref term" href="#g-motion-primitive" title="One kind of movement the controller handles as a unit, such as straight driving, a curve, an in-place turn or strafing.">motion primitive</a>.</td>
+<td>Feasible. Update after successful testing.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">30 + 30</td>
+</tr>
+<tr id="req-7-5">
+<td class="c-id"><a class="self" href="#req-7-5">7.5</a></td>
+<td>The AGV must schedule tape tracking parameters so a single set covers all payload conditions, not hard-coded per payload weight.</td>
+<td>Duplicates a requirement above.</td>
+<td class="c-status"><span class="badge st-duplicate"><span aria-hidden="true" class="badge-dot">D</span><span>Closed as duplicate</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-7-6">
+<td class="c-id"><a class="self" href="#req-7-6">7.6</a></td>
+<td>Across all commanded speeds and all payloads, the AGV must keep lateral tape tracking error within 10 mm.</td>
+<td>Cannot be guaranteed with the current vehicle model.</td>
+<td class="c-status"><span class="badge st-rejected"><span aria-hidden="true" class="badge-dot">R</span><span>Not feasible</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-7-7">
+<td class="c-id"><a class="self" href="#req-7-7">7.7</a></td>
+<td>Regardless of the final edge's length, the AGV must start decelerating early enough to reach zero at the final node without overshooting.</td>
+<td>Difficult. Will attempt later; update if testing succeeds.</td>
+<td class="c-status"><span class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span><span>Conditional / to discuss</span></span></td>
+<td class="c-effort">30 + 30</td>
+</tr>
+<tr id="req-7-8">
+<td class="c-id"><a class="self" href="#req-7-8">7.8</a></td>
+<td>The AGV must compute the deceleration start point from the total remaining distance across consecutive edges with the same motion primitive, not only the final edge.</td>
+<td>Duplicate. Currently calculations only work along one edge.</td>
+<td class="c-status"><span class="badge st-duplicate"><span aria-hidden="true" class="badge-dot">D</span><span>Closed as duplicate</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-7-9">
+<td class="c-id"><a class="self" href="#req-7-9">7.9</a></td>
+<td>If the final edge is shorter than the stopping distance, the AGV must begin decelerating on an earlier edge.</td>
+<td>Duplicates a requirement above.</td>
+<td class="c-status"><span class="badge st-duplicate"><span aria-hidden="true" class="badge-dot">D</span><span>Closed as duplicate</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="group-8"><span class="group-num">8</span>Lidar fields, payload, coupling and remote control</h2>
+<figure class="fig" data-name="8_1_lidar_fields" id="fig-29"><a aria-label="Open figure 29 full size" class="fig-media" href="images/8_1_lidar_fields.svg" rel="noopener" target="_blank"><img alt="Figure 29. Choosing and overriding the lidar safety zone" height="520" loading="lazy" src="images/8_1_lidar_fields.svg" width="960"/></a><figcaption><span class="fig-label">Figure 29</span><span class="fig-title">Choosing and overriding the lidar safety zone</span><span class="fig-body"> Top left, to scale: the orange outlines are three of the scanner's <a class="xref term" href="#g-protective-field" title="An area watched by the safety laser scanner (lidar). If anything enters the active field, the AGV stops. Larger fields are needed at higher speeds.">protective fields</a>, reaching 0.4 m, 1.0 m and 2.2 m ahead of the bumper (example values); faster driving needs a longer field. If anything enters the active field, the AGV stops. Volley wants all 64 fields usable (<a class="xref req-ref" href="#req-8-1" title="8.1: The AGV must use all 64 available laser protective (lidar) fields.">8.1</a>) and chosen automatically from speed, type of motion and load overhang (<a class="xref req-ref" href="#req-8-2" title="8.2: The AGV must select the lidar field from wheel speed, motion primitive and a runtime-configurable payload size offset. Schema to be agreed.">8.2</a>), shown by the selector on the right. Bottom: an operator may remotely override a protective stop, and the override is limited to one edge (orange) before it switches off again (<a class="xref req-ref" href="#req-8-4" title="8.4: The AGV must support remote override of a laser protective stop during operation, applied edge by edge.">8.4</a>).</span></figcaption></figure>
+
+<figure class="fig" data-name="8_3_pallet_payload" id="fig-30"><a aria-label="Open figure 30 full size" class="fig-media" href="images/8_3_pallet_payload.svg" rel="noopener" target="_blank"><img alt="Figure 30. Confirming the pallet is seated and knowing its weight" height="530" loading="lazy" src="images/8_3_pallet_payload.svg" width="960"/></a><figcaption><span class="fig-label">Figure 30</span><span class="fig-title">Confirming the pallet is seated and knowing its weight</span><span class="fig-body"> Top left: side view at 1 m = 100 px. At this scale the pins and cups are only a few pixels, so the inset zooms ten times (1 px = 1 mm) on one of them, assuming a 60 mm cup and a 40 mm pin. When the AGV is centred, the pin enters the cup. When it is 35 mm off, the pin lands on the pallet deck beside the cup. Volley wants the AGV to tell these apart and report it (<a class="xref req-ref" href="#req-8-3" title="8.3: The AGV must actively confirm whether a pallet is correctly coupled ('pins in cups') and report it via VDA5050.">8.3</a>). Right: Volley wants the load's weight estimated from lift-cylinder pressure (<a class="xref req-ref" href="#req-8-5" title="8.5: The AGV must estimate payload weight from hydraulic pressure and publish it as payload data in state.">8.5</a>). HITO says the current hardware has no sensor for either.</span></figcaption></figure>
+
+<figure class="fig" data-name="8_6_joystick" id="fig-31"><a aria-label="Open figure 31 full size" class="fig-media" href="images/8_6_joystick.svg" rel="noopener" target="_blank"><img alt="Figure 31. Driving the AGV back onto the tape by remote control" height="370" loading="lazy" src="images/8_6_joystick.svg" width="960"/></a><figcaption><span class="fig-label">Figure 31</span><span class="fig-title">Driving the AGV back onto the tape by remote control</span><span class="fig-body"> To scale: the AGV has drifted about 1 m off the tape, so automatic mode stops. An operator drives it back with a handheld gamepad whose commands travel to the AGV over a new <a class="xref term" href="#g-topic" title="The address a message is published to, for example uagv/v2/HITO/AGV001/state.">MQTT topic</a> (blue dashed path). The gamepad is not drawn to scale. HITO agreed, at 30 + 30 days. While driven this way, the AGV would normally report operatingMode MANUAL in its state message.</span></figcaption></figure>
+
+<figure class="fig" data-name="uml_8" id="fig-32"><a aria-label="Open figure 32 full size" class="fig-media" href="images/uml_8.svg" rel="noopener" target="_blank"><img alt="Figure 32. Message structure for group 8" height="2118" loading="lazy" src="images/uml_8.svg" width="960"/></a><figcaption><span class="fig-label">Figure 32</span><span class="fig-title">Message structure for group 8</span><span class="fig-body"> Payload weight (<a class="xref req-ref" href="#req-8-5" title="8.5: The AGV must estimate payload weight from hydraulic pressure and publish it as payload data in state.">8.5</a>) has a standard home in state.loads[].weight. Pallet coupling (<a class="xref req-ref" href="#req-8-3" title="8.3: The AGV must actively confirm whether a pallet is correctly coupled ('pins in cups') and report it via VDA5050.">8.3</a>) has no standard field, so it would need an agreed extension. A protective-field breach shows as state.safetyState.fieldViolation; the override for <a class="xref req-ref" href="#req-8-4" title="8.4: The AGV must support remote override of a laser protective stop during operation, applied edge by edge.">8.4</a> would be a custom action, sent either as an <a class="xref term" href="#g-instant-action" title="An action sent on the instantActions topic rather than attached to a node or edge, so it runs as soon as it arrives.">instant action</a> or attached to one edge (order.edges[].actions[]) so it expires with that edge. Joystick driving (<a class="xref req-ref" href="#req-8-6" title="8.6: The AGV may support remote joystick / remote movement for recovery, e.g. when off the magnetic tape.">8.6</a>) would show as operatingMode MANUAL. The active lidar field (<a class="xref req-ref" href="#req-5-15" title="5.15: The AGV must report the currently selected laser protective field in commonMessage.">5.15</a>, <a class="xref req-ref" href="#req-8-2" title="8.2: The AGV must select the lidar field from wheel speed, motion primitive and a runtime-configurable payload size offset. Schema to be agreed.">8.2</a>) goes in HITO's <a class="xref term" href="#g-commonmessage" title="HITO's own extra topic, not part of VDA5050, carrying RFID, tape-sensor and lidar-field values. See Figure 19.">commonMessage</a>. Group 7 has no structure figure because it adds no message fields.</span></figcaption></figure>
+
+<div class="table-wrap"><table class="req-table" id="table-8">
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>HITO response</th>
+<th>Status</th>
+<th>Effort</th>
+</tr>
+</thead>
+<tbody>
+<tr id="req-8-1">
+<td class="c-id"><a class="self" href="#req-8-1">8.1</a></td>
+<td>The AGV must use all 64 available laser protective (lidar) fields.</td>
+<td>Can be implemented by changing the electrical wiring and adding software.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">20 + 20</td>
+</tr>
+<tr id="req-8-2">
+<td class="c-id"><a class="self" href="#req-8-2">8.2</a></td>
+<td>The AGV must select the lidar field from wheel speed, <a class="xref term" href="#g-motion-primitive" title="One kind of movement the controller handles as a unit, such as straight driving, a curve, an in-place turn or strafing.">motion primitive</a> and a runtime-configurable payload size offset. Schema to be agreed.</td>
+<td>Good idea; can be added after discussion.</td>
+<td class="c-status"><span class="badge st-conditional"><span aria-hidden="true" class="badge-dot">C</span><span>Conditional / to discuss</span></span></td>
+<td class="c-effort">10 + 10</td>
+</tr>
+<tr id="req-8-3">
+<td class="c-id"><a class="self" href="#req-8-3">8.3</a></td>
+<td>The AGV must actively confirm whether a pallet is correctly coupled ('pins in cups') and report it via <a class="xref term" href="#g-vda5050" title="Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See Figure 2.">VDA5050</a>.</td>
+<td>Current hardware doesn't support it; feasible solution to be discussed.</td>
+<td class="c-status"><span class="badge st-blocked"><span aria-hidden="true" class="badge-dot">B</span><span>Needs hardware / clarification</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-8-4">
+<td class="c-id"><a class="self" href="#req-8-4">8.4</a></td>
+<td>The AGV must support remote override of a laser protective stop during operation, applied edge by edge.</td>
+<td>Can be implemented as part of the instant action function.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">10 + 10</td>
+</tr>
+<tr id="req-8-5">
+<td class="c-id"><a class="self" href="#req-8-5">8.5</a></td>
+<td>The AGV must estimate payload weight from hydraulic pressure and publish it as payload data in state.</td>
+<td>Current hardware doesn't support it; feasible solution to be discussed.</td>
+<td class="c-status"><span class="badge st-blocked"><span aria-hidden="true" class="badge-dot">B</span><span>Needs hardware / clarification</span></span></td>
+<td class="c-effort">/</td>
+</tr>
+<tr id="req-8-6">
+<td class="c-id"><a class="self" href="#req-8-6">8.6</a></td>
+<td>The AGV may support remote joystick / remote movement for recovery, e.g. when off the <a class="xref term" href="#g-magnetic-tape" title="A strip on the floor, here assumed 50 mm wide, that the AGV's sensor array follows to stay on its path.">magnetic tape</a>.</td>
+<td>Can be implemented with a new topic interface. Update after successful testing.</td>
+<td class="c-status"><span class="badge st-implement"><span aria-hidden="true" class="badge-dot">I</span><span>Will implement</span></span></td>
+<td class="c-effort">30 + 30</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="points-to-raise-with-hito">Points to raise with HITO</h2>
+<p><strong><a class="xref req-ref" href="#req-7-5" title="7.5: The AGV must schedule tape tracking parameters so a single set covers all payload conditions, not hard-coded per payload weight.">7.5</a> is not a duplicate of <a class="xref req-ref" href="#req-7-4" title="7.4: The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per motion primitive.">7.4</a>.</strong> <a class="xref req-ref" href="#req-7-4" title="7.4: The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per motion primitive.">7.4</a> asks for parameters that vary with commanded speed; <a class="xref req-ref" href="#req-7-5" title="7.5: The AGV must schedule tape tracking parameters so a single set covers all payload conditions, not hard-coded per payload weight.">7.5</a> asks for one parameter set that holds across every payload. A speed-scheduled table kept separately per payload would meet <a class="xref req-ref" href="#req-7-4" title="7.4: The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per motion primitive.">7.4</a> and fail <a class="xref req-ref" href="#req-7-5" title="7.5: The AGV must schedule tape tracking parameters so a single set covers all payload conditions, not hard-coded per payload weight.">7.5</a>. Because the AGV can't measure payload weight (<a class="xref req-ref" href="#req-8-5" title="8.5: The AGV must estimate payload weight from hydraulic pressure and publish it as payload data in state.">8.5</a>), a single robust set is the only workable design anyway. Ask HITO to confirm that the <a class="xref req-ref" href="#req-7-4" title="7.4: The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per motion primitive.">7.4</a> work uses one set for all loads and that its 30 + 30 days include tests at unloaded, empty-pallet and max-payload conditions.</p>
+<p><strong><a class="xref req-ref" href="#req-7-8" title="7.8: The AGV must compute the deceleration start point from the total remaining distance across consecutive edges with the same motion primitive, not only the final edge.">7.8</a> and <a class="xref req-ref" href="#req-7-9" title="7.9: If the final edge is shorter than the stopping distance, the AGV must begin decelerating on an earlier edge.">7.9</a> are not covered by <a class="xref req-ref" href="#req-7-7" title="7.7: Regardless of the final edge's length, the AGV must start decelerating early enough to reach zero at the final node without overshooting.">7.7</a> as written.</strong> HITO's own note says deceleration is planned along one edge only, which is the exact gap <a class="xref req-ref" href="#req-7-9" title="7.9: If the final edge is shorter than the stopping distance, the AGV must begin decelerating on an earlier edge.">7.9</a> describes. Get it in writing that the <a class="xref req-ref" href="#req-7-7" title="7.7: Regardless of the final edge's length, the AGV must start decelerating early enough to reach zero at the final node without overshooting.">7.7</a> estimate includes multi-edge planning.</p>
+<p><strong><a class="xref req-ref" href="#req-5-3" title="5.3: When the magnetic tape sensor has no reading, the AGV must report it in commonMessage as an empty string or an optional value.">5.3</a> counter-proposal changes the contract.</strong> "0 for one second" is ambiguous because 0 can be a real reading. Decide between an empty / omitted value and HITO's rule.</p>
+<p><strong>Rejections need numbers.</strong> For <a class="xref req-ref" href="#req-3-7" title="3.7: After an in-place rotation at a node, the AGV must stop within ±1.5° of the target angle with rotational overshoot of less than 0.5°.">3.7</a>, <a class="xref req-ref" href="#req-7-3" title="7.3: Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all lateral (sideslip / strafe) speeds up to its maximum.">7.3</a> and <a class="xref req-ref" href="#req-7-6" title="7.6: Across all commanded speeds and all payloads, the AGV must keep lateral tape tracking error within 10 mm.">7.6</a>, ask what HITO <em>can</em> guarantee: rotation tolerance, lateral tracking error, and the top speed for stable <a class="xref term" href="#g-strafe" title="Moving sideways without turning, possible on vehicles with omnidirectional wheels.">strafing</a>.</p>
+<p><strong><a class="xref req-ref" href="#req-2-3" title="2.3: When the AGV's main firmware shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN.">2.3</a> / <a class="xref req-ref" href="#req-2-4" title="2.4: When the AGV's VDA5050 agent shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN.">2.4</a> depend on <a class="xref req-ref" href="#req-2-2" title="2.2: The AGV must register an MQTT Last Will message on the connection topic, with connectionState set to CONNECTIONBROKEN.">2.2</a>.</strong> The <a class="xref term" href="#g-broker" title="The server that receives every published message and forwards it to the subscribers of its topic. It also stores retained messages and publishes Last Will messages.">broker</a> publishes CONNECTIONBROKEN only if the Will is registered; test the three together.</p>
+<p><strong>Open items without owner or date:</strong> reporting frequency in <a class="xref req-ref" href="#req-5-10" title="5.10: The AGV must report state-estimated x, y and theta in agvPosition in both state and visualization messages, at a TBD Hz frequency to be agreed.">5.10</a> (TBD Hz), retained-topic list for <a class="xref req-ref" href="#req-2-1" title="2.1: The AGV must publish the factsheet message with the MQTT retained flag set to true.">2.1</a>, lidar schema for <a class="xref req-ref" href="#req-8-2" title="8.2: The AGV must select the lidar field from wheel speed, motion primitive and a runtime-configurable payload size offset. Schema to be agreed.">8.2</a>, hardware options for <a class="xref req-ref" href="#req-8-3" title="8.3: The AGV must actively confirm whether a pallet is correctly coupled ('pins in cups') and report it via VDA5050.">8.3</a> and <a class="xref req-ref" href="#req-8-5" title="8.5: The AGV must estimate payload weight from hydraulic pressure and publish it as payload data in state.">8.5</a>, the meaning of errorHint in <a class="xref req-ref" href="#req-5-9" title="5.9: The AGV may populate errorHint for any reported error.">5.9</a> (check which <a class="xref term" href="#g-vda5050" title="Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See Figure 2.">VDA5050</a> version is the baseline), and estimates for <a class="xref req-ref" href="#req-5-8" title="5.8: The AGV must populate errorDescription for every reported error.">5.8</a> and <a class="xref req-ref" href="#req-6-1" title="6.1: The AGV must rotate to a node's theta in the direction given by an action attached to that node with blockingType NONE.">6.1</a>. <a class="xref req-ref" href="#req-2-7" title="2.7: HITO must provide updated interface documentation listing all deviations from the current VDA5050 specification.">2.7</a>'s "future maintenance out of scope" should be settled contractually.</p>
+<p><strong>Source housekeeping:</strong> IDs 5.2 and 7.2 are missing; <a class="xref req-ref" href="#req-3-2" title="3.2: When an order is canceled and the AGV cannot decelerate to zero at the next node, it must stop at the node after the next node.">3.2</a>'s Chinese text has a typo (先在 → 现在).</p>
+<h2 id="glossary">Glossary</h2>
+<dl>
+<dt id="g-vda5050">VDA5050</dt>
+<dd>Open interface standard from the German automotive and machinery associations (VDA and VDMA) for communication between AGVs and a fleet manager. Messages are JSON documents sent over MQTT, one topic per message type. See <a class="xref fig-ref" href="#fig-2">Figure 2</a>.</dd>
+<dt id="g-mqtt">MQTT</dt>
+<dd>Lightweight publish/subscribe messaging protocol. Clients publish messages to named topics through a broker, and every client subscribed to that topic receives them.</dd>
+<dt id="g-broker">MQTT broker</dt>
+<dd>The server that receives every published message and forwards it to the subscribers of its topic. It also stores retained messages and publishes Last Will messages.</dd>
+<dt id="g-last-will">Last Will</dt>
+<dd>A message a client hands to the broker when it connects. If the client later disconnects without saying goodbye (crash, network loss), the broker publishes that message for it. VDA5050 uses it to announce CONNECTIONBROKEN.</dd>
+<dt id="g-retained">Retained message</dt>
+<dd>A message published with MQTT's retain flag. The broker keeps the latest one per topic and hands it to any client that subscribes later, so a fleet manager that starts after the AGV still gets the factsheet.</dd>
+<dt id="g-fleet-manager">Fleet manager</dt>
+<dd>The central server that plans routes and sends orders to AGVs. VDA5050 calls it master control; in this project it is Volley's system.</dd>
+<dt id="g-topic">Topic</dt>
+<dd>The address a message is published to, for example uagv/v2/HITO/AGV001/state.</dd>
+<dt id="g-order">order (topic)</dt>
+<dd>VDA5050 message from the fleet manager giving the AGV its route as nodes and edges, with optional actions on each. Structure: <a class="xref fig-ref" href="#fig-8">Figure 8</a>.</dd>
+<dt id="g-instantactions">instantActions (topic)</dt>
+<dd>VDA5050 message carrying commands the AGV must act on immediately, such as cancelOrder, startPause or stopPause. Structure: <a class="xref fig-ref" href="#fig-12">Figure 12</a>.</dd>
+<dt id="g-state">state (topic)</dt>
+<dd>The AGV's full status report: order progress, position, loads, action progress, battery, errors and safety state. Structure: <a class="xref fig-ref" href="#fig-22">Figure 22</a>.</dd>
+<dt id="g-visualization">visualization (topic)</dt>
+<dd>A lighter, higher-rate message with just position and velocity, meant for live display. Structure: <a class="xref fig-ref" href="#fig-22">Figure 22</a>.</dd>
+<dt id="g-connection">connection (topic)</dt>
+<dd>Reports ONLINE, OFFLINE or CONNECTIONBROKEN. The CONNECTIONBROKEN version is registered as the Last Will. Structure: <a class="xref fig-ref" href="#fig-12">Figure 12</a>.</dd>
+<dt id="g-factsheet">factsheet (topic)</dt>
+<dd>The AGV's self-description: type, physical limits, supported features and the custom actions it understands. Structure: <a class="xref fig-ref" href="#fig-12">Figure 12</a>.</dd>
+<dt id="g-commonmessage">commonMessage (topic)</dt>
+<dd>HITO's own extra topic, not part of VDA5050, carrying RFID, tape-sensor and lidar-field values. See <a class="xref fig-ref" href="#fig-19">Figure 19</a>.</dd>
+<dt id="g-instant-action">Instant action</dt>
+<dd>An action sent on the instantActions topic rather than attached to a node or edge, so it runs as soon as it arrives.</dd>
+<dt id="g-node">Node</dt>
+<dd>A waypoint in an order. The AGV drives from node to node along edges; nodes can carry a target heading and actions.</dd>
+<dt id="g-edge">Edge</dt>
+<dd>The path segment between two nodes in an order.</dd>
+<dt id="g-horizon">Base and horizon</dt>
+<dd>The released part of an order (base) may be driven. The unreleased part (horizon) is a preview the AGV must not enter until the fleet manager releases it.</dd>
+<dt id="g-blockingtype">blockingType</dt>
+<dd>Says whether an action stops other things while it runs: NONE (nothing waits), SOFT (driving waits) or HARD (everything waits).</dd>
+<dt id="g-theta">theta (θ)</dt>
+<dd>Heading angle in radians, measured counter-clockwise from the map's x axis.</dd>
+<dt id="g-state-estimate">State estimate</dt>
+<dd>The AGV's best estimate of its position and heading, fused from wheel odometry, RFID reads and the tape sensor.</dd>
+<dt id="g-magnetic-tape">Magnetic tape</dt>
+<dd>A strip on the floor, here assumed 50 mm wide, that the AGV's sensor array follows to stay on its path.</dd>
+<dt id="g-rfid">RFID tag</dt>
+<dd>Floor tags the AGV reads to know exactly which node it is at.</dd>
+<dt id="g-hmi">HMI</dt>
+<dd>Human-machine interface: the AGV's own on-board screen.</dd>
+<dt id="g-motion-primitive">Motion primitive</dt>
+<dd>One kind of movement the controller handles as a unit, such as straight driving, a curve, an in-place turn or strafing.</dd>
+<dt id="g-protective-field">Protective field</dt>
+<dd>An area watched by the safety laser scanner (lidar). If anything enters the active field, the AGV stops. Larger fields are needed at higher speeds.</dd>
+<dt id="g-strafe">Strafe / sideslip</dt>
+<dd>Moving sideways without turning, possible on vehicles with omnidirectional wheels.</dd>
+<dt id="g-composition">UML composition</dt>
+<dd>A diagram line with a filled diamond meaning the object on the right only exists inside the object on the left; in JSON, it is a nested object or array.</dd>
+</dl>
+<hr/>
+<p>Diagrams are generated by <code>generator/build.py</code> (pure Python) from <code>generator/data.py</code>. Visual tokens follow the design system produced by <a href="https://github.com/nextlevelbuilder/ui-ux-pro-max-skill">UI UX Pro Max</a> (Minimalism &amp; Swiss Style, tracking blue + delivery orange, IBM Plex Sans / JetBrains Mono), saved in <code>design-system/agv-spec/MASTER.md</code>.</p>
+  </article>
+  <footer class="doc-foot">
+    <p>Generated from <code>docs/AGV_requirements_illustrated.md</code> by <code>sitegen/build_site.py</code>. Edit the data in <code>generator/</code>, then run <code>make</code>.</p>
+  </footer>
+</main>
+
+<script>window.REQ_INDEX = [{"anchor": "req-1-1", "id": "1.1", "text": "When the AGV receives an order containing only a single node, and that node is the AGV\u0027s current node, if the theta in the order differs from the current theta, the AGV must rotate in place to the commanded theta."}, {"anchor": "req-1-2", "id": "1.2", "text": "When the AGV reaches the final node of an order and that node\u0027s theta differs from the current theta, the AGV must rotate to the theta specified for the final node."}, {"anchor": "req-1-3", "id": "1.3", "text": "During all edge movements and rotational movements, the AGV must report its driving state as true whenever the commanded wheel speed is non-zero."}, {"anchor": "req-1-4", "id": "1.4", "text": "When the commanded wheel speed is zero, the AGV must report its driving state as false."}, {"anchor": "req-2-1", "id": "2.1", "text": "The AGV must publish the factsheet message with the MQTT retained flag set to true."}, {"anchor": "req-2-2", "id": "2.2", "text": "The AGV must register an MQTT Last Will message on the connection topic, with connectionState set to CONNECTIONBROKEN."}, {"anchor": "req-2-3", "id": "2.3", "text": "When the AGV\u0027s main firmware shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN."}, {"anchor": "req-2-4", "id": "2.4", "text": "When the AGV\u0027s VDA5050 agent shuts down or crashes, the AGV must ensure that the MQTT broker publishes CONNECTIONBROKEN."}, {"anchor": "req-2-5", "id": "2.5", "text": "For an instant action, the AGV may report FINISHED only after the firmware has actually executed and applied the request, not merely because the VDA5050 agent received it."}, {"anchor": "req-2-6", "id": "2.6", "text": "For the stopPause instant action, the AGV may report FINISHED only after the firmware has returned to the auto-run state."}, {"anchor": "req-2-7", "id": "2.7", "text": "HITO must provide updated interface documentation listing all deviations from the current VDA5050 specification."}, {"anchor": "req-2-8", "id": "2.8", "text": "HITO must fully document all custom messages, including commonMessage: field names, field types, permitted values and example payloads."}, {"anchor": "req-2-9", "id": "2.9", "text": "Any change to the VDA5050 interface or custom messages must be jointly reviewed and approved by Volley and HITO before release."}, {"anchor": "req-3-1", "id": "3.1", "text": "When an order is canceled, if the AGV can decelerate to zero at the next node (given speed, deceleration, remaining edge distance), it must stop at the next node."}, {"anchor": "req-3-2", "id": "3.2", "text": "When an order is canceled and the AGV cannot decelerate to zero at the next node, it must stop at the node after the next node."}, {"anchor": "req-3-3", "id": "3.3", "text": "When the AGV reaches the last released node while the following edge is not yet released, it must stop at that last released node."}, {"anchor": "req-3-4", "id": "3.4", "text": "If the following edge and node are released before the AGV reaches the last released node, the AGV must pass through without stopping."}, {"anchor": "req-3-5", "id": "3.5", "text": "The AGV must perform time-based off-magnetic-tape detection only when the commanded wheel speed is non-zero."}, {"anchor": "req-3-6", "id": "3.6", "text": "At any node where a stop is required, the AGV must stop within a 10 mm radius of the node center and must not overshoot the node center."}, {"anchor": "req-3-7", "id": "3.7", "text": "After an in-place rotation at a node, the AGV must stop within \u00b11.5\u00b0 of the target angle with rotational overshoot of less than 0.5\u00b0."}, {"anchor": "req-4-1", "id": "4.1", "text": "The AGV must publish visualization messages at the frequency set by parameters in iconfig.yaml."}, {"anchor": "req-4-2", "id": "4.2", "text": "The AGV must publish commonMessage messages at the frequency set by parameters in iconfig.yaml."}, {"anchor": "req-5-1", "id": "5.1", "text": "The AGV must report RFID signal strength in commonMessage, matching the S value on the AGV\u0027s screen."}, {"anchor": "req-5-3", "id": "5.3", "text": "When the magnetic tape sensor has no reading, the AGV must report it in commonMessage as an empty string or an optional value."}, {"anchor": "req-5-4", "id": "5.4", "text": "The AGV must report all error codes shown on the HMI screen in the errors field of the state message."}, {"anchor": "req-5-5", "id": "5.5", "text": "The AGV must use defined string enumeration values for errorType rather than undefined raw strings."}, {"anchor": "req-5-6", "id": "5.6", "text": "The errorType string values must be jointly reviewed and approved by Volley and HITO before release."}, {"anchor": "req-5-7", "id": "5.7", "text": "The errorType string values must not change unless both Volley and HITO agree."}, {"anchor": "req-5-8", "id": "5.8", "text": "The AGV must populate errorDescription for every reported error."}, {"anchor": "req-5-9", "id": "5.9", "text": "The AGV may populate errorHint for any reported error."}, {"anchor": "req-5-10", "id": "5.10", "text": "The AGV must report state-estimated x, y and theta in agvPosition in both state and visualization messages, at a TBD Hz frequency to be agreed."}, {"anchor": "req-5-11", "id": "5.11", "text": "The AGV must continuously update x, y and theta from its state estimate, not update one axis by edge distance while keeping the other unchanged."}, {"anchor": "req-5-12", "id": "5.12", "text": "The AGV must report theta from its state estimate, not a fixed value derived from the first RFID reading."}, {"anchor": "req-5-13", "id": "5.13", "text": "The AGV must report the actual RFID reader reading in commonMessage, matching the RFID value on the AGV\u0027s screen."}, {"anchor": "req-5-14", "id": "5.14", "text": "The AGV must report velocity in visualization: the derivatives of x, y and theta."}, {"anchor": "req-5-15", "id": "5.15", "text": "The AGV must report the currently selected laser protective field in commonMessage."}, {"anchor": "req-6-1", "id": "6.1", "text": "The AGV must rotate to a node\u0027s theta in the direction given by an action attached to that node with blockingType NONE."}, {"anchor": "req-6-2", "id": "6.2", "text": "The action type used to specify rotation direction must be jointly reviewed and approved by Volley and HITO."}, {"anchor": "req-7-1", "id": "7.1", "text": "Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all longitudinal speeds up to its maximum."}, {"anchor": "req-7-3", "id": "7.3", "text": "Unloaded, with empty pallet and at max payload, the AGV must stably track the tape at all lateral (sideslip / strafe) speeds up to its maximum."}, {"anchor": "req-7-4", "id": "7.4", "text": "The AGV must schedule tape tracking control parameters dynamically from the commanded speed, not hard-code them per motion primitive."}, {"anchor": "req-7-5", "id": "7.5", "text": "The AGV must schedule tape tracking parameters so a single set covers all payload conditions, not hard-coded per payload weight."}, {"anchor": "req-7-6", "id": "7.6", "text": "Across all commanded speeds and all payloads, the AGV must keep lateral tape tracking error within 10 mm."}, {"anchor": "req-7-7", "id": "7.7", "text": "Regardless of the final edge\u0027s length, the AGV must start decelerating early enough to reach zero at the final node without overshooting."}, {"anchor": "req-7-8", "id": "7.8", "text": "The AGV must compute the deceleration start point from the total remaining distance across consecutive edges with the same motion primitive, not only the final edge."}, {"anchor": "req-7-9", "id": "7.9", "text": "If the final edge is shorter than the stopping distance, the AGV must begin decelerating on an earlier edge."}, {"anchor": "req-8-1", "id": "8.1", "text": "The AGV must use all 64 available laser protective (lidar) fields."}, {"anchor": "req-8-2", "id": "8.2", "text": "The AGV must select the lidar field from wheel speed, motion primitive and a runtime-configurable payload size offset. Schema to be agreed."}, {"anchor": "req-8-3", "id": "8.3", "text": "The AGV must actively confirm whether a pallet is correctly coupled (\u0027pins in cups\u0027) and report it via VDA5050."}, {"anchor": "req-8-4", "id": "8.4", "text": "The AGV must support remote override of a laser protective stop during operation, applied edge by edge."}, {"anchor": "req-8-5", "id": "8.5", "text": "The AGV must estimate payload weight from hydraulic pressure and publish it as payload data in state."}, {"anchor": "req-8-6", "id": "8.6", "text": "The AGV may support remote joystick / remote movement for recovery, e.g. when off the magnetic tape."}];</script>
+<script src="assets/site.js" defer></script>
+</body>
+</html>

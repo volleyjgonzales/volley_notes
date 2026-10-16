@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ title }}</title>
+<meta name="description" content="Volley's 52 functional requirements for the parking-lot AGV, with HITO's responses, effort estimates and diagrams.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" type="button" aria-controls="sidebar" aria-expanded="false">
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <span>Contents</span>
+  </button>
+  <span class="topbar-title">AGV requirements</span>
+</header>
+
+<aside class="sidebar" id="sidebar" aria-label="Contents">
+  <div class="sidebar-head">
+    <a class="brand" href="#top">
+      <svg class="brand-agv" width="34" height="22" viewBox="0 0 34 22" aria-hidden="true">
+        <rect x="1" y="2" width="31" height="18" rx="3" fill="var(--surface)" stroke="var(--heading)" stroke-width="2"/>
+        <rect x="27" y="4" width="4" height="14" rx="1" fill="var(--accent)"/>
+        <path d="M10 6 L20 11 L10 16 Z" fill="var(--heading)"/>
+      </svg>
+      <span>AGV requirements</span>
+    </a>
+    <label class="filter">
+      <span class="sr-only">Filter contents</span>
+      <input id="toc-filter" type="search" placeholder="Filter, or type an id like 5.3" autocomplete="off">
+    </label>
+    <p class="filter-hit" id="filter-hit" hidden></p>
+  </div>
+  <nav class="route-wrap">
+    <ol class="route" id="route">
+      {% for s in sections %}
+      <li class="stop" data-target="{{ s.id }}" data-keywords="{{ s.keywords }}">
+        <a class="stop-link" href="#{{ s.id }}">
+          {% if s.num %}<span class="stop-num">{{ s.num }}</span>{% endif %}<span class="stop-title">{{ s.title }}</span>
+        </a>
+        {% if s.entries %}
+        <ol class="sub">
+          {% for it in s.entries %}
+          <li data-target="{{ it.id }}"><a href="#{{ it.id }}">{% if it.num %}<span class="sub-num">Fig. {{ it.num }}</span>{% endif %}{{ it.label }}</a></li>
+          {% endfor %}
+        </ol>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    <span class="route-agv" id="route-agv" aria-hidden="true"></span>
+  </nav>
+</aside>
+
+<main id="main">
+  <header class="doc-head" id="top">
+    <h1>{{ title }}</h1>
+    <div class="lede">{{ lede | safe }}</div>
+    <div class="statbar" role="img" aria-label="Status of {{ total }} requirements">
+      {% for st in stats %}<span class="seg st-{{ st.key }}" style="flex:{{ st.n }}" title="{{ st.label }}: {{ st.n }}">{{ st.n }}</span>{% endfor %}
+    </div>
+    <ul class="statlegend">
+      {% for st in stats %}<li><span class="badge st-{{ st.key }}"><span class="badge-dot" aria-hidden="true">{{ st.letter }}</span><span>{{ st.label }}</span></span> <strong>{{ st.n }}</strong></li>{% endfor %}
+    </ul>
+  </header>
+  <article class="doc">
+    {{ content | safe }}
+  </article>
+  <footer class="doc-foot">
+    <p>Generated from <code>docs/AGV_requirements_illustrated.md</code> by <code>sitegen/build_site.py</code>. Edit the data in <code>generator/</code>, then run <code>make</code>.</p>
+  </footer>
+</main>
+
+<script>window.REQ_INDEX = {{ req_index | tojson }};</script>
+<script src="assets/site.js" defer></script>
+</body>
+</html>
