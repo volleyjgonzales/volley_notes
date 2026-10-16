@@ -9,10 +9,10 @@
 
 <h2 data-num id="ad-why-a-timed-plan-is-not-enough">Why a timed plan is not enough</h2>
 <p>The motion planner (CHUGG, doc 01 <a class="ref" href="#bg-motion-planning-and-the-response">section 21</a>) returns, for every AGV, a list of motions with start and end times, chosen so that no two footprints overlap at any moment. That guarantee holds only if every AGV is exactly on time. In practice an AGV is slowed by acceleration limits, a door, a lift, wheel slip or a late command acknowledgement. Others finish early.</p>
-<p><a class="ref" href="#ad-fig-84_adg_delay">Figure 1</a> shows the failure. Two AGVs cross the same cell <code>b</code>, AGV 1 first. If AGV 1's first move is late and each AGV starts its moves at the planned times, AGV 2 drives into <code>b</code> while AGV 1 is still there. The plan was collision-free; executing it by the clock is not.</p>
+<p><a class="ref" href="#ad-fig-84_adg_delay">Figure 1</a> shows the failure. Two AGVs cross the same cell <code>B</code>, AGV 1 first. If AGV 1's first move is late and each AGV starts its moves at the planned times, AGV 2 drives into <code>B</code> while AGV 1 is still there. The plan was collision-free; executing it by the clock is not.</p>
 <figure id="ad-fig-84_adg_delay">
   <img src="figures/84_adg_delay.svg" alt="Why a timed plan needs an ADG">
-  <figcaption><strong>Timestamps versus dependencies.</strong> Panel 1: the plan. Panel 2: AGV 1's first move takes 2.5 s instead of 1 s; executed by the clock, AGV 2 enters <code>b</code> while AGV 1 is still in it. Panel 3: executed by dependencies, AGV 2's move into <code>b</code> waits until AGV 1's move out of <code>b</code> has finished. The order is the plan's; only the times change.</figcaption>
+  <figcaption><strong>Timestamps versus dependencies.</strong> Panel 1: the plan. Panel 2: AGV 1's first move takes 2.5 s instead of 1 s; executed by the clock, AGV 2 enters <code>B</code> while AGV 1 is still in it. Panel 3: executed by dependencies, AGV 2's move into <code>B</code> waits until AGV 1's move out of <code>B</code> has finished. The order is the plan's; only the times change.</figcaption>
 </figure>
 <p>There are three ways out:</p>
 <ul>
@@ -66,7 +66,49 @@
 <h3 data-num id="ad-plans-and-actions">Plans and actions</h3>
 <p>Each robot <span class="math">i</span> has a plan, a sequence of timed actions:</p>
 <div class="math">p^i = \big( (t^i_1, a^i_1, s^i_1, g^i_1), \; (t^i_2, a^i_2, s^i_2, g^i_2), \; \dots, \; (t^i_{n_i}, a^i_{n_i}, s^i_{n_i}, g^i_{n_i}) \big)</div>
-<p>Action <span class="math">a^i_k</span> is the <span class="math">k</span>-th action of robot <span class="math">i</span>. It starts at planned time <span class="math">t^i_k</span> and moves the robot from location <span class="math">s^i_k</span> to location <span class="math">g^i_k</span>. Consecutive actions connect: <span class="math">g^i_k = s^i_{k+1}</span>. The figures write <span class="math">a^i_k</span> as <code>a[i,k]</code>.</p>
+<p>Read each symbol like this:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Symbol</th>
+      <th>Meaning</th>
+      <th>In the example of <a class="ref" href="#ad-fig-85_adg_construction">Figure 2</a></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="math">i</span>, <span class="math">j</span></td>
+      <td>Which robot</td>
+      <td>AGV 1, AGV 2, AGV 3</td>
+    </tr>
+    <tr>
+      <td><span class="math">k</span>, <span class="math">l</span></td>
+      <td>Which of that robot's actions, counting from 1 in plan order</td>
+      <td>AGV 1 has two actions, so <span class="math">k \in \{1, 2\}</span></td>
+    </tr>
+    <tr>
+      <td><span class="math">a^i_k</span></td>
+      <td><strong>a</strong> for <em>action</em>: the <span class="math">k</span>-th action of robot <span class="math">i</span>. Superscript = robot, subscript = position in its plan. It is a name, not a number or a power</td>
+      <td><span class="math">a^1_2</span> is AGV 1's second action</td>
+    </tr>
+    <tr>
+      <td><span class="math">s^i_k</span>, <span class="math">g^i_k</span></td>
+      <td>The action's <strong>s</strong>tart location and <strong>g</strong>oal location (cells of the map)</td>
+      <td><span class="math">s^1_2 = \mathrm{B}</span>, <span class="math">g^1_2 = \mathrm{C}</span></td>
+    </tr>
+    <tr>
+      <td><span class="math">t^i_k</span></td>
+      <td>The action's planned start time</td>
+      <td><span class="math">t^1_2 = 1</span></td>
+    </tr>
+    <tr>
+      <td><span class="math">p^i</span>, <span class="math">n_i</span></td>
+      <td>Robot <span class="math">i</span>'s whole plan, and the number of actions in it</td>
+      <td><span class="math">n_1 = 2</span>, <span class="math">n_3 = 1</span></td>
+    </tr>
+  </tbody>
+</table>
+<p>So the vertex drawn as <span class="math">a^1_2</span> with "B -&gt; C, t = 1" underneath means: <em>AGV 1's second action moves it from cell B to cell C, and the plan starts it at time 1</em>. Consecutive actions connect, <span class="math">g^i_k = s^i_{k+1}</span>: AGV 1's first action ends in B, where its second starts. Map cells are written with capital letters (A to F) so they cannot be confused with the action symbol <span class="math">a</span>.</p>
 <p>The ADG has one vertex per action, <span class="math">V = \{a^i_k\}</span>, and two kinds of edge.</p>
 
 <h3 data-num id="ad-type-1-edges">Type 1 edges: each robot's own order</h3>
@@ -78,7 +120,7 @@
 <p>Robot <span class="math">i</span>'s action <span class="math">a^i_k</span> <em>leaves</em> location <span class="math">s^i_k</span>. Robot <span class="math">j</span>'s action <span class="math">a^j_l</span> <em>enters</em> the same location, later in the plan. The edge says that the leaving action must finish before the entering action may start: a robot moves into a location only after the previous robot has completely moved out.</p>
 <figure id="ad-fig-85_adg_construction">
   <img src="figures/85_adg_construction.svg" alt="Building an action dependency graph">
-  <figcaption><strong>Construction on a small example.</strong> Three AGVs, five actions. Type 1 edges chain each AGV's actions. Two pairs satisfy the Type 2 rule: <code>a[3,1]</code> leaves <code>c</code>, which <code>a[1,2]</code> enters later; <code>a[1,2]</code> leaves <code>b</code>, which <code>a[2,1]</code> enters later. Inset: three AGVs rotating around a triangle at the same instant produce a cycle.</figcaption>
+  <figcaption><strong>Construction on a small example.</strong> (1) A map of six cells (garage nodes) A to F and three AGVs' timed plans: AGV 1 drives A → B → C, AGV 2 drives D → B → E, AGV 3 drives C → F. (2) How to read one vertex: <span class="math">a^1_2</span> is AGV 1's second action, from start cell B to goal cell C, planned to start at time 1. (3) The ADG: Type 1 edges chain each AGV's actions. Two pairs satisfy the Type 2 rule: <span class="math">a^3_1</span> leaves C, which <span class="math">a^1_2</span> enters later; <span class="math">a^1_2</span> leaves B, which <span class="math">a^2_1</span> enters later. (4) Three robots rotating around a triangle at the same instant produce a cycle.</figcaption>
 </figure>
 <p>Checking the rule on <a class="ref" href="#ad-fig-85_adg_construction">Figure 2</a> by hand. Each action that leaves a location is compared with every other AGV's action that enters it:</p>
 <table>
@@ -92,26 +134,26 @@
   </thead>
   <tbody>
     <tr>
-      <td><code>a[3,1]</code>: leaves <code>c</code> at 0</td>
-      <td><code>a[1,2]</code>: enters <code>c</code> at 1</td>
+      <td><span class="math">a^3_1</span>: leaves <code>C</code> at 0</td>
+      <td><span class="math">a^1_2</span>: enters <code>C</code> at 1</td>
       <td><span class="math">0 \le 1</span></td>
-      <td>yes: <code>a[3,1] → a[1,2]</code></td>
+      <td>yes: <span class="math">a^3_1 \to a^1_2</span></td>
     </tr>
     <tr>
-      <td><code>a[1,2]</code>: leaves <code>b</code> at 1</td>
-      <td><code>a[2,1]</code>: enters <code>b</code> at 2</td>
+      <td><span class="math">a^1_2</span>: leaves <code>B</code> at 1</td>
+      <td><span class="math">a^2_1</span>: enters <code>B</code> at 2</td>
       <td><span class="math">1 \le 2</span></td>
-      <td>yes: <code>a[1,2] → a[2,1]</code></td>
+      <td>yes: <span class="math">a^1_2 \to a^2_1</span></td>
     </tr>
     <tr>
-      <td><code>a[2,2]</code>: leaves <code>b</code> at 3</td>
-      <td><code>a[1,1]</code>: enters <code>b</code> at 0</td>
+      <td><span class="math">a^2_2</span>: leaves <code>B</code> at 3</td>
+      <td><span class="math">a^1_1</span>: enters <code>B</code> at 0</td>
       <td><span class="math">3 \le 0</span> is false</td>
-      <td>no: AGV 1 was in <code>b</code> first, and that order is already the edge above</td>
+      <td>no: AGV 1 was in <code>B</code> first, and that order is already the edge above</td>
     </tr>
     <tr>
-      <td><code>a[1,1]</code> leaves <code>a</code>; <code>a[2,1]</code> leaves <code>d</code></td>
-      <td>nobody enters <code>a</code> or <code>d</code></td>
+      <td><span class="math">a^1_1</span> leaves <code>A</code>; <span class="math">a^2_1</span> leaves <code>D</code></td>
+      <td>nobody enters <code>A</code> or <code>D</code></td>
       <td>—</td>
       <td>no</td>
     </tr>
@@ -120,14 +162,24 @@
 <p>The construction compares every pair of actions, so it takes <span class="math">O(|V|^2)</span> time. Faster constructions skip pairs that cannot give an edge (see <a class="ref" href="#ad-beyond-the-basic-adg">section 6</a>).</p>
 
 <h3 data-num id="ad-cycles">Cycles mean "only with perfect timing"</h3>
-<p>Suppose three robots rotate around a triangle at the same instant: <span class="math">x \to y</span>, <span class="math">y \to z</span>, <span class="math">z \to x</span>, all at <span class="math">t = 0</span>. Each action leaves a location another one enters at the same time, and <span class="math">t \le t</span> holds, so the rule adds three edges that form a cycle. Each robot waits for another to leave. The plan is only safe if all three move in perfect lockstep, which real robots cannot guarantee. Hönig et al. call such transitions unsafe, and point out that they show up as cycles in the ADG. A planner whose output must run on an ADG must therefore avoid them. In the scheduler, a cycle in the action DAG makes <code>GetTopologicalOrdering()</code> fail, and the response reports "Failed to get final ordering for action DAG!".</p>
+<p>Suppose three robots rotate around a triangle at the same instant: <span class="math">\mathrm{X} \to \mathrm{Y}</span>, <span class="math">\mathrm{Y} \to \mathrm{Z}</span>, <span class="math">\mathrm{Z} \to \mathrm{X}</span>, all at <span class="math">t = 0</span>. Each action leaves a location another one enters at the same time, and <span class="math">t \le t</span> holds, so the rule adds three edges that form a cycle. Each robot waits for another to leave. The plan is only safe if all three move in perfect lockstep, which real robots cannot guarantee. Hönig et al. call such transitions unsafe, and point out that they show up as cycles in the ADG. A planner whose output must run on an ADG must therefore avoid them. In the scheduler, a cycle in the action DAG makes <code>GetTopologicalOrdering()</code> fail, and the response reports "Failed to get final ordering for action DAG!".</p>
 
 <h2 data-num id="ad-executing-an-adg">Executing an ADG</h2>
 
 <h3 data-num id="ad-statuses-and-the-dispatch-rule">Statuses and the dispatch rule</h3>
 <p>Each vertex has a status: <strong>staged</strong> (not yet sent), <strong>enqueued</strong> (sent to the robot's command queue) or <strong>finished</strong> (the robot reported completion). Hönig et al. enqueue an action <span class="math">a^j_l</span> when two conditions hold:</p>
 <div class="math">\underbrace{\mathrm{status}(a^j_{l-1}) \in \{\text{enqueued}, \text{finished}\}}_{\text{Type 1 predecessor}} \;\;\wedge\;\; \underbrace{\forall\, u \in \mathrm{pred}_2(a^j_l):\; \mathrm{status}(u) = \text{finished}}_{\text{Type 2 predecessors}}</div>
-<p>The Type 1 predecessor only needs to be <em>enqueued</em>, because the robot executes its own queue in order. Sending the next action early lets it start without a round trip to the dispatcher. Type 2 predecessors belong to other robots, so they must be <em>finished</em>. A vertex becomes finished when its robot reports it.</p>
+<figure id="ad-fig-88_adg_statuses">
+  <img src="figures/88_adg_statuses.svg" alt="Executing an ADG: statuses over time">
+  <figcaption><strong>Executing the example ADG.</strong> Top: the three statuses and who moves an action between them. The dispatcher sends a staged action when the enqueue rule holds, and the robot marks it finished when it reports completion. The closest <code>ActionNode</code> status values are shown under each. Below: five moments while the example of <a class="ref" href="#ad-fig-85_adg_construction">Figure 2</a> runs, with the colour of every vertex and each robot's command queue. (1) Only the two actions without predecessors are sent. (2) When AGV 3 reports <span class="math">a^3_1</span>, <span class="math">a^1_2</span> is sent and waits in AGV 1's queue behind <span class="math">a^1_1</span>. (3) AGV 1 starts <span class="math">a^1_2</span> on its own. (4) When <span class="math">a^1_2</span> is reported, <span class="math">a^2_1</span> and <span class="math">a^2_2</span> are released together. (5) All finished.</figcaption>
+</figure>
+<p>Walking through <a class="ref" href="#ad-fig-88_adg_statuses">Figure 3</a> shows why the rule has two parts.</p>
+<ul>
+  <li><strong>Type 2 waits for <em>finished</em>.</strong> At the start, <span class="math">a^1_2</span> (AGV 1 drives into C) is held back because AGV 3, which must first leave C, has not reported.</li>
+  <li><strong>Type 1 only waits for <em>enqueued</em>.</strong> As soon as <span class="math">a^3_1</span> is reported, <span class="math">a^1_2</span> is sent even though AGV 1 is still busy with <span class="math">a^1_1</span>. The robot holds it in its queue and starts it the moment the first move ends, with no round trip to the dispatcher.</li>
+  <li><strong>Each report can release several actions.</strong> When AGV 1 reports <span class="math">a^1_2</span>, both of AGV 2's actions are released: <span class="math">a^2_1</span> because its Type 2 predecessor is now finished, and <span class="math">a^2_2</span> because its only predecessor, <span class="math">a^2_1</span>, is now enqueued.</li>
+</ul>
+<p>Here <span class="math">a^j_{l-1}</span> is the same robot's previous action (its Type 1 predecessor), and <span class="math">\mathrm{pred}_2(a^j_l)</span> is the set of actions with a Type 2 edge into <span class="math">a^j_l</span>. The Type 1 predecessor only needs to be <em>enqueued</em>, because the robot executes its own queue in order. Sending the next action early lets it start without a round trip to the dispatcher. Type 2 predecessors belong to other robots, so they must be <em>finished</em>. A vertex becomes finished when its robot reports it.</p>
 <p>Some later work uses a single rule instead: an action may start once all its predecessors are finished. Berndt et al. (2020) use the statuses <em>staged</em>, <em>in progress</em> and <em>completed</em>. The two rules give the same safety guarantee.</p>
 
 <h3 data-num id="ad-why-it-is-safe">Why it is safe</h3>
@@ -153,7 +205,7 @@
 <div class="math">L(v) = \min_{w \in \mathrm{succ}(v)} \big( L(w) - d(w) \big) \quad (\text{or the makespan if } v \text{ has no successor}), \qquad \mathrm{slack}(v) = L(v) - C(v)</div>
 <figure id="ad-fig-86_adg_critical_path">
   <img src="figures/86_adg_critical_path.svg" alt="Earliest start, critical path and slack">
-  <figcaption><strong>Timing on the example ADG.</strong> The durations are invented. The recurrence gives <span class="math">S</span> and <span class="math">C</span> for every action and a makespan of 10. The critical path <code>a[1,1] → a[1,2] → a[2,1] → a[2,2]</code> has no slack. <code>a[3,1]</code> has a slack of 1: it can run up to 1 s late without moving the end.</figcaption>
+  <figcaption><strong>Timing on the example ADG.</strong> The durations are invented. The recurrence gives <span class="math">S</span> and <span class="math">C</span> for every action and a makespan of 10. The critical path <span class="math">a^1_1 \to a^1_2 \to a^2_1 \to a^2_2</span> has no slack. <span class="math">a^3_1</span> has a slack of 1: it can run up to 1 s late without moving the end.</figcaption>
 </figure>
 <p>What this says about delays:</p>
 <ul>
@@ -378,8 +430,8 @@ for(const auto&amp; node : request_data.base_schedule.nodes) {
   <p>The Type 1 predecessor is on the same robot, which runs its queue in order, so it cannot start the next action before finishing the previous one. A Type 2 predecessor is on another robot; only its completion report proves the location is clear.</p>
 </details>
 <details>
-  <summary>2. In <a class="ref" href="#ad-fig-86_adg_critical_path">Figure 3</a>, <code>a[3,1]</code> is delayed by 2.5 s. What is the new makespan?</summary>
-  <p><code>a[3,1]</code> now finishes at 4.5 instead of 2. Its slack is 1, so the end moves by <span class="math">2.5 - 1 = 1.5</span>: <code>a[1,2]</code> starts at 4.5 and the makespan becomes 11.5.</p>
+  <summary>2. In <a class="ref" href="#ad-fig-86_adg_critical_path">Figure 3</a>, <span class="math">a^3_1</span> is delayed by 2.5 s. What is the new makespan?</summary>
+  <p><span class="math">a^3_1</span> now finishes at 4.5 instead of 2. Its slack is 1, so the end moves by <span class="math">2.5 - 1 = 1.5</span>: <span class="math">a^1_2</span> starts at 4.5 and the makespan becomes 11.5.</p>
 </details>
 <details>
   <summary>3. The action DAG builder adds an edge from every earlier occupant, not just the last one. Why is that still correct, and what does it cost?</summary>
