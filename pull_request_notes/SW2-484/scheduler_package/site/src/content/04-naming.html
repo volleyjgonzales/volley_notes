@@ -7,7 +7,7 @@
 <h1>04 — Naming and small struct refactors</h1>
 <p>This is a working list to keep open while refactoring. It covers the whole stack the scheduler touches: the ROS messages in <code>interfaces</code>, the garage model in <code>common_ros</code>, the events and DAG in <code>planner_core</code>, and the <code>scheduler</code> package itself. Each row gives the current name, the proposed one, where it lives, how expensive the change is, and why. The rules in <a class="ref" href="#nm-naming-rules">section 2</a> produce the proposals, so a name not listed here can be decided the same way.</p>
 <blockquote><p><strong>Scope decided for the refactor.</strong> Doc 02 adopts the rows for <code>scheduler</code> and <code>planner_core</code> (<a class="ref" href="#pr-naming-and-the-ros-boundary">section 7</a> there). Rows for <code>common_ros</code> and the ROS interfaces are not renamed yet: the scheduler reaches them through one translation header and its own internal types, so its code can use the good names now and drop the translation when <code>common_ros</code> catches up.</p></blockquote>
-<p>These are recommendations, not decisions. The few that need a team decision are collected in <a class="ref" href="#nm-decisions-for-review">section 9</a>. Everything is taken from the four source snapshots (<code>sources/repomix-*.xml</code>); where the snapshots do not show something, the row says so.</p>
+<p>These are recommendations, not decisions. The few that need a team decision are collected in <a class="ref" href="#nm-decisions-for-review">section 9</a>. Everything is taken from the six source snapshots (<code>sources/repomix-*.xml</code>: <code>scheduler</code>, <code>planner_core</code>, <code>common_ros</code>, <code>interfaces</code>, <code>motion_planner</code>, <code>cost_functions</code>); where the snapshots do not show something, the row says so.</p>
 
 <h2 data-num id="nm-how-to-read-this-list">How to read this list</h2>
 <p>Every recommendation carries a <strong>tier</strong>: how far the change reaches, and so how much it costs.</p>
@@ -61,7 +61,7 @@
 <p>Today several concepts have three to five names each, and several names mean three or four things. <a class="ref" href="#nm-fig-82_naming_today">Figure 1</a> shows the worst cases. The table below fixes one word per concept. The rest of the document applies it.</p>
 <figure id="nm-fig-82_naming_today">
   <img src="figures/82_naming_today.svg" alt="One concept, many names: the worst cases today">
-  <figcaption><strong>One concept, many names.</strong> Each card is one concept, with the spellings it has today across messages and C++ (left) and the proposed single word (right). From the four source snapshots.</figcaption>
+  <figcaption><strong>One concept, many names.</strong> Each card is one concept, with the spellings it has today across messages and C++ (left) and the proposed single word (right). From the six source snapshots.</figcaption>
 </figure>
 <table>
   <thead>
@@ -423,11 +423,73 @@
   </tbody>
 </table>
 
-<h3 data-num id="nm-pipeline-stage-names">Pipeline stage names</h3>
-<p>Doc 02 already moves tray and AGV assignment behind <code>tray_assignment::Solve</code> and <code>agv_assignment::SolveInPlace</code>. The remaining <code>Scheduler</code> methods along <code>Plan()</code> read better as verb phrases.</p>
+<h3 data-num id="nm-pipeline-stage-names">Pipeline stages: folders and namespaces</h3>
+<p>Doc 02 organises the <code>scheduler</code> package by pipeline stage (<a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> there): one folder, one CMake target and one namespace per stage, and possibly one package per stage later. The folder names are therefore names that people will say every day, and that may become package names. All of them are tier A while they stay folders.</p>
 <table>
   <thead>
     <tr>
+      <th>Stage</th>
+      <th>Proposed folder · namespace</th>
+      <th>Alternatives considered</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1–3 · jobs → finished event DAG</td>
+      <td><code>task_planning/</code> · <code>volley::task_planning</code></td>
+      <td><code>task_assignment</code>; <code>event_planning</code></td>
+      <td>The stages decompose jobs into events, allocate trays and AGVs, and add blocker moves: decomposition plus allocation is what "task planning" means, while "assignment" covers only stages 2–3. Close to the existing <code>task_planner</code> package (which holds <code>BottleneckAssignment</code>, used by stage 3); if reviewers find that confusing, <code>event_planning</code> names the output instead</td>
+    </tr>
+    <tr>
+      <td>1 · job expansion</td>
+      <td><code>task_planning/job_expansion/</code></td>
+      <td><code>job_planning</code></td>
+      <td>"Expand" is the stage's verb (<code>Expand&lt;Type>Job</code>); "plan" is reserved for <code>Plan()</code> (<a class="ref" href="#nm-rule-plan-word">section 2.10</a>)</td>
+    </tr>
+    <tr>
+      <td>2 · tray assignment</td>
+      <td><code>task_planning/tray_assignment/</code> · <code>volley::task_planning::tray_assignment</code></td>
+      <td><code>tray_movement</code></td>
+      <td>Job expansion also moves trays; this step only fills in what expansion left open (doc 02, <a class="ref" href="#pr-source-tree">section 8.2</a>)</td>
+    </tr>
+    <tr>
+      <td>3 · AGV assignment</td>
+      <td><code>task_planning/agv_assignment/</code> · <code>volley::task_planning::agv_assignment</code></td>
+      <td><code>agv_matching</code></td>
+      <td>Pairs with <code>tray_assignment</code>; matching is one step inside it</td>
+    </tr>
+    <tr>
+      <td>3 · validation</td>
+      <td><code>task_planning/validation/</code></td>
+      <td><code>sanity_check</code></td>
+      <td>Matches <code>ValidateEvents</code></td>
+    </tr>
+    <tr>
+      <td>4 · timed motions</td>
+      <td><code>motion_planning/</code> · <code>volley::motion_planning</code></td>
+      <td><code>path_planning</code>; <code>mapf</code></td>
+      <td>CHUGG plans timed trajectories for all agents together; a path has no time. Matches the package that does the work (<code>motion_planner</code>) and <code>PlanMotions</code>. The namespace must not be <code>motion_planner</code>, so it cannot hide the package's names</td>
+    </tr>
+    <tr>
+      <td>5 · action DAG</td>
+      <td><code>action_graph/</code> · <code>volley::action_graph</code></td>
+      <td><code>action_sequencing</code>; <code>adg</code></td>
+      <td>The output is a partial order, not a sequence: actions of different AGVs run in parallel unless an edge orders them (doc 05). Spelled out, not the acronym</td>
+    </tr>
+    <tr>
+      <td>shared</td>
+      <td><code>core/</code> · <code>volley::scheduler_core</code></td>
+      <td><code>common/</code></td>
+      <td>A <code>volley::common</code> namespace would hide <code>::common</code> and break today's <code>common::EnumInteger</code> calls (doc 02, <a class="ref" href="#pr-source-tree">section 8.2</a>)</td>
+    </tr>
+  </tbody>
+</table>
+<p>The stage functions follow. Doc 02 already moves tray and AGV assignment behind <code>tray_assignment::Solve</code> and <code>agv_assignment::SolveInPlace</code>. The remaining functions along <code>Plan()</code> read better as verb phrases, and the action-DAG helpers can drop words their folder now says.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
       <th>Current</th>
       <th>Proposed</th>
       <th>Why</th>
@@ -435,34 +497,114 @@
   </thead>
   <tbody>
     <tr>
-      <td><code>PlanRetrieveJob</code>, <code>PlanInsertJob</code>, … (11 methods)</td>
+      <td>1</td>
+      <td><code>PlanRetrieveJob</code>, <code>PlanInsertJob</code>, … (12 methods)</td>
       <td><code>ExpandRetrieveJob</code>, <code>ExpandInsertJob</code>, …</td>
       <td>Job expansion; rule in <a class="ref" href="#nm-rule-plan-word">section 2.10</a></td>
     </tr>
     <tr>
+      <td>2–3</td>
       <td><code>DoTrayAssignments</code>, <code>DoAgvAssignments</code></td>
       <td><code>AssignTrays</code>, <code>AssignAgvs</code> (or the doc 02 solvers)</td>
       <td>"Do" adds nothing</td>
     </tr>
     <tr>
+      <td>3</td>
       <td><code>SanityCheckEvents</code></td>
       <td><code>ValidateEvents</code></td>
       <td>Standard verb</td>
     </tr>
     <tr>
-      <td><code>ResponseFromTrajectories</code></td>
-      <td><code>BuildPlanResponse</code></td>
-      <td>Verb first, like <code>BuildActionDagFromMotions</code></td>
-    </tr>
-    <tr>
+      <td>3</td>
       <td><code>AddDepsAfterAmiga</code> (and the <code>Amiga*</code> test names)</td>
       <td>a name that says what the step does</td>
       <td>A project nickname; a new reader cannot guess it. What it does is in doc 01's call trace</td>
     </tr>
     <tr>
-      <td><code>PlanMotions</code>, <code>Plan</code></td>
+      <td>4</td>
+      <td><code>Scheduler::PlanMotions</code></td>
+      <td><code>motion_planning::PlanMotions</code></td>
+      <td>Keep the name: it does plan motions. It becomes a free function</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>ResponseFromTrajectories</code></td>
+      <td><code>BuildPlanResponse</code></td>
+      <td>Verb first; stays in <code>Scheduler</code> and calls the <code>action_graph</code> functions</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>CollectAndCollapseTrajectoryMotions</code></td>
+      <td><code>action_graph::CollectMotions</code></td>
+      <td>The collapsing of floor-traversal runs is documented in the comment; the name keeps the verb</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>BuildActionDagFromMotions</code></td>
+      <td><code>action_graph::BuildActionDag</code></td>
+      <td>The argument type says "from motions"</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>TransferEventDagDepsToActionDag</code></td>
+      <td><code>action_graph::CopyEventDependencies</code></td>
+      <td>"Dependency" spelled out (sections <a class="ref" href="#nm-rule-spell-words-out">2.1</a>, <a class="ref" href="#nm-rule-one-concept-one-word">2.2</a>); "copy" says the event DAG is unchanged; the namespace says which DAG receives them</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>InsertVrcActionsIntoDag</code></td>
+      <td><code>action_graph::InsertVrcActions</code></td>
+      <td>The namespace says which DAG</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>BuildScheduledActionsArray</code>, <code>ToActionNode</code></td>
+      <td><code>action_graph::FlattenActionDag</code>, keep <code>ToActionNode</code></td>
+      <td>It flattens the DAG, in topological order, into the indexed message list Dispatch reads, with parent indices; "array" names the container, not the job</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>DagBase&lt;ActionNodeMsg></code>, <code>final_actions_dag</code></td>
+      <td><code>using ActionDag = DagBase&lt;ActionNodeMsg>;</code>, <code>action_dag</code></td>
+      <td>Pairs with <code>EventDag</code>; "final" says nothing once the variable lives in one function</td>
+    </tr>
+    <tr>
+      <td>—</td>
+      <td><code>Plan</code></td>
       <td>keep</td>
-      <td>They do plan</td>
+      <td>It is the plan call</td>
+    </tr>
+  </tbody>
+</table>
+<h3 data-num id="nm-motion-planner-names">Names seen in <code>motion_planner</code></h3>
+<p>Not part of this refactor: <code>motion_planner</code> is outside the scheduler and <code>planner_core</code>, so these are tier B rows for its owners, listed because the scheduler code reads them.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Motion::action_id</code>, <code>GetActionId()</code></td>
+      <td><code>event_index</code>, <code>GetEventIndex()</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>It holds the event DAG vertex index the motion came from, not an action: actions only exist after stage 5. Static motions use <code>999999</code> as "no event"; an <code>std::optional</code> or named constant would say so</td>
+    </tr>
+    <tr>
+      <td><code>kMagicPredecessorCost</code></td>
+      <td><code>kPerPredecessorPenalty</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Say what the 3 s is: a penalty per predecessor state in SIPP (doc 01, <a href="#bg-sipp-the-single-agv-search">SIPP</a>)</td>
+    </tr>
+    <tr>
+      <td><code>GetEdgeDurations</code>, <code>GetEdgeMarginalDurations</code></td>
+      <td><code>GetEdgeTrapezoidDurations</code>, <code>GetEdgeCruiseDurations</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Two kinds of duration per edge; the name should say which model each uses</td>
     </tr>
   </tbody>
 </table>
@@ -1153,6 +1295,7 @@ Edge[] edges   # Edge: node_id_a, node_id_b, int16[] disallowed_headings (0:179,
   <li><strong><code>TransitionType</code> values.</strong> <code>TRANSLATE_LONGITUDINAL</code> and <code>TRANSLATE_LATERAL</code>, or shorter <code>DRIVE</code> and <code>CRAB</code>? Pick whatever the AGV team says out loud.</li>
   <li><strong>"Size class" for parking windows, resource windows and resource sizes.</strong> Confirm with the layout owners, who write these in YAML.</li>
   <li><strong>The interface version.</strong> Which tier C items go into it, and how stored <code>DiscreteGarageEvent</code> buffers are migrated or read.</li>
+  <li><strong>Stage folder names.</strong> <code>task_planning</code>, <code>motion_planning</code> and <code>action_graph</code> (<a class="ref" href="#nm-pipeline-stage-names">section 4.3</a>), or <code>event_planning</code> for stages 1–3 if <code>task_planning</code> is too close to the <code>task_planner</code> package. Decide before stage C0 of doc 02 creates the folders: once a stage becomes a package, its name is tier B.</li>
   <li><strong>What <code>BAY_ODP</code> and <code>TYPE_BLIFT</code> should be called.</strong> Their meaning is not in the snapshots.</li>
 </ol>
 

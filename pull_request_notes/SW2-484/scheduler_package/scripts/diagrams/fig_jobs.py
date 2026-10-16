@@ -772,7 +772,7 @@ def job_retrieve():
                 "on a VECS in an unexpected state, it is true: FailJob() copies it so Dispatch keeps the job and "
                 "retries later.", T.sky),
                ("Not decided yet", "Where T21 parks, which trays block T17's path, which AGV does the work and the "
-                "exact route are all chosen by the later stages (sections 15 to 18).", T.border)],
+                "exact route are all chosen by the later stages (tray assignment, AGV assignment, motion planning).", T.border)],
         bw=300)
 
 

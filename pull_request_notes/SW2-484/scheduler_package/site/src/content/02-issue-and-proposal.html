@@ -13,6 +13,7 @@
 -->
 <h1>02 — Scheduler Core Refactor: problem statement and proposal</h1>
 <p>This document explains <em>what</em> the refactor changes and <em>why</em>, using the code in <code>sources/repomix-scheduler.xml</code> as evidence. It assumes you have read sections <a class="ref" href="#bg-schedulecontext-the-per-call-workspace">7</a>–<a class="ref" href="#bg-one-plan-call-step-by-step">10</a>, <a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">13</a> and <a class="ref" href="#bg-tray-assignment-dotrayassignments">16</a>–<a class="ref" href="#bg-agv-assignment-doagvassignments">17</a> of <a href="#doc-background">01 — Software background</a>. Code snippets follow the same conventions as doc 01: every snippet says which class it lives in, what <code>this</code> is, and the type of each variable that is not obvious. Snippets marked <strong>proposed</strong> do not exist in the repository.</p>
+<p><strong>How the document is organised.</strong> The scheduler is a five-stage pipeline: job expansion, tray assignment and AGV assignment build the event DAG (task planning); CHUGG turns it into timed motions (motion planning); and the action DAG turns those into the commands Dispatch executes. <a class="ref" href="#pr-the-pipeline-the-refactor-works-on">Section 2</a> places the ticket in that pipeline, sections <a class="ref" href="#pr-where-the-two-algorithms-sit-today">3</a>–<a class="ref" href="#pr-current-versus-target-responsibilities">5</a> describe the two algorithms and what moves where, <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> decides how the code is organised by stage (folders or packages), and the rest designs the tray module, the naming boundary and the staged plan.</p>
 <table>
   <thead>
     <tr>
@@ -68,6 +69,60 @@
 <p><strong>Parent Jira initiative:</strong> <strong>Scheduler Core Refactor</strong> (parent key not given in the supplied ticket text). <strong>Specific tasks:</strong> <a href="https://volleyautomation.atlassian.net/browse/SW2-484">SW2-484</a> (tray solver interface, in progress), <a href="https://volleyautomation.atlassian.net/browse/SW2-769">SW2-769</a> (scheduler package reorganization, marked done) and <a href="https://volleyautomation.atlassian.net/browse/SW2-487">SW2-487</a> (tray benchmark set, To Do). The links follow the usual Jira URL pattern; the base domain and current status have not been verified. Related keys reported by the user: SW2-677, SW2-652, SW2-593, SW2-488, SW2-496, SW2-514, SW2-663, SW2-18, SW2-686, SW2-776 and SW2-905. <strong>Do not assume all of them block the refactor.</strong></p>
 <p><strong>Objective:</strong> move tray-move planning and AGV assignment out of large <code>Scheduler</code> methods and behind generic, swappable interfaces. Default implementations must reproduce current behaviour, and each solver needs at least <strong>10 real-customer-layout scenarios</strong> with recorded baseline performance. <strong>Out of scope:</strong> changes to CHUGG/SIPP motion planning, a new optimal solver, and adding to active schedules.</p>
 <p><strong>Definition of Done:</strong> two generic interfaces; two behaviour-equivalent default implementations; 10+ site-based benchmark scenarios per solver with saved baselines; every <code>Scheduler</code> assignment call site routed through the interfaces; old code paths removed. Source: user-provided Jira text, October 2026. This describes the intended state, not the code today.</p>
+<h2 data-num id="pr-the-pipeline-the-refactor-works-on">The pipeline the refactor works on</h2>
+<p><code>Scheduler::Plan()</code> is a pipeline of five stages (doc 01, <a class="ref" href="#bg-fig-01_pipeline">Figure 1</a> there). The ticket's two algorithms are two of them. The other three matter for the refactor because the code layout should follow the stages, and because each stage boundary is a natural interface: every stage hands the next one a data structure, not a call into its internals.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
+      <th>Standard name</th>
+      <th>Input → output</th>
+      <th>Code today</th>
+      <th>Algorithms it calls</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1 · Job expansion</td>
+      <td rowspan="3">task planning (decomposition and allocation)</td>
+      <td>jobs + garage state → event DAG with blanks</td>
+      <td>12 <code>Plan&lt;Type>Job</code> members of <code>Scheduler</code></td>
+      <td>searches from <code>motion_planner</code></td>
+    </tr>
+    <tr>
+      <td>2 · Tray assignment <strong>(ticket)</strong></td>
+      <td>event DAG → blanks filled, blocker moves added</td>
+      <td><code>DoTrayAssignments</code> and helpers, members of <code>Scheduler</code></td>
+      <td>blocking-tray, open-space and empty-tray searches (<code>motion_planner</code>)</td>
+    </tr>
+    <tr>
+      <td>3 · AGV assignment <strong>(ticket)</strong>, then <code>Reduce()</code> and the sanity check</td>
+      <td>event DAG → AGV events and edges added; final DAG</td>
+      <td><code>DoAgvAssignments</code>, <code>SanityCheckEvents</code>, members</td>
+      <td><code>BottleneckAssignment</code> (<code>task_planner</code>), <code>GetPosePath</code></td>
+    </tr>
+    <tr>
+      <td>4 · Motion planning</td>
+      <td>MAPF</td>
+      <td>event DAG → <code>ContinuousState</code> (timed motions)</td>
+      <td><code>PlanMotions</code>, a member, about 60 lines</td>
+      <td>CHUGG (<code>motion_planner</code>)</td>
+    </tr>
+    <tr>
+      <td>5 · Action DAG</td>
+      <td>action dependency graph</td>
+      <td><code>ContinuousState</code> + event DAG → <code>ActionNode[]</code></td>
+      <td><code>ResponseFromTrajectories</code> (member) and five <strong>free functions</strong> in an anonymous namespace of <code>scheduler.cpp</code>; <code>InsertVrcActionsIntoDag</code> (free, <code>utils.cpp</code>)</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+<p>Three facts from this table shape the proposal:</p>
+<ul>
+  <li><strong>The algorithms of stages 4 and 5 are already separate.</strong> CHUGG lives in <code>motion_planner</code>; the scheduler only adapts its inputs. The action-DAG code is already free functions: they take the context pointer, the layout and the logger as arguments and touch no <code>Scheduler</code> member. Only <code>ResponseFromTrajectories</code>, the member that calls them, reads members: the collision table and motion graph (for the occupancy checker), the layout, the cost model (for VRC actions) and <code>printdags_</code>. Moving them is cheap. The interface work is to pass those services explicitly, narrow the context argument to the three fields the helpers read (the event DAG, the job list, the initial state), and return the per-job action indices that <code>BuildScheduledActionsArray</code> writes into <code>ctx->scheduled_jobs</code> today.</li>
+  <li><strong>Stages 1–3 are where the coupling is.</strong> All three are <code>Scheduler</code> members that share private helpers and edit one context (<a class="ref" href="#pr-what-the-two-algorithms-touch">section 4</a>). This is the ticket's work, and the part that needs the solver interfaces.</li>
+  <li><strong>Stages exchange data, not calls.</strong> 1–3 pass the event DAG (<code>planner_core</code>), 4 passes a <code>ContinuousState</code> (<code>motion_planner</code>), 5 produces ROS messages. Each stage can therefore be built and tested on its own once its inputs are those types, which is what makes the module options in <a class="ref" href="#pr-module-layout-folders-or-packages">section 7</a> possible.</li>
+</ul>
 <h2 data-num id="pr-where-the-two-algorithms-sit-today">Where the two algorithms sit today</h2>
 <p>Both algorithms are <code>const</code> member functions of <code>Scheduler</code> that take the per-call context and edit it in place. They return <code>BoolStringPair</code> (<code>std::pair&lt;bool, std::string></code>: success flag plus a message). <a class="ref" href="#pr-proposed-layout-and-api-for-tray-assignment">Section 6</a> proposes replacing both habits: <code>stdx::Expected</code> instead of <code>BoolStringPair</code>, and a returned result instead of editing <code>ctx</code>.</p>
 <pre><code class="language-cpp">// include/scheduler/scheduler.hpp — inside class volley::Scheduler (public section)
@@ -175,49 +230,55 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
 </code></pre>
 <p><code>ctx->initial_state</code> stays untouched; <code>working_state</code> is the solver's private "garage after everything planned so far". Keeping that distinction is invariant 9 in practice (<a class="ref" href="#pr-key-invariants-to-maintain">section 7</a>).</p>
 <h2 data-num id="pr-current-versus-target-responsibilities">Current versus target responsibilities</h2>
+<p>Every concern of <code>Scheduler::Plan()</code>, grouped by stage, with where it lives today and where it goes. Folder names are those of <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a>; "later" marks moves that are not needed for the ticket's Definition of Done.</p>
 <table>
   <thead>
     <tr>
+      <th>Stage</th>
       <th>Concern</th>
-      <th>Today (method in <code>Scheduler</code>)</th>
+      <th>Today (in <code>Scheduler</code>)</th>
       <th>After the refactor</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>Validate request, build <code>ScheduleContext</code></td>
+      <td>orchestrator</td>
+      <td>Validate request, build <code>ScheduleContext</code>, run the stages, build the reply</td>
       <td><code>Plan</code></td>
-      <td>Stays in <code>Scheduler</code></td>
+      <td>Stays in <code>Scheduler</code> (<code>scheduler.hpp</code>); context in <code>plan_context.hpp</code></td>
     </tr>
     <tr>
+      <td>1 · job expansion</td>
       <td>Expand jobs into events</td>
       <td><code>Plan&lt;Type>Job</code> (12 methods)</td>
-      <td>Stays in <code>Scheduler</code></td>
+      <td>Stays in <code>Scheduler</code> for the ticket (renamed <code>Expand&lt;Type>Job</code>); later free functions in <code>task_planning/job_expansion/</code></td>
     </tr>
     <tr>
+      <td rowspan="4">2 · tray assignment</td>
       <td>Choose tray and destination for each <code>TrayMove</code></td>
       <td><code>DoTrayAssignments</code> → <code>AssignTrayIdForEmptyMove</code>, <code>AssignDestForUntargetedMove</code></td>
-      <td><code>tray_assignment::DefaultSolver</code> (the loop) + pure <code>ChooseEmptyTray</code>, <code>ChooseParkingSpot</code> (<a class="ref" href="#pr-before-and-after-the-tray-call-tree">section 6.3</a>)</td>
+      <td><code>tray_assignment::DefaultSolver</code> (the loop) + pure <code>ChooseEmptyTray</code>, <code>ChooseParkingSpot</code> in <code>task_planning/tray_assignment/</code> (<a class="ref" href="#pr-before-and-after-the-tray-call-tree">section 8.3</a>)</td>
     </tr>
     <tr>
       <td>Move blocking trays out of the way</td>
       <td><code>ResolveBlockingTrays</code> → <code>FindOpenSpaceForRootTray</code>, <code>TryFindBlockingTrayResolution</code></td>
-      <td>Pure free function <code>tray_assignment::ResolveBlockingTrays(svc, request)</code>, public so job planning can call it too</td>
+      <td>Pure free function <code>tray_assignment::ResolveBlockingTrays(svc, request)</code>, public so job expansion can call it too</td>
     </tr>
     <tr>
       <td>Write the tray results into <code>ctx</code></td>
       <td>(done inside <code>DoTrayAssignments</code>)</td>
-      <td><code>tray_assignment::ApplyTrayAssignment(ctx, result)</code>, called by <code>Plan()</code> right after <code>Solve</code>; the only writer (sections <a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">6.1</a>, <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">6.5</a>)</td>
+      <td><code>tray_assignment::ApplyTrayAssignment(ctx, result)</code>, called by <code>Plan()</code> right after <code>Solve</code>; the only writer (sections <a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">8.1</a>, <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">8.5</a>)</td>
     </tr>
     <tr>
       <td>Choose parking headings</td>
       <td><code>UsePreferredHeading</code>, <code>UseRetrievalHeading</code>, <code>UseEvChargeHeading</code></td>
-      <td>Pure functions in <code>core/headings</code></td>
+      <td>Pure functions in <code>core/headings</code> (job expansion uses them too)</td>
     </tr>
     <tr>
+      <td rowspan="3">3 · AGV assignment</td>
       <td>Match AGVs to tray moves</td>
       <td><code>DoAgvAssignments</code> + cost helpers + <code>BottleneckAssignment</code></td>
-      <td><code>agv_assignment::DefaultSolver</code></td>
+      <td><code>agv_assignment::DefaultSolver</code> in <code>task_planning/agv_assignment/</code>; travel cost in <code>task_planning/travel_cost</code></td>
     </tr>
     <tr>
       <td>Add approach, lift and lower events</td>
@@ -230,18 +291,168 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
       <td>Default AGV solver, same order (move later only with evidence)</td>
     </tr>
     <tr>
-      <td>DAG primitives</td>
-      <td><code>planner_core::ScheduleEventDag</code></td>
-      <td>Unchanged</td>
+      <td>3 · validation</td>
+      <td>Sanity check of the finished event DAG</td>
+      <td><code>SanityCheckEvents</code></td>
+      <td>Renamed <code>ValidateEvents</code> (stage H); later a free function in <code>task_planning/validation/</code></td>
     </tr>
     <tr>
-      <td>Sanity check, motion planning, response</td>
-      <td><code>SanityCheckEvents</code>, <code>PlanMotions</code>, <code>ResponseFromTrajectories</code></td>
-      <td>Unchanged</td>
+      <td>1–3</td>
+      <td>DAG primitives</td>
+      <td><code>planner_core::ScheduleEventDag</code></td>
+      <td>Unchanged (renamed in stage I)</td>
+    </tr>
+    <tr>
+      <td>4 · motion planning</td>
+      <td>Adapt the event DAG to CHUGG and run it</td>
+      <td><code>PlanMotions</code> (member, about 60 lines)</td>
+      <td>Free function <code>motion_planning::PlanMotions(svc, event_dag, state)</code> in <code>motion_planning/</code>; CHUGG itself stays in <code>motion_planner</code>, unchanged</td>
+    </tr>
+    <tr>
+      <td rowspan="2">5 · action DAG</td>
+      <td>Turn timed motions into action nodes and edges</td>
+      <td>Five free functions in an anonymous namespace of <code>scheduler.cpp</code>; <code>InsertVrcActionsIntoDag</code> in <code>utils.cpp</code></td>
+      <td><code>action_graph/</code>, with inputs narrowed from the context pointer to the event DAG, job list and initial state, the services passed explicitly, and the per-job action indices returned instead of written into <code>ctx->scheduled_jobs</code>; names per doc 04</td>
+    </tr>
+    <tr>
+      <td>Assemble the reply</td>
+      <td><code>ResponseFromTrajectories</code> (member)</td>
+      <td>Stays in <code>Scheduler</code> as <code>BuildPlanResponse</code>; calls <code>action_graph::BuildActionDag</code></td>
     </tr>
   </tbody>
 </table>
-<p><strong>Decision needed:</strong> where the solver <em>interfaces</em> live. <a class="ref" href="#pr-source-tree">Section 6.2</a> proposes starting inside the scheduler package: subfolders <code>core/</code>, <code>tray_assignment/</code> and <code>agv_assignment/</code> under <code>include/scheduler/</code>, <code>src/</code> and <code>test/</code>, still built by the one <code>CMakeLists.txt</code>. Moving a module to its own package later is a matter of moving those three subfolders. Options are <code>planner_core</code>, a small solver-interface package, or a new scheduler-core package. A default implementation needs <code>motion_planner</code> and <code>cost_functions</code>, so putting it in a low-level package can create dependency cycles. Check against <code>package.xml</code> and the exported CMake targets before choosing.</p>
+<p><strong>Decision needed:</strong> folders or packages for the stages, and therefore where the solver <em>interfaces</em> live. <a class="ref" href="#pr-module-layout-folders-or-packages">Section 6</a> compares the two and recommends starting with stage folders inside the scheduler package (one library target per stage, still one <code>CMakeLists.txt</code>; tree in <a class="ref" href="#pr-source-tree">section 8.2</a>), so the interfaces live in <code>task_planning/tray_assignment/solver.hpp</code> and <code>task_planning/agv_assignment/solver.hpp</code>. Promoting a stage to its own package later means moving its three folders and adding a <code>package.xml</code>. A default implementation needs <code>motion_planner</code> and <code>cost_functions</code>, so putting interfaces and defaults in a low-level package such as <code>planner_core</code> would create dependency cycles. Check against <code>package.xml</code> and the exported CMake targets before choosing.</p>
+<h2 data-num id="pr-module-layout-folders-or-packages">Module layout: stage folders or stage packages</h2>
+<p>The code should be organised by pipeline stage (<a class="ref" href="#pr-the-pipeline-the-refactor-works-on">section 2</a>), not by "everything <code>Scheduler</code> does". There are two ways to draw those boundaries: as folders inside the <code>scheduler</code> package (Option 1), or as separate ROS packages (Option 2). This section compares them and recommends a path that starts with Option 1 and allows Option 2 one stage at a time.</p>
+<figure id="pr-fig-95_module_layout">
+  <img src="figures/95_module_layout.svg" alt="Stage folders vs stage packages">
+  <figcaption><strong>Stage folders vs stage packages.</strong> Option 1 (top) keeps one <code>scheduler</code> package with one folder per stage and a shared <code>core/</code>. Option 2 (bottom) makes the stages packages: stage 4 already is one (<code>motion_planner</code>); <code>task_planning</code> needs a new <code>scheduler_core</code> package for <code>PlanContext</code> and <code>GarageServices</code>; <code>action_graph</code> needs nothing new once its inputs are narrowed. This is a proposal, not existing code.</figcaption>
+</figure>
+<h3 data-num id="pr-stage-names">Stage names</h3>
+<p>The folder names should say what each stage produces, using the field's standard terms (doc 01, <a href="#bg-how-to-think-about-the-scheduler">How to think about the scheduler</a>):</p>
+<table>
+  <thead>
+    <tr>
+      <th>Stages</th>
+      <th>Suggested in the request</th>
+      <th>Recommended</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1–3</td>
+      <td><code>task_assignment</code></td>
+      <td><code>task_planning</code></td>
+      <td>Stages 1–3 do more than assignment: job expansion <em>decomposes</em> jobs into events and adds blocker moves (rearrangement), and only stages 2–3 <em>allocate</em> trays and AGVs. "Task planning" is the usual name for decomposition plus allocation, and the output is a plan (the event DAG). The name is close to the existing <code>task_planner</code> package, which holds <code>BottleneckAssignment</code>; if that is confusing, use <code>event_planning</code>, which names the output directly.</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><code>path_planning</code></td>
+      <td><code>motion_planning</code></td>
+      <td>CHUGG plans <em>timed</em> trajectories for many agents at once (MAPF with SIPP), not paths alone; a path has no time. The name also matches the package that does the work, <code>motion_planner</code>, and the existing method <code>PlanMotions</code>.</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>action_sequencing</code></td>
+      <td><code>action_graph</code></td>
+      <td>The output is a partial order (the action dependency graph, doc 05), not a sequence: actions of different AGVs run in parallel unless an edge orders them. A "sequence" would suggest the total order the ADG exists to avoid.</td>
+    </tr>
+  </tbody>
+</table>
+<p>Inside <code>task_planning/</code> each step is a subfolder: <code>job_expansion/</code>, <code>tray_assignment/</code>, <code>agv_assignment/</code> and <code>validation/</code>. The two ticket modules keep the names used in the rest of this document. The <code>Plan()</code> orchestrator, <code>PlanContext</code>, the ROS boundary (<code>ros/</code>) and the shared <code>core/</code> stay at the top of the package because every stage uses them or none owns them.</p>
+<h3 data-num id="pr-option-1-stage-folders-in-scheduler">Option 1: stage folders in <code>scheduler</code></h3>
+<p>One package, one folder per stage under <code>include/scheduler/</code>, <code>src/</code> and <code>test/</code> (full tree in <a class="ref" href="#pr-source-tree">section 8.2</a>). Each stage folder builds its own CMake library target, and the <code>scheduler</code> library links them. That gives most of the enforcement of separate packages at no packaging cost:</p>
+<ul>
+  <li><strong>The linker enforces direction.</strong> <code>scheduler_task_planning</code> links <code>scheduler_core</code> (the target for <code>core/</code>), never <code>scheduler</code>; code in it that calls a <code>Scheduler</code> member does not link.</li>
+  <li><strong>A CI include check covers what the linker cannot.</strong> A stage folder never includes another stage folder, <code>scheduler.hpp</code> or <code>ros/</code>. Inside <code>task_planning/</code>, <code>job_expansion/</code> may call the public functions of <code>tray_assignment/</code> (<code>ResolveBlockingTrays</code>, <code>ChooseEmptyTray</code>), as it does today; <code>agv_assignment/</code> must not include <code>tray_assignment/</code> (the hand-off is <code>first_event_by_tray</code>, a plain map in its <code>Input</code>).</li>
+  <li><strong>Moves are cheap and reversible.</strong> Changing a boundary is a <code>git mv</code> and a CMake edit in one package, reviewed in one PR.</li>
+</ul>
+<h3 data-num id="pr-option-2-one-package-per-stage">Option 2: one package per stage</h3>
+<p>Each stage becomes a ROS package with its own <code>package.xml</code> and CMake. Three things differ from how the request pictures it:</p>
+<ul>
+  <li><strong>Stage 4 already is a package.</strong> <code>motion_planner</code> holds CHUGG, SIPP and the searches. What remains in <code>scheduler</code> is <code>PlanMotions</code>, about 60 lines that adapt the event DAG and the garage state to CHUGG's inputs. A <code>motion_planning</code> package would hold only that adapter, so it should stay in <code>scheduler</code>.</li>
+  <li><strong><code>task_planning</code> needs a lower package first.</strong> Its solvers take <code>PlanContext</code>, <code>GarageServices</code> and the internal types. Those cannot stay in <code>scheduler</code> (a package below <code>scheduler</code> cannot include it), so a new <code>scheduler_core</code> package must hold them. Today's dependencies leave room for it: <code>planner_core</code> depends only on <code>common</code>, <code>common_ros</code> and <code>interfaces</code>; <code>motion_planner</code> on those plus <code>cost_functions</code>; <code>scheduler</code> on all of them plus <code>task_planner</code> and <code>stdx</code>. A <code>scheduler_core</code> between <code>motion_planner</code> and <code>scheduler</code> creates no cycle.</li>
+  <li><strong><code>action_graph</code> is ready almost as it is.</strong> Its code is already free functions; once their argument is narrowed from the context pointer to the event DAG, job list and initial state, and the collision table, motion graph, layout and cost model are passed as separate references, every type it uses comes from a lower package: <code>planner_core</code> (the DAGs), <code>motion_planner</code> (<code>ContinuousState</code>), <code>common_ros</code>, <code>cost_functions</code> and <code>interfaces</code>.</li>
+</ul>
+<p>The cost: every installed header becomes public API that other packages can include, so it falls under the stricter naming tier of doc 04 and changes need the owners of every user. Each package adds a <code>package.xml</code>, CMake export boilerplate, a <code>colcon</code> build step and a place in the release process.</p>
+<h3 data-num id="pr-comparison">Comparison</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Criterion</th>
+      <th>Option 1: stage folders</th>
+      <th>Option 2: stage packages</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Dependency enforcement</td>
+      <td>Per-stage CMake targets (link errors) plus a CI include check</td>
+      <td>Strongest: <code>package.xml</code> and <code>colcon</code> refuse undeclared dependencies</td>
+    </tr>
+    <tr>
+      <td>Prerequisites</td>
+      <td>None; can start with stage C0 of the plan</td>
+      <td>A <code>scheduler_core</code> package; narrowed stage inputs; agreed owners</td>
+    </tr>
+    <tr>
+      <td>Interface stability</td>
+      <td>Headers are internal to one package; changes are one PR</td>
+      <td>Installed headers are public API; changes cross packages and reviews</td>
+    </tr>
+    <tr>
+      <td>Private helpers</td>
+      <td>Private headers in <code>src/&lt;stage>/</code>, not on any include path</td>
+      <td>Same, per package</td>
+    </tr>
+    <tr>
+      <td>Build and CI</td>
+      <td>One package; incremental builds as today</td>
+      <td>Packages build in parallel and test in isolation; more package boilerplate</td>
+    </tr>
+    <tr>
+      <td>Benchmarks (SW2-487)</td>
+      <td>A benchmark target links only the stage library</td>
+      <td>A benchmark package depends only on the stage package</td>
+    </tr>
+    <tr>
+      <td>Reuse outside the scheduler</td>
+      <td>Not possible without depending on <code>scheduler</code></td>
+      <td>Any package can depend on one stage (for example a planning simulator using <code>action_graph</code>)</td>
+    </tr>
+    <tr>
+      <td>Naming constraint (rename only in <code>scheduler</code> and <code>planner_core</code>)</td>
+      <td>Met: all new names live in <code>scheduler</code></td>
+      <td>New package names are new names outside <code>scheduler</code>; acceptable because nothing else uses them yet, but each needs approval</td>
+    </tr>
+    <tr>
+      <td>Risk to behaviour parity</td>
+      <td>Low: files move, code does not</td>
+      <td>Low for the code, higher for the build: export, install and link errors appear outside the parity tests</td>
+    </tr>
+    <tr>
+      <td>Reversibility</td>
+      <td>High</td>
+      <td>Low once other packages depend on a stage</td>
+    </tr>
+  </tbody>
+</table>
+<h3 data-num id="pr-recommendation-folders-now-packages-when-proven">Recommendation: folders now, packages when proven</h3>
+<p><strong>Adopt Option 1 now, and write the code as if it were Option 2.</strong> Each stage folder gets its own CMake target with the dependency rules above, so promoting a stage later is a move of three folders and a new <code>package.xml</code>, not a refactor. Then promote stages one at a time, only when they meet the checklist below:</p>
+<ol>
+  <li><strong><code>action_graph</code> first.</strong> It is already free functions, its inputs are lower-package types once narrowed, and it is the natural unit to test against doc 05's ADG rules. It can be promoted as soon as stage C0 has narrowed its inputs (stage J of the plan).</li>
+  <li><strong><code>task_planning</code> after the benchmarks.</strong> Its interfaces are what this ticket designs; they should stay internal until stage G's benchmarks and stage H's cleanup show they are stable. Promotion then needs <code>scheduler_core</code> as well.</li>
+  <li><strong><code>motion_planning</code> never.</strong> The algorithm already lives in <code>motion_planner</code>; the adapter belongs to the orchestrator.</li>
+</ol>
+<p>A stage folder is ready to become a package when all of these hold:</p>
+<ul>
+  <li>It includes nothing from <code>scheduler.hpp</code>, <code>ros/</code> or another stage folder (the CI check has passed for some time).</li>
+  <li>Its public inputs and outputs are types from lower packages, or from <code>scheduler_core</code> once that exists.</li>
+  <li>Something outside <code>Scheduler::Plan()</code> needs it: a second user, or a benchmark that must not link the scheduler.</li>
+  <li>Its public interface has not changed for a release.</li>
+  <li>An owner for the package is agreed.</li>
+</ul>
 <h2 data-num id="pr-target-architecture">Target architecture</h2>
 <figure id="pr-fig-02_target_architecture">
   <img src="figures/02_target_architecture.svg" alt="Target design">
@@ -270,7 +481,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
   <img src="figures/58_tray_dataflow.svg" alt="Tray assignment data flow, today vs proposed">
   <figcaption><strong>How tray assignment reads and writes <code>ScheduleContext</code>.</strong> Top: today <code>DoTrayAssignments</code> gets a shared, mutable pointer to the context and writes into it throughout the loop, so a failure halfway leaves it half-edited. Bottom: (1) <code>Plan</code> passes <code>Solve</code> two <code>const</code> references; (2) <code>Solve</code> keeps its working data in a private <code>Pass</code>, calls pure functions to decide, and returns a <code>Result</code>; (3) <code>ApplyTrayAssignment</code> writes the <code>Result</code> into the context. If <code>Solve</code> fails, step 3 never runs and the context is unchanged.</figcaption>
 </figure>
-<p>The pieces, all in namespace <code>volley::tray_assignment</code> unless marked <code>scheduler_core</code>:</p>
+<p>The pieces, all in namespace <code>volley::task_planning::tray_assignment</code> (folder <code>task_planning/tray_assignment/</code>) unless marked <code>scheduler_core</code>:</p>
 <table>
   <thead>
     <tr>
@@ -294,7 +505,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
     <tr>
       <td><code>Input</code></td>
       <td>Struct of two <code>const</code> references into <code>plan_ctx</code></td>
-      <td><code>include/scheduler/tray_assignment/solver.hpp</code></td>
+      <td><code>include/scheduler/task_planning/tray_assignment/solver.hpp</code></td>
       <td>One <code>Solve</code> call (a temporary built in <code>Plan</code>)</td>
       <td><code>initial_state</code>, <code>event_dag</code></td>
       <td>nothing</td>
@@ -326,7 +537,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
     <tr>
       <td><code>DefaultSolver</code></td>
       <td>Today's algorithm behind the interface; holds only <code>const GarageServices&amp;</code></td>
-      <td><code>default_solver.hpp</code>, <code>src/tray_assignment/default_solver.cpp</code></td>
+      <td><code>default_solver.hpp</code>, <code>src/task_planning/tray_assignment/default_solver.cpp</code></td>
       <td>Owned by <code>Scheduler</code></td>
       <td><code>Input</code>, services</td>
       <td>nothing outside itself</td>
@@ -334,7 +545,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
     <tr>
       <td><code>DefaultSolver::Pass</code></td>
       <td><strong>Private nested class</strong>: the loop's working data</td>
-      <td>declared in <code>default_solver.hpp</code>, defined in <code>src/tray_assignment/pass.hpp</code></td>
+      <td>declared in <code>default_solver.hpp</code>, defined in <code>src/task_planning/tray_assignment/pass.hpp</code></td>
       <td>One <code>Solve</code> call (a local variable)</td>
       <td><code>Input</code>, services</td>
       <td>only its own members</td>
@@ -342,7 +553,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
     <tr>
       <td>Pure functions</td>
       <td><code>ChooseEmptyTray</code>, <code>ResolveBlockingTrays</code>, <code>ChooseParkingSpot</code>, <code>FindCriticalPath</code>, the heading functions, ...</td>
-      <td><code>empty_tray.hpp</code>, <code>blocking_trays.hpp</code>, <code>src/tray_assignment/critical_path.hpp</code>, <code>core/headings.hpp</code></td>
+      <td><code>empty_tray.hpp</code>, <code>blocking_trays.hpp</code>, <code>src/task_planning/tray_assignment/critical_path.hpp</code>, <code>core/headings.hpp</code></td>
       <td>—</td>
       <td>their arguments</td>
       <td>nothing</td>
@@ -350,7 +561,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
     <tr>
       <td><code>ApplyTrayAssignment</code></td>
       <td>Free function, the only one that takes a mutable <code>PlanContext&amp;</code></td>
-      <td><code>apply.hpp</code>, <code>src/tray_assignment/apply.cpp</code></td>
+      <td><code>apply.hpp</code>, <code>src/task_planning/tray_assignment/apply.cpp</code></td>
       <td>—</td>
       <td><code>Result</code></td>
       <td><code>ctx.event_dag</code>, event fields, <code>ctx.first_event_by_tray</code></td>
@@ -376,8 +587,8 @@ struct GarageServices {                       // read-only services every search
 };
 }  // namespace volley::scheduler_core
 </code></pre>
-<pre><code class="language-cpp">// PROPOSED — include/scheduler/tray_assignment/solver.hpp
-namespace volley::tray_assignment {
+<pre><code class="language-cpp">// PROPOSED — include/scheduler/task_planning/tray_assignment/solver.hpp
+namespace volley::task_planning::tray_assignment {
 
 struct Input {                                     // everything Solve may read; nothing it may write
   const DiscreteGarageState&amp; initial_state;        // plan_ctx->initial_state
@@ -408,21 +619,21 @@ class Solver {
   [[nodiscard]] virtual stdx::Expected&lt;Result> Solve(const Input&amp; input) const = 0;
 };
 
-}  // namespace volley::tray_assignment
+}  // namespace volley::task_planning::tray_assignment
 </code></pre>
-<pre><code class="language-cpp">// PROPOSED — include/scheduler/tray_assignment/default_solver.hpp
-namespace volley::tray_assignment {
+<pre><code class="language-cpp">// PROPOSED — include/scheduler/task_planning/tray_assignment/default_solver.hpp
+namespace volley::task_planning::tray_assignment {
 class DefaultSolver final : public Solver {
  public:
   explicit DefaultSolver(const scheduler_core::GarageServices&amp; services);   // services must outlive the solver
   [[nodiscard]] stdx::Expected&lt;Result> Solve(const Input&amp; input) const override;
  private:
-  class Pass;                                // defined in src/tray_assignment/pass.hpp; no one else can name it
+  class Pass;                                // defined in src/task_planning/tray_assignment/pass.hpp; no one else can name it
   const scheduler_core::GarageServices&amp; services_;
 };
-}  // namespace volley::tray_assignment
+}  // namespace volley::task_planning::tray_assignment
 </code></pre>
-<pre><code class="language-cpp">// PROPOSED — src/tray_assignment/pass.hpp (private header: not under include/, not installed)
+<pre><code class="language-cpp">// PROPOSED — src/task_planning/tray_assignment/pass.hpp (private header: not under include/, not installed)
 class DefaultSolver::Pass {
  public:
   Pass(const scheduler_core::GarageServices&amp; services, const DiscreteGarageState&amp; initial_state);  // copies the state
@@ -441,7 +652,7 @@ class DefaultSolver::Pass {
   Result result_;                                                    // what Solve returns
 };
 </code></pre>
-<pre><code class="language-cpp">// PROPOSED — src/tray_assignment/default_solver.cpp (shape only)
+<pre><code class="language-cpp">// PROPOSED — src/task_planning/tray_assignment/default_solver.cpp (shape only)
 stdx::Expected&lt;Result> DefaultSolver::Solve(const Input&amp; input) const {
   auto order = input.event_dag.GetTopologicalOrdering();              // the only read of the DAG's structure
   if(!order) return stdx::Unexpected("Failed to get total ordering");
@@ -461,109 +672,126 @@ stdx::Expected&lt;Result> DefaultSolver::Solve(const Input&amp; input) const {
   return std::move(pass).TakeResult();
 }
 </code></pre>
-<pre><code class="language-cpp">// PROPOSED — include/scheduler/tray_assignment/apply.hpp
-namespace volley::tray_assignment {
+<pre><code class="language-cpp">// PROPOSED — include/scheduler/task_planning/tray_assignment/apply.hpp
+namespace volley::task_planning::tray_assignment {
 // The only function in the module that takes a mutable context. Implementation in 6.5.
 [[nodiscard]] stdx::Result ApplyTrayAssignment(PlanContext&amp; ctx, const Result&amp; result);
-}  // namespace volley::tray_assignment
+}  // namespace volley::task_planning::tray_assignment
 </code></pre>
 <p><code>EmitOptions</code> and <code>CommitOptions</code> carry the small differences between today's two copies of the emission code (<a class="ref" href="#pr-before-and-after-the-tray-call-tree">6.3</a>) so that parity holds; they can disappear once those differences are settled.</p>
 <h3 data-num id="pr-source-tree">Source tree</h3>
-<p>The package root stays <code>scheduler/</code> with <strong>one</strong> <code>CMakeLists.txt</code>. The new code goes into subfolders of the existing <code>include/scheduler/</code> and <code>src/</code> (and <code>test/</code>), one per module:</p>
+<p>This is Option 1 of <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a>: the package root stays <code>scheduler/</code> with <strong>one</strong> <code>CMakeLists.txt</code>, and <code>include/scheduler/</code>, <code>src/</code> and <code>test/</code> get one folder per pipeline stage. Folders marked <em>later</em> are created empty in stage C0 and filled after the ticket's work (<a class="ref" href="#pr-staged-plan">section 10</a>); everything else is part of this refactor.</p>
 <pre><code class="language-text">scheduler/                                       # ROS package root (name unchanged)
-├── CMakeLists.txt                               # the only CMakeLists.txt; lists the new .cpp files
-├── package.xml                                  # already depends on stdx
+├── CMakeLists.txt                               # the only CMakeLists.txt; one library target per stage
+├── package.xml                                  # already depends on stdx, motion_planner, task_planner
 ├── include/
 │   └── scheduler/
-│       ├── scheduler.hpp                        # existing: Plan(), job expansion; owns services_, tray_solver_
+│       ├── scheduler.hpp                        # orchestrator: Plan() runs the stages; owns services_, tray_solver_
 │       ├── plan_context.hpp                     # PlanContext (today ScheduleContext), ScheduledJob
 │       ├── scheduler_ros.hpp                    # existing
 │       ├── scheduler_msgs.hpp                   # existing
 │       ├── utils.hpp                            # existing
-│       ├── core/
-│       │   ├── vocabulary.hpp                   # translation header: new names for common_ros types (7.2)
-│       │   ├── types.hpp                        # AssetId, AssetType: internal types, no ROS includes (7.3)
+│       ├── core/                                # shared by every stage; includes no stage
+│       │   ├── vocabulary.hpp                   # translation header: new names for common_ros types (9.2)
+│       │   ├── types.hpp                        # AssetId, AssetType: internal types, no ROS includes (9.3)
 │       │   ├── garage_services.hpp              # GarageServices
 │       │   ├── headings.hpp                     # PreferredHeading, RetrievalHeading, EvChargeHeading
 │       │   └── overloaded.hpp                   # Overloaded helper for std::visit
 │       ├── ros/
-│       │   └── convert.hpp                      # messages <-> internal types (7.3)
-│       ├── tray_assignment/
-│       │   ├── solver.hpp                       # Solver, Input, Result, TrayFill, DagEdit
-│       │   ├── default_solver.hpp               # DefaultSolver (declares the private nested Pass)
-│       │   ├── apply.hpp                        # ApplyTrayAssignment
-│       │   ├── empty_tray.hpp                   # ChooseEmptyTray, TrayChoice
-│       │   └── blocking_trays.hpp               # ResolveBlockingTrays, ChooseParkingSpot, PlannedTrayMove, ...
-│       └── agv_assignment/
-│           ├── solver.hpp
-│           ├── default_solver.hpp
-│           └── travel_cost.hpp                  # GetJustMovingCost (shared with PlanAgvChargeJob)
-├── src/
-│   ├── scheduler.cpp                            # existing; shrinks to Plan() + job expansion
-│   ├── scheduler_component.cpp                  # existing
-│   ├── scheduler_ros.cpp                        # existing
-│   ├── utils.cpp                                # existing
-│   ├── core/
-│   │   └── headings.cpp
-│   ├── ros/
-│   │   └── convert.cpp
-│   ├── tray_assignment/
-│   │   ├── default_solver.cpp                   # Solve(): the per-event loop
-│   │   ├── pass.hpp                             # PRIVATE header: DefaultSolver::Pass
-│   │   ├── pass.cpp
-│   │   ├── critical_path.hpp                    # PRIVATE header: CheckDestinationUsable, FindCriticalPath, ...
-│   │   ├── critical_path.cpp
-│   │   ├── empty_tray.cpp
-│   │   ├── blocking_trays.cpp                   # + detail::FindOpenSpace, detail::TryResolveBlocker
-│   │   └── apply.cpp
-│   └── agv_assignment/
-│       ├── default_solver.cpp
-│       └── travel_cost.cpp
-└── test/
-    ├── scheduler_tests.cpp                      # existing (and the other existing test files)
-    ├── tray_assignment/                         # empty_tray, blocking_trays, critical_path, default_solver, apply
-    └── agv_assignment/
+│       │   └── convert.hpp                      # messages <-> internal types (9.3)
+│       ├── task_planning/                       # stages 1-3: jobs -> finished event DAG
+│       │   ├── travel_cost.hpp                  # GetJustMovingCost (AGV assignment and PlanAgvChargeJob)
+│       │   ├── job_expansion/                   # later: Expand<Type>Job as free functions
+│       │   ├── tray_assignment/                 # stage 2 (this ticket)
+│       │   │   ├── solver.hpp                   # Solver, Input, Result, TrayFill, DagEdit
+│       │   │   ├── default_solver.hpp           # DefaultSolver (declares the private nested Pass)
+│       │   │   ├── apply.hpp                    # ApplyTrayAssignment
+│       │   │   ├── empty_tray.hpp               # ChooseEmptyTray, TrayChoice
+│       │   │   └── blocking_trays.hpp           # ResolveBlockingTrays, ChooseParkingSpot, PlannedTrayMove, ...
+│       │   ├── agv_assignment/                  # stage 3 (this ticket)
+│       │   │   ├── solver.hpp
+│       │   │   └── default_solver.hpp
+│       │   └── validation/                      # later: ValidateEvents (today SanityCheckEvents)
+│       ├── motion_planning/                     # stage 4
+│       │   └── plan_motions.hpp                 # PlanMotions(services, event_dag, state) -> ContinuousState
+│       └── action_graph/                        # stage 5
+│           └── build.hpp                        # BuildActionDag, CopyEventDependencies, InsertVrcActions
+├── src/                                         # mirrors include/scheduler/; private headers live here
+│   ├── scheduler.cpp                            # existing; shrinks to Plan() + job expansion until "later"
+│   ├── scheduler_component.cpp, scheduler_ros.cpp, utils.cpp   # existing
+│   ├── core/headings.cpp
+│   ├── ros/convert.cpp
+│   ├── task_planning/
+│   │   ├── travel_cost.cpp
+│   │   ├── tray_assignment/
+│   │   │   ├── default_solver.cpp               # Solve(): the per-event loop
+│   │   │   ├── pass.hpp                         # PRIVATE header: DefaultSolver::Pass
+│   │   │   ├── pass.cpp
+│   │   │   ├── critical_path.hpp                # PRIVATE header: CheckDestinationUsable, FindCriticalPath, ...
+│   │   │   ├── critical_path.cpp
+│   │   │   ├── empty_tray.cpp
+│   │   │   ├── blocking_trays.cpp               # + detail::FindOpenSpace, detail::TryResolveBlocker
+│   │   │   └── apply.cpp
+│   │   └── agv_assignment/
+│   │       └── default_solver.cpp
+│   ├── motion_planning/plan_motions.cpp         # body of today's Scheduler::PlanMotions
+│   └── action_graph/build.cpp                   # today's anonymous-namespace helpers + InsertVrcActionsIntoDag
+└── test/                                        # mirrors src/
+    ├── scheduler_tests.cpp, ...                 # existing end-to-end tests stay at the top
+    ├── task_planning/tray_assignment/           # empty_tray, blocking_trays, critical_path, default_solver, apply
+    ├── task_planning/agv_assignment/
+    └── action_graph/                            # new: ADG rules from doc 05 on hand-built inputs
 </code></pre>
-<p>The single <code>CMakeLists.txt</code> only grows its source lists. Today it builds one shared library with <code>volley_add_library(${PROJECT_NAME} SHARED src/scheduler.cpp src/utils.cpp)</code> and four <code>volley_add_gtest</code> targets:</p>
+<p>The <code>CMakeLists.txt</code> declares one library per stage. Today it builds one shared library with <code>volley_add_library(${PROJECT_NAME} SHARED src/scheduler.cpp src/utils.cpp)</code> and four <code>volley_add_gtest</code> targets; the excerpt below adds the stage targets. Whether <code>volley_add_library</code> accepts <code>STATIC</code> and <code>LINK_LIBRARIES</code> is not visible in this snapshot (it is defined in <code>volley_cmake</code>); plain <code>add_library</code> and <code>target_link_libraries</code> do the same job.</p>
 <pre><code class="language-cmake"># PROPOSED — CMakeLists.txt (excerpt; the rest of the file is unchanged)
-volley_add_library(
-  ${PROJECT_NAME}
-  SHARED
-  src/scheduler.cpp
-  src/utils.cpp
-  src/core/headings.cpp
-  src/ros/convert.cpp
-  src/tray_assignment/default_solver.cpp
-  src/tray_assignment/pass.cpp
-  src/tray_assignment/critical_path.cpp
-  src/tray_assignment/empty_tray.cpp
-  src/tray_assignment/blocking_trays.cpp
-  src/tray_assignment/apply.cpp
-  src/agv_assignment/default_solver.cpp
-  src/agv_assignment/travel_cost.cpp
+# Shared core: no stage, no scheduler.hpp
+add_library(scheduler_core STATIC src/core/headings.cpp)
+
+# Stage libraries: each links scheduler_core and lower packages, never ${PROJECT_NAME}
+add_library(scheduler_task_planning STATIC
+  src/task_planning/travel_cost.cpp
+  src/task_planning/tray_assignment/default_solver.cpp
+  src/task_planning/tray_assignment/pass.cpp
+  src/task_planning/tray_assignment/critical_path.cpp
+  src/task_planning/tray_assignment/empty_tray.cpp
+  src/task_planning/tray_assignment/blocking_trays.cpp
+  src/task_planning/tray_assignment/apply.cpp
+  src/task_planning/agv_assignment/default_solver.cpp
 )
+target_link_libraries(scheduler_task_planning PUBLIC scheduler_core)
+
+add_library(scheduler_motion_planning STATIC src/motion_planning/plan_motions.cpp)
+target_link_libraries(scheduler_motion_planning PUBLIC scheduler_core)
+
+add_library(scheduler_action_graph STATIC src/action_graph/build.cpp)   # services passed one by one: no scheduler_core
+
+# The orchestrator library links the stages
+volley_add_library(${PROJECT_NAME} SHARED src/scheduler.cpp src/utils.cpp src/ros/convert.cpp)
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  scheduler_task_planning scheduler_motion_planning scheduler_action_graph)
 
 if(BUILD_TESTING)
   volley_add_gtest(
     tray_assignment_tests
-    test/tray_assignment/empty_tray_test.cpp
-    test/tray_assignment/blocking_trays_test.cpp
-    test/tray_assignment/critical_path_test.cpp
-    test/tray_assignment/default_solver_test.cpp
-    test/tray_assignment/apply_test.cpp
+    test/task_planning/tray_assignment/empty_tray_test.cpp
+    test/task_planning/tray_assignment/blocking_trays_test.cpp
+    test/task_planning/tray_assignment/critical_path_test.cpp
+    test/task_planning/tray_assignment/default_solver_test.cpp
+    test/task_planning/tray_assignment/apply_test.cpp
     LINK_LIBRARIES
       yaml-cpp
-      ${PROJECT_NAME}
+      scheduler_task_planning                    # not ${PROJECT_NAME}: the test cannot reach Scheduler
   )
 endif()
 </code></pre>
-<p>How the boundaries hold with one library target:</p>
+<p>(Each stage target also needs the <code>ament_target_dependencies</code> on the lower packages it uses, its include directory, and <code>POSITION_INDEPENDENT_CODE</code> because it is linked into a shared library.) How the boundaries hold:</p>
 <ul>
-  <li><strong>Public vs private headers.</strong> Headers under <code>include/scheduler/&lt;module>/</code> are the module's API; code includes them as <code>#include "scheduler/tray_assignment/solver.hpp"</code>. Headers next to the <code>.cpp</code> files in <code>src/&lt;module>/</code> are private. They are not under <code>include/</code>, so they are not installed and not on anyone's include path, and only files in the same folder include them (<code>#include "pass.hpp"</code>). Check that <code>volley_add_library</code> exports only <code>include/</code> (it is defined in <code>volley_cmake</code>, not in this snapshot).</li>
+  <li><strong>Public vs private headers.</strong> Headers under <code>include/scheduler/&lt;stage>/</code> are the stage's API; code includes them as <code>#include "scheduler/task_planning/tray_assignment/solver.hpp"</code>. Headers next to the <code>.cpp</code> files in <code>src/&lt;stage>/</code> are private. They are not under <code>include/</code>, so they are not installed and not on anyone's include path, and only files in the same folder include them (<code>#include "pass.hpp"</code>). Check that <code>volley_add_library</code> exports only <code>include/</code>.</li>
   <li><strong><code>Pass</code> cannot be used from outside even by accident.</strong> It is a private nested class of <code>DefaultSolver</code>, so code outside <code>DefaultSolver</code> cannot name it, whatever it includes.</li>
-  <li><strong>Dependency direction is a rule, checked in CI.</strong> With one target, CMake cannot stop <code>src/tray_assignment/*.cpp</code> from including <code>scheduler/scheduler.hpp</code>. The rules: <code>tray_assignment/</code> and <code>agv_assignment/</code> never include <code>scheduler.hpp</code>; <code>agv_assignment/</code> does not include <code>tray_assignment/</code> (the hand-off, <code>first_event_by_tray</code>, is a plain map in its <code>Input</code>); <code>core/</code> includes neither. A one-line grep in CI enforces this. If the team later wants the linker to enforce it, the same <code>CMakeLists.txt</code> can declare one library per module without moving any file.</li>
+  <li><strong>The linker enforces the direction between stages and the orchestrator.</strong> No stage target links <code>${PROJECT_NAME}</code>, so a stage that calls a <code>Scheduler</code> member fails to link, and a test that links only <code>scheduler_task_planning</code> proves the solver works without a <code>Scheduler</code>.</li>
+  <li><strong>A CI include check covers the rest.</strong> The linker cannot see header-only includes, so a one-line grep checks: no file under a stage folder or <code>core/</code> includes <code>scheduler/scheduler.hpp</code> or <code>scheduler/ros/</code>; no stage folder includes another stage folder; under <code>task_planning/</code>, <code>agv_assignment/</code> does not include <code>tray_assignment/</code> (the hand-off, <code>first_event_by_tray</code>, is a plain map in its <code>Input</code>), while <code>job_expansion/</code> may include <code>tray_assignment/</code>'s public headers.</li>
 </ul>
-<p>Names: <strong><code>tray_assignment</code> rather than <code>tray_movement</code></strong>, because job expansion also plans tray movement (it creates the <code>TrayMove</code>s); this module only fills in what expansion left open (tray ids, destinations, blockers). It matches the stage name in doc 01 (<code>DoTrayAssignments</code>) and pairs with <code>agv_assignment</code>. Namespaces follow the folders: <code>volley::tray_assignment</code>, <code>volley::agv_assignment</code>, <code>volley::scheduler_core</code> for <code>core/</code>, and <code>volley::ros_convert</code> for <code>ros/</code>. The shared folder is <code>core/</code>, not <code>common/</code>, because a <code>volley::common</code> namespace would break existing code. The <code>common</code> package already defines namespace <code>::common</code>, and <code>scheduler.cpp</code> calls <code>common::EnumInteger(...)</code> from inside <code>namespace volley</code>. Name lookup would find <code>volley::common</code> first and stop there, so those calls would no longer compile.</p>
+<p>Names: <strong><code>tray_assignment</code> rather than <code>tray_movement</code></strong>, because job expansion also plans tray movement (it creates the <code>TrayMove</code>s); this module only fills in what expansion left open (tray ids, destinations, blockers). It matches the stage name in doc 01 (<code>DoTrayAssignments</code>) and pairs with <code>agv_assignment</code>. The stage folder names are explained in <a class="ref" href="#pr-stage-names">section 6.1</a>. Namespaces follow the folders: <code>volley::task_planning::tray_assignment</code>, <code>volley::task_planning::agv_assignment</code>, <code>volley::motion_planning</code>, <code>volley::action_graph</code>, <code>volley::scheduler_core</code> for <code>core/</code>, and <code>volley::ros_convert</code> for <code>ros/</code>. <code>scheduler.cpp</code> declares <code>namespace tray_assignment = task_planning::tray_assignment;</code> (and the same for <code>agv_assignment</code>), so the snippets in this document use the short names. The shared folder is <code>core/</code>, not <code>common/</code>, because a <code>volley::common</code> namespace would break existing code. The <code>common</code> package already defines namespace <code>::common</code>, and <code>scheduler.cpp</code> calls <code>common::EnumInteger(...)</code> from inside <code>namespace volley</code>. Name lookup would find <code>volley::common</code> first and stop there, so those calls would no longer compile. For the same reason no namespace is called <code>volley::motion_planner</code>: the stage namespace is <code>motion_planning</code>, so it cannot hide the package's own names.</p>
 <h3 data-num id="pr-before-and-after-the-tray-call-tree">Before and after: the tray call tree</h3>
 <p>Not everything moves into the new class. The two figures below show the same call tree before and after; the question that sorts every function is <strong>what does it write?</strong></p>
 <figure id="pr-fig-59_tray_tree_before">
@@ -685,11 +913,11 @@ endif()
 <p>Today <code>DoTrayAssignments(ctx)</code> edits three things it does not own: the DAG (<code>ctx->events</code>), the hand-off map (<code>ctx->first_tray_event</code>) and the <code>TrayMove</code> objects inside the DAG (<code>SetTrayId</code>, <code>SetDest</code>). The proposal: <code>Solve</code> takes a read-only <code>Input</code> and <strong>returns a description of the edits</strong>; <code>Plan()</code> writes them into the context with one call to <code>ApplyTrayAssignment</code>.</p>
 <p><strong>Why this is practical for tray assignment.</strong> The tray tree reads the DAG exactly once: <code>GetTopologicalOrdering()</code> at the start (plus <code>GetEventFromVertex</code> to walk it). After that it only <em>writes</em>: <code>AddEvent</code>, <code>AddDependency</code>, the two setters, and <code>first_tray_event</code>. Nothing in the loop reads back an edge it added. So the solver never needs to see its own edits in the DAG, and recording them instead of applying them changes nothing it computes. (The garage <em>state</em> the loop does read is <code>working_state</code>, which is private to the <code>Pass</code> anyway.)</p>
 <p><strong>Why not return a whole new DAG.</strong> <code>ScheduleEventDag</code> holds <code>std::shared_ptr&lt;ScheduleEvent></code>. Copying it copies pointers, so a “new DAG” would share event objects with the old one, and the setters would still edit the caller's events. A deep copy needs cloning and an old → new identity map for <code>first_event_by_tray</code> and every later stage. <code>planner_core</code> has no virtual <code>Clone()</code>: events are copy-constructible, but only through their concrete type, so cloning means a <code>dynamic_cast</code> (or a switch on <code>GetType()</code>) over the five subclasses. An <strong>edit log</strong> avoids both: it refers to existing events by the same <code>shared_ptr</code>, adds new events as new objects, and never touches the caller's.</p>
-<p>The <code>Result</code> type and its parts are defined in 6.1. An <strong>edit log</strong> means: <code>fills</code> for blanks on existing events, <code>edits</code> for new events and edges in the order today's code creates them, and the hand-off map.</p>
+<p>The <code>Result</code> type and its parts are defined in <a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">section 8.1</a>. An <strong>edit log</strong> means: <code>fills</code> for blanks on existing events, <code>edits</code> for new events and edges in the order today's code creates them, and the hand-off map.</p>
 <p><strong>Parity depends on the order.</strong> The DAG's vertex indices follow <code>AddEvent</code> order (Boost <code>vecS</code>). <code>ScheduleEventDag::GetTopologicalOrdering()</code> takes the lowest job index first, but breaks ties within a job by heap order, which depends on vertex order and on the order edges were added; <code>Reduce()</code> and every replay use that ordering (doc 01, <a class="ref" href="#bg-the-operations">section 12.5</a>). <code>edits</code> is therefore an ordered log, and <code>ApplyTrayAssignment</code> replays it front to back with the same <code>AddEvent</code> / <code>AddDependency</code> calls today's code makes, so the resulting DAG is the same graph built in the same order. <code>AddDependency</code> returns <code>false</code> only when an endpoint is missing or the edge already exists, and tray assignment only logs it, so replaying the same calls gives the same edge set.</p>
 <p><strong>The one subtle part: the loop needs filled values before they are applied.</strong> After <code>ChooseEmptyTray</code>, the main loop plans <em>that</em> tray's path, and later <code>Apply</code>s the move to <code>working_state</code>. Today it reads the id back from the mutated event. In the new design the <code>Pass</code> makes a resolved copy, <code>TrayMove resolved = *move; resolved.SetTrayId(choice.tray_id);</code>, applies the copy to its <code>working_state</code>, records a <code>TrayFill</code>, and never touches <code>*move</code>. Both assumptions hold in <code>planner_core</code> (<code>sources/repomix-planner-core.xml</code>): <code>ScheduleEvent</code>'s copy constructor is public and defaulted, so <code>TrayMove resolved = *move;</code> compiles (copy <em>assignment</em> is private, so <code>resolved = *move;</code> does not), and <code>Apply</code> is a <code>const</code> member, so it can only change the state it is given. One behaviour to keep in mind: <code>TrayMove::Apply</code> with a blank tray id does nothing, and with a blank destination it removes the tray from the state (doc 01, <a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>). The resolved copy always has both fields set, so the <code>Pass</code> never hits those branches.</p>
 <p><strong>Applying it.</strong> One function owns every write to the context:</p>
-<pre><code class="language-cpp">// PROPOSED — src/tray_assignment/apply.cpp ; declared in include/scheduler/tray_assignment/apply.hpp
+<pre><code class="language-cpp">// PROPOSED — src/task_planning/tray_assignment/apply.cpp ; declared in include/scheduler/task_planning/tray_assignment/apply.hpp
 stdx::Result ApplyTrayAssignment(PlanContext&amp; ctx, const Result&amp; result) {
   for(const auto&amp; edit : result.edits) {                       // structure first, in recorded order
     stdx::Result applied = std::visit(Overloaded{
@@ -730,8 +958,8 @@ stdx::Result ApplyTrayAssignment(PlanContext&amp; ctx, const Result&amp; result)
 <p><strong>Limits to be honest about.</strong> <code>const ScheduleEventDag&amp;</code> stops structural edits, but <code>GetEventFromVertex</code> still hands out <code>std::shared_ptr&lt;ScheduleEvent></code> to non-const events, so the compiler does not stop a solver from calling a setter. The rule is enforced by review and by one test: snapshot every event's fields before <code>Solve</code>, compare after. Changing <code>planner_core</code> to hand out <code>shared_ptr&lt;const ScheduleEvent></code> would make it a compile error, but that is outside this refactor.</p>
 <h3 data-num id="pr-free-function-signatures-and-the-plan-call-site">Free-function signatures and the <code>Plan()</code> call site</h3>
 <p>The types in <a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">6.1</a> cover the solver itself. These are the public pure functions that both <code>DefaultSolver</code> and job planning call:</p>
-<pre><code class="language-cpp">// PROPOSED — include/scheduler/tray_assignment/empty_tray.hpp and blocking_trays.hpp
-namespace volley::tray_assignment {
+<pre><code class="language-cpp">// PROPOSED — include/scheduler/task_planning/tray_assignment/empty_tray.hpp and blocking_trays.hpp
+namespace volley::task_planning::tray_assignment {
 
 struct TrayChoice { uint16_t tray_id; Pose destination; };   // heading may follow the tray
 [[nodiscard]] stdx::Expected&lt;TrayChoice> ChooseEmptyTray(
@@ -756,7 +984,7 @@ struct ParkingPlan { Pose destination; std::vector&lt;PlannedTrayMove> required_
 [[nodiscard]] stdx::Expected&lt;ParkingPlan> ChooseParkingSpot(
     const scheduler_core::GarageServices&amp; services, const DiscreteGarageState&amp; state, uint16_t tray_id, size_t job_index);
 
-}  // namespace volley::tray_assignment
+}  // namespace volley::task_planning::tray_assignment
 </code></pre>
 <p><code>ResolveRequest</code> is worth its few lines: today's main-loop call is <code>ResolveBlockingTrays(blocking_tray_id, move->GetJobIndex(), working_state, std::set&lt;uint16_t>{move->GetTrayId().value()}, WithPriorDests(blocking_tray_id, critical_path))</code>, and the <code>AssignDestForUntargetedMove</code> call passes <code>{}, {}</code> positionally. With designated initializers the call says what each value is:</p>
 <pre><code class="language-cpp">// PROPOSED — inside Pass / DefaultSolver
@@ -795,8 +1023,8 @@ if(!assigned) {
   <li>It <strong>reads back fields it set</strong>: <code>SetAgvId</code> on a <code>TrayMove</code>, then <code>GetAgvId()</code> on candidate moves while building later dependencies.</li>
 </ul>
 <p>An edit log could still work, if the solver keeps a private <em>structural</em> copy of the DAG (the default copy constructor copies <code>dag_</code> and <code>ptr_to_vertex_</code>, so the copy shares the events), applies every edit to that copy as it goes, and logs it, including a <code>Reduce</code> step. The log must name events by pointer, never by vertex: <code>Remove</code> on the work-queue copy renumbers its vertices. The field reads are the real obstacle: they would need either cloned events with an identity map (and <code>planner_core</code> has no <code>Clone()</code>, see <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">6.5</a>), or a side table (<code>agv_of[event]</code>) replacing every <code>GetAgvId()</code> read, which touches parity-sensitive code. <strong>Recommendation:</strong> for stage F, use the same layout and <code>stdx</code> types, and give the AGV solver an <code>Input</code> plus an explicitly mutable <code>ScheduleEventDag&amp;</code> (named as such in the signature). Convert it to a returned result after the benchmarks exist and can prove nothing changed.</p>
-<pre><code class="language-cpp">// PROPOSED — sketch only; include/scheduler/agv_assignment/solver.hpp
-namespace volley::agv_assignment {
+<pre><code class="language-cpp">// PROPOSED — sketch only; include/scheduler/task_planning/agv_assignment/solver.hpp
+namespace volley::task_planning::agv_assignment {
 struct Input {
   const DiscreteGarageState&amp; initial_state;                                 // plan_ctx->initial_state
   const std::unordered_map&lt;uint16_t, ScheduleEventSPtr>&amp; first_event_by_tray;  // from tray_assignment::Result
@@ -807,7 +1035,7 @@ class Solver {
   // event_dag is edited in place in the first pass (see 6.7); the name says so.
   [[nodiscard]] virtual stdx::Result SolveInPlace(const Input&amp; input, EventDag&amp; event_dag) const = 0;
 };
-}  // namespace volley::agv_assignment
+}  // namespace volley::task_planning::agv_assignment
 </code></pre>
 <h2 data-num id="pr-naming-and-the-ros-boundary">Naming and the ROS boundary</h2>
 <p>The refactor rewrites most of the code it touches, so it is the cheapest moment to fix names. Doc 04 lists the recommendations for the whole stack. This section takes the subset that can be done now, under one constraint: <strong>renames stay inside <code>scheduler</code> and <code>planner_core</code></strong>. <code>common_ros</code> and the ROS interfaces are used by too many other packages, so their renames come later.</p>
@@ -1191,14 +1419,19 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
       <td>All tests and DAG snapshots identical; response messages byte-identical on the baseline fixtures</td>
     </tr>
     <tr>
+      <td>C0 — stage folders</td>
+      <td>Create the stage folders of <a class="ref" href="#pr-source-tree">section 8.2</a> (<code>core/</code>, <code>task_planning/</code>, <code>motion_planning/</code>, <code>action_graph/</code>) with one CMake target each and the CI include check. Move the action-DAG helpers and <code>InsertVrcActionsIntoDag</code> into <code>action_graph/</code>, narrowing their argument from the context pointer to the event DAG, job list and initial state, passing the services explicitly and returning the per-job action indices (<code>ResponseFromTrajectories</code> writes them into the context)</td>
+      <td>Response messages byte-identical on the baseline fixtures; <code>scheduler_action_graph</code> links without <code>${PROJECT_NAME}</code>; first <code>test/action_graph/</code> tests pass</td>
+    </tr>
+    <tr>
       <td>C1 — pure helpers in place</td>
       <td>Still inside <code>scheduler.cpp</code>: turn the heading helpers, <code>AssignTrayIdForEmptyMove</code> (→ <code>ChooseEmptyTray</code>), <code>ResolveBlockingTrays</code> and the inline main-loop blocks into free functions over <code>GarageServices</code> returning <code>stdx::Expected</code>; job planning calls them too. Merge the two emission blocks</td>
       <td>All tests and DAG snapshots identical; new unit tests for each pure function</td>
     </tr>
     <tr>
       <td>C2 — tray module</td>
-      <td>Create the <code>core/</code> and <code>tray_assignment/</code> subfolders under <code>include/scheduler/</code>, <code>src/</code> and <code>test/</code> (<a class="ref" href="#pr-source-tree">section 6.2</a>) and add the files to <code>CMakeLists.txt</code>; move the pure functions; add <code>Solver</code>, <code>Input</code>, <code>Result</code>, <code>Pass</code>, <code>DefaultSolver</code>, <code>ApplyTrayAssignment</code></td>
-      <td>A test constructs <code>DefaultSolver</code> without a <code>Scheduler</code>; invariant 9 test passes</td>
+      <td>Fill <code>core/</code> and <code>task_planning/tray_assignment/</code> (<a class="ref" href="#pr-source-tree">section 8.2</a>) and add the files to the stage targets; move the pure functions; add <code>Solver</code>, <code>Input</code>, <code>Result</code>, <code>Pass</code>, <code>DefaultSolver</code>, <code>ApplyTrayAssignment</code>. Now that <code>GarageServices</code> exists, move <code>PlanMotions</code> into <code>motion_planning/</code> as a free function</td>
+      <td>A test that links only <code>scheduler_task_planning</code> constructs <code>DefaultSolver</code>; invariant 9 test passes</td>
     </tr>
     <tr>
       <td>D — tray migration</td>
@@ -1207,12 +1440,12 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     </tr>
     <tr>
       <td>E — tray cleanup</td>
-      <td>Delete <code>DoTrayAssignments</code> and the old members; port the 4 direct <code>DoTrayAssignments</code> tests and the <code>ResolveBlockingTrays</code> test to <code>tray_assignment/test</code></td>
+      <td>Delete <code>DoTrayAssignments</code> and the old members; port the 4 direct <code>DoTrayAssignments</code> tests and the <code>ResolveBlockingTrays</code> test to <code>test/task_planning/tray_assignment/</code></td>
       <td>No production call to the old methods</td>
     </tr>
     <tr>
       <td>F — AGV module</td>
-      <td><code>agv_assignment/</code> with the same layout and <code>stdx</code> types; pure cost helpers; <code>SolveInPlace(input, events)</code> (<a class="ref" href="#pr-agv-assignment-same-layout-and-error-type-now-returned-result-later">section 6.7</a>); port the 9 direct tests</td>
+      <td><code>task_planning/agv_assignment/</code> with the same layout and <code>stdx</code> types; pure cost helpers; <code>SolveInPlace(input, events)</code> (<a class="ref" href="#pr-agv-assignment-same-layout-and-error-type-now-returned-result-later">section 6.7</a>); port the 9 direct tests</td>
       <td>Same behaviour and coverage</td>
     </tr>
     <tr>
@@ -1222,7 +1455,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     </tr>
     <tr>
       <td>H — final cleanup</td>
-      <td>Remove legacy code; remaining scheduler renames (<code>ValidateEvents</code>, <code>BuildPlanResponse</code>); vocabulary check fails the build; run full system and advanced suites</td>
+      <td>Remove legacy code; remaining scheduler renames (<code>ValidateEvents</code>, <code>BuildPlanResponse</code>); vocabulary check fails the build; run full system and advanced suites. Optional, after the Definition of Done: move <code>Expand&lt;Type>Job</code> into <code>task_planning/job_expansion/</code> and <code>ValidateEvents</code> into <code>task_planning/validation/</code> as free functions over <code>GarageServices</code></td>
       <td>Definition of Done demonstrable</td>
     </tr>
     <tr>
@@ -1230,9 +1463,14 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
       <td>The renames in <a class="ref" href="#pr-renames-in-planner-core">section 7.5</a>, with deprecated aliases; update <code>scheduler</code> to the new names</td>
       <td><code>planner_core</code>, <code>scheduler</code> and every package above <code>planner_core</code> build and pass their tests</td>
     </tr>
+    <tr>
+      <td>J — first stage package (optional)</td>
+      <td>When <code>action_graph/</code> meets the promotion checklist of <a class="ref" href="#pr-recommendation-folders-now-packages-when-proven">section 6.5</a>, move its three folders into a new <code>action_graph</code> package. <code>task_planning</code> follows only after G and H, together with a <code>scheduler_core</code> package</td>
+      <td>Same tests and parity fixtures pass; <code>scheduler</code> depends on the new package</td>
+    </tr>
   </tbody>
 </table>
-<p><strong>Ticket mapping:</strong> check SW2-769's package structure against the current branch. SW2-484 is the natural first implementation ticket. B2 and C1 are good first PRs inside it: both are mechanical, and the parity tests review them. SW2-487 can start as soon as baseline capture is deterministic. No AGV-specific child tickets were supplied, so none are named here.</p>
+<p><strong>Ticket mapping:</strong> check SW2-769's package structure against the current branch. SW2-484 is the natural first implementation ticket. B2, C0 and C1 are good first PRs inside it: both are mechanical, and the parity tests review them. SW2-487 can start as soon as baseline capture is deterministic. No AGV-specific child tickets were supplied, so none are named here.</p>
 <h2 data-num id="pr-decisions-to-resolve-in-review">Decisions to resolve in review</h2>
 <table>
   <thead>
@@ -1260,8 +1498,13 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     </tr>
     <tr>
       <td>Folder layout and names</td>
-      <td>Subfolders <code>core/</code>, <code>tray_assignment/</code>, <code>agv_assignment/</code> under <code>include/scheduler/</code>, <code>src/</code> and <code>test/</code>; one <code>CMakeLists.txt</code>; private headers in <code>src/&lt;module>/</code>; namespaces to match (<a class="ref" href="#pr-source-tree">6.2</a>)</td>
-      <td><code>volley_add_library</code> exports only <code>include/</code>; CI include check for dependency direction</td>
+      <td>One folder per pipeline stage (<code>task_planning/</code> with <code>tray_assignment/</code>, <code>agv_assignment/</code>, <code>job_expansion/</code>, <code>validation/</code>; <code>motion_planning/</code>; <code>action_graph/</code>; shared <code>core/</code>) under <code>include/scheduler/</code>, <code>src/</code> and <code>test/</code>; one <code>CMakeLists.txt</code> with one library target per stage; private headers in <code>src/&lt;stage>/</code>; namespaces to match (sections <a class="ref" href="#pr-stage-names">6.1</a>, <a class="ref" href="#pr-source-tree">8.2</a>)</td>
+      <td><code>volley_add_library</code> exports only <code>include/</code>; stage targets link without <code>${PROJECT_NAME}</code>; CI include check for the rest; whether <code>task_planning</code> clashes in people's minds with the <code>task_planner</code> package (else <code>event_planning</code>)</td>
+    </tr>
+    <tr>
+      <td>Stage folders or stage packages</td>
+      <td>Folders now, written so that each can become a package; promote <code>action_graph</code> first (stage J), <code>task_planning</code> after the benchmarks with a <code>scheduler_core</code> package, <code>motion_planning</code> never (<a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a>)</td>
+      <td>Owners for any new package; whether anything outside the scheduler needs a stage</td>
     </tr>
     <tr>
       <td>Virtual interface vs templates</td>
@@ -1270,13 +1513,13 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     </tr>
     <tr>
       <td>Where interfaces live</td>
-      <td>Small, low-dependency header package</td>
-      <td><code>colcon graph</code>, <code>package.xml</code>, exported CMake targets</td>
+      <td>In the stage folders of <code>scheduler</code> now (<code>task_planning/&lt;module>/solver.hpp</code>); in stage packages only when a stage meets the promotion checklist (<a class="ref" href="#pr-recommendation-folders-now-packages-when-proven">6.5</a>)</td>
+      <td><code>colcon graph</code>, <code>package.xml</code>, exported CMake targets; a second user of a stage</td>
     </tr>
     <tr>
       <td>Where default solvers live</td>
-      <td>Scheduler library sub-module first</td>
-      <td>Avoid new group-level dependency cycles</td>
+      <td>Next to their interfaces, in the same stage folder; never in <code>planner_core</code></td>
+      <td>Avoid new package-level dependency cycles (defaults need <code>motion_planner</code> and <code>cost_functions</code>)</td>
     </tr>
     <tr>
       <td>Benchmarks</td>
@@ -1295,7 +1538,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     </tr>
     <tr>
       <td>Shared folder and namespace</td>
-      <td><code>core/</code> and <code>volley::scheduler_core</code>, not <code>common</code> (<a class="ref" href="#pr-source-tree">6.2</a>)</td>
+      <td><code>core/</code> and <code>volley::scheduler_core</code>, not <code>common</code> (<a class="ref" href="#pr-source-tree">8.2</a>)</td>
       <td>A build with the new namespace and today's <code>common::EnumInteger</code> calls</td>
     </tr>
     <tr>

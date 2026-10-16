@@ -195,7 +195,7 @@ def tray_tree_before():
           badge_key="as-built",
           legend=[("box", WRITE, "writes ScheduleContext"), ("box", ARG, "writes an argument / local"),
                   ("box", PURE, "writes nothing"), ("dep", WRITE, "«writes»")],
-          footnote="Signatures abridged. Line numbers and full parameter lists: doc 01, sections 15 and 23.")
+          footnote="Signatures abridged. Line numbers and full parameter lists: doc 01, Tray assignment and AGV assignment.")
     return d
 
 
@@ -263,7 +263,7 @@ def tray_tree_after():
         dict(name="DefaultSolver", accent=SOLVE, stereo="class · default_solver.hpp",
              attrs=["- services_: const GarageServices&"],
              methods=["+ Solve(input) const : stdx::Expected<Result>", "  // was DoTrayAssignments(ctx)"]),
-        dict(name="Pass", accent=PASS, stereo="private nested class · src/tray_assignment/pass.hpp",
+        dict(name="Pass", accent=PASS, stereo="private nested class · src/task_planning/tray_assignment/pass.hpp",
              attrs=["- working_state_: DiscreteGarageState  // copy", "- freeing_moves_: GarageOccupancyChecker<...>",
                     "- last_event_by_tray_: unordered_map<...>", "- result_: Result  // returned by Solve"],
              methods=["+ RecordStateChange(event): stdx::Result", "  // was ApplyTransitionToFreeingMoves",
@@ -291,8 +291,9 @@ def tray_tree_after():
                             "+ BlockersOnPath(...): vector<uint16_t>", "  // all four were inline in the main loop"])
     right = max(res.x1, app.x1, et.x1, bt.x1, cp.x1) + 24
     bottom = max(dflt.y1, cp.y1) + 24
-    _package(d, px0, top, right - px0, bottom - top, "scheduler/tray_assignment", SOLVE,
-             "namespace volley::tray_assignment")
+    _package(d, px0, top, right - px0, bottom - top, "task_planning/tray_assignment", SOLVE)
+    d.text(right - 24, top + 13, "namespace volley::task_planning::tray_assignment", size=S.small, fill=T.muted,
+           anchor="end")
 
     # ---- package common ----
     cy0 = bottom + 50
@@ -346,7 +347,7 @@ def tray_tree_after():
                   ("box", PURE, "pure functions"), ("box", WRITE, "writes PlanContext"),
                   ("real", SOLVE, "realizes"), ("dep", T.fg2, "dependency")],
           footnote="// was ... names the Scheduler member or inline block (previous figure) that each item replaces. "
-                   "'services' is a const GarageServices&. Names follow doc 02 section 7 (MotionGraph and Pose are aliases in core/vocabulary.hpp).")
+                   "'services' is a const GarageServices&. Names follow doc 02, Naming and the ROS boundary (MotionGraph and Pose are aliases in core/vocabulary.hpp).")
     return d
 
 
@@ -434,6 +435,101 @@ def naming_boundary():
           badge_key="proposed",
           legend=[("box", OUT, "unchanged packages"), ("box", BND, "boundary (new)"), ("box", INS, "new names"),
                   ("arrow", T.fg2, "data or names flow")],
-          footnote="Proposed in doc 02 section 7; the full list of names is doc 04. File paths are under "
+          footnote="Proposed in doc 02, Naming and the ROS boundary; the full list of names is doc 04. File paths are under "
                    "scheduler/include/scheduler/ (headers) and scheduler/src/ (sources).")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 95 — module layout: Option 1 (stage folders in scheduler) vs Option 2 (one package per stage)
+# --------------------------------------------------------------------------------------
+
+@figure("95_module_layout", "Stage folders vs stage packages", DOC2)
+def module_layout():
+    d = Doc("95_module_layout", "Stage folders vs stage packages",
+            "Option 1 keeps one scheduler package with a folder per pipeline stage. Option 2 makes each stage a "
+            "package; motion planning already is one (motion_planner), and a scheduler_core package is needed first.")
+    W, G = 1500, 50
+    ORC, TP, MP, AG, CORE, LOW = T.amber, T.violet, T.sky, T.green, T.teal, T.faint
+
+    def lane_for(y, boxes, title, color):
+        _lane(d, 0, y, W, max(bx.y1 for bx in boxes) - y + 24, title, color)
+        return max(bx.y1 for bx in boxes) + 24
+
+    def down(a, b, x, label=None, kind="flow", color=T.fg2):
+        connect(d, [(x, a.y1), (x, b.y0)], kind=kind, color=color, size=8,
+                label=label, label_at=(x + 8, (a.y1 + b.y0) / 2) if label else None, label_anchor="start")
+
+    # ---------------- Option 1 ----------------
+    y = 0
+    o1 = _box(d, 24, y + 46, 1452, "scheduler/  scheduler.hpp, plan_context.hpp, ros/",
+              "orchestrator: Scheduler::Plan() runs the five stages in order and applies their results",
+              ["owns GarageServices and the two solvers; PlanContext lives in plan_context.hpp",
+               "ros/convert.hpp: messages <-> internal types, used only here and by scheduler_ros.cpp"], ORC)
+    ry = o1.y1 + G
+    t1 = _box(d, 24, ry, 600, "task_planning/", "stages 1-3: jobs -> finished event DAG",
+              ["job_expansion/     // Expand<Type>Job, one file per type",
+               "tray_assignment/   // Solver, DefaultSolver, ChooseEmptyTray",
+               "agv_assignment/    // Solver, DefaultSolver, travel cost",
+               "validation/        // ValidateEvents",
+               "uses planner_core, motion_planner searches,",
+               "     task_planner (BottleneckAssignment)"], TP)
+    m1 = _box(d, 688, ry, 380, "motion_planning/", "stage 4: adapter around CHUGG",
+              ["PlanMotions(event_dag, state, ...)", "  -> ContinuousState", "about 60 lines today",
+               "uses motion_planner (CHUGG)"], MP)
+    a1 = _box(d, 1092, ry, 384, "action_graph/", "stage 5: timed motions -> action DAG",
+              ["BuildActionDag(...)", "CopyEventDependencies", "InsertVrcActions",
+               "uses planner_core, common_ros, cost_functions"], AG)
+    cy = max(t1.y1, m1.y1, a1.y1) + G
+    c1 = _box(d, 24, cy, 1452, "core/", "shared by every stage; includes no stage and no scheduler.hpp",
+              ["GarageServices, types.hpp (AssetId, ...), vocabulary.hpp (aliases for common_ros names), headings"],
+              CORE)
+    for b in (t1, m1, a1):
+        down(o1, b, b.cx, "calls")
+        down(b, c1, b.cx, kind="dep", color=CORE)
+    d.text(24, c1.y1 + 26, "Rule, checked by a CI include grep: a stage folder never includes another stage folder, "
+           "scheduler.hpp or ros/. Inside task_planning, job_expansion may call tray_assignment's public functions.",
+           size=S.small, fill=T.red)
+    e1 = lane_for(y, [o1, t1, m1, a1, c1, BBox(24, c1.y1, 1476, c1.y1 + 36)],
+                  "Option 1 · one package, one folder per stage (recommended now)", ORC)
+
+    # ---------------- Option 2 ----------------
+    y = e1 + 70
+    o2 = _box(d, 24, y + 46, 1452, "scheduler  (package)", "orchestrator and ROS node; keeps the stage-4 adapter",
+              ["Scheduler::Plan(), scheduler_ros, ros/convert",
+               "PlanMotions stays here: the stage-4 algorithm already is a package (motion_planner)"], ORC)
+    ry = o2.y1 + G
+    t2 = _box(d, 24, ry, 600, "task_planning  (new package)", "stages 1-3; installed headers become public API",
+              ["job_expansion, tray_assignment, agv_assignment,", "validation as folders inside",
+               "needs PlanContext and GarageServices", "  -> scheduler_core must exist first"], TP)
+    m2 = _box(d, 688, ry, 380, "motion_planner  (exists)", "CHUGG, SIPP, searches, filters",
+              ["already its own package", "nothing to move"], MP)
+    a2 = _box(d, 1092, ry, 384, "action_graph  (new package)", "stage 5",
+              ["inputs: event DAG, ContinuousState,", "  job list, initial state",
+               "no PlanContext needed once", "  the inputs are narrowed"], AG)
+    ly = max(t2.y1, m2.y1, a2.y1) + G
+    c2 = _box(d, 24, ly, 600, "scheduler_core  (new package)", "PlanContext, GarageServices, types, vocabulary",
+              ["a new package with its own CMake, package.xml", "and review owners"], CORE)
+    l2 = _box(d, 688, ly, 788, "existing lower packages", "unchanged",
+              ["planner_core, cost_functions, task_planner, common_ros, interfaces"], LOW)
+    for b in (t2, m2, a2):
+        down(o2, b, b.cx, "depends on", kind="dep")
+    down(t2, c2, t2.cx, kind="dep", color=CORE)
+    down(m2, l2, m2.cx, kind="dep", color=LOW)
+    down(a2, l2, a2.cx, kind="dep", color=LOW)
+    connect(d, [(t2.x1, t2.y0 + 40), (m2.x0, t2.y0 + 40)], kind="dep", color=MP, size=8,
+            label="searches", label_at=((t2.x1 + m2.x0) / 2, t2.y0 + 30))
+    connect(d, [(c2.x1, c2.cy), (l2.x0, c2.cy)], kind="dep", color=LOW, size=8)
+    lane_for(y, [o2, t2, m2, a2, c2, l2], "Option 2 · one package per stage (target for proven stages)", TP)
+
+    frame(d, title="Stage folders vs stage packages",
+          subtitle="Both options follow the five pipeline stages. Option 1 draws the boundaries as folders inside "
+                   "scheduler; Option 2 makes them packages, which needs a scheduler_core package first. Recommended: "
+                   "Option 1 now, promote action_graph first, task_planning only after its interfaces are stable.",
+          badge_key="proposed",
+          legend=[("box", ORC, "orchestrator"), ("box", TP, "task planning (stages 1-3)"),
+                  ("box", MP, "motion planning (stage 4)"), ("box", AG, "action graph (stage 5)"),
+                  ("box", CORE, "shared core"), ("arrow", T.fg2, "calls"), ("dep", T.fg2, "depends on")],
+          footnote="Proposed in doc 02 (module layout section). Folder paths are under scheduler/include/scheduler/, "
+                   "scheduler/src/ and scheduler/test/.")
     return d
