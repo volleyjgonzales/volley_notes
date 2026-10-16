@@ -286,7 +286,7 @@ function replaceInText(
 }
 
 function linkDocMentions(p: Parsed) {
-  replaceInText(p.tree, /\b[Dd]oc (0[1-4])\b/g, (m) => {
+  replaceInText(p.tree, /\b[Dd]oc (0[1-5])\b/g, (m) => {
     const d = docByNum(m[1]);
     if (!d || d.num === p.config.num) return null;
     return [h('a.xref.docref', { href: `#doc-${d.key}` }, m[0])];

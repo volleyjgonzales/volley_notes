@@ -263,3 +263,18 @@
   code: ["tray_assignment::Solver", "tray_assignment::DefaultSolver", DefaultSolver, ApplyTrayAssignment, GarageServices, "Result::edits"]
   to: pr-the-new-pieces-and-how-they-fit-together
   def: The proposed split - DefaultSolver::Solve decides and returns a Result; ApplyTrayAssignment writes it into the context.
+
+- term: action dependency graph
+  text: [action dependency graph, action dependency graphs, ADG, ADGs]
+  code: [final_actions_dag]
+  to: ad-from-a-timed-plan-to-an-adg
+  def: "A DAG of robot actions whose edges say which action must finish before another may start; keeps a plan's order, not its times"
+- term: transitive reduction
+  text: [transitive reduction]
+  to: ad-transitive-reduction
+  def: "The unique smallest edge set with the same reachability as a DAG; what Reduce() computes"
+- term: critical path
+  text: [critical path]
+  to: ad-timing-critical-path-and-slack
+  def: "The longest path through a DAG weighted by durations; it fixes the makespan"
+

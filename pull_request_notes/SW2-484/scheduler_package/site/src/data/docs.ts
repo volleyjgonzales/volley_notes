@@ -1,4 +1,4 @@
-/** The four study documents, in tab order. `file` is relative to site/. */
+/** The study documents, in tab order. `file` is relative to site/. */
 export interface Part {
   title: string;
   /** id of the first <h2> in the part; the part runs until the next part */
@@ -9,7 +9,7 @@ export interface Part {
 
 export interface DocConfig {
   key: string;
-  num: '01' | '02' | '03' | '04';
+  num: '01' | '02' | '03' | '04' | '05';
   file: string;
   prefix: string;
   tab: string;
@@ -55,6 +55,14 @@ export const DOCS: DocConfig[] = [
     prefix: 'nm',
     tab: 'Naming',
     summary: 'Renames and small struct refactors across messages, common_ros, planner_core and the scheduler.',
+  },
+  {
+    key: 'adg',
+    num: '05',
+    file: 'src/content/05-adg-primer.html',
+    prefix: 'ad',
+    tab: 'ADG primer',
+    summary: 'Action dependency graphs from scratch: orders, construction, safe execution, timing, and the schedule the scheduler sends.',
   },
 ];
 
