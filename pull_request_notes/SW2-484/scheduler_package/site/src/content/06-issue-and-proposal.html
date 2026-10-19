@@ -1,7 +1,7 @@
 <!--
   05 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
-  Conventions (shared by all six documents)
+  Conventions (shared by all seven documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
     No number in the text.
   - Every heading and figure has a stable id. Ids keep the prefix of the document they were first
@@ -172,7 +172,7 @@
 <p><strong>It need not stay this lopsided, and some of it will not.</strong> Each stage grows for its own reasons. Task planning grows with every new job type and site feature. Motion planning grows inside <code>motion_planner</code>, where an unfinished second solver (CBS, <code>chugg_cbs.cpp</code>) and some unused helpers already sit, about 660 lines the scheduler never calls. The action graph is small because it implements only the basic construction; execution features from the ADG literature, such as absorbing delays or switching the order of two robots at run time (<a class="ref" href="#ad-beyond-the-basic-adg">section 5</a>), would make it grow, and that is the main reason to give it its own folder now.</p>
 <h3 data-num id="pr-is-task-planning-too-complex">Necessary and avoidable complexity in task planning</h3>
 <p>Task planning is expected to be the largest and most intricate stage. Its current size and shape, however, are not all necessary.</p>
-<p><strong>Why it is expected to be the largest.</strong> MAPF and the ADG are general algorithms with compact, well-studied formulations: their code knows about footprints, intervals and graphs, not about cars. Task planning is where the garage's own rules live: twelve job types, bay modes and readiness, VECS charging, VRC floors, parking headings, disabled nodes and size classes. Its hardest part, moving blocking trays out of the way, is a rearrangement problem of the sliding-puzzle kind, whose optimal version is NP-hard in general. In multi-robot warehouse systems the domain layer is typically the largest one, and this code follows that pattern.</p>
+<p><strong>Why it is expected to be the largest.</strong> MAPF and the ADG are general algorithms with compact, well-studied formulations: their code knows about footprints, intervals and graphs, not about cars. Task planning is where the garage's own rules live: twelve job types, bay modes and readiness, VECS charging, parking headings, disabled nodes and size classes. (Floors and VRCs would belong here too, but task planning has no rule for them yet; see <a class="ref" href="#ly-vrc-support-status">section 7</a>.) Its hardest part, moving blocking trays out of the way, is a rearrangement problem of the sliding-puzzle kind, whose optimal version is NP-hard in general. In multi-robot warehouse systems the domain layer is typically the largest one, and this code follows that pattern.</p>
 <p><strong>What is not necessary.</strong> The evidence in the code points to several sources of size and coupling that the problem does not require:</p>
 <table>
   <thead>
@@ -3102,7 +3102,7 @@ Edge[] edges   # Edge: node_id_a, node_id_b, int16[] disallowed_headings (0:179,
   <li><strong>"Size class" for parking windows, resource windows and resource sizes.</strong> Confirm with the layout owners, who write these in YAML.</li>
   <li><strong>The interface version.</strong> Which tier C items go into it, and how stored <code>DiscreteGarageEvent</code> buffers are migrated or read.</li>
   <li><strong>Stage folder names.</strong> Tracked with the folder layout in <a class="ref" href="#pr-decisions-to-resolve-in-review">section 12</a>.</li>
-  <li><strong>What <code>BAY_ODP</code> and <code>TYPE_BLIFT</code> should be called.</strong> Their meaning is not in the snapshots.</li>
+  <li><strong>What <code>BAY_ODP</code> and <code>TYPE_BLIFT</code> should be called.</strong> A BLift is a bay whose carriage is also a VRC terminal (<code>layout.cpp</code>: “A BLift is a Bay that is also a Lift (VRC) terminal”; Dispatch sends it <code>BayCommand.COMMAND_TYPE_MOVE_LIFT_TO_FLOOR</code> instead of a VRC command). The names should say that; <code>BAY_ODP</code>'s expansion is still not in the snapshots.</li>
 </ol>
 
 <h3 data-num id="nm-rollout">Rollout</h3>

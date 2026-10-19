@@ -316,3 +316,33 @@
   to: bg-the-cost-model
   def: Accelerate, cruise, decelerate - the timing model for every move; a short move is a triangle that never reaches full speed.
   decl: Trapezoid
+
+- term: faces_reciprocal
+  code: [faces_reciprocal]
+  to: ly-faces-reciprocal-and-the-inbound-heading
+  def: "Layout key for bays and chargers. When true, the inbound heading is headings[0] + 180 (returned unwrapped by GetInboundHeading)."
+
+- term: rotation_allowed
+  code: [rotation_allowed]
+  to: ly-rotation-allowed
+  def: "Layout key. When true, an AGV may turn in place at the node; PoseGraph adds ROT_LEFT / ROT_RIGHT neighbours. Pecos allows it only at W8 and W22."
+
+- term: max_resource_size
+  code: [max_resource_size, max_resource_size_index]
+  to: ly-max-resource-size
+  def: "Layout key naming the largest payload window allowed at a node; stored as its index in the area-sorted window list."
+
+- term: parking_windows
+  code: [parking_windows, parking_window_buffer]
+  to: ly-parking-windows-and-the-buffer
+  def: "The payload size classes in the layout file (plus an automatic TRAY window), sorted by area; a window's position is its resource size index."
+
+- term: disallowed_edge_orientation
+  code: [disallowed_edge_orientation]
+  to: ly-edges
+  def: "Optional layout edge key; removes that heading and its reciprocal from the edge in the PoseGraph."
+
+- term: prioritization_value
+  code: [prioritization_value, bay_prioritization_]
+  to: ly-bay-only-fields
+  def: "Layout key on bays; bays are ordered by it, highest first (ties: higher bay id first). Pecos order is [21, 7]."

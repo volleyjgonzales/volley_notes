@@ -7,7 +7,7 @@ from registry import figure
 from svgkit import BBox, Doc, text_width, wrap
 from theme import T, S
 
-DOC3 = "03-motion-planning.html"
+DOC3 = "04-motion-planning.html"
 M = 12          # member font size
 EXT = T.muted   # classes from other packages
 CBS = T.faint   # CBS-only members (present, never called)

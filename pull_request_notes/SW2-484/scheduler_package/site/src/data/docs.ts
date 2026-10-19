@@ -9,7 +9,7 @@ export interface Part {
 
 export interface DocConfig {
   key: string;
-  num: '01' | '02' | '03' | '04' | '05' | '06';
+  num: '01' | '02' | '03' | '04' | '05' | '06' | '07';
   file: string;
   prefix: string;
   tab: string;
@@ -32,25 +32,33 @@ export const DOCS: DocConfig[] = [
     ],
   },
   {
-    key: 'task-planning',
+    key: 'layout-file',
     num: '02',
-    file: 'src/content/02-task-planning.html',
+    file: 'src/content/02-layout-file.html',
+    prefix: 'ly',
+    tab: 'Layout file',
+    summary: 'The site layout YAML field by field: what each key means, who reads it, what the parser checks, and what could be better.',
+  },
+  {
+    key: 'task-planning',
+    num: '03',
+    file: 'src/content/03-task-planning.html',
     prefix: 'tp',
     tab: 'Task planning',
     summary: 'Stages 1-3: job expansion, tray assignment and AGV assignment build the event DAG.',
   },
   {
     key: 'motion-planning',
-    num: '03',
-    file: 'src/content/03-motion-planning.html',
+    num: '04',
+    file: 'src/content/04-motion-planning.html',
     prefix: 'mp',
     tab: 'Motion planning',
     summary: 'Stage 4: CHUGG and SIPP turn the event DAG into timed, collision-free motions.',
   },
   {
     key: 'action-graph',
-    num: '04',
-    file: 'src/content/04-action-graph.html',
+    num: '05',
+    file: 'src/content/05-action-graph.html',
     prefix: 'ag',
     tab: 'Action graph',
     summary: 'Stage 5: action dependency graphs from first principles, the action DAG the scheduler sends, and a review of the pipeline.',
@@ -62,16 +70,16 @@ export const DOCS: DocConfig[] = [
   },
   {
     key: 'proposal',
-    num: '05',
-    file: 'src/content/05-issue-and-proposal.html',
+    num: '06',
+    file: 'src/content/06-issue-and-proposal.html',
     prefix: 'pr',
     tab: 'Issue & proposal',
     summary: 'The refactor: where the code is, what changes, module layout, solver interfaces, staged plan, and proposed naming work.',
   },
   {
     key: 'verification',
-    num: '06',
-    file: 'src/content/06-verification.html',
+    num: '07',
+    file: 'src/content/07-verification.html',
     prefix: 'vr',
     tab: 'Verification',
     summary: 'Regression parity and benchmarks for the extracted solvers.',

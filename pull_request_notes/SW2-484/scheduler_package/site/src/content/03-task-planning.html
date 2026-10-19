@@ -1,7 +1,7 @@
 <!--
   02 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
-  Conventions (shared by all six documents)
+  Conventions (shared by all seven documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
     No number in the text.
   - Every heading and figure has a stable id. Ids keep the prefix of the document they were first
@@ -2252,4 +2252,4 @@ for(const auto&amp; [agv_id, root_event_opt] : ordered_matching) {
 <h3 id="bg-vecs-ev-charging">VECS (EV charging)</h3>
 <p>A VECS sits on a node of type <code>TYPE_EV_CHARGE</code> (6, a node type of its own; its VECS id is the node id). Moving a tray off a VECS that is <code>CHARGING</code> first adds <code>VecsTransition CHARGING -> READY_TO_CHARGE</code>; moving onto one is refused unless it is <code>READY_TO_CHARGE</code>. <code>PlanChargePayloadJob</code> finds a VECS with <code>ResolveBlockingTrays</code>: for a payload with <code>ev_charge_requested</code>, the open-space search accepts only <code>EV_CHARGE</code> nodes at a heading between 0 and 90 (<a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a>); it does not look at the VECS state, and the job afterwards only checks that the node has a VECS before adding <code>READY_TO_CHARGE -> CHARGING</code>. A VECS in another state is therefore caught only when the events are replayed (the move onto it is refused).</p>
 <h3 id="bg-vrcs-in-task-planning">VRCs (lifts between floors)</h3>
-<p>Task planning creates no VRC events. An AGV move between floors is planned like any other move, and the scheduler adds the VRC commands later, to the action DAG, after motion planning (<a class="ref" href="#bg-vrcs-lifts-between-floors">section 6.3</a>).</p>
+<p>Task planning creates no VRC events. An AGV move between floors is planned like any other move, and the scheduler adds the VRC commands later, to the action DAG, after motion planning (<a class="ref" href="#bg-vrcs-lifts-between-floors">section 6.3</a>). Assignment is not floor-aware either: trays, parking spots and AGVs are chosen by search cost alone, and a VRC ride is just another edge in those searches. The status of VRC support in every stage is summarised in the Layout file tab (<a class="ref" href="#ly-vrc-support-status">section 7</a>).</p>

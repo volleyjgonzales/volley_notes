@@ -392,7 +392,7 @@ def trapezoid_runs():
 # 97 — prioritized planning with safe intervals, animated
 # --------------------------------------------------------------------------------------
 
-DOC3 = "03-motion-planning.html"
+DOC3 = "04-motion-planning.html"
 
 
 @figure("97_prioritized_planning", "Prioritized planning with safe intervals, step by step", DOC3)

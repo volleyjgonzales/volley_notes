@@ -1,7 +1,7 @@
 <!--
   01 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
-  Conventions (shared by all six documents)
+  Conventions (shared by all seven documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
     No number in the text.
   - Every heading and figure has a stable id. Ids keep the prefix of the document they were first
@@ -24,7 +24,7 @@
   <p><strong>Viewing the figures.</strong> Click a figure to open it full screen with pan and zoom; "Pan / zoom viewer" under each caption opens the gallery of all figures (<a href="figures/viewer.html"><code>figures/viewer.html</code></a>). Every figure carries a status badge: <strong>AS-BUILT</strong>, <strong>PROPOSED</strong>, <strong>ILLUSTRATIVE</strong>, <strong>SCHEMATIC</strong>, <strong>CONCEPTUAL</strong>, or <strong>YAML GEOMETRY · HYPOTHETICAL OCCUPANCY</strong>.</p>
 </blockquote>
 <h2 id="bg-how-to-use-this-guide">How to use this study pack</h2>
-<p>The study pack has six tabs. The first four describe the scheduler as it is, in the order a plan call runs; the last two describe the refactor. Each tab assumes the ones before it.</p>
+<p>The study pack has seven tabs. The first five describe the scheduler as it is: the whole, the site layout it is built from, then the stages in the order a plan call runs; the last two describe the refactor. Each tab assumes the ones before it.</p>
 <table>
   <thead>
     <tr>
@@ -40,27 +40,32 @@
       <td>Name the five stages and the four representations of a plan, the main types and who owns them, and follow one <code>Plan()</code> call from request to response</td>
     </tr>
     <tr>
-      <td>02 · <a href="#doc-task-planning">Task planning</a></td>
+      <td>02 · <a href="#doc-layout-file">Layout file</a></td>
+      <td>The site layout YAML, key by key: what each field means, which code reads it, what the parser checks and accepts silently, VRC support across the pipeline, and improvements</td>
+      <td>Read and edit a layout file, predict the poses and edges it creates, and spot the mistakes the parser lets through</td>
+    </tr>
+    <tr>
+      <td>03 · <a href="#doc-task-planning">Task planning</a></td>
       <td>Stages 1–3: job expansion, the single-agent searches and graph filters, tray assignment, AGV assignment, the final checks, and the bay and VECS rules, which together build the event DAG</td>
       <td>Explain how each job becomes events, how trays, parking spots and AGVs are chosen, and the bay, VECS and VRC rules</td>
     </tr>
     <tr>
-      <td>03 · <a href="#doc-motion-planning">Motion planning</a></td>
+      <td>04 · <a href="#doc-motion-planning">Motion planning</a></td>
       <td>Stage 4: CHUGG and SIPP, the timing model, and the <code>ContinuousState</code> timeline</td>
       <td>Explain how the event DAG becomes timed, collision-free motions and how long each move is assumed to take</td>
     </tr>
     <tr>
-      <td>04 · <a href="#doc-action-graph">Action graph</a></td>
+      <td>05 · <a href="#doc-action-graph">Action graph</a></td>
       <td>Stage 5: action dependency graphs from first principles, the action DAG the scheduler sends to Dispatch, and a review of the whole pipeline</td>
       <td>Explain why execution is safe when robots run early or late, and how the response is built</td>
     </tr>
     <tr>
-      <td>05 · <a href="#doc-proposal">Issue &amp; proposal</a></td>
+      <td>06 · <a href="#doc-proposal">Issue &amp; proposal</a></td>
       <td>The refactor: where the code is, what changes, the module layout, the solver interfaces, the staged plan, and proposed naming work</td>
       <td>Review the design and pick up a stage of the plan</td>
     </tr>
     <tr>
-      <td>06 · <a href="#doc-verification">Verification</a></td>
+      <td>07 · <a href="#doc-verification">Verification</a></td>
       <td>Parity tests and benchmarks for the extracted solvers</td>
       <td>Show that a refactoring step changed no behaviour</td>
     </tr>
@@ -265,7 +270,7 @@
   <li><strong>Task planning also uses <code>motion_planner</code>.</strong> The searches and filters that job expansion and tray assignment call (blocking-tray, open-space and empty-tray searches, AGV hiding, graph filters and path finding, <a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a>) are another 1,420 lines there, and <code>BottleneckAssignment</code> lives in <code>task_planner</code> (not in the snapshots). With them, task planning is about 5,000 lines.</li>
   <li><strong>The action graph is small.</strong> About 540 lines: five helpers in <code>scheduler.cpp</code>, <code>ResponseFromTrajectories</code>, and VRC insertion in <code>utils.cpp</code>.</li>
 </ul>
-<p>Counting the library code that actually runs, task planning (about 5,000 lines) is the largest stage, motion planning (about 3,900) is close behind, and the action graph (about 540) is a small fraction of either. The difference in kind matters more than the line counts: motion planning and the action graph are general algorithms that know nothing about cars, bays or VECS, while task planning is where every garage rule lives (twelve job types, bay modes, headings, EV charging, VRC floors, blocking trays). <a class="ref" href="#pr-where-the-code-will-live">Section 2.1</a> discusses what that means for the refactor.</p>
+<p>Counting the library code that actually runs, task planning (about 5,000 lines) is the largest stage, motion planning (about 3,900) is close behind, and the action graph (about 540) is a small fraction of either. The difference in kind matters more than the line counts: motion planning and the action graph are general algorithms that know nothing about cars, bays or VECS, while task planning is where every garage rule lives (twelve job types, bay modes, headings, EV charging, blocking trays). Floors and VRCs are the exception: task planning has no rule for them yet (<a class="ref" href="#ly-vrc-support-status">section 7</a>). <a class="ref" href="#pr-where-the-code-will-live">Section 2.1</a> discusses what that means for the refactor.</p>
 <figure id="bg-fig-96_code_by_stage">
   <img src="figures/96_code_by_stage.svg" alt="Where the code is, by pipeline stage">
   <figcaption><strong>Where the code is, by pipeline stage.</strong> Solid segments are in the <code>scheduler</code> package, pale segments with a dashed outline are in library packages, and the empty dotted segment is <code>motion_planner</code> code the scheduler never calls. Task planning dominates the scheduler; motion planning's size is in <code>motion_planner</code>, most of which runs; the action graph is small. Counts are lines of C++ without tests, measured on the snapshots; <code>common_ros</code> and <code>task_planner</code> are not counted.</figcaption>

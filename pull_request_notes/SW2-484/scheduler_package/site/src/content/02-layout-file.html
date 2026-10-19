@@ -1,0 +1,473 @@
+<!--
+  02 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  Conventions: see the header comment of 01-background.html. New ids use "ly-".
+-->
+<h1>02 — The layout file: the garage as YAML</h1>
+<p><em>One YAML file per site describes everything about the garage that does not move: where the nodes are, which headings an AGV may have at each, which nodes connect, which payload sizes fit where, where the bays and chargers face, and, for multi-floor sites, the floors and VRCs. Every planner in the pipeline is built from it.</em></p>
+<p>The Background tab describes the C++ objects built from the file (<a class="ref" href="#bg-layout-places-in-sorted-vectors-and-ordered-maps">section 8.1</a>). This tab is about the file itself: every key, how the parser reads it, who uses it downstream, what the parser checks and what it silently accepts, and what could be improved. All examples use the Pecos file, <code>sources/5675_pecos_combined.yaml</code> (352 lines), and the parser in <code>common_ros/src/layout.cpp</code>. Facts that are read from the code but not observed in a run are marked as such.</p>
+
+<h2 data-num id="ly-what-the-layout-file-is">What the layout file is, and who reads it</h2>
+<p>The layout is a static description: it holds no AGVs, trays or bay states (those arrive in every request as <code>DiscreteGarageState</code>). The scheduler node reads the ROS parameter <code>layout</code> (a name such as <code>5675_pecos_combined</code>), resolves it to a file with <code>GetLayoutPathByName</code> (site configuration), and the <code>Scheduler</code> constructor builds four objects from it, once, for the life of the node:</p>
+<pre><code class="language-cpp">// scheduler.cpp, Scheduler::Scheduler(layout_filepath, logger, params)
+layout_(std::make_shared&lt;Layout>(layout_filepath)),   // parse the YAML
+pg_(layout_),                                          // PoseGraph: poses and neighbour slots
+gg_(pg_),                                              // GarageGraph: typed, weighted transitions
+table_(gg_, logger),                                   // CollisionTable: which places conflict
+</code></pre>
+<figure id="ly-fig-105_layout_consumers">
+  <img src="figures/105_layout_consumers.svg" alt="Diagram: the Pecos YAML file and its lookup feed a Layout class box; arrows labelled with fields lead to PoseGraph, GarageGraph and CollisionTable; three coloured buses connect Layout, GarageGraph and CollisionTable to six reader cards (scheduler, CHUGG/SIPP, action graph, safety checker, tape layout, GetGarageLayout).">
+  <figcaption><strong>Who reads the layout file.</strong> The YAML is looked up by name (ROS parameter <code>layout</code>, then <code>GetLayoutPathByName</code>), parsed once into a <code>Layout</code>, and expanded into a <code>PoseGraph</code>, a <code>GarageGraph</code> and a <code>CollisionTable</code>; the collision table is cached on disk under the layout name and md5. Arrow labels name the fields that flow (headings and <code>rotation_allowed</code> become poses, edges become neighbour slots, windows become footprints). In each reader, L, GG and CT mark what it reads from the Layout, the GarageGraph and the CollisionTable.</figcaption>
+</figure>
+<p>Three consequences follow from this structure:</p>
+<ul>
+  <li><strong>A layout change needs a restart.</strong> The four objects are members built in the constructor; nothing reloads them.</li>
+  <li><strong>The md5 is part of the cache key.</strong> The collision table is cached on disk under the layout name and the file's md5, and <code>GetStaticFilter</code> refuses a graph and a table whose md5s differ. Any byte change, a comment included, forces a rebuild of the table.</li>
+  <li><strong>Everything downstream sees the layout only through these objects.</strong> Task planning asks <code>layout_</code> for bay prioritization, inbound headings and windows; the searches and CHUGG use <code>gg_</code> and <code>table_</code>; the action graph uses <code>layout_</code> again for VRCs. Which reader uses which field is in the per-field sections below.</li>
+</ul>
+
+<h2 data-num id="ly-the-file-at-a-glance">The file at a glance</h2>
+<p><code>Layout::Layout(YAML::Node)</code> reads these top-level keys and ignores any other. Pecos uses five of the eight.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Key</th>
+      <th>Required?</th>
+      <th>What it describes</th>
+      <th>Pecos</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>name</code></td>
+      <td>yes</td>
+      <td>The layout's name: part of the collision-table cache key and of log and file names</td>
+      <td><code>5675_pecos_combined</code></td>
+    </tr>
+    <tr>
+      <td><code>parking_window_buffer</code></td>
+      <td>yes (<code>length_m</code>, <code>width_m</code>)</td>
+      <td>A margin added to the windows by <code>GetBufferedResourceWindow</code></td>
+      <td>0.1524 m × 0.0762 m (6 in × 3 in)</td>
+    </tr>
+    <tr>
+      <td><code>parking_windows</code></td>
+      <td>in practice</td>
+      <td>The payload size classes: name, length, width, optional height</td>
+      <td>COMPACT, STANDARD, LARGE, XL</td>
+    </tr>
+    <tr>
+      <td><code>rotation_circle_tape_radius</code></td>
+      <td>no (default <code>kDefaultTapeCircleRadius</code>)</td>
+      <td>Radius of the tape circle painted at rotation nodes (tape layout tool)</td>
+      <td>absent</td>
+    </tr>
+    <tr>
+      <td><code>floors</code></td>
+      <td>no (default: one floor, id 0, z 0)</td>
+      <td>Floor ids and heights, for multi-floor sites</td>
+      <td>absent</td>
+    </tr>
+    <tr>
+      <td><code>nodes</code></td>
+      <td>in practice</td>
+      <td>Every place: position, type, size limit, headings, rotation, facing; bay extras</td>
+      <td>28 nodes: 13 Waypoint, 10 Parking, 3 AgvCharge, 2 Bay</td>
+    </tr>
+    <tr>
+      <td><code>edges</code></td>
+      <td>in practice</td>
+      <td>Which nodes connect (undirected), with an optional disallowed orientation</td>
+      <td>37 edges</td>
+    </tr>
+    <tr>
+      <td><code>vrcs</code></td>
+      <td>no</td>
+      <td>Vertical conveyors: id, root node, one node per floor</td>
+      <td>absent</td>
+    </tr>
+  </tbody>
+</table>
+<p>Step through the figure to see each part of the file next to what it creates on the floor plan.</p>
+<figure id="ly-fig-106_layout_yaml_to_map">
+  <img src="figures/106_layout_yaml_to_map.svg" alt="Animated figure: an abridged listing of 5675_pecos_combined.yaml with line numbers beside the Pecos floor plan; each step highlights YAML lines and the matching stall, node, bay, charger, edges or sandbox zones on the map.">
+  <figcaption><strong>The Pecos YAML and the map it describes.</strong> Step through the file: each step highlights some of its lines on the left and draws what they create on the floor plan on the right: the window and buffer that size every stall, a parking node, the rotation waypoint W8, bay B21, charger C14, the edges, and the section comments that mark the two sandboxes and the measurement datum. The card under the map shows the C++ values <code>Layout(YAML::Node)</code> stores.</figcaption>
+</figure>
+<p>One Pecos node, as written in the file:</p>
+<pre><code class="language-yaml">  - id: 8                    # node id: referenced by edges, poses, events and messages
+    x: 30.8823               # metres, site frame (ENU), float32
+    y: 12.7753
+    type: Waypoint           # Waypoint | Parking | Bay | BLift | AgvCharge | EvCharge | Lift
+    max_resource_size: XL    # largest payload window allowed here (a parking_windows name, or TRAY)
+    rotation_allowed: true   # may an AGV turn in place here?
+    headings:                # degrees; each one also allows its reciprocal
+      - 0
+      - 90
+    faces_reciprocal: false  # bays and chargers: which reciprocal is the inbound heading
+</code></pre>
+
+<h2 data-num id="ly-nodes">Nodes</h2>
+<p>Every node becomes one <code>GarageNodeMsg</code> in <code>Layout::nodes_</code>, sorted by id. Its fields, in file order:</p>
+
+<h3 data-num id="ly-node-identity-and-position">Identity and position: <code>id</code>, <code>x</code>, <code>y</code>, <code>floor</code></h3>
+<ul>
+  <li><strong><code>id</code></strong> (required, <code>uint32</code>) is the node's name everywhere: in edges, in <code>GaragePose.node_id</code>, in events and messages. A bay's id is also its bay id (read a second time as <code>uint16</code>), so bay ids and node ids share one number space. Ids need not be contiguous: Pecos has 1–11, 13–27, 31 and 41 (no 12). Code that needs a dense index uses the position in the sorted vector, never the id (<a class="ref" href="#ly-edgemsg-carries-indices">section 9.4</a> shows where that distinction leaks).</li>
+  <li><strong><code>x</code>, <code>y</code></strong> (required, metres, read as <code>float</code>) place the node in the site frame. They decide what an edge <em>is</em> (its bearing makes it a locomote or a strafe), how long it takes (its length feeds the trapezoid cost model), and every footprint polygon in the collision table. Pecos's measurement datum is recorded only in a comment on node 22: <code># Offset "origin" (take any future measurements from here)</code>.</li>
+  <li><strong><code>floor</code></strong> (optional, default 0) matters only with <code>floors</code> and VRCs: nodes on different floors never collide unless both are VRC nodes, and a segment between floors is legal only between lift nodes (<a class="ref" href="#ly-floors-and-vrcs">section 6</a>).</li>
+</ul>
+
+<h3 data-num id="ly-node-types">Node types</h3>
+<p><code>type</code> (required) is a string mapped to a <code>GarageNodeMsg.TYPE_*</code> constant; an unknown string throws. The type decides which planners may use the node and for what.</p>
+<table>
+  <thead>
+    <tr>
+      <th>YAML</th>
+      <th>Constant</th>
+      <th>Pecos</th>
+      <th>What the type drives</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Waypoint</code></td>
+      <td><code>TYPE_WAYPOINT</code></td>
+      <td>13</td>
+      <td>Aisles. A tray may be stashed on one only when <code>allow_waypoint_stash</code> is set</td>
+    </tr>
+    <tr>
+      <td><code>Parking</code></td>
+      <td><code>TYPE_PARKING</code></td>
+      <td>10</td>
+      <td>Park destinations, open-space search targets, the retrieval-heading cache (<code>InitRetrievalHeadings</code>)</td>
+    </tr>
+    <tr>
+      <td><code>Bay</code></td>
+      <td><code>TYPE_BAY</code></td>
+      <td>2</td>
+      <td>Customer bays: bay prioritization, inbound heading, the bay's door-area footprint (<code>BAY_ODP</code>)</td>
+    </tr>
+    <tr>
+      <td><code>BLift</code></td>
+      <td><code>TYPE_BLIFT</code></td>
+      <td>0</td>
+      <td>A bay that is also a VRC terminal (“A BLift is a Bay that is also a Lift (VRC) terminal”). Same bay setup as <code>Bay</code>, but the collision table builds <code>BAY_ODP</code> only for <code>TYPE_BAY</code></td>
+    </tr>
+    <tr>
+      <td><code>AgvCharge</code></td>
+      <td><code>TYPE_AGV_CHARGE</code></td>
+      <td>3</td>
+      <td>AGV chargers: <code>PlanAgvChargeJob</code> picks one; SIPP keeps any other entity off them</td>
+    </tr>
+    <tr>
+      <td><code>EvCharge</code></td>
+      <td><code>TYPE_EV_CHARGE</code></td>
+      <td>0</td>
+      <td>Car chargers: only EV-charge payloads park there; the required heading is hard-coded, not read from <code>faces_reciprocal</code></td>
+    </tr>
+    <tr>
+      <td><code>Lift</code></td>
+      <td><code>TYPE_LIFT</code></td>
+      <td>0</td>
+      <td>VRC stops: allows segments between floors</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 data-num id="ly-headings-and-poses"><code>headings</code>: from a node to its poses</h3>
+<p><code>headings</code> lists, in degrees, the orientations an AGV may have at the node. The parser reads each as <code>uint16</code> and sorts them. <code>GetAllowedHeadings</code> then adds every reciprocal (a centred rectangle covers the same area either way, <a class="ref" href="#bg-posegraph-from-nodes-to-poses">section 8.2</a>), and each resulting heading is one pose: a node with <code>[90]</code> has poses −90 and 90; node 8 with <code>[0, 90]</code> has −90, 0, 90 and 180. Pecos has 26 × 2 + 2 × 4 = 60 poses.</p>
+<p>The heading is the direction of the AGV's body +y axis, which is its driving (locomote) axis; 90 means facing west (Background tab, <a href="#bg-node-heading-pose-vertex-the-words-for-places">“Node, heading, pose, vertex”</a>). Moving along body +y is a locomote, along body +x a strafe.</p>
+<figure id="ly-fig-107_node_to_poses">
+  <img src="figures/107_node_to_poses.svg" alt="Animated figure: a map crop around waypoints W8 and W9 with an AGV at the poses of node 8, coloured arrows for the FORWARD, BACK, LEFT, RIGHT and rotation slots, and a table of the eight PoseNeighbor slots for poses (8,90), (8,−90), (8,0), (8,180) and (9,90), ending with Pecos totals.">
+  <figcaption><strong>How one node becomes poses and neighbour slots.</strong> Step through node 8 (headings [0, 90], rotation allowed) and node 9 (heading [90]): <code>GetAllowedHeadings</code> adds each reciprocal, so node 8 has four poses and node 9 two; an AGV at each pose shows that the heading is where body +y, the driving axis, points (90 = west). The table fills the eight <code>PoseNeighbor</code> slots as <code>pose_graph.cpp</code> does. FORWARD and BACK turn out to be strafes and LEFT and RIGHT locomotes, and (8, 0) and (8, 180) exist only as stepping stones for rotation. Pecos has 60 poses and 164 filled slots.</figcaption>
+</figure>
+<p>Why headings matter:</p>
+<ul>
+  <li><strong>They decide which edges exist for an AGV.</strong> A translation from one pose to the next keeps the heading, so an edge between two nodes exists for heading <em>h</em> only if both nodes allow <em>h</em>. Node 8's extra poses 0 and 180 have no translation neighbours at all, because none of its neighbours allows 0 or 180; they exist only so that a turn from 90 to −90 can be two 90° steps.</li>
+  <li><strong>They decide the inbound heading of bays and chargers</strong>: <code>headings[0]</code>, possibly reversed by <code>faces_reciprocal</code> (<a class="ref" href="#ly-faces-reciprocal-and-the-inbound-heading">section 3.5</a>).</li>
+  <li><strong>They are what <code>HasGaragePose</code> checks</strong> when a request names a pose, and what the controller snaps a measured yaw to (<code>GetClosestHeading</code>).</li>
+</ul>
+
+<h3 data-num id="ly-rotation-allowed"><code>rotation_allowed</code></h3>
+<p>Required boolean. When true, <code>PoseGraph</code> links each pose of the node to its nearest clockwise and counter-clockwise allowed headings (<code>ROT_RIGHT</code>, <code>ROT_LEFT</code>), the GarageGraph types those links <code>ROTATION</code>, the collision table uses a circle (radius half the window's diagonal) instead of a rectangle at that node, and the tape tool paints a rotation circle. Elsewhere an AGV can only keep its heading. In Pecos only waypoints 8 and 22 allow rotation, one per sandbox; every reversal of an AGV's heading must pass through one of them. With a single heading, both rotation slots point to the reciprocal: a 180° spin.</p>
+
+<h3 data-num id="ly-faces-reciprocal-and-the-inbound-heading"><code>faces_reciprocal</code> and the inbound heading</h3>
+<p>Optional boolean, default false, meaningful only for bays and chargers. The <em>inbound heading</em> of such a node is <code>headings[0] + 180 · faces_reciprocal</code> (<code>GetInboundHeading</code>): for a bay, the heading a payload facing into the garage has on insert; for a charger, the heading an AGV must have to charge. In Pecos the bays 7 and 21 and the chargers 14 and 16 set it; charger 10 does not.</p>
+<figure id="ly-fig-108_inbound_heading">
+  <img src="figures/108_inbound_heading.svg" alt="Animated figure: map of bay B7 and chargers C10 and C14 with AGVs at their inbound poses, next to the YAML entries and highlighted C++ from layout.cpp, pose_graph.cpp and scheduler.cpp; a table of raw and wrapped inbound headings; the last step marks the failing −90 == 270 comparison in red.">
+  <figcaption><strong>How faces_reciprocal sets the inbound heading.</strong> Step through bay 7 and chargers 10 and 14, which all list heading 90: <code>faces_reciprocal: true</code> adds 180, which gives 270, and <code>GetInboundHeading</code> does not wrap it. Wrapped, it is −90: the AGV in bay 7 faces east, towards W31, its outbound pose is the LEFT neighbour (31, −90), and parking nodes cache the reciprocal, 90, as their retrieval heading. The last step shows one place where the unwrapped value is used: <code>PlanAgvChargeJob</code> compares a stored −90 with 270, so, reading the code, an AGV already charging on C14 or C16 is not recognised as charging (not observed in a run).</figcaption>
+</figure>
+<p>The field is easy to misread, for three reasons: its name describes a mechanism (“use the reciprocal”) rather than the result; its meaning differs by node type (the header comment and <code>GarageNode.msg</code> describe the bay case differently); and the helper that applies it returns an unwrapped angle (270 rather than −90), which every caller must remember to wrap. <code>GetBayInboundHeading</code> wraps; <code>PlanAgvChargeJob</code>'s “already charging?” test does not:</p>
+<pre><code class="language-cpp">// scheduler.cpp, Scheduler::PlanAgvChargeJob: the early return for an AGV already on its charger
+if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
+    agv.pose.heading == volley::GetInboundHeading(curr_node)) {   // -90 == 270 for C14 and C16
+  return std::make_pair(true, "");
+}
+// ... later, the destination pose IS wrapped:
+//   ConstructGaragePose(charge_node_id, static_cast&lt;int16_t>(volley::Wrap(volley::GetInboundHeading(node))))
+</code></pre>
+<p>Reading the code, an AGV already charging on <code>C14</code> or <code>C16</code> is therefore not treated as charging, and the charger search plans a move to another free charger. This is a one-line fix inside the scheduler (wrap the value, or call <code>GetBayInboundHeading</code>'s charger equivalent); it has not been reproduced in a test.</p>
+
+<h3 data-num id="ly-max-resource-size"><code>max_resource_size</code></h3>
+<p>Required string: the name of the largest payload window allowed at the node (one of the <code>parking_windows</code> names, or the automatic <code>TRAY</code>). The parser turns it into <code>max_resource_size_index</code>, the window's position in the area-sorted list (<a class="ref" href="#ly-parking-windows-and-the-buffer">section 5</a>), and an unknown name throws. Sizes 0 up to that index are allowed at the node: the static filters disable the node for larger payloads, SIPP refuses traversals with a larger footprint, and the retrieve job checks that the chosen bay fits the car. In Pecos every node is <code>XL</code> except the three chargers, which are <code>TRAY</code>: an AGV may stand there, a tray with a car may not.</p>
+
+<h3 data-num id="ly-bay-only-fields">Bay-only fields: <code>prioritization_value</code>, <code>insert_floor</code>, <code>system_floors</code></h3>
+<p>For <code>Bay</code> and <code>BLift</code> nodes the parser reads three more optional keys:</p>
+<ul>
+  <li><strong><code>prioritization_value</code></strong> (int, default 0). The parser sorts bays by it, highest first, into <code>bay_prioritization_</code>: the first bay is the one most preferred to be ready for insert, the last the one most preferred to be ready for retrieve. Ties are broken by the <em>higher bay id first</em> (a <code>std::priority_queue&lt;std::pair&lt;int, uint16_t>></code>), which is deterministic but nowhere documented. Pecos sets no value, so the order is <code>[21, 7]</code>: B21 is preferred insert-ready, B7 is tried first for a retrieve and drives the retrieval-heading cache. The value is not copied into <code>GarageNode.bay_prioritization</code>, which stays 0. Consumers: <code>ComputeBayRebalancingActions</code>, <code>PlanRetrieveJob</code> and <code>InitRetrievalHeadings</code> (<a class="ref" href="#bg-bays-vecs-and-vrcs">section 20</a>).</li>
+  <li><strong><code>insert_floor</code></strong> (default: the node's floor). Stored, but no code in the snapshots reads it.</li>
+  <li><strong><code>system_floors</code></strong> (list, default: the node's floor). The scheduler's bay-opening code uses <code>system_floors[0]</code> as the retrieve floor (“Pick the first floor for now”).</li>
+</ul>
+
+<h2 data-num id="ly-edges">Edges</h2>
+<p>Each entry <code>{src, dst}</code> connects two nodes. The parser stores the pair as <code>(min, max)</code> in an undirected Boost graph, so the names <code>src</code> and <code>dst</code> carry no meaning; travel is allowed both ways. An optional <code>disallowed_edge_orientation</code> (degrees) removes that heading and its reciprocal from the edge.</p>
+<p>The edge list says <em>which</em> nodes connect; the node coordinates and headings say <em>how</em>. For each pose, <code>PoseGraph</code> computes the bearing of every edge relative to the pose's heading and files the destination into one of four slots, within 0.1 rad (about 5.7°). An edge that fits no slot, for a heading both nodes share, throws when the graph is built.</p>
+<figure id="ly-fig-110_edge_classification">
+  <img src="figures/110_edge_classification.svg" alt="Map of node 8 and its neighbours 31, 9, 4 and 13 at real coordinates, with four narrow tolerance wedges around node 8. A table of bearings and slots, the classification code with highlighted lines, the eight slots of pose (8, 90), and hypothetical edits shown in red.">
+  <figcaption><strong>From layout edges to neighbour slots.</strong> PoseGraph names each edge per pose: it takes the atan2 bearing of the edge, subtracts the pose's yaw and snaps the result to FORWARD (0), LEFT (+pi/2), BACK (pi) or RIGHT (-pi/2) within 0.1 rad. For pose (8, 90) this gives 13 FORWARD, 31 LEFT, 4 BACK and 9 RIGHT. Because the pose faces -x, LEFT and RIGHT are locomotes and FORWARD and BACK are strafes. Step through the four neighbours, then three hypothetical edits: a diagonal edge that makes the constructor throw, a disallowed_edge_orientation that removes a heading and its reciprocal from one edge, and a 0.1 m misalignment that PoseGraph accepts at 0.1 rad but GetMotionType rejects at 1e-3 rad.</figcaption>
+</figure>
+<p>What follows for whoever edits a layout:</p>
+<ul>
+  <li><strong>Edges must be axis-aligned with the headings they serve.</strong> Pecos's are exactly horizontal or vertical. A diagonal edge between nodes that share a heading stops the scheduler at start-up; a diagonal edge between nodes with no shared heading is silently useless.</li>
+  <li><strong>The two tolerances disagree.</strong> <code>PoseGraph</code> accepts 0.1 rad, but <code>GetMotionType</code>, which classifies a motion as locomote or strafe when commands are built, demands 1e-3 rad and throws otherwise. A short edge (the 0.6096 m charger spurs) with a few millimetres of coordinate error passes the first check and fails the second.</li>
+  <li><strong>The slot names are misleading.</strong> <code>FORWARD</code> and <code>BACK</code> are along body ±x, which is a strafe; <code>LEFT</code> and <code>RIGHT</code> are along body ±y, the driving axis. The names describe a body frame in which the AGV faces +x, the opposite of the heading convention.</li>
+  <li><strong>The sandboxes hang on one edge.</strong> Pecos's two YAML sections are joined only by edge 8–13 (4.391 m); a <code>disallowed_edge_orientation</code> of 90 on it would split the garage for every AGV.</li>
+</ul>
+
+<h2 data-num id="ly-parking-windows-and-the-buffer">Parking windows and the buffer</h2>
+<p><code>parking_windows</code> defines the payload size classes, each with <code>name</code>, <code>length_m</code> (along the AGV's driving axis), <code>width_m</code> and an optional <code>height_m</code> (0 means unconstrained; larger than the bay clearance <code>kBayHeight</code> throws). The parser adds a <code>TRAY</code> window of the nominal tray size, sorts all windows by area (TRAY must come out smallest), and requires each to fit inside the next; two windows of equal size throw. A window's position in this list is its <em>resource size index</em>, and the collision entity id of a payload footprint is <code>PAYLOAD (4) + index</code>.</p>
+<figure id="ly-fig-109_resource_windows">
+  <img src="figures/109_resource_windows.svg" alt="Nested rectangles of the five resource windows to scale, a table of their indices and entity ids, two flow lanes showing the buffer unused and the unbuffered windows feeding the collision table, a scaled view of four Pecos stalls with XL and buffered outlines and their clearances, and a Pecos map marking the three TRAY-only chargers.">
+  <figcaption><strong>Resource windows.</strong> The parser adds a TRAY window (<code>kTrayLength</code> × <code>kTrayWidth</code>; its size is not in the snapshots, so it is drawn nominal) to the four Pecos windows. It sorts all five by area into indices 0 to 4 (TRAY, COMPACT, STANDARD, LARGE, XL), throws unless each fits inside the next, and gives each a collision entity id PAYLOAD (4) + index. A node's <code>max_resource_size</code> admits sizes 0 up to its own index: XL everywhere except chargers 10, 14 and 16, which are TRAY. The buffer (+0.1524 m length, +0.0762 m width) is applied only inside <code>CalcOverlappingSizedPoses</code>, whose result nothing in the snapshots reads; the collision table uses the unbuffered windows. That matters in Pecos: unbuffered, neighbouring stalls clear by 0.2 mm in x and 76 mm in y; buffered, they would overlap by 152.2 mm in x and 0.2 mm in y.</figcaption>
+</figure>
+<ul>
+  <li><strong>Indices are positional.</strong> Adding a window between two existing ones renumbers every larger one, and with it the collision entity ids. Anything that stores an index (logs, caches, tests) breaks silently; names are the stable identifiers.</li>
+  <li><strong>The buffer does not protect anything today.</strong> The collision table is built from the unbuffered windows (<code>CollisionTable::BuildEntityTable</code> uses <code>GetResourceWindow</code>), and the only reader of the buffered footprints, <code>PoseGraph::GetOverlappingSizedPoses</code>, has no caller in the snapshots (it may be used outside them). Pecos's stall pitch equals the XL length to 0.2 mm, so with the buffer applied neighbouring XL stalls would overlap.</li>
+  <li><strong>Only heights are optional.</strong> Pecos sets none, so every window is height-unconstrained.</li>
+</ul>
+
+<h2 data-num id="ly-floors-and-vrcs">Floors and VRCs</h2>
+<p>Three keys describe multi-floor sites. None is used in Pecos.</p>
+<ul>
+  <li><strong><code>floors</code></strong>: a list of <code>{id, z}</code>. Without it there is one floor, id 0 at z 0. The z values give a VRC ride its length (<code>|Δz|</code>), which the cost model turns into a ride time.</li>
+  <li><strong><code>floor</code></strong> on each node (default 0), and <strong><code>Lift</code></strong> / <strong><code>BLift</code></strong> node types for the VRC stops.</li>
+  <li><strong><code>vrcs</code></strong>: a list of <code>{id, root_node, nodes}</code>. The parser sorts each VRC's nodes by floor and adds a layout edge between adjacent floors. <code>PoseGraph</code> files those edges as <code>VRC_UP</code> / <code>VRC_DOWN</code> (by floor, not by bearing: the stops share x and y), the GarageGraph types them <code>VRC_TRANSITION</code> with length <code>|Δz|</code>, and the collision table makes the stops of one VRC collide across floors (the “shaft rule”). <code>root_node</code> is stored but not validated, and read only by <code>GetRootNodeForVrcNode</code>, which nothing in the snapshots calls.</li>
+</ul>
+<figure id="ly-fig-114_vrc_ride">
+  <img src="figures/114_vrc_ride.svg" alt="Animated two-floor layout with a VRC shaft: AGV-1 carries tray T7 from floor 0 to floor 1 across the VRC edge, then the AGV trajectory, the collapsed motions and the action DAG with the inserted VRC approach and move commands, and a list of gaps.">
+  <figcaption><strong>An AGV changes floors today.</strong> Step through it on a two-floor layout made up for this figure (Pecos has no VRC). The <code>floors</code>, Lift nodes and <code>vrcs</code> entry turn into one <code>VRC_TRANSITION</code> edge of length |dz|. Task planning sees only a TrayMove. SIPP drives AGV-1 across the VRC edge for 13.87 s of trapezoid travel, with no door time and no carriage. Only the collision table's shaft rule keeps AGV-2 out. The action graph then collapses the ride into one motion, and <code>InsertVrcActionsIntoDag</code> adds an approach command and replaces the ride with a VRC move command (door close + transit + door open = 19.87 s), chained per VRC. The last step lists the gaps. Timings use the cost_functions defaults.</figcaption>
+</figure>
+
+<h2 data-num id="ly-vrc-support-status">VRC support across the pipeline</h2>
+<p>VRC support is a working skeleton rather than a finished feature. The layout and graph layers model a VRC ride as an ordinary edge an AGV can take; motion planning plans the AGV across it like any other edge; and the VRC commands themselves are added only at the very end, when the action graph is built. Task planning has no VRC logic, and the carriage is never planned as an agent with its own position or timing. Nothing in the snapshots tests the scheduler's VRC path end to end, and Pecos has no VRC, so none of this code runs there.</p>
+<figure id="ly-fig-112_vrc_support_status">
+  <img src="figures/112_vrc_support_status.svg" alt="Matrix of VRC support by layer: layout and graphs partial, task planning no, motion planning partial, action graph partial, dispatch and safety partial; columns for what exists, what runs on a plan call, and gaps.">
+  <figcaption><strong>VRC support across the pipeline.</strong> For each layer, what VRC code exists, what of it runs on a normal plan call, and what is missing or risky. The layout and graph layers (common_ros) parse floors, Lift/BLift nodes and <code>vrcs</code>, create <code>VRC_UP</code>/<code>VRC_DOWN</code> pose neighbours and <code>VRC_TRANSITION</code> edges, and let VRC nodes on different floors collide (the shaft rule). Task planning creates no <code>VrcTransition</code>. SIPP drives the AGV across the VRC edge, and <code>PlanNodeSequential</code> has no VRC branch. VRC commands appear only in the action graph (<code>CollectAndCollapseTrajectoryMotions</code>, <code>InsertVrcActionsIntoDag</code> in utils.cpp). The BLift conversion to <code>MOVE_LIFT_TO_FLOOR</code> happens in Dispatch, which is outside the snapshots. Pecos has no VRC, so none of this runs there.</figcaption>
+</figure>
+<table>
+  <thead>
+    <tr>
+      <th>Layer</th>
+      <th>Supported?</th>
+      <th>What runs on a plan call</th>
+      <th>What is missing</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Layout and graphs (common_ros)</td>
+      <td>Largely yes</td>
+      <td>Parses <code>floors</code>, <code>vrcs</code>, Lift and BLift; <code>VRC_UP</code> / <code>VRC_DOWN</code> pose neighbours; <code>VRC_TRANSITION</code> edges of length <code>|Δz|</code>; the shaft rule in the collision table</td>
+      <td>No check that VRC stops are Lift or BLift nodes; an empty <code>nodes</code> list underflows; an unknown floor id yields z = 0 silently; BLift has no door-area footprint; no VRC tests in the snapshots</td>
+    </tr>
+    <tr>
+      <td>Task planning (scheduler stages 1–3, planner_core)</td>
+      <td>No (implicit only)</td>
+      <td>Nothing VRC-specific. Search costs come from the GarageGraph, which contains the VRC edges, so a tray on another floor is reachable and costed like any move. Bays use <code>system_floors[0]</code> as the retrieve floor</td>
+      <td><code>VrcTransition</code> is defined in planner_core but never created; assignment is not floor-aware; no reservation of the carriage; the charge job's “trapped in a bay” check tests only <code>TYPE_BAY</code>, so a BLift is missed; <code>insert_floor</code> is unused</td>
+    </tr>
+    <tr>
+      <td>Motion planning (CHUGG, SIPP, cost model)</td>
+      <td>Partial</td>
+      <td>SIPP drives the AGV across the <code>VRC_TRANSITION</code> edge; the cost is a trapezoid over <code>|Δz|</code> at <code>vrc_transit</code>; multi-floor rides count as one run; other AGVs are kept out by the shaft rule</td>
+      <td><code>PlanEventSequential(VrcTransition)</code> is fully written but <code>PlanNodeSequential</code> never calls it; the ride time leaves out door times and the carriage's approach, so it is optimistic; the carriage is not an agent</td>
+    </tr>
+    <tr>
+      <td>Action graph</td>
+      <td>Partial (the main runtime path)</td>
+      <td><code>CollectAndCollapseTrajectoryMotions</code> merges each run of floor-traversal motions into one; <code>InsertVrcActionsIntoDag</code> adds an approach command when the carriage is on the wrong floor, replaces the AGV's ride action with a VRC move command (door close + transit + door open), and chains the commands per VRC</td>
+      <td>A ride at the very end of a trajectory is dropped (no flush after the loop); the collapsed motion borrows the next motion's action id; per-VRC chaining skips an edge that would close a cycle; VRC commands in the base schedule are ignored; no direct test</td>
+    </tr>
+    <tr>
+      <td>Dispatch and safety (outside the scheduler)</td>
+      <td>Partial, outside the snapshots</td>
+      <td><code>GarageSafetyChecker</code> blocks a VRC command while a BLift bay on that VRC is not idle; Dispatch converts a VRC command for a BLift into <code>BayCommand.COMMAND_TYPE_MOVE_LIFT_TO_FLOOR</code></td>
+      <td>The scheduler never sends <code>MOVE_LIFT_TO_FLOOR</code> itself and nothing orders a VRC command after the bay state the safety checker requires</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>In short.</strong> The task planner does not support VRCs: it neither creates VRC events nor reasons about floors, and works only because the graph it searches happens to contain the VRC edges. The motion planner supports them partially: it can route an AGV through a VRC, but plans the ride as plain travel, without the carriage, its doors or its other users. The VRC commands Dispatch needs are reconstructed afterwards by the action graph. A site with a VRC therefore depends on code paths that no snapshot test exercises; before such a site goes live, the minimum is an end-to-end test of a cross-floor retrieve, the trailing-ride fix in <code>CollectAndCollapseTrajectoryMotions</code>, and door times in the ride cost.</p>
+
+<h2 data-num id="ly-validation">What the parser checks, and what it accepts silently</h2>
+<p>The parser checks types and a few cross-references, but not references between nodes and edges.</p>
+<figure id="ly-fig-111_layout_validation">
+  <img src="figures/111_layout_validation.svg" alt="A four-node example layout shown three ways (YAML, the parser's view, and its internal maps), stepping through five silent faults and the existing checks, with the exact layout.cpp lines and a two-column summary of checked versus not-checked inputs.">
+  <figcaption><strong>What the layout parser checks.</strong> <code>Layout::Layout</code> throws for an unknown node type, an unknown <code>max_resource_size</code>, windows that do not nest, <code>height_m</code> above <code>kBayHeight</code> and an unknown VRC node id; <code>PoseGraph</code> throws for a node without headings and an off-axis edge between nodes that share a heading. It does not check references within the file. Step through five faults on a four-node example that load without an error: an edge to an unknown id lands on index 0 (the lowest id), a duplicate id is last-wins and duplicates poses, a misspelt optional key is silently defaulted, a heading listed with its reciprocal duplicates poses, and an empty VRC node list underflows <code>size() - 1</code>.</figcaption>
+</figure>
+<table>
+  <thead>
+    <tr>
+      <th>Input</th>
+      <th>Checked?</th>
+      <th>What happens</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Unknown node <code>type</code>, unknown <code>max_resource_size</code></td>
+      <td>yes</td>
+      <td>Throws at load</td>
+    </tr>
+    <tr>
+      <td>Windows that do not nest, equal windows, a window smaller than TRAY, <code>height_m</code> above <code>kBayHeight</code></td>
+      <td>yes</td>
+      <td>Throws at load</td>
+    </tr>
+    <tr>
+      <td>A node without headings; an off-axis edge between nodes that share a heading</td>
+      <td>yes (PoseGraph)</td>
+      <td>Throws when the scheduler is constructed</td>
+    </tr>
+    <tr>
+      <td>A missing required scalar (<code>id</code>, <code>x</code>, <code>rotation_allowed</code>, ...)</td>
+      <td>yes (yaml-cpp)</td>
+      <td>Throws, but the message does not name the node</td>
+    </tr>
+    <tr>
+      <td>An edge that names an unknown node id</td>
+      <td>no</td>
+      <td><code>node_id_to_index_[a]</code> is <code>std::map::operator[]</code>: it inserts the id with index 0, so the edge attaches to the lowest-id node and <code>HasNode</code> starts returning true for the bad id</td>
+    </tr>
+    <tr>
+      <td>Duplicate node ids, duplicate edges</td>
+      <td>no</td>
+      <td>Last-wins index, duplicated poses; parallel edges and an “overwrote slot” warning</td>
+    </tr>
+    <tr>
+      <td>A heading listed with its reciprocal (<code>[0, 180]</code>)</td>
+      <td>no</td>
+      <td>Duplicate poses and GarageGraph vertices</td>
+    </tr>
+    <tr>
+      <td>Bay or charger with several headings, or a heading outside [0, 179]</td>
+      <td>no</td>
+      <td><code>headings[0]</code> silently defines the inbound heading; 270 wraps for poses but not in <code>GetInboundHeading</code></td>
+    </tr>
+    <tr>
+      <td>A misspelt optional key (<code>faces_reciprocol</code>, <code>prioritisation_value</code>, ...)</td>
+      <td>no</td>
+      <td>Silently defaulted</td>
+    </tr>
+    <tr>
+      <td>A VRC with an empty <code>nodes</code> list; VRC stops that are not lift nodes; an unknown <code>root_node</code></td>
+      <td>no</td>
+      <td><code>vrc.nodes.size() - 1</code> underflows (undefined behaviour); the others fail later or never</td>
+    </tr>
+    <tr>
+      <td>Floor ids above 255</td>
+      <td>no</td>
+      <td>Read as <code>uint32</code>, stored in a <code>uint8</code> field: 256 becomes 0</td>
+    </tr>
+    <tr>
+      <td>A node on a floor that <code>floors</code> does not list</td>
+      <td>no</td>
+      <td><code>GetFloorZForFloorId</code> returns 0.0 rather than “unknown”, so ride lengths are silently wrong</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 data-num id="ly-issues-found">Issues found while reading the parser and its users</h2>
+<p>Each item below is read from the code; none has been reproduced in a run.</p>
+<h3 data-num id="ly-charger-heading-comparison">An AGV already charging on C14 or C16 is not recognised</h3>
+<p><code>PlanAgvChargeJob</code> compares the AGV's stored heading (−90) with the unwrapped inbound heading (270) of chargers with <code>faces_reciprocal: true</code> (<a class="ref" href="#ly-faces-reciprocal-and-the-inbound-heading">section 3.5</a>). Fix: wrap the value, in the scheduler.</p>
+<h3 data-num id="ly-phantom-edges">An edge to an unknown node creates a phantom node</h3>
+<p>Edge parsing uses <code>node_id_to_index_[a]</code>. A typo in an edge id silently connects the other end to the lowest-id node and makes the typo look like a real node to <code>HasNode</code>. Fix: <code>.at()</code> and a clear error, in common_ros.</p>
+<h3 data-num id="ly-empty-vrc-underflow">An empty VRC node list is undefined behaviour</h3>
+<p><code>for(std::size_t i = 0; i &lt; vrc.nodes.size() - 1; i++)</code> underflows when <code>nodes</code> is empty. Fix: <code>i + 1 &lt; vrc.nodes.size()</code> and a check that the list has at least two stops, in common_ros.</p>
+<h3 data-num id="ly-edgemsg-carries-indices"><code>GetGarageLayout</code> publishes vertex indices as edge ends</h3>
+<p><code>GetGarageLayout</code> fills <code>EdgeMsg.src</code> / <code>dst</code> with Boost vertex indices, which are positions in the id-sorted node vector, not node ids. <code>Edge.msg</code>'s comment (“node index”) matches, but the YAML and every other message use ids, and in Pecos they differ (edge 8–31 is published as <code>{7, 26}</code>). The message also omits floors and disallowed orientations. Whoever serves and reads this service is outside the snapshots; check the consumer before changing it.</p>
+<h3 data-num id="ly-name-based-behaviour">One behaviour depends on the layout's name</h3>
+<p><code>Scheduler::UseEvChargeHeading</code> tests <code>strstr(name, "576_eccles")</code>. Site behaviour should be layout data (for example a per-node preferred heading), not a name match.</p>
+<h3 data-num id="ly-unused-and-dead-fields">Fields that are stored but have no effect</h3>
+<ul>
+  <li><code>parking_window_buffer</code>: applied only to footprints that nothing in the snapshots reads (<a class="ref" href="#ly-parking-windows-and-the-buffer">section 5</a>).</li>
+  <li><code>insert_floor</code>, <code>vrcs[].root_node</code>: stored, never read in the snapshots.</li>
+  <li><code>faces_reciprocal</code> on parking and waypoint nodes: ignored, but Pecos writes <code>false</code> on every one.</li>
+  <li><code>prioritization_value</code>: used for ordering, but not copied into <code>GarageNode.bay_prioritization</code>, so anything reading the message sees 0.</li>
+</ul>
+
+<h2 data-num id="ly-improvements">Improvements</h2>
+<p>The layout format and its parser live in <code>common_ros</code>, <code>interfaces</code> and the site configuration, which the refactor does not rename (<a class="ref" href="#nm-how-to-read-this-list">section 16.1</a>). The items below are therefore split by where they would land: the scheduler-side items fit the refactor; the rest are a separate proposal for the owners of those packages.</p>
+<h3 data-num id="ly-improvements-in-the-scheduler">Inside the scheduler (fits the refactor)</h3>
+<ul>
+  <li>Wrap every inbound heading the scheduler compares (the charger test above, and <code>ApplyTransitionToFreeingMoves</code> for VECS), or call one helper that returns a wrapped pose.</li>
+  <li>Replace the <code>576_eccles</code> name test with a layout-driven rule once the field exists; until then, keep it in one named function with a comment.</li>
+  <li>Give the bay order a name that says what it is (for example <code>BaysByInsertPreference()</code>) and document the tie rule where task planning reads it.</li>
+  <li>Use window <em>names</em> in logs and messages, never indices.</li>
+</ul>
+<h3 data-num id="ly-improvements-in-the-format">In the format and parser (common_ros, interfaces, site configuration)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Today</th>
+      <th>Proposed</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>headings: [90]</code> + <code>faces_reciprocal: true</code></td>
+      <td><code>inbound_heading: -90</code> on Bay, BLift, AgvCharge and EvCharge; <code>headings</code> unchanged elsewhere</td>
+      <td>States the result instead of the mechanism; one meaning; already wrapped</td>
+    </tr>
+    <tr>
+      <td><code>headings</code> (degrees, reciprocals implied)</td>
+      <td><code>headings_deg</code>, documented “each heading also allows its reciprocal”; reject a heading listed with its reciprocal</td>
+      <td>Units in the key, as <code>length_m</code> already does; no duplicate poses</td>
+    </tr>
+    <tr>
+      <td><code>src</code> / <code>dst</code> on an undirected edge</td>
+      <td><code>nodes: [8, 31]</code></td>
+      <td>The order has no meaning; the names suggest it does</td>
+    </tr>
+    <tr>
+      <td><code>prioritization_value</code></td>
+      <td><code>insert_preference</code> (higher = preferred ready for insert), ties documented</td>
+      <td>Says which way the order points</td>
+    </tr>
+    <tr>
+      <td><code>parking_windows</code>, read into <code>resource_windows_</code></td>
+      <td><code>size_classes</code> (or keep the key and rename the code)</td>
+      <td>One word for one concept across file, code and messages</td>
+    </tr>
+    <tr>
+      <td>Section comments (<code># 5675_pecos_sandbox_eng</code>), datum in a comment</td>
+      <td><code>zone:</code> per node; <code>datum:</code> at top level</td>
+      <td>Comments carry meaning the parser drops, yet change the md5</td>
+    </tr>
+    <tr>
+      <td><code>rotation_allowed</code> required, <code>faces_reciprocal</code> optional</td>
+      <td>All booleans optional with documented defaults</td>
+      <td>Consistency</td>
+    </tr>
+    <tr>
+      <td>PoseGraph slots <code>FORWARD</code> / <code>LEFT</code> / ...</td>
+      <td><code>STRAFE_POS</code> / <code>LOCOMOTE_POS</code> / ... (or document the body frame next to the enum)</td>
+      <td>The current names contradict the heading convention</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>A schema and a linter.</strong> Most of the silent cases above are cheap to catch before a file ever reaches a robot:</p>
+<ul>
+  <li>A JSON Schema for the file (types, ranges, enums for <code>type</code> and window names, no unknown keys), checked in CI for every site configuration.</li>
+  <li>A <code>layout_lint</code> tool (common_ros) that loads the file and checks what a schema cannot: every edge end exists; no duplicate nodes, edges or floors; every node is on some edge; every shared-heading edge is within 1e-3 rad, not 0.1; bays and chargers have exactly one heading in range and an outbound pose; VRCs have at least two stops, all lift nodes, on distinct listed floors, with <code>root_node</code> among them; <code>insert_floor</code> and <code>system_floors</code> name listed floors.</li>
+  <li>In the parser: <code>.at()</code> instead of <code>operator[]</code>, <code>add_vertex</code> for every node (a node whose index is above every edge end is otherwise outside the Boost graph), the VRC loop bound, and error messages that name the node.</li>
+</ul>

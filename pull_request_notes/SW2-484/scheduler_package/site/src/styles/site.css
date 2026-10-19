@@ -1319,6 +1319,16 @@ body.anim-full-open {
   cursor: help;
   border-radius: 4px;
 }
+.prose pre .ty-code {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--kw-line);
+  text-underline-offset: 3px;
+}
+.prose pre .ty-code:hover,
+.prose pre .ty-code:focus-visible {
+  text-decoration-style: solid;
+  outline: none;
+}
 .prose .ty:hover > code,
 .prose .ty:focus-visible > code {
   box-shadow: inset 0 -1.5px 0 var(--kw-line);
@@ -1535,8 +1545,28 @@ dialog::backdrop {
   }
 }
 @media (max-width: 1400px) and (min-width: 1101px) {
-  /* six tabs: drop the number badges before the labels run out of room */
+  /* seven tabs: drop the number badges before the labels run out of room */
   .tab-num {
+    display: none;
+  }
+  .tab {
+    padding: 0 8px;
+  }
+}
+@media (max-width: 1320px) and (min-width: 1101px) {
+  /* then shrink the search button to its icon and tighten the labels */
+  .search-btn-text,
+  .search-btn kbd {
+    display: none;
+  }
+  .search-btn {
+    min-width: 0;
+  }
+  .tab {
+    padding: 0 6px;
+    font-size: 13.5px;
+  }
+  .brand-sub {
     display: none;
   }
 }

@@ -677,6 +677,51 @@ function linkKeywords(p: Parsed, terms: ResolvedTerm[], decls: DeclIndex, usedDe
   }
 }
 
+/** Code blocks (after highlighting): the first mention of each type with a known definition in a
+ *  block becomes a hover/tap target, like inline code mentions (span.ty). Only identifiers that
+ *  start with an upper-case letter are considered (types, messages, classes, enum-like names). */
+function linkCodeTypes(tree: Root, decls: DeclIndex, usedDecls: Map<string, Decl>) {
+  let h2 = '';
+  const ID = /[A-Z][A-Za-z0-9_]*/g;
+  for (const block of tree.children) {
+    if (isEl(block, 'h2')) {
+      h2 = String(block.properties?.id ?? '');
+      continue;
+    }
+    // a highlighted top-level <pre> comes back from Shiki wrapped in a root node, so walk any node
+    visit(block as Root, 'element', (pre) => {
+      if (pre.tagName !== 'pre') return;
+      if ((pre.properties?.className as string[] | undefined)?.includes('decl-msg')) return SKIP;
+      const seen = new Set<string>();
+      visit(pre, 'text', (node, index, parent) => {
+        if (!parent || index === undefined || (parent as Element).tagName === 'a') return;
+        if (isEl(parent as Element) && ((parent as Element).properties?.className as string[] | undefined)?.includes('ty')) return;
+        const v = node.value;
+        const out: ElementContent[] = [];
+        let last = 0;
+        for (const m of v.matchAll(ID)) {
+          const name = m[0];
+          const prev = v[m.index! - 1];
+          if (prev && /[\w]/.test(prev)) continue;
+          if (seen.has(name)) continue;
+          const rule = declFor(decls, name, h2);
+          if (!rule) continue;
+          seen.add(name);
+          usedDecls.set(rule.decl.id, rule.decl);
+          if (m.index! > last) out.push(text(v.slice(last, m.index)));
+          out.push(h('span.ty.ty-code', { tabindex: 0, 'data-decl': rule.decl.id }, name));
+          last = m.index! + name.length;
+        }
+        if (!out.length) return;
+        if (last < v.length) out.push(text(v.slice(last)));
+        (parent as Element).children.splice(index, 1, ...out);
+        return index + out.length;
+      });
+      return SKIP;
+    });
+  }
+}
+
 function wrapTables(p: Parsed) {
   visit(p.tree, 'element', (node, index, parent) => {
     if (node.tagName !== 'table' || !parent || index === undefined) return;
@@ -765,6 +810,7 @@ export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: Resolve
       })
       .use(rehypeStringify);
     const tree = (await proc.run(p.tree)) as Root;
+    linkCodeTypes(tree, declIndex, usedDecls);
     // inline the animated SVGs last, so no text pass (keywords, links) ever touches them
     const html = proc.stringify(tree).replace(/<div class="anim-stage" data-anim="([^"]+)"([^>]*)><\/div>/g, (m0, name, rest) => {
       const svg = ANIM_SVGS.get(name);
