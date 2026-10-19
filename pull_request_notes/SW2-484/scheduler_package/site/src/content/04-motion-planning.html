@@ -152,7 +152,7 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
     </tr>
     <tr>
       <td><code>BayTransition</code></td>
-      <td>One motion with a fixed duration (<a class="ref" href="#bg-what-can-be-configured">section 23.1</a>). A closing transition (or <code>PROCESS_RETRIEVE</code>) first waits until the last already-planned motion that would collide with the door area (<code>BAY_ODP</code>) has ended.</td>
+      <td>One motion with a fixed duration (<a class="ref" href="#bg-what-can-be-configured">section 23.1</a>). A closing transition (or <code>PROCESS_RETRIEVE</code>) first waits until the last already-planned motion that would collide with the bay's overdrive-plate area (<code>BAY_ODP</code>; the code names the resulting motion <code>bay_door_is_closed</code>) has ended.</td>
     </tr>
     <tr>
       <td><code>VecsTransition</code></td>

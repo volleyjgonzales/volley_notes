@@ -234,7 +234,7 @@ table_(gg_, logger),                                   // CollisionTable: which 
       <td><code>Bay</code></td>
       <td><code>TYPE_BAY</code></td>
       <td>2</td>
-      <td>Customer bays: bay prioritization, inbound heading, the bay's door-area footprint (<code>BAY_ODP</code>)</td>
+      <td>Customer bays: bay prioritization, inbound heading, the bay's overdrive-plate footprint (<code>BAY_ODP</code>)</td>
     </tr>
     <tr>
       <td><code>BLift</code></td>
@@ -367,7 +367,7 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
       <td>Layout and graphs (common_ros)</td>
       <td>Largely yes</td>
       <td>Parses <code>floors</code>, <code>vrcs</code>, Lift and BLift; <code>VRC_UP</code> / <code>VRC_DOWN</code> pose neighbours; <code>VRC_TRANSITION</code> edges of length <code>|Δz|</code>; the shaft rule in the collision table</td>
-      <td>No check that VRC stops are Lift or BLift nodes; an empty <code>nodes</code> list underflows; an unknown floor id yields z = 0 silently; BLift has no door-area footprint; no VRC tests in the snapshots</td>
+      <td>No check that VRC stops are Lift or BLift nodes; an empty <code>nodes</code> list underflows; an unknown floor id yields z = 0 silently; BLift has no overdrive-plate (<code>BAY_ODP</code>) footprint; no VRC tests in the snapshots</td>
     </tr>
     <tr>
       <td>Task planning (scheduler stages 1–3, planner_core)</td>

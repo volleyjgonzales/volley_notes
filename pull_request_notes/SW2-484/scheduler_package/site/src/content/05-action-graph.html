@@ -641,6 +641,31 @@ if(delta->type == "AgvPoseChanged") {
   <figcaption><strong>An illustrative retrieve, end to end.</strong> (1) The event DAG. (2) CHUGG's motions per entity. (3) The action DAG. Same-entity edges chain AGV-1's five actions. The occupancy edge <code>b1 → a3</code> exists because AGV-2's move swept W2, which AGV-1 enters later. The event edge <code>e1 → e3</code> becomes <code>a5 → c1</code>. The occupancy edge <code>a1 → a3</code> is implied by AGV-1's own chain and is removed by <code>Reduce()</code>. (4) The serialised <code>Schedule.nodes</code>, in one topological order, with parents as indices.</figcaption>
 </figure>
 
+<h3 data-num id="ad-the-construction-step-by-step">The construction, step by step</h3>
+<p>The figure below runs <code>ResponseFromTrajectories</code> on a small retrieve in the Pecos layout and shows every data structure it touches. AGV-2 first leaves W22; AGV-1 lifts the car's tray T23 at P23, carries it through W22 and W41 into bay B21 and lowers it; then the bay hands the car over.</p>
+<figure id="ad-fig-126_action_dag_construction">
+  <img src="figures/126_action_dag_construction.svg" alt="Building the action DAG, motion by motion">
+  <figcaption><strong>Building the action DAG, motion by motion.</strong> Step through it: the motions are sorted and the wait is dropped; each motion becomes an action that is chained to its entity's previous action, depends on every earlier occupant of the space it needs, and then occupies that space; <code>Reduce()</code> removes the implied edge; the event edge from the lower to the hand-over is transferred; and one topological order is written out as <code>Schedule.nodes</code> with parent indices.</figcaption>
+</figure>
+<p>Five data structures carry the construction. Each has one job:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Data structure</th>
+      <th>Type</th>
+      <th>Role</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>all_motions</code></td><td><code>std::set&lt;Motion, MotionScheduleOrder></code></td><td>Every non-wait motion of every entity, in the order actions are created: planned start time, then the event vertex (a motion's action id), then a hash so that distinct motions never compare equal</td></tr>
+    <tr><td><code>last_entity_action</code></td><td><code>unordered_map&lt;GarageEntityIdMsg, shared_ptr&lt;ActionNodeMsg>></code></td><td>The latest action of each AGV, bay, VECS or VRC; the source of the same-entity edge</td></tr>
+    <tr><td><code>freeing_moves</code></td><td><code>GarageOccupancyChecker&lt;shared_ptr&lt;ActionNodeMsg>></code></td><td>For each location (pose or edge of the motion graph), which actions occupy it and which footprint types they block. <code>GetBlockers</code> reads it, <code>AddOccupant</code> writes it through the <code>CollisionTable</code>. Nothing is ever removed, so “occupant” means “has used this space at some earlier time”</td></tr>
+    <tr><td><code>event_start_end</code></td><td><code>unordered_map&lt;size_t, pair&lt;ActionNode, ActionNode>></code></td><td>For each event, its first and last action; used to turn event edges into action edges</td></tr>
+    <tr><td><code>final_actions_dag</code></td><td><code>DagBase&lt;ActionNodeMsg></code></td><td>The action DAG itself: shared action nodes as vertices, dependencies as edges, with <code>Reduce()</code> and <code>GetTopologicalOrdering()</code></td></tr>
+  </tbody>
+</table>
+<p>The loop body is short. For each motion in order, <code>ToActionNode</code> creates the action with a fresh guid and the job's id, and <code>event_start_end</code> records it as the first action of its event if the event has none yet, and as its last action in any case. The action then gets an edge from <code>last_entity_action[entity]</code>, which keeps each machine's commands in order. Next, <code>GetBlockers(location, collision_id, lifted)</code> returns every earlier action that occupies a location conflicting with this motion's footprint, and each becomes a predecessor. In the example that is how the hand-over of W22 from AGV-2 to AGV-1 appears: a0 → a2. Finally <code>AddOccupant</code> records the new action on every location its footprint conflicts with. <code>lifted</code> is true for every motion whose collision id is not the bare AGV, because a tray or car can only move on a lifted AGV. A tray standing on the ground is checked against an AGV through its legs only, so an empty AGV can still pass under it.</p>
+<p>Because occupancy is never cleared, a motion depends on <em>every</em> earlier user of its space, not just the last one. W22 is blocked for a3 by both a0 and a2. The first <code>Reduce()</code> removes the edges that such chains imply (a0 → a3 here). Geometry cannot express some orders, though: the bay's hand-over never shares space with the car's arrival in a way the code checks (bay transitions carry a TODO in this loop). <code>TransferEventDagDepsToActionDag</code> therefore adds, for every event edge <span class="math">e \to e'</span>, an edge from the last action of <span class="math">e</span> to the first action of <span class="math">e'</span>, which gives a5 → a6. A second <code>Reduce()</code> follows, then VRC insertion (nothing to insert in Pecos) and a third <code>Reduce()</code>. <code>BuildScheduledActionsArray</code> takes one topological order and writes each action's in-edges as indices of earlier array entries. It re-adds the edge from the same entity's previous action if <code>Reduce()</code> removed it, and appends each action's index to its job's <code>node_indices</code>.</p>
 <h3 data-num id="bg-vrcs-lifts-between-floors">VRC commands: lifts between floors</h3>
 <figure id="bg-fig-14_vrc_floors">
   <img src="figures/14_vrc_floors.svg" alt="VRC conceptual transfer">

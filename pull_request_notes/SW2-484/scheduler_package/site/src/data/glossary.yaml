@@ -258,7 +258,7 @@
 - term: VECS and VRC
   text: [VECS, VRC, VRCs]
   to: bg-bays-vecs-and-vrcs
-  def: VECS - EV charging stations; VRC - vehicle lifts between floors.
+  def: VECS - Volley EV charging stations; VRC - vertical reciprocating conveyors, the lifts between floors.
 
 - term: BoolStringPair
   code: [BoolStringPair]
@@ -362,3 +362,220 @@
   text: [Dispatch]
   to: ds-the-central-package-at-a-glance
   def: "The dispatcher in the central package: queues jobs, calls the scheduler's Plan service, checks the response and executes the schedule. The scheduler's only client."
+
+# ---- acronyms (plain-text links; expansion on hover)
+
+- term: "AGV"
+  text: ["AGV", "AGVs"]
+  to: bg-what-problem-does-this-software-solve
+  def: "AGV: Automated guided vehicle: the robot that drives under a tray, lifts it and carries it"
+
+- term: "DAG"
+  text: ["DAG", "DAGs"]
+  to: bg-directed-acyclic-graphs-then-scheduleeventdag
+  def: "DAG: Directed acyclic graph"
+
+- term: "ROS"
+  text: ["ROS"]
+  to: bg-ros-messages-and-services
+  def: "ROS: Robot Operating System (ROS 2): the middleware the scheduler runs on"
+
+- term: "YAML"
+  text: ["YAML"]
+  to: ly-what-the-layout-file-is
+  def: "YAML: YAML Ain't Markup Language: the text format of the site layout file"
+
+- term: "API"
+  text: ["API"]
+  to: bg-acronyms
+  def: "API: Application programming interface"
+
+- term: "EV"
+  text: ["EV"]
+  to: bg-acronyms
+  def: "EV: Electric vehicle"
+
+- term: "CI"
+  text: ["CI"]
+  to: bg-acronyms
+  def: "CI: Continuous integration: the automated build and test runs"
+
+- term: "BGL"
+  text: ["BGL"]
+  to: bg-acronyms
+  def: "BGL: Boost Graph Library"
+
+- term: "GUID"
+  text: ["GUID", "GUIDs"]
+  to: bg-acronyms
+  def: "GUID: Globally unique identifier, 128 bits (interfaces/msg/Guid)"
+
+- term: "SVG"
+  text: ["SVG"]
+  to: bg-acronyms
+  def: "SVG: Scalable Vector Graphics: the format of this pack's figures"
+
+- term: "UML"
+  text: ["UML"]
+  to: bg-acronyms
+  def: "UML: Unified Modeling Language: the class and sequence diagram notation"
+
+- term: "CCW"
+  text: ["CCW"]
+  to: bg-acronyms
+  def: "CCW: Counter-clockwise"
+
+- term: "CAD"
+  text: ["CAD"]
+  to: bg-acronyms
+  def: "CAD: Computer-aided design: the drawing that defines garage north"
+
+- term: "SHA"
+  text: ["SHA"]
+  to: bg-acronyms
+  def: "SHA: Secure Hash Algorithm: here, a git commit hash"
+
+- term: "ODP"
+  text: ["ODP"]
+  to: bg-acronyms
+  def: "ODP: overdrive plate, the retractable part at the front of a tray; BAY_ODP is the space it takes up at a bay"
+
+- term: "RMF"
+  text: ["RMF"]
+  to: bg-acronyms
+  def: "RMF: Robotics Middleware Framework (Open-RMF), an open-source fleet-management framework"
+
+- term: "MAPF"
+  text: ["MAPF"]
+  to: mp-the-standard-mapf-problem
+  def: "MAPF: Multi-agent path finding: collision-free paths for several agents on a shared graph"
+
+- term: "MAPF-PC"
+  text: ["MAPF-PC"]
+  to: mp-chuggs-problem-in-symbols
+  def: "MAPF-PC: Multi-agent path finding with precedence constraints: each agent has a goal sequence, and some goals must be reached before others"
+
+- term: "CBS"
+  text: ["CBS"]
+  to: mp-the-standard-mapf-problem
+  def: "CBS: Conflict-based search: plans agents alone, then branches on each conflict with constraints"
+
+- term: "SOC"
+  text: ["SOC"]
+  to: mp-the-standard-mapf-problem
+  def: "SOC: Sum of costs: the sum of all agents' arrival times"
+
+- term: "PBS"
+  text: ["PBS"]
+  to: mp-from-chugg-to-standard-solvers
+  def: "PBS: Priority-based search: searches over priority orders between agents, planning each with prioritized planning"
+
+- term: "CCBS"
+  text: ["CCBS"]
+  to: mp-from-chugg-to-standard-solvers
+  def: "CCBS: Continuous-time conflict-based search"
+
+- term: "ECBS"
+  text: ["ECBS"]
+  to: mp-from-chugg-to-standard-solvers
+  def: "ECBS: Enhanced conflict-based search: bounded-suboptimal CBS"
+
+- term: "CBS-PC"
+  text: ["CBS-PC"]
+  to: pr-related-formulations
+  def: "CBS-PC: Conflict-based search with precedence constraints (a MAPF-PC solver)"
+
+- term: "PBS-PC"
+  text: ["PBS-PC"]
+  to: pr-related-formulations
+  def: "PBS-PC: Priority-based search with precedence constraints (a MAPF-PC solver)"
+
+- term: "CBS-TA"
+  text: ["CBS-TA"]
+  to: pr-related-formulations
+  def: "CBS-TA: Conflict-based search with task assignment: assigns goals to agents inside the search"
+
+- term: "TAPF"
+  text: ["TAPF"]
+  to: pr-related-formulations
+  def: "TAPF: Combined target assignment and path finding"
+
+- term: "MAPD"
+  text: ["MAPD"]
+  to: pr-related-formulations
+  def: "MAPD: Multi-agent pickup and delivery: a stream of pickup and delivery tasks planned online"
+
+- term: "NAMO"
+  text: ["NAMO"]
+  to: pr-related-formulations
+  def: "NAMO: Navigation among movable obstacles"
+
+- term: "POCL"
+  text: ["POCL"]
+  to: pr-related-formulations
+  def: "POCL: Partial-order causal-link planning: plans as partially ordered actions with causal links"
+
+- term: "HTN"
+  text: ["HTN"]
+  to: pr-related-formulations
+  def: "HTN: Hierarchical task network: goals decomposed into subtasks by methods"
+
+- term: "PDDL"
+  text: ["PDDL"]
+  to: pr-related-formulations
+  def: "PDDL: Planning Domain Definition Language"
+
+- term: "STN"
+  text: ["STN", "STNs"]
+  to: pr-related-formulations
+  def: "STN: Simple temporal network: time points with difference constraints"
+
+- term: "RCPSP"
+  text: ["RCPSP"]
+  to: pr-related-formulations
+  def: "RCPSP: Resource-constrained project scheduling problem"
+
+- term: "CP"
+  text: ["CP"]
+  to: pr-related-formulations
+  def: "CP: Constraint programming"
+
+- term: "CP-SAT"
+  text: ["CP-SAT"]
+  to: pr-related-formulations
+  def: "CP-SAT: Google OR-Tools' constraint-programming solver built on a SAT solver"
+
+- term: "AAMAS"
+  text: ["AAMAS"]
+  to: bg-acronyms
+  def: "AAMAS: International Conference on Autonomous Agents and Multiagent Systems"
+
+- term: "AAAI"
+  text: ["AAAI"]
+  to: bg-acronyms
+  def: "AAAI: AAAI Conference on Artificial Intelligence (Association for the Advancement of Artificial Intelligence)"
+
+- term: "ICAPS"
+  text: ["ICAPS"]
+  to: bg-acronyms
+  def: "ICAPS: International Conference on Automated Planning and Scheduling"
+
+- term: "SoCS"
+  text: ["SoCS"]
+  to: bg-acronyms
+  def: "SoCS: Symposium on Combinatorial Search"
+
+- term: "AIJ"
+  text: ["AIJ"]
+  to: bg-acronyms
+  def: "AIJ: Artificial Intelligence (journal)"
+
+- term: "RA-L"
+  text: ["RA-L"]
+  to: bg-acronyms
+  def: "RA-L: IEEE Robotics and Automation Letters"
+
+- term: "IEEE"
+  text: ["IEEE"]
+  to: bg-acronyms
+  def: "IEEE: Institute of Electrical and Electronics Engineers"

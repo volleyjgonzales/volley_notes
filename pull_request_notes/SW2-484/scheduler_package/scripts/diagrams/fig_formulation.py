@@ -27,7 +27,7 @@ def edge_kinds():
                 "waypoints. Seven events after AGV assignment (AGV-1 serves job A's moves, AGV-2 the blocker and "
                 "job B's first move, AGV-3 its second); AGV approach and lift events are left out.")
     S1 = d.step("Causal edges (green): an effect of one event is a precondition of the next. Until B21 is in "
-                "retrieve mode its door area blocks the aisle, the bay node must be empty before T17 enters, and "
+                "retrieve mode its overdrive-plate area blocks the aisle, the bay node must be empty before T17 enters, and "
                 "the car must be in the bay before the hand-over. Every valid plan contains these orders.")
     S2 = d.step("Path-dependent edge (blue): T15 must leave P15 only because T17's route was fixed through P15 "
                 "before motion planning. With another route, or with T15 leaving in time, the edge is not needed. "
@@ -58,7 +58,7 @@ def edge_kinds():
                "e4": "job A (blocker), AGV-2", "e5": "job B, AGV-2", "e6": "job B, AGV-3"}[k]
         B[k] = event_box(d, x, y, f"{kind} {k}", text, w=W, sub=sub)
     edges = [
-        ("e0", "e1", CAUSAL, S1, "door area clear"),
+        ("e0", "e1", CAUSAL, S1, "ODP area clear"),
         ("e0", "e2", CAUSAL, S1, "bay in retrieve mode"),
         ("e1", "e2", CAUSAL, S1, "bay node empty"),
         ("e2", "e3", CAUSAL, S1, "car in bay"),

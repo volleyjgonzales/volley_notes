@@ -577,7 +577,7 @@ def collision_table_storage():
         "ResMap<Edge, Pose> epmap_;  ResMap<Edge, Edge> eemap_;",
     ], title="The definition", size=11.5)
     # entity ids
-    ents = [("0", "BAY_ODP", "bay door area (only at bay poses)"), ("1", "TRAY_LEGS", "tray on the floor"),
+    ents = [("0", "BAY_ODP", "overdrive-plate area (bay poses only)"), ("1", "TRAY_LEGS", "tray on the floor"),
             ("2", "TRAY", "tray"), ("3", "AGV", "AGV"), ("4, 5, ...", "PAYLOAD", "one per parking window (+ index)")]
     ex = code.x1 + 40
     d.text(ex, 8, "Entity ids (CollisionEntityId; table index)", size=13, weight=600, fill=CT)

@@ -1325,7 +1325,7 @@ return std::make_pair(true, "");
 </figure>
 <p>This is what happens to a <code>TrayMove</code> that has both a tray id and a destination, such as “R: <code>P17</code> → <code>B21</code>”. The loop is long in the source (about 450 lines), but it does five things in order:</p>
 <ol>
-  <li><strong>Check the destination</strong> (<code>:2622</code>–<code>:2648</code>). Build a filter that ignores <em>every</em> tray and AGV (trays will be moved, AGVs will drive away) and check that the destination vertex is enabled. If it is not, the job fails with “… but it's occupied, or not enabled.” “Occupied” here means something that will not move out of the way: a disabled node, a disabled tray or AGV (its node is blocked at the largest footprint even though it is in the ignore set), or a bay that is not <code>READY_TO_RETRIEVE</code> (the call passes no bays to ignore, so a closed bay's door area is blocked); ordinary trays and AGVs are ignored.</li>
+  <li><strong>Check the destination</strong> (<code>:2622</code>–<code>:2648</code>). Build a filter that ignores <em>every</em> tray and AGV (trays will be moved, AGVs will drive away) and check that the destination vertex is enabled. If it is not, the job fails with “… but it's occupied, or not enabled.” “Occupied” here means something that will not move out of the way: a disabled node, a disabled tray or AGV (its node is blocked at the largest footprint even though it is in the ignore set), or a bay that is not <code>READY_TO_RETRIEVE</code> (the call passes no bays to ignore, so a closed bay's overdrive-plate (<code>BAY_ODP</code>) area is blocked); ordinary trays and AGVs are ignored.</li>
   <li><strong>Find the critical path</strong> (<code>:2660</code>–<code>:2706</code>). Search from the root tray to the destination with <code>BlockingTraySearchEnvironment</code>. Unlike a normal path search, this one may pass <em>through</em> trays; it records them. The result is the <strong>critical path</strong> (the nodes R will travel over) and <code>blocking_trays</code>, the trays on it, in path order.</li>
   <li><strong>Resolve blockers one at a time</strong> (<code>while(!blocking_trays.empty())</code>, <code>:2717</code>). For the first blocker, ask <code>ResolveBlockingTrays</code> for a new home that is not on the critical path and does not require moving R. Two fallbacks follow if that fails (below).</li>
   <li><strong>Turn the answer into events</strong> (<code>:2928</code>–<code>:2990</code>). Add each required move and the blocker's own move to the DAG, chained in order, with <code>freeing_moves</code> edges along their paths, and finally an edge “blocker move → root move”. Then re-scan the rest of the critical path for blockers and repeat step 3.</li>
@@ -2162,7 +2162,7 @@ for(const auto&amp; [agv_id, root_event_opt] : ordered_matching) {
   <tbody>
     <tr>
       <td><code>BayTransition</code></td>
-      <td>the bay's ODP (operator door) area is free (<code>GetStaticFilter</code> for <code>BAY_ODP</code>)</td>
+      <td>the bay's ODP (overdrive plate) area is free (<code>GetStaticFilter</code> for <code>BAY_ODP</code>)</td>
     </tr>
     <tr>
       <td><code>AgvMove</code> with a destination</td>

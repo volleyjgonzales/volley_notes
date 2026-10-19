@@ -580,10 +580,10 @@ def seq_plan_motions():
     alt_mid = y - 18
     # ---------------- step 7 ----------------
     step("Bay and VECS events need no search: one motion of fixed duration (a closing bay first waits until no "
-         "planned motion collides with the door area), carved into every AGV's table. Every event, of any type, "
+         "planned motion collides with the bay's overdrive-plate area), carved into every AGV's table. Every event, of any type, "
          "is then applied to the working state before the loop moves on.")
     y += 24
-    selfmsg("ch", "BayTransition: wait for deps, wait until door area clear,",
+    selfmsg("ch", "BayTransition: wait for deps, wait until ODP area clear,",
             sub_text="AddMotion(transition of fixed duration); DeconflictAgvs(node, transition)")
     selfmsg("ch", "VecsTransition: AddMotion(vecs_transition seconds); DeconflictAgvs")
     alt_y1 = y - 18
