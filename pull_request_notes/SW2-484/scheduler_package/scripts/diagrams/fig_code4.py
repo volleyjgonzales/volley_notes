@@ -181,6 +181,30 @@ def bay_logic():
     d = Doc("33_bay_logic", "Bays: commanded transitions, classification and rebalancing",
             "Bay transitions the scheduler commands, ClassifyBay() rules from utils.cpp, and a worked example of "
             "ComputeBayRebalancingActions().")
+    # ---- animation: commands, classification rules, then ComputeBayRebalancingActions() one loop at a time
+    d.step("The three bay commands the scheduler issues: TRANSITION_TO_RETRIEVE (from READY_TO_INSERT or "
+           "VEHICLE_INSERTED), TRANSITION_TO_INSERT (from READY_TO_RETRIEVE) and PROCESS_RETRIEVE. The other "
+           "states are reached through bay or customer activity.")
+    d.step("ClassifyBays() turns each bay's state, plus whether a tray and a payload sit in it, into a "
+           "classification. A disabled bay, or a payload without a tray, is NOT_USABLE; a bay that is processing "
+           "is classified by the state it will reach.")
+    d.step("Worked example: four bays in bay_prioritization order [1, 2, 3, 4]. Classified, bays 1 and 4 are "
+           "RETRIEVE_READY (no tray) and bays 2 and 3 are INSERT_READY (empty tray, no car). None is NOT_USABLE.")
+    d.step("CalculateDesiredBaySplit(): 4 eligible bays x ratio 0.75, rounded up = 3 insert-ready bays wanted, "
+           "capped by the 3 empty trays; the remaining 1 bay should be retrieve-ready.")
+    d.step("Loop 1: bays already in transit (WILL_BE_INSERT_READY / WILL_BE_RETRIEVE_READY) count towards their "
+           "future state and are never changed. None here, so the counts stay at 3 and 1. (ClassifyBay never "
+           "returns WILL_BE_RETRIEVE_READY, and the _BUT_INVALID variant is not counted.)")
+    d.step("Loop 2: walk bay_prioritization front to back and keep every bay that is already INSERT_READY until "
+           "enough are found: bays 2 and 3 are kept, 1 insert-ready bay is still missing.")
+    d.step("Loop 3: walk the list back to front and keep bays that are already RETRIEVE_READY: bay 4 is kept, so "
+           "the retrieve-ready quota is met.")
+    d.step("Loop 4: walk front to back again and pick bays to switch to insert. Bay 1 is RETRIEVE_READY and not "
+           "kept, so it goes on the to-insert list; PlanRebalanceGarageJob will run the READY_FOR_INSERT recipe "
+           "(empty tray in, then TRANSITION_TO_INSERT).")
+    d.step("Loop 5 (switch to retrieve, back to front) has nothing left to do, and loop 6 finds no bay left in an "
+           "invalid state (those would fall back to retrieve-ready). Result: to-insert [1], to-retrieve [], a single "
+           "bay transition. Keeping correct bays (loops 2, 3) before changing any (loops 4, 5) keeps transitions few.")
     # --- state boxes
     S_ = {
         "RTI": (0, 80, "READY_TO_INSERT"),
@@ -206,6 +230,10 @@ def bay_logic():
     connect(d, [(B["RTR"].cx + 40, B["RTR"].y0), (B["RTR"].cx + 40, B["RTI"].y0 - 20), (B["RTI"].cx, B["RTI"].y0 - 20),
                 (B["RTI"].cx, B["RTI"].y0)], kind="flow", color=BAYC, size=8, sw=1.6,
             label="TRANSITION_TO_INSERT", label_at=((B["RTR"].cx + 40 + B["RTI"].cx) / 2 + 60, B["RTI"].y0 - 20))
+    with d.only(7):     # loop 4 picks bay 1: its READY_FOR_INSERT recipe ends with this command
+        lx_, ly_ = (B["RTR"].cx + 40 + B["RTI"].cx) / 2 + 60, B["RTI"].y0 - 20
+        tw_ = text_width("TRANSITION_TO_INSERT", 11, "mono") + 30
+        d.rect(lx_ - tw_ / 2, ly_ - 13, tw_, 26, rx=13, fill="none", stroke=T.amber, sw=1.8, layer="top")
     connect(d, [(B["RTR"].cx + 40, B["RTR"].y1), (B["PR"].cx + 40, B["PR"].y0)], kind="flow", color=BAYC, size=8,
             sw=1.6, label="PROCESS_RETRIEVE", label_at=(B["PR"].cx + 40, (B["RTR"].y1 + B["PR"].y0) / 2))
     for k_, ln_ in enumerate([
@@ -216,6 +244,8 @@ def bay_logic():
         d.text(0, B["PI"].y1 + 24 + k_ * 16, ln_, size=11, fill=T.muted)
     # --- classification table
     tx = 610
+    _tab = d.at(1)
+    _tab.__enter__()
     d.text(tx, 10, "ClassifyBay(state, tray_in_bay, payload_in_bay)", size=12.5, weight=600, fill=T.fg)
     rows = [("any", "no", "yes", "NOT_USABLE"), ("READY_TO_INSERT", "yes", "no", "INSERT_READY"),
             ("READY_TO_INSERT", "other", "", "INSERT_READY_BUT_INVALID"), ("READY_TO_RETRIEVE", "no", "no", "RETRIEVE_READY"),
@@ -235,27 +265,64 @@ def bay_logic():
         d.text(tx + 178, yy + 8, tr, size=10.5, family="mono", fill=T.muted)
         d.text(tx + 222, yy + 8, pl, size=10.5, family="mono", fill=T.muted)
         d.text(tx + 282, yy + 8, cl.replace("_BUT_INVALID", "_BUT_INV."), size=10.5, family="mono", fill=col)
+        if r in (1, 3):     # the two rows the worked example's bays fall into
+            with d.only(2):
+                d.rect(tx - 4, yy - 4, 1120 - tx + 8, 24, rx=5, fill=T.tint(T.sky, 0.12, T.bg), stroke=T.sky,
+                       sw=1.4, layer="bg")
+    _tab.__exit__(None, None, None)
     # --- rebalancing example
     ey = 500
-    d.text(0, ey, "ComputeBayRebalancingActions(): worked example", size=12.5, weight=600, fill=T.fg)
-    d.text(0, ey + 22, "bay_prioritization = [1, 2, 3, 4]  (front = preferred for insert, back = preferred for retrieve)   "
-                      "ratio = 0.75   empty trays = 3", size=11.5, family="mono", fill=T.muted)
-    d.text(0, ey + 42, "eligible bays = 4  ->  insert-ready wanted = min(ceil(0.75 x 4), 3) = 3,  retrieve-ready wanted = 1",
-           size=11.5, family="mono", fill=T.fg2)
-    bays = [("bay 1", "RETRIEVE_READY", "step 4: -> READY_FOR_INSERT job", T.amber),
-            ("bay 2", "INSERT_READY", "step 2: keep (insert 1/3)", T.green),
-            ("bay 3", "INSERT_READY", "step 2: keep (insert 2/3)", T.green),
-            ("bay 4", "RETRIEVE_READY", "step 3: keep (retrieve 1/1)", T.green)]
+    with d.at(2):
+        d.text(0, ey, "ComputeBayRebalancingActions(): worked example", size=12.5, weight=600, fill=T.fg)
+        d.text(0, ey + 22, "bay_prioritization = [1, 2, 3, 4]  (front = preferred for insert, back = preferred for "
+                          "retrieve)   ratio = 0.75   empty trays = 3", size=11.5, family="mono", fill=T.muted)
+    with d.at(3):
+        d.text(0, ey + 42, "eligible bays = 4  ->  insert-ready wanted = min(ceil(0.75 x 4), 3) = 3,  "
+                          "retrieve-ready wanted = 1", size=11.5, family="mono", fill=T.fg2)
+    # (name, classification, action, colour once decided, step that decides it)
+    bays = [("bay 1", "RETRIEVE_READY", "loop 4: -> READY_FOR_INSERT job", T.amber, 7),
+            ("bay 2", "INSERT_READY", "loop 2: keep (insert 1/3)", T.green, 5),
+            ("bay 3", "INSERT_READY", "loop 2: keep (insert 2/3)", T.green, 5),
+            ("bay 4", "RETRIEVE_READY", "loop 3: keep (retrieve 1/1)", T.green, 6)]
     bw = 245
-    for i, (b, cl, act, col) in enumerate(bays):
+    cy0 = ey + 92
+    for i, (b, cl, act, col, k) in enumerate(bays):
         x = i * (bw + 16)
-        bb = BBox(x, ey + 62, x + bw, ey + 142)
-        d.rect(bb.x0, bb.y0, bb.w, bb.h, rx=10, fill=T.card, stroke=col, sw=1.4)
-        d.text(x + 14, bb.y0 + 20, b, size=13, weight=600, fill=T.fg)
-        d.text(x + 14, bb.y0 + 42, cl, size=11, family="mono", fill=T.teal)
-        d.text(x + 14, bb.y0 + 64, act, size=11, fill=col)
-    d.text(0, ey + 166, "Steps 2 and 3 keep bays that are already right before step 4 / 5 change anything, so the "
-                       "result needs as few bay transitions as possible.", size=11.5, fill=T.muted)
+        bb = BBox(x, cy0, x + bw, cy0 + 80)
+        with d.at(2, k - 1):
+            d.rect(bb.x0, bb.y0, bb.w, bb.h, rx=10, fill=T.card, stroke=T.border, sw=1.4)
+        with d.at(k):
+            d.rect(bb.x0, bb.y0, bb.w, bb.h, rx=10, fill=T.card, stroke=col, sw=1.4)
+            d.text(x + 14, bb.y0 + 64, act, size=11, fill=col)
+        with d.only(k):
+            d.rect(bb.x0 - 5, bb.y0 - 5, bb.w + 10, bb.h + 10, rx=13, fill="none", stroke=T.sky, sw=1.8,
+                   dash="3 3")
+        with d.at(2):
+            d.text(x + 14, bb.y0 + 20, b, size=13, weight=600, fill=T.fg)
+            d.text(x + 14, bb.y0 + 42, cl, size=11, family="mono", fill=T.teal)
+    # scan direction of the loop running in this step
+    x_l, x_r, sy = 6, 4 * (bw + 16) - 22, ey + 70
+    for k, fwd, lab in ((5, True, "loop 2: bay_prioritization front -> back, keep INSERT_READY"),
+                        (6, False, "loop 3: back -> front, keep RETRIEVE_READY"),
+                        (7, True, "loop 4: front -> back, switch to insert"),
+                        (8, False, "loop 5: back -> front, switch to retrieve (quota already met)")):
+        with d.only(k):
+            pts = [(x_l, sy), (x_r, sy)] if fwd else [(x_r, sy), (x_l, sy)]
+            connect(d, pts, kind="flow", color=T.sky, size=8, sw=1.6, label=lab, label_at=((x_l + x_r) / 2, sy))
+    # running counters, one line per step
+    status = {2: "ClassifyBays(): 4 bays, none NOT_USABLE",
+              3: "still wanted: insert-ready 3 · retrieve-ready 1",
+              4: "loop 1: no bay in transit  ->  still wanted: insert-ready 3 · retrieve-ready 1",
+              5: "loop 2: bays 2, 3 kept  ->  still wanted: insert-ready 1 · retrieve-ready 1",
+              6: "loop 3: bay 4 kept  ->  still wanted: insert-ready 1 · retrieve-ready 0",
+              7: "loop 4: bay 1 -> to-insert list  ->  still wanted: insert-ready 0 · retrieve-ready 0",
+              8: "loops 5, 6: nothing to change  ->  result = (to insert: [1], to retrieve: [ ])"}
+    for k, txt in status.items():
+        with d.only(k):
+            d.text(0, cy0 + 104, txt, size=11.5, family="mono", weight=600, fill=T.sky)
+    with d.at(7):
+        d.text(0, cy0 + 128, "Loops 2 and 3 keep bays that are already right before loops 4 / 5 change anything, so "
+                             "the result needs as few bay transitions as possible.", size=11.5, fill=T.muted)
     frame(d, title="Bays: commanded transitions, classification and rebalancing",
           subtitle="The scheduler only commands three bay transitions. REBALANCE_GARAGE jobs classify every bay, work "
                    "out how many should be ready for insert, and plan READY_FOR_INSERT / READY_FOR_RETRIEVE recipes.",

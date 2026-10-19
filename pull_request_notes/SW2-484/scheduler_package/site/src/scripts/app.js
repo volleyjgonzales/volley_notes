@@ -612,6 +612,188 @@
   });
   window.addEventListener('resize', () => lightbox.open && fit());
 
+  // ---------------------------------------------------------------- animated figures
+  // An animated SVG marks its elements with data-s / data-e (first and last step, -1 = to the end).
+  for (const fig of $$('.fig-anim')) {
+    const svg = fig.querySelector('.anim-stage svg');
+    if (!svg) continue;
+    const caps = JSON.parse(fig.dataset.captions || '[]');
+    const n = caps.length;
+    const els = [...svg.querySelectorAll('[data-s]')].map((el) => [el, +el.getAttribute('data-s'), +el.getAttribute('data-e')]);
+    const count = fig.querySelector('.anim-count');
+    const capEl = fig.querySelector('.anim-caption');
+    const playBtn = fig.querySelector('[data-act="play"]');
+    const dots = [...fig.querySelectorAll('.anim-dot')];
+    let k = 0;
+    let timer = null;
+    const show = () => {
+      for (const [el, a, b] of els) el.classList.toggle('anim-on', a <= k && (b < 0 || k <= b));
+      count.textContent = `Step ${k + 1} / ${n}`;
+      capEl.textContent = caps[k];
+      dots.forEach((d, i) => d.classList.toggle('on', i === k));
+      fig.querySelector('[data-act="prev"]').disabled = k === 0;
+      fig.querySelector('[data-act="next"]').disabled = k === n - 1;
+    };
+    const stop = () => {
+      clearInterval(timer);
+      timer = null;
+      playBtn.textContent = '▶ Play';
+      fig.classList.remove('playing');
+    };
+    const go = (i) => {
+      k = Math.max(0, Math.min(n - 1, i));
+      show();
+    };
+    const play = () => {
+      if (timer) return stop();
+      if (k === n - 1) go(0);
+      playBtn.textContent = 'Pause';
+      fig.classList.add('playing');
+      timer = setInterval(() => {
+        if (k >= n - 1) return stop();
+        go(k + 1);
+      }, 2200);
+    };
+
+    // ---- zoom / pan: changes the SVG viewBox, so the figure stays vector at any zoom
+    const stage = fig.querySelector('.anim-stage');
+    const zoomLabel = fig.querySelector('.anim-zoom');
+    const fullBtn = fig.querySelector('[data-act="full"]');
+    const b0 = svg.viewBox.baseVal;
+    const vb0 = { x: b0.x, y: b0.y, w: b0.width, h: b0.height };
+    let vb = { ...vb0 };
+    const MAX = 12;
+    const applyVb = () => {
+      const z = vb0.w / vb.w;
+      // keep at least half a screen of the figure in view
+      vb.x = Math.max(vb0.x - vb.w / 2, Math.min(vb0.x + vb0.w - vb.w / 2, vb.x));
+      vb.y = Math.max(vb0.y - vb.h / 2, Math.min(vb0.y + vb0.h - vb.h / 2, vb.y));
+      svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+      zoomLabel.textContent = `${Math.round(z * 100)}%`;
+      stage.classList.toggle('zoomed', z > 1.001);
+      fig.querySelector('[data-act="zoom-out"]').disabled = z <= 1.001;
+      fig.querySelector('[data-act="zoom-in"]').disabled = z >= MAX - 0.01;
+    };
+    const toUser = (cx, cy) => {
+      const m = svg.getScreenCTM();
+      if (!m) return { x: vb.x + vb.w / 2, y: vb.y + vb.h / 2 };
+      const p = new DOMPoint(cx, cy).matrixTransform(m.inverse());
+      return { x: p.x, y: p.y };
+    };
+    const zoomBy = (f, cx, cy) => {
+      const z = vb0.w / vb.w;
+      const nz = Math.max(1, Math.min(MAX, z * f));
+      f = nz / z;
+      if (Math.abs(f - 1) < 1e-6) return;
+      if (cx === undefined) {
+        const r = svg.getBoundingClientRect();
+        cx = r.left + r.width / 2;
+        cy = r.top + r.height / 2;
+      }
+      const p = toUser(cx, cy);
+      vb = { x: p.x - (p.x - vb.x) / f, y: p.y - (p.y - vb.y) / f, w: vb.w / f, h: vb.h / f };
+      if (nz <= 1.001) vb = { ...vb0 };
+      applyVb();
+    };
+    const fitView = () => { vb = { ...vb0 }; applyVb(); };
+    const isFull = () => fig.classList.contains('is-full');
+    const setFull = (on) => {
+      fig.classList.toggle('is-full', on);
+      document.body.classList.toggle('anim-full-open', on);
+      fullBtn.textContent = on ? '✕ Exit full screen' : '⛶ Full screen';
+      fullBtn.title = on ? 'Exit full screen (Esc)' : 'Full screen (F, Esc to exit)';
+      fitView();
+      if (on) fig.focus({ preventScroll: true });
+      else fig.scrollIntoView({ block: 'nearest' });
+    };
+    stage.addEventListener('wheel', (e) => {
+      // in the page, plain wheel scrolls; Ctrl/⌘ + wheel (or a trackpad pinch) zooms. Full screen: wheel zooms.
+      if (!isFull() && !e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomBy(Math.exp(-e.deltaY * (e.ctrlKey && !isFull() ? 0.01 : 0.0018)), e.clientX, e.clientY);
+    }, { passive: false });
+    const ptrs = new Map();
+    let pinch = null;
+    stage.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) };
+      }
+      if (vb0.w / vb.w > 1.001 || ptrs.size === 2) {
+        stage.setPointerCapture(e.pointerId);
+        stage.classList.add('dragging');
+      }
+    });
+    stage.addEventListener('pointermove', (e) => {
+      const prev = ptrs.get(e.pointerId);
+      if (!prev) return;
+      const cur = { x: e.clientX, y: e.clientY };
+      ptrs.set(e.pointerId, cur);
+      if (ptrs.size === 2 && pinch) {
+        const [a, b] = [...ptrs.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch.d > 0) zoomBy(d / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        pinch.d = d;
+        return;
+      }
+      if (vb0.w / vb.w <= 1.001) return;
+      const m = svg.getScreenCTM();
+      const s = m ? m.a : 1;
+      vb.x -= (cur.x - prev.x) / s;
+      vb.y -= (cur.y - prev.y) / s;
+      applyVb();
+    });
+    const endPtr = (e) => {
+      ptrs.delete(e.pointerId);
+      if (ptrs.size < 2) pinch = null;
+      if (!ptrs.size) stage.classList.remove('dragging');
+    };
+    stage.addEventListener('pointerup', endPtr);
+    stage.addEventListener('pointercancel', endPtr);
+    stage.addEventListener('dblclick', (e) => (vb0.w / vb.w > 1.001 ? fitView() : zoomBy(2, e.clientX, e.clientY)));
+
+    fig.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-act], [data-go]');
+      if (!b) return;
+      if (b.dataset.go !== undefined) { stop(); return go(+b.dataset.go); }
+      const act = b.dataset.act;
+      if (act === 'play') return play();
+      if (act === 'zoom-in') return zoomBy(1.4);
+      if (act === 'zoom-out') return zoomBy(1 / 1.4);
+      if (act === 'fit') return fitView();
+      if (act === 'full') return setFull(!isFull());
+      stop();
+      if (act === 'reset') go(0);
+      if (act === 'prev') go(k - 1);
+      if (act === 'next') go(k + 1);
+    });
+    fig.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'ArrowRight') { stop(); go(k + 1); }
+      else if (e.key === 'ArrowLeft') { stop(); go(k - 1); }
+      else if (e.key === ' ' && e.target.tagName !== 'BUTTON') play();
+      else if (e.key === '+' || e.key === '=') zoomBy(1.4);
+      else if (e.key === '-') zoomBy(1 / 1.4);
+      else if (e.key === '0') fitView();
+      else if (e.key === 'f' || e.key === 'F') setFull(!isFull());
+      else if (e.key === 'Escape' && isFull()) setFull(false);
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    applyVb();
+    fig.tabIndex = 0;
+    show();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const f = $('.fig-anim.is-full');
+    if (f) { f.querySelector('[data-act="full"]').click(); e.preventDefault(); }
+  });
+
   // ---------------------------------------------------------------- start
   route(false);
 })();

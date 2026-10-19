@@ -327,6 +327,42 @@ def job_recipes():
     lw = 268
     rh = 86
     W = 1060
+    # ---- animation: one step per family of job types (row indices), then the whole sheet.
+    groups = [
+        ([0, 2, 9], "Single-entity jobs: one event for the AGV, tray or bay the job names (a TrayMove for a "
+                    "carried tray; a stop-charging VecsTransition first for a tray on a charging VECS). They are the "
+                    "building blocks: other job methods create their TrayMoves through PlanReparkTrayJob and reuse "
+                    "PlanAgvMoveJob and PlanBayTransitionJob."),
+        ([1, 3], "Customer jobs through a bay. RETRIEVE switches the chosen bay to retrieve mode if needed, moves a "
+                 "tray already in the bay out (destination '?'), brings the car's tray in and hands over with "
+                 "PROCESS_RETRIEVE. INSERT opens the bay towards the garage, moves the loaded tray out to a spot "
+                 "chosen later, and after planning asks for a follow-up READY_FOR_INSERT job."),
+        ([4, 5], "Bay preparation. READY_FOR_INSERT sends a car that asked for charging to a VECS, brings an empty "
+                 "tray (chosen later, '?') into the bay and then switches it to insert mode. READY_FOR_RETRIEVE "
+                 "switches an insert-mode bay to retrieve mode and moves the tray in it out, to a VECS if its car "
+                 "asked for charging."),
+        ([10, 8], "Charging. CHARGE_PAYLOAD moves the tray onto a VECS found by ResolveBlockingTrays (unless it "
+                  "already sits on a ready one) and starts charging. CHARGE_AGV drives the AGV to the fastest free "
+                  "charger; only an AGV trapped in an insert-mode bay needs the bay switched to retrieve mode first "
+                  "and back to insert mode afterwards."),
+        ([6, 7], "Housekeeping jobs only compose other pieces. CLEAN_GARAGE hides the AGVs (only as job index 0) "
+                 "and plans trays left on waypoints back into parking. REBALANCE_GARAGE asks "
+                 "ComputeBayRebalancingActions() which bays to switch and runs the READY_FOR_INSERT / "
+                 "READY_FOR_RETRIEVE recipes for them; failures are only logged, so it never fails."),
+    ]
+    for _, cap in groups:
+        d.step(cap)
+    d.step("The whole cheat sheet: every row is independent, read left to right in creation order. Dashed boxes "
+           "appear only when needed, '+ recipe' calls another job method, and '?' is a blank for "
+           "DoTrayAssignments().")
+    for k, (members, _) in enumerate(groups):
+        with d.only(k):
+            for i in range(len(rows)):
+                y = i * rh
+                if i in members:
+                    d.rect(-11, y - 9, W + 22, rh + 2, rx=10, fill="none", stroke=T.sky, sw=1.8, layer="top")
+                else:
+                    d.rect(-8, y - 6, W + 16, rh - 4, rx=8, fill=T.bg, opacity=0.72, layer="top")
     for i, (jt, fn, chips, note_) in enumerate(rows):
         y = i * rh
         if i % 2 == 0:
@@ -363,7 +399,8 @@ def job_recipes():
     frame(d, title="Cheat sheet: what each job type adds to the event DAG",
           subtitle="One row per job type (rows are independent, not one scenario). Read a row left to right: the "
                    "events that Plan<Type>Job appends, in creation order. A \"?\" is left empty for "
-                   "DoTrayAssignments() to fill. 'Job expansion' shows each row in a 2D garage example.",
+                   "DoTrayAssignments() to fill. 'Job expansion' shows each row in a 2D garage example. Steps "
+                   "group the rows into families.",
           badge_key="as-built",
           legend=[("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),
                   ("box", VECS, "VecsTransition"), ("dashbox", T.fg2, "only when needed"),

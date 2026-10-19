@@ -386,3 +386,233 @@ def trapezoid_runs():
           footnote="Formulas from cost_functions.cpp (Trapezoid, TimeAtDistance); parameters are the MotionCostParams "
                    "defaults (locomote 1.0 m/s, 0.2 m/s²); 2.29 m is the most common edge length in the Pecos layout.")
     return d
+
+
+# --------------------------------------------------------------------------------------
+# 97 — prioritized planning with safe intervals, animated
+# --------------------------------------------------------------------------------------
+
+DOC3 = "03-motion-planning.html"
+
+
+@figure("97_prioritized_planning", "Prioritized planning with safe intervals, step by step", DOC3)
+def prioritized_planning():
+    from svgkit import text_width   # noqa: F401
+    d = Doc("97_prioritized_planning", "Prioritized planning with safe intervals",
+            "Two AGVs cross at vertex 3. CHUGG plans the first event in the order, carves its motions into the "
+            "other AGV's safe-interval table, then plans the second event with SIPP, which waits until vertex 3 "
+            "is safe.")
+    A1, A2, RES = T.sky, T.amber, T.red
+    E = 2.0                       # seconds per edge, for the example
+    # ---- map ----
+    P = {1: (0, 1), 2: (1, 1), 3: (2, 1), 4: (3, 1), 6: (2, 0), 5: (2, 2)}
+    G = 78
+    mx, my = 30, 70
+    xy = {v: (mx + c * G, my + r * G) for v, (c, r) in P.items()}
+    d.text(0, 0, "Map and events", size=13.5, weight=600, fill=T.fg)
+    for u, v in [(1, 2), (2, 3), (3, 4), (6, 3), (3, 5)]:
+        d.line(*xy[u], *xy[v], stroke=T.border, sw=2)
+    for v, (x, y) in xy.items():
+        d.circle(x, y, 15, fill=T.bg_deep, stroke=T.border, sw=1.5)
+        d.text(x, y + 0.5, str(v), size=12, family="mono", weight=600, fill=T.fg, anchor="middle")
+    # starts and goals
+    for (v, col, lab) in [(1, A1, "AGV 1"), (6, A2, "AGV 2")]:
+        x, y = xy[v]
+        d.circle(x, y, 19, fill="none", stroke=col, sw=2.5)
+        d.text(x, y - 30, lab, size=11, family="mono", weight=600, fill=col, anchor="middle")
+    for (v, col) in [(4, A1), (5, A2)]:
+        x, y = xy[v]
+        d.circle(x, y, 19, fill="none", stroke=col, sw=1.5, dash="3 3")
+    ev_y = my + 2 * G + 46
+    d.text(0, ev_y, "e1  AGV 1: 1 -> 4   (job 0)", size=12, family="mono", fill=A1)
+    d.text(0, ev_y + 20, "e2  AGV 2: 6 -> 5   (job 1)", size=12, family="mono", fill=A2)
+    d.text(0, ev_y + 44, "no edge between them; priority order: e1, e2", size=11.5, fill=T.muted)
+    # paths on the map
+    def path(vs, col, k):
+        with d.at(k):
+            for u, v in zip(vs, vs[1:]):
+                (x1, y1), (x2, y2) = xy[u], xy[v]
+                dx, dy = x2 - x1, y2 - y1
+                L = (dx * dx + dy * dy) ** 0.5
+                ox, oy = -dy / L * 6, dx / L * 6
+                connect(d, [(x1 + dx * 0.25 + ox, y1 + dy * 0.25 + oy), (x2 - dx * 0.25 + ox, y2 - dy * 0.25 + oy)],
+                        kind="flow", color=col, sw=2.4, size=8)
+    path([1, 2, 3, 4], A1, 1)
+    path([6, 3, 5], A2, 3)
+    # ---- space-time chart ----
+    cx0, cy0 = 380, 40
+    rows = [1, 2, 3, 4, 6, 5]
+    RH = 34
+    TS = 34                      # px per second
+    TMAX = 12
+    d.text(cx0, 0, "Space-time: which vertex is used when (each edge takes 2 s)", size=13.5, weight=600, fill=T.fg)
+    for i, v in enumerate(rows):
+        y = cy0 + 20 + i * RH
+        d.text(cx0, y + RH / 2, f"vertex {v}", size=11.5, family="mono", fill=T.fg2)
+        d.rect(cx0 + 80, y + 4, TMAX * TS, RH - 8, rx=4, fill=T.tint(T.card, 0.6, T.bg))
+    for s in range(0, TMAX + 1, 2):
+        x = cx0 + 80 + s * TS
+        d.line(x, cy0 + 16, x, cy0 + 20 + len(rows) * RH, stroke=T.grid, sw=1, layer="under")
+        d.text(x, cy0 + 34 + len(rows) * RH, f"{s} s", size=11, family="mono", fill=T.muted, anchor="middle")
+    ry = {v: cy0 + 20 + i * RH for i, v in enumerate(rows)}
+
+    def bar(v, t0, t1, col, *, alpha=0.75, label=None, dash=None, layer="main", h_in=10, open_end=False):
+        y = ry[v]
+        x0 = cx0 + 80 + t0 * TS
+        x1 = cx0 + 80 + min(t1, TMAX) * TS
+        d.rect(x0, y + h_in, x1 - x0, RH - 2 * h_in, rx=4, fill=T.tint(col, alpha, T.bg), stroke=col, sw=1.2,
+               dash=dash, layer=layer)
+        if open_end:
+            d.text(x1 - 6, y + RH / 2, "...", size=11, family="mono", fill=T.bg, anchor="end", layer="labels")
+        if label:
+            d.text((x0 + x1) / 2, y + RH / 2, label, size=10.5, family="mono", weight=600, fill=T.bg, anchor="middle")
+
+    # AGV 1's plan (vertex occupancy: from the start of the edge into it to the end of the edge out of it)
+    a1 = [(1, 0, 2), (2, 0, 4), (3, 2, 6), (4, 4, TMAX)]
+    with d.at(1):
+        for v, t0, t1 in a1:
+            bar(v, t0, t1, A1, label="AGV 1" if v == 1 else None, open_end=(v == 4))
+    # reservations in AGV 2's safe-interval table
+    with d.at(2):
+        for v, t0, t1 in a1:
+            y = ry[v]
+            d.rect(cx0 + 80 + t0 * TS - 2, y + 3, (min(t1, TMAX) - t0) * TS + 4, RH - 6, rx=5, fill="none",
+                   stroke=RES, sw=1.8, dash="4 3", layer="over")
+        d.text(cx0 + 80, cy0 + 56 + len(rows) * RH, "red outline = unsafe for AGV 2 (carved from AGV 1's motions; "
+               "vertex 4 stays unsafe: AGV 1 parks there)", size=11, fill=RES)
+    # AGV 2: the naive path that would collide, then SIPP's answer
+    with d.only(3):
+        bar(6, 0, 0.4, A2, alpha=0.4)
+        bar(3, 0, 4, A2, alpha=0.15, dash="4 3", h_in=13, layer="over")
+        xx, yy = cx0 + 80 + 2 * TS, ry[3] + RH / 2
+        d.line(xx - 7, yy - 7, xx + 7, yy + 7, stroke=RES, sw=3, layer="top")
+        d.line(xx - 7, yy + 7, xx + 7, yy - 7, stroke=RES, sw=3, layer="top")
+        d.text(cx0 + 80 + TMAX * TS + 10, yy, "straight on: conflict", size=11, fill=RES)
+    with d.at(4):
+        bar(6, 0, 8, A2, alpha=0.35, label="AGV 2 waits at 6")
+        bar(3, 6, 10, A2, label="6->3->5")
+        bar(5, 8, TMAX, A2, open_end=True)
+    with d.at(5):
+        d.text(cx0 + 80, cy0 + 76 + len(rows) * RH, "Result: e1 kept its path; e2 absorbed the whole conflict. With e2 "
+               "first in the order, AGV 1 would have waited instead.", size=11, fill=T.fg)
+    d.step("Two events with no edge between them. The event DAG's topological order, with job priority, puts e1 "
+           "(job 0) first. Both AGVs start at t = 0.")
+    d.step("Plan e1: AGV 1's safe-interval table holds nothing it must avoid, so SIPP returns the shortest path "
+           "1 -> 2 -> 3 -> 4. The bars show when AGV 1 occupies each vertex.")
+    d.step("Carve e1's motions into every other AGV's table: for AGV 2, vertex 3 is now unsafe from 2 s to 6 s, and "
+           "vertex 4 from 4 s on, for good, because AGV 1 stays there.")
+    d.step("Plan e2 with SIPP. Driving straight from 6 to 3 would occupy vertex 3 from 0 s to 4 s, inside its unsafe "
+           "interval, so that state is not in the search.")
+    d.step("SIPP's answer: wait at 6 until vertex 3's next safe interval opens at 6 s, then 6 -> 3 -> 5. The wait is "
+           "part of AGV 2's trajectory in the ContinuousState.")
+    d.step("Both trajectories are fixed. e1 is never revisited, so the event order decides who waits: that is "
+           "prioritized planning, and why the scheduler's edges and job order steer CHUGG.")
+    frame(d, title="Prioritized planning with safe intervals",
+          subtitle="CHUGG plans events one at a time in the event DAG's order. Each finished event is carved into "
+                   "the other AGVs' safe-interval tables; SIPP then searches over (vertex, safe interval) states, "
+                   "so a later AGV waits rather than collide.",
+          badge_key="illustrative",
+          legend=[("fill", A1, "AGV 1 (planned first)"), ("fill", A2, "AGV 2 (planned second)"),
+                  ("dashbox", RES, "unsafe interval for AGV 2")],
+          footnote="Simplified: every edge takes 2 s and a vertex counts as used from the start of the move into it "
+                   "to the end of the move out of it. In the code the table is keyed by footprint and vertex "
+                   "(the SolveSequential figure shows the real structure) and moves use the trapezoid timing of the cost model.")
+    return d
+
+
+# --------------------------------------------------------------------------------------
+# 98 — conflict-based search on the same example, animated
+# --------------------------------------------------------------------------------------
+
+@figure("98_cbs_example", "Conflict-based search on the same example", DOC3)
+def cbs_example():
+    d = Doc("98_cbs_example", "Conflict-based search on the same example",
+            "CBS plans each AGV alone, finds the conflict at vertex 3, branches on which AGV must avoid it, and "
+            "expands the cheaper branch. Here it finds a plan with a lower total time than prioritized planning.")
+    A1, A2, RES = T.sky, T.amber, T.red
+    # ---- constraint tree ----
+    d.text(0, 0, "Constraint tree (CBS high level)", size=13.5, weight=600, fill=T.fg)
+    def ct_node(x, y, title, lines, col, k_from, *, chosen_from=None):
+        with d.at(k_from):
+            d.rect(x, y, 250, 30 + 18 * len(lines), rx=9, fill=T.card, stroke=col, sw=1.6)
+            d.text(x + 12, y + 17, title, size=12, family="mono", weight=700, fill=col)
+            for i, ln in enumerate(lines):
+                d.text(x + 12, y + 38 + 18 * i, ln, size=11, family="mono", fill=T.fg2)
+        if chosen_from is not None:
+            with d.at(chosen_from):
+                d.rect(x - 4, y - 4, 258, 38 + 18 * len(lines), rx=11, fill="none", stroke=T.green, sw=2.4)
+        return BBox(x, y, x + 250, y + 30 + 18 * len(lines))
+    root = ct_node(130, 30, "root: no constraints", ["each AGV planned alone", "cost 6 + 4 = 10",
+                                                     "conflict: vertex 3, 2-4 s"], T.fg2, 0)
+    left = ct_node(0, 190, "AGV 2 avoids 3 in 2-6 s", ["AGV 2 waits at 6", "cost 6 + 10 = 16", "no conflict"], A2, 1)
+    right = ct_node(270, 190, "AGV 1 avoids 3 in 0-4 s", ["AGV 1 waits at 2", "cost 8 + 4 = 12", "no conflict"], A1, 2,
+                    chosen_from=3)
+    with d.at(1):
+        connect(d, [(root.cx - 40, root.y1), (root.cx - 40, 160), (left.cx, 160), (left.cx, left.y0)], kind="flow",
+                color=T.fg2, size=7)
+    with d.at(2):
+        connect(d, [(root.cx + 40, root.y1), (root.cx + 40, 160), (right.cx, 160), (right.cx, right.y0)], kind="flow",
+                color=T.fg2, size=7)
+    with d.at(3):
+        d.text(270, 310, "lowest cost, conflict-free: the solution", size=11.5, weight=600, fill=T.green)
+    with d.at(4):
+        d.text(0, 340, "Prioritized planning (same example, earlier figure) fixed", size=11.5, fill=T.fg)
+        d.text(0, 358, "e1 first and got 16. CBS lets either AGV wait: 12.", size=11.5, fill=T.fg)
+    # ---- space-time chart of the node being looked at ----
+    cx0, cy0 = 600, 40
+    rows = [1, 2, 3, 4, 6, 5]
+    RH, TS, TMAX = 32, 30, 12
+    d.text(cx0, 0, "Space-time of the node being expanded", size=13.5, weight=600, fill=T.fg)
+    for i, v in enumerate(rows):
+        y = cy0 + 20 + i * RH
+        d.text(cx0, y + RH / 2, f"vertex {v}", size=11.5, family="mono", fill=T.fg2)
+        d.rect(cx0 + 80, y + 4, TMAX * TS, RH - 8, rx=4, fill=T.tint(T.card, 0.6, T.bg))
+    for s in range(0, TMAX + 1, 2):
+        x = cx0 + 80 + s * TS
+        d.line(x, cy0 + 16, x, cy0 + 20 + len(rows) * RH, stroke=T.grid, sw=1, layer="under")
+        d.text(x, cy0 + 34 + len(rows) * RH, f"{s} s", size=11, family="mono", fill=T.muted, anchor="middle")
+    ry = {v: cy0 + 20 + i * RH for i, v in enumerate(rows)}
+
+    def bar(v, t0, t1, col, alpha=0.75, label=None):
+        y = ry[v]
+        x0, x1 = cx0 + 80 + t0 * TS, cx0 + 80 + min(t1, TMAX) * TS
+        d.rect(x0, y + 9, x1 - x0, RH - 18, rx=4, fill=T.tint(col, alpha, T.bg), stroke=col, sw=1.2)
+        if label:
+            d.text((x0 + x1) / 2, y + RH / 2, label, size=10, family="mono", weight=600, fill=T.bg, anchor="middle")
+    plans = {
+        0: ([(1, 0, 2), (2, 0, 4), (3, 2, 6), (4, 4, TMAX)], [(6, 0, 2), (3, 0, 4), (5, 2, TMAX)]),
+        1: ([(1, 0, 2), (2, 0, 4), (3, 2, 6), (4, 4, TMAX)], [(6, 0, 8), (3, 6, 10), (5, 8, TMAX)]),
+        2: ([(1, 0, 2), (2, 0, 6), (3, 4, 8), (4, 6, TMAX)], [(6, 0, 2), (3, 0, 4), (5, 2, TMAX)]),
+    }
+    for k, node in ((0, 0), (1, 1), (2, 2), (3, 2), (4, 2)):
+        p1, p2 = plans[node]
+        with d.only(k):
+            for v, t0, t1 in p1:
+                bar(v, t0, t1, A1, label="AGV 1" if v == 1 else None)
+            for v, t0, t1 in p2:
+                bar(v, t0, t1, A2, alpha=0.6, label="AGV 2" if v == 6 else None)
+    with d.only(0):
+        y = ry[3]
+        d.rect(cx0 + 80 + 2 * TS, y + 2, 2 * TS, RH - 4, rx=5, fill="none", stroke=RES, sw=2.4)
+        d.text(cx0 + 80 + TMAX * TS + 10, y + RH / 2, "conflict", size=11, weight=600, fill=RES)
+    d.step("Root of the constraint tree: plan each AGV alone, ignoring the other. Total cost (sum of arrival "
+           "times) 6 + 4 = 10, but both use vertex 3 between 2 s and 4 s: a conflict.")
+    d.step("Branch 1: forbid AGV 2 from vertex 3 while AGV 1 is there. Only AGV 2 is replanned (SIPP): it waits at "
+           "6 and arrives at 10 s. Cost 16.")
+    d.step("Branch 2: forbid AGV 1 from vertex 3 while AGV 2 is there. AGV 1 waits at 2 and arrives at 8 s; AGV 2 "
+           "goes straight. Cost 12.")
+    d.step("CBS always expands the cheapest open node. Branch 2 has the lower cost and no conflict, so it is the "
+           "solution; with sum-of-costs as the objective it is optimal.")
+    d.step("Same input, different answer: prioritized planning committed to e1 first and paid 16. CBS needs the "
+           "same pieces, a graph, start and goal per agent, a conflict test and a single-agent planner, but searches "
+           "over who yields.")
+    frame(d, title="Conflict-based search on the same example",
+          subtitle="CBS (Sharon et al. 2015) keeps a tree of constraint sets. Each node replans only the constrained "
+                   "agent with a single-agent search, checks for the first conflict and, if there is one, branches "
+                   "into two children, one per agent that could give way.",
+          badge_key="illustrative",
+          legend=[("fill", A1, "AGV 1"), ("fill", A2, "AGV 2"), ("box", RES, "conflict"),
+                  ("box", T.green, "chosen node")],
+          footnote="Same map, timing and occupancy rule as the prioritized-planning figure. CHUGG has an unfinished CBS mode "
+                   "(SolveCbs); the scheduler calls SolveSequential, which is prioritized planning.")
+    return d

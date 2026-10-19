@@ -533,3 +533,68 @@ def module_layout():
           footnote="Proposed in Issue & proposal (module layout section). Folder paths are under scheduler/include/scheduler/, "
                    "scheduler/src/ and scheduler/test/.")
     return d
+
+
+# --------------------------------------------------------------------------------------
+# 99 — swappable motion planners: problem, solvers, validator
+# --------------------------------------------------------------------------------------
+
+@figure("99_motion_solver_interface", "Swappable motion planners", "05-issue-and-proposal.html")
+def motion_solver_interface():
+    d = Doc("99_motion_solver_interface", "Swappable motion planners",
+            "The scheduler's motion_planning folder turns the event DAG into a solver-neutral MotionProblem; any "
+            "MotionSolver in motion_planner returns a MotionPlan; one validator checks it before the action graph "
+            "is built.")
+    SCH, MP, VAL, NEW = T.amber, T.sky, T.green, T.violet
+    W = 1500
+    # ---- scheduler lane ----
+    y = 0
+    a = _box(d, 24, y + 46, 330, "BuildMotionProblem", "motion_planning/ (adapter, scheduler)",
+             ["event DAG + start state", "+ GarageServices", "-> MotionProblem", "events -> goals, edges -> precedence"], SCH)
+    s = _box(d, 390, y + 46, 330, "SelectSolver", "configuration + capabilities",
+             ["parameter: which solver", "check problem.Needs()", "  against solver.Capabilities()", "fallback: CHUGG"], SCH)
+    v = _box(d, 756, y + 46, 330, "ValidateMotionPlan", "one checker for every solver",
+             ["every goal reached", "every precedence respected", "no conflict (CollisionTable)", "else: error, job fails"], VAL)
+    g = _box(d, 1122, y + 46, 354, "action_graph/", "unchanged",
+             ["MotionPlan -> action DAG", "uses goal ids, as today it", "uses event vertex ids"], T.green)
+    e1 = max(b.y1 for b in (a, s, v, g)) + 24
+    _lane(d, 0, y, W, e1 - y, "scheduler · motion_planning/ folder (adapter, selection, validation)", SCH)
+    # ---- motion_planner lane ----
+    y2 = e1 + 80
+    i = _box(d, 24, y2 + 46, 520, "MotionProblem / MotionPlan / MotionSolver", "neutral types + interface (new)",
+             ["World: motion graph, conflict model, timing model", "Start: agents, loads, blocked places, devices",
+              "Tasks: goals + precedence edges", "Settings: objective, time budget",
+              "Solve(problem) -> Expected<MotionPlan>", "Capabilities(): what the solver supports"], MP)
+    c = _box(d, 580, y2 + 46, 280, "ChuggSolver", "wraps SolveSequential",
+             ["goal sequences, precedence,", "footprints, devices: yes", "objective: first feasible"], MP)
+    n = _box(d, 896, y2 + 46, 280, "CbsSolver (new)", "SIPP low level (SippAgv)",
+             ["landmark / avoid constraints", "exist already", "precedence: later step"], NEW)
+    m = _box(d, 1212, y2 + 46, 264, "other solvers", "PBS, LaCAM, learned, ...",
+             ["anything that implements", "MotionSolver and passes", "the validator"], NEW)
+    e2 = max(b.y1 for b in (i, c, n, m)) + 24
+    _lane(d, 0, y2, W, e2 - y2, "motion_planner package (solvers)", MP)
+    # ---- arrows ----
+    connect(d, [(a.x1, a.cy), (s.x0, s.cy)], kind="flow", color=SCH, size=8)
+    connect(d, [(s.x1, s.cy), (v.x0, v.cy)], kind="flow", color=SCH, size=8)
+    connect(d, [(v.x1, v.cy), (g.x0, g.cy)], kind="flow", color=VAL, size=8)
+    connect(d, [(s.cx, s.y1), (s.cx, y2 + 20), (c.cx, y2 + 20), (c.cx, c.y0)], kind="flow", color=SCH, size=8,
+            label="Solve(problem)", label_at=(s.cx + 8, (s.y1 + y2) / 2 + 4), label_anchor="start")
+    connect(d, [(n.cx, y2 + 20), (n.cx, n.y0)], kind="flow", color=SCH, size=8)
+    connect(d, [(m.cx, y2 + 20), (m.cx, m.y0)], kind="flow", color=SCH, size=8)
+    d.line(c.cx, y2 + 20, m.cx, y2 + 20, stroke=SCH, sw=1.4)
+    bus = c.y1 + 22
+    for b in (c, n, m):
+        d.line(b.cx, b.y1, b.cx, bus, stroke=MP, sw=1.4, dash="6 4")
+    d.line(c.cx, bus, m.cx, bus, stroke=MP, sw=1.4, dash="6 4")
+    connect(d, [(c.cx, bus), (i.x1, bus)], kind="real", color=MP, size=8, label="implements",
+            label_at=((c.cx + i.x1) / 2, bus + 14))
+    frame(d, title="Swappable motion planners",
+          subtitle="The same Strategy pattern as the tray and AGV solvers: the scheduler builds a solver-neutral "
+                   "problem, any solver behind one interface answers it, and one validator decides whether the answer "
+                   "is usable. CHUGG becomes one implementation among several.",
+          badge_key="proposed",
+          legend=[("box", SCH, "scheduler (adapter, selection)"), ("box", MP, "motion_planner (interface, CHUGG)"),
+                  ("box", NEW, "new solvers"), ("box", VAL, "validator"), ("real", MP, "implements")],
+          footnote="Proposed in Issue & proposal, Swappable motion planners. Names are proposals; the types live in "
+                   "motion_planner so that solvers there can implement the interface without depending on scheduler.")
+    return d

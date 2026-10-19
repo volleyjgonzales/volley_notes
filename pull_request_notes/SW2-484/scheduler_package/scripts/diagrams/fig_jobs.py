@@ -29,6 +29,25 @@ FULL_X, FULL_Y = (20.4, 46.4), (6.9, 25.2)
 W = 1120
 ENT_COL = {"tray": TRAY, "agv": AGV, "bay": BAYC, "vecs": VECS}
 
+# Animation of the per-job figures: step 0 is the request, step r + 1 is row r of the method table.
+# job_figure fills _EV_STEP (event number -> step that creates it) before the map is drawn, so the
+# numbered map marks (intent arrows, bay events) appear with their event.
+_EV_STEP: dict = {}
+
+
+class _maybe_at:
+    """`with _maybe_at(d, n):` = `with d.at(step of event n)` while a job figure is being drawn."""
+    def __init__(self, d, n):
+        self.cm = d.at(_EV_STEP[n]) if n in _EV_STEP else None
+
+    def __enter__(self):
+        if self.cm:
+            self.cm.__enter__()
+
+    def __exit__(self, *a):
+        if self.cm:
+            self.cm.__exit__(*a)
+
 
 # --------------------------------------------------------------------------------------
 # small drawing helpers
@@ -70,9 +89,15 @@ def odp_area(d: Doc, m: Map, nid: int, text: str, color=T.red):
            halo_w=3)
 
 
-def intent(d: Doc, m: Map, src, dst, num, color, *, bend=0.18, q_off=(0, -40), src_off=(0, 0), dst_off=(0, 0),
-           num_t=0.5, dash="7 5"):
-    """Curved 'intent' arrow (no path is planned at this stage). dst=None -> arrow to a '?' bubble."""
+def intent(d: Doc, m: Map, src, dst, num, color, **kw):
+    """Curved 'intent' arrow (no path is planned at this stage). dst=None -> arrow to a '?' bubble.
+    In an animated job figure it appears at the step that creates event `num`."""
+    with _maybe_at(d, num):
+        _intent(d, m, src, dst, num, color, **kw)
+
+
+def _intent(d: Doc, m: Map, src, dst, num, color, *, bend=0.18, q_off=(0, -40), src_off=(0, 0), dst_off=(0, 0),
+            num_t=0.5, dash="7 5"):
     k = m.s / 21
     q_off, src_off, dst_off = [(a * k, b * k) for a, b in (q_off, src_off, dst_off)]
     x0, y0 = m.P(src)
@@ -148,13 +173,29 @@ def event_column(d: Doc, x, y, events, edges, *, bw=290, gap=40, lane_x0=None):
         kind, text, job, style = ev[:4]
         sub = ev[4] if len(ev) > 4 else None
         k = f"{kind} · job {job}" if job is not None else kind
-        b = event_box(d, x, yy, k, text, n=i + 1, w=bw, style=style, size=11.5, sub=sub)
+        with _maybe_at(d, i + 1):
+            b = event_box(d, x, yy, k, text, n=i + 1, w=bw, style=style, size=11.5, sub=sub)
+            if i + 1 in _EV_STEP:           # a "new" ring only while it is being added
+                with d.only(_EV_STEP[i + 1]):
+                    d.rect(b.x0 - 5, b.y0 - 5, b.w + 10, b.h + 10, rx=11, fill="none", stroke=T.sky, sw=1.8,
+                           dash="3 3")
         boxes.append(b)
         yy = b.y1 + gap
     lane_x0 = lane_x0 or x + bw + 34
     lanes_used = []
     adj_count = {}
     for (i, j, rule, ent, *lab) in edges:
+        _cm = d.at(max(_EV_STEP.get(i, 0), _EV_STEP.get(j, 0))) if (i in _EV_STEP or j in _EV_STEP) else None
+        if _cm:
+            _cm.__enter__()
+        _edge(d, boxes, i, j, rule, ent, lab, lanes_used, adj_count, lane_x0)
+        if _cm:
+            _cm.__exit__(None, None, None)
+    return boxes
+
+
+def _edge(d, boxes, i, j, rule, ent, lab, lanes_used, adj_count, lane_x0):
+    if True:
         a, b = boxes[i - 1], boxes[j - 1]
         col = ENT_COL.get(ent, ent) if rule != "B" else RULE_B
         if rule == "C":
@@ -177,7 +218,6 @@ def event_column(d: Doc, x, y, events, edges, *, bw=290, gap=40, lane_x0=None):
             connect(d, [(a.x1, ya), (lx, ya), (lx, yb), (b.x1, yb)], kind="flow", color=col, size=8, sw=sw,
                     dash=dash, radius=7)
             label_pill(d, lx, (ya + yb) / 2, text, color=col, size=10, bg=T.bg)
-    return boxes
 
 
 # --------------------------------------------------------------------------------------
@@ -325,7 +365,7 @@ TAG_COL = {"ok": T.green, "skip": T.faint, "fail": T.red, "event": T.sky, "edge"
            "note": T.amber}
 
 
-def step_table(d: Doc, x, y, w, steps, *, title="The method, step by step"):
+def step_table(d: Doc, x, y, w, steps, *, title="The method, step by step", animate=False):
     """steps: (code, general, scenario, tag_text, tag_kind). Returns bottom y."""
     c0, c4 = 34, 132
     rest = w - c0 - c4
@@ -349,6 +389,10 @@ def step_table(d: Doc, x, y, w, steps, *, title="The method, step by step"):
         h = 12 + n * 15.5
         if r % 2 == 0:
             d.rect(x, yy, w, h, rx=5, fill=T.tint(T.card, 0.55, T.bg), layer="bg")
+        if animate:
+            with d.only(r + 1):
+                d.rect(x - 3, yy - 1, w + 6, h + 2, rx=6, fill=T.tint(T.sky, 0.12, T.bg), stroke=T.sky, sw=1.6,
+                       layer="bg")
         num_badge(d, x + 15, yy + 14, r + 1, T.tint(T.fg2, 0.85, T.bg), r=10)
         for j, ln in enumerate(cl):
             d.text(xs[0], yy + 14 + j * 15.5, ln, size=10.5, family="mono", fill=T.fg2)
@@ -383,6 +427,20 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
                legend_override=None, events_title="Events appended to ctx->events",
                events_sub="numbered in creation order; arrows = edges this method adds"):
     d = Doc(name, heading, subtitle)
+    # ---- animation: step 0 = the request, step r + 1 = row r of the method table
+    _EV_STEP.clear()
+    gens0 = GENERAL.get(name, [""] * len(steps))
+    d.step("Start: the request arrives. The map is working_state as the method first sees it; no events yet. "
+           "Step through the method one table row at a time.")
+    for r, ((code, scen, tag, kind), gen) in enumerate(zip(steps, gens0)):
+        mm = re.match(r"adds ([\d, ]+)", tag or "")
+        if mm:
+            for n_ in re.findall(r"\d+", mm.group(1)):
+                _EV_STEP.setdefault(int(n_), r + 1)
+        cap = f"{gen} In this example: {scen}".strip() if gen else scen
+        if tag:
+            cap += f" ({tag})"
+        d.step(f"Row {r + 1}. " + cap)
     xl, yl = REGIONS[region]
     s = W / (xl[1] - xl[0])
     m = Map(d, 0, 0, s, xl, yl)
@@ -409,7 +467,8 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
     gens = GENERAL.get(name, [""] * len(steps))
     assert len(gens) == len(steps), (name, len(gens), len(steps))
     steps = [(c, g, sc, t, k) for (c, sc, t, k), g in zip(steps, gens)]
-    y = step_table(d, 0, y, W, steps)
+    y = step_table(d, 0, y, W, steps, animate=True)
+    _EV_STEP.clear()
     if notes:
         y = notes_row(d, 0, y + 22, W, notes)
     legend = [("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),
@@ -493,90 +552,127 @@ def expansion_loop():
     G_RET = "PlanRetrieveJob(.., 0) made these 4"
     G_REP = "PlanReparkTrayJob(.., 1) made this 1"
     REP = [("TrayMove", "T19: P19 -> P24", 1)]
+    # ---- animation: one step per phase of an iteration, then the tail of the figure
+    S_PRE = d.step("Before the loop: Plan() builds plan_ctx from request_data.base_state. scheduled_jobs and the "
+                   "event DAG are empty; three jobs are pending.")
+    S_R0 = d.step("i = 0, RETRIEVE: job_index = scheduled_jobs.size() = 0. PlanRetrieveJob succeeds and adds four "
+                  "events to plan_ctx->events, every one constructed with job_index 0.")
+    S_P0 = d.step("Plan() appends the RETRIEVE to plan_ctx->scheduled_jobs, so it now sits at [0], the slot its "
+                  "four events point to.")
+    S_R1 = d.step("i = 1, INSERT: job_index = size() = 1. PlanInsertJob fails before adding any event "
+                  "(the bay has no tray in a discrete state); scheduled_jobs and the DAG stay as they were.")
+    S_F1 = d.step("The failure goes straight into result.scheduled_jobs as a FailJob with STATE_ERROR, and only for "
+                  "INSERT Plan() also fires clean_garage_request_fn_().")
+    S_R2 = d.step("i = 2, REPARK_TRAY: job_index = size() is 1 again, because the INSERT never got a slot. "
+                  "PlanReparkTrayJob adds one event with job_index 1.")
+    S_P2 = d.step("The REPARK_TRAY is appended at [1], matching its event's job_index. With i (= 2) the event "
+                  "would point past the end of scheduled_jobs.")
+    S_T0 = d.step("After the loop, the index stays on everything that belongs to the job: job [0] -> its four "
+                  "events after expansion.")
+    S_T1 = d.step("Tray and AGV assignment add blocker TrayMoves and AgvMoves with the same job_index; "
+                  "ToActionNode() turns each event into an ActionNode and looks up scheduled_jobs[job_index].guid.")
+    S_T2 = d.step("The final result: failures first in loop order, then the successful jobs with their "
+                  "node_indices. And the reason the index is size(), not i.")
     rows = [
         ("before the loop", [
-            ("plan_ctx built from request_data.base_state", T.fg2),
-            ("pending_jobs = [RETRIEVE, INSERT, REPARK_TRAY]", T.fg2)],
-         [], [], [], None),
+            ("plan_ctx built from request_data.base_state", T.fg2, S_PRE),
+            ("pending_jobs = [RETRIEVE, INSERT, REPARK_TRAY]", T.fg2, S_PRE)],
+         [], [], [], None, (S_PRE, S_PRE, S_PRE, S_PRE)),
         ("i = 0  ·  TYPE_RETRIEVE (car on T17)", [
-            ("job_index = scheduled_jobs.size()  -> 0", T.teal),
-            ("PlanRetrieveJob(plan_ctx, job.payload_id, 0)", T.sky),
-            ("-> success. ONE job, FOUR events, each", T.green),
-            ("   constructed with job_index 0", T.green),
-            ("plan_ctx->PushBackScheduledJob(job)  -> [0]", T.sky)],
-         [("RETRIEVE", True)], [(G_RET, RET, True)], [], T.green),
+            ("job_index = scheduled_jobs.size()  -> 0", T.teal, S_R0),
+            ("PlanRetrieveJob(plan_ctx, job.payload_id, 0)", T.sky, S_R0),
+            ("-> success. ONE job, FOUR events, each", T.green, S_R0),
+            ("   constructed with job_index 0", T.green, S_R0),
+            ("plan_ctx->PushBackScheduledJob(job)  -> [0]", T.sky, S_P0)],
+         [("RETRIEVE", True)], [(G_RET, RET, True)], [], T.green, (S_R0, S_P0, S_R0, S_R0)),
         ("i = 1  ·  TYPE_INSERT (bay B7)", [
-            ("job_index = scheduled_jobs.size()  -> 1", T.teal),
-            ("PlanInsertJob(plan_ctx, job.bay_id, 1)", T.sky),
-            ("-> fails before adding any event:", T.red),
-            ("   \"... the bay has no tray in discrete state.\"", T.red),
-            ("result.scheduled_jobs.push_back(FailJob(job, msg))", T.sky),
-            ("clean_garage_request_fn_()   // INSERT only", T.sky)],
-         [("RETRIEVE", False)], [(G_RET, RET, False)], [("INSERT  STATE_ERROR", T.red)], T.red),
+            ("job_index = scheduled_jobs.size()  -> 1", T.teal, S_R1),
+            ("PlanInsertJob(plan_ctx, job.bay_id, 1)", T.sky, S_R1),
+            ("-> fails before adding any event:", T.red, S_R1),
+            ("   \"... the bay has no tray in discrete state.\"", T.red, S_R1),
+            ("result.scheduled_jobs.push_back(FailJob(job, msg))", T.sky, S_F1),
+            ("clean_garage_request_fn_()   // INSERT only", T.sky, S_F1)],
+         [("RETRIEVE", False)], [(G_RET, RET, False)], [("INSERT  STATE_ERROR", T.red)], T.red,
+         (S_R1, S_R1, S_R1, S_F1)),
         ("i = 2  ·  TYPE_REPARK_TRAY (T19 -> P24)", [
-            ("job_index = scheduled_jobs.size()  -> 1   (again)", T.teal),
-            ("PlanReparkTrayJob(plan_ctx, job.tray_id, 1, ...)", T.sky),
-            ("-> success. ONE job, ONE event, job_index 1", T.green),
-            ("plan_ctx->PushBackScheduledJob(job)  -> [1]", T.sky)],
+            ("job_index = scheduled_jobs.size()  -> 1   (again)", T.teal, S_R2),
+            ("PlanReparkTrayJob(plan_ctx, job.tray_id, 1, ...)", T.sky, S_R2),
+            ("-> success. ONE job, ONE event, job_index 1", T.green, S_R2),
+            ("plan_ctx->PushBackScheduledJob(job)  -> [1]", T.sky, S_P2)],
          [("RETRIEVE", False), ("REPARK_TRAY", True)], [(G_RET, RET, False), (G_REP, REP, True)],
-         [("INSERT  STATE_ERROR", T.red)], T.green),
+         [("INSERT  STATE_ERROR", T.red)], T.green, (S_R2, S_P2, S_R2, S_R2)),
     ]
+    row_last = [S_R0 - 1, S_R1 - 1, S_R2 - 1, S_P2]
     y = 22
-    for title, code, jobs, groups, res, col in rows:
+    for r, (title, code, jobs, groups, res, col, (s_row, s_jobs, s_ev, s_res)) in enumerate(rows):
         h = max(18 + len(code) * 19 + 26, ev_height(groups) + 16, 96)
         d.rect(-10, y, W + 20, h, rx=10, fill=T.tint(T.card, 0.45, T.bg), layer="bg")
+        with d.at(s_row, row_last[r]):   # "current iteration" outline
+            d.rect(-13, y - 3, W + 26, h + 6, rx=12, fill="none", stroke=T.sky, sw=1.8, layer="bg")
         if col:
-            d.rect(-10, y, 4, h, rx=2, fill=col, layer="bg")
+            with d.at(s_row):
+                d.rect(-10, y, 4, h, rx=2, fill=col, layer="bg")
         d.text(0, y + 16, title, size=12.5, family="mono", weight=700, fill=T.fg)
-        for k, (ln, c) in enumerate(code):
-            d.text(0, y + 38 + k * 19, ln, size=10.5, family="mono", fill=c)
-        jobs_box(y + 8, jobs, h - 16)
-        events_box(y + 8, groups, h - 16)
-        result_box(y + 8, res, h - 16)
+        for k, (ln, c, sk) in enumerate(code):
+            with d.at(sk):
+                d.text(0, y + 38 + k * 19, ln, size=10.5, family="mono", fill=c)
+        with d.at(s_jobs):
+            jobs_box(y + 8, jobs, h - 16)
+        with d.at(s_ev):
+            events_box(y + 8, groups, h - 16)
+        if s_res > s_row:   # unchanged until the step that writes it
+            with d.at(s_row, s_res - 1):
+                result_box(y + 8, rows[r - 1][4], h - 16)
+        with d.at(s_res):
+            result_box(y + 8, res, h - 16)
         y += h + 12
 
     # ---- one job -> many events -> many actions ----
     y += 14
-    d.text(0, y, "One job, many events, many actions: how the index ties them together to the end", size=13,
-           weight=600, fill=T.fg)
-    y += 16
     h = 214
-    d.rect(-10, y, W + 20, h, rx=10, fill=T.tint(T.sky, 0.05, T.bg), stroke=T.tint(T.sky, 0.35, T.bg), sw=1,
-           layer="bg")
+    with d.at(S_T0):
+        d.text(0, y, "One job, many events, many actions: how the index ties them together to the end", size=13,
+               weight=600, fill=T.fg)
+        d.rect(-10, y + 16, W + 20, h, rx=10, fill=T.tint(T.sky, 0.05, T.bg), stroke=T.tint(T.sky, 0.35, T.bg),
+               sw=1, layer="bg")
+    y += 16
     stages = [
-        ("job", ["scheduled_jobs[0]", "RETRIEVE", "guid = g_ret"], T.green, 0, 170),
-        ("after job expansion", ["4 events", "job_index = 0"], T.amber, 200, 190),
+        ("job", ["scheduled_jobs[0]", "RETRIEVE", "guid = g_ret"], T.green, 0, 170, S_T0),
+        ("after job expansion", ["4 events", "job_index = 0"], T.amber, 200, 190, S_T0),
         ("after tray + AGV assignment", ["the 4, plus any blocker", "TrayMoves and AgvMoves", "(approach, lift, lower)",
-                                          "all job_index = 0"], T.amber, 420, 240),
-        ("in the response", ["N ActionNodes,", "job_id = g_ret", "node_indices = [..]"], T.sky, 690, 200),
+                                          "all job_index = 0"], T.amber, 420, 240, S_T1),
+        ("in the response", ["N ActionNodes,", "job_id = g_ret", "node_indices = [..]"], T.sky, 690, 200, S_T1),
     ]
     by = y + 34
     prev = None
-    for title, lines, col, x, w in stages:
-        bh = 30 + 17 * len(lines)
-        d.text(x + 10, by - 10, title, size=10.5, family="mono", weight=600, fill=T.muted)
-        d.rect(x + 10, by, w, bh, rx=8, fill=T.card, stroke=col, sw=1.4)
-        for k, ln in enumerate(lines):
-            d.text(x + 22, by + 18 + k * 17, ln, size=10.5, family="mono", fill=T.fg)
-        if prev:
-            connect(d, [(prev, by + 24), (x + 10, by + 24)], kind="flow", color=T.faint, size=8, sw=1.4)
+    for title, lines, col, x, w, sk in stages:
+        with d.at(sk):
+            bh = 30 + 17 * len(lines)
+            d.text(x + 10, by - 10, title, size=10.5, family="mono", weight=600, fill=T.muted)
+            d.rect(x + 10, by, w, bh, rx=8, fill=T.card, stroke=col, sw=1.4)
+            for k, ln in enumerate(lines):
+                d.text(x + 22, by + 18 + k * 17, ln, size=10.5, family="mono", fill=T.fg)
+            if prev:
+                connect(d, [(prev, by + 24), (x + 10, by + 24)], kind="flow", color=T.faint, size=8, sw=1.4)
         prev = x + 10 + w
-    d.text(910, by + 6, "lookup in ToActionNode():", size=10, family="mono", fill=T.faint)
-    d.text(910, by + 22, "scheduled_jobs[", size=10, family="mono", fill=T.faint)
-    d.text(910, by + 38, "  event->GetJobIndex()]", size=10, family="mono", fill=T.faint)
-    d.text(910, by + 54, "  .job.guid", size=10, family="mono", fill=T.faint)
+    with d.at(S_T1):
+        d.text(910, by + 6, "lookup in ToActionNode():", size=10, family="mono", fill=T.faint)
+        d.text(910, by + 22, "scheduled_jobs[", size=10, family="mono", fill=T.faint)
+        d.text(910, by + 38, "  event->GetJobIndex()]", size=10, family="mono", fill=T.faint)
+        d.text(910, by + 54, "  .job.guid", size=10, family="mono", fill=T.faint)
     lines = [("Later stages keep the tag: a blocker TrayMove is built as TrayMove(move->GetJobIndex()) and an AGV "
               "approach as AgvMove(root_event->GetJobIndex(), ...), so they belong to the job whose move needed them.",
-              T.fg2),
+              T.fg2, S_T1),
              ("Final result.scheduled_jobs = [INSERT STATE_ERROR, RETRIEVE STATE_EXECUTING, REPARK_TRAY "
-              "STATE_EXECUTING]: failures first, in loop order, then successes with their node_indices.", T.fg),
+              "STATE_EXECUTING]: failures first, in loop order, then successes with their node_indices.", T.fg, S_T2),
              ("Why size() and not i: the index must point into scheduled_jobs, which only holds successful jobs. "
-              "With i, the REPARK's event would say 2, and scheduled_jobs[2] does not exist.", T.amber)]
+              "With i, the REPARK's event would say 2, and scheduled_jobs[2] does not exist.", T.amber, S_T2)]
     yy = by + 112
-    for t, c in lines:
-        for ln in wrap(t, W - 20, 11.5):
-            d.text(10, yy, ln, size=11.5, fill=c)
-            yy += 17
+    for t, c, sk in lines:
+        with d.at(sk):
+            for ln in wrap(t, W - 20, 11.5):
+                d.text(10, yy, ln, size=11.5, fill=c)
+                yy += 17
         yy += 4
     frame(d, title="Job expansion: the loop in Plan(), step by step",
           subtitle="job_index is the job's position in plan_ctx->scheduled_jobs (jobs that have succeeded so far), "
@@ -643,39 +739,69 @@ def building_blocks():
     bodies = job_method_bodies()
     name_w, cw, rh = 290, 50, 30
     cols = [(c, "call") for c in CALL_COLS] + [(k, "make") for k, _ in MAKE_COLS] + [("A", "rule"), ("B", "rule")]
+
+    def hit_of(name, c, kind):
+        b = bodies[name]
+        if kind == "call":
+            return re.search(r"\b" + c + r"\(", b) is not None and c != name
+        if kind == "make":
+            return re.search(r"make_shared<(volley::)?" + c + r">", b) is not None
+        return ("UpdateLastEntityEvent" if c == "A" else "UpdateLeafDependencies") in b
+
+    n_repark = sum(hit_of(nm, "PlanReparkTrayJob", "call") for nm in ENTRY_METHODS)
+    # ---- animation: one column group per step, then the workhorse column
+    S_ROWS = d.step("The thirteen job methods, one per row. Eleven implement a job type; PlanOpenBayDoor and "
+                    "PlanUnstashWaypointTraysJob are helpers that other methods call.")
+    S_CALL = d.step("Calls: which other job methods and helpers each method calls directly. Composite jobs pass "
+                    "their own job_index down, so the callee's events belong to the caller's job.")
+    S_MAKE = d.step("Creates directly: which event types a method constructs itself with make_shared<...>. "
+                    "Many methods create no TrayMove themselves; they get one from a callee.")
+    S_RULE = d.step("Edge rules: whether a method applies rule A (UpdateLastEntityEvent) or rule B "
+                    "(UpdateLeafDependencies) itself rather than through a callee.")
+    S_WORK = d.step(f"PlanReparkTrayJob is the workhorse: {n_repark} other methods create their TrayMoves through "
+                    "it, so rule C, the heading policy and the VECS checks live in one place.")
+    group_step = {"call": S_CALL, "make": S_MAKE, "rule": S_RULE}
     # group header
-    groups = [("calls", len(CALL_COLS), T.teal), ("creates directly", len(MAKE_COLS), T.amber),
-              ("edge rules", 2, T.fg2)]
+    groups = [("calls", len(CALL_COLS), T.teal, S_CALL), ("creates directly", len(MAKE_COLS), T.amber, S_MAKE),
+              ("edge rules", 2, T.fg2, S_RULE)]
     x = name_w
-    for g, n, col in groups:
+    for g, n, col, sk in groups:
         d.rect(x + 2, 0, n * cw - 4, 22, rx=6, fill=T.tint(col, 0.16, T.bg), stroke=T.tint(col, 0.6, T.bg), sw=1)
         d.text(x + n * cw / 2, 11, g, size=11, weight=600, fill=col, anchor="middle")
+        with d.only(sk):   # "this group now" outline
+            d.rect(x - 1, -3, n * cw + 2, 64 + len(ENTRY_METHODS) * rh, rx=8, fill="none", stroke=T.sky, sw=1.8,
+                   layer="under")
         x += n * cw
     for i, (c, kind) in enumerate(cols):
         cx = name_w + i * cw + cw / 2
         lab = SHORT.get(c, {"TrayMove": "Tray", "AgvMove": "Agv", "BayTransition": "Bay", "VecsTransition": "Vecs"}.get(c, c))
-        d.text(cx, 40, lab, size=10.5, family="mono", weight=600, fill=T.fg2, anchor="middle")
+        d.text(cx, 34 if i % 2 == 0 else 48, lab, size=10.5, family="mono", weight=600, fill=T.fg2,
+               anchor="middle")   # staggered: neighbouring labels are wider than a column
+    rep_i = CALL_COLS.index("PlanReparkTrayJob")
+    with d.at(S_WORK):   # the workhorse column, kept in the final picture
+        d.rect(name_w + rep_i * cw + 3, 26, cw - 6, 35 + len(ENTRY_METHODS) * rh, rx=7,
+               fill=T.tint(T.teal, 0.14, T.bg), stroke=T.teal, sw=1.6, layer="under")
     y = 62
     for r, name in enumerate(ENTRY_METHODS):
-        b = bodies[name]
         if r % 2 == 0:
             d.rect(0, y - 4, name_w + len(cols) * cw, rh, rx=4, fill=T.tint(T.card, 0.6, T.bg), layer="bg")
+        if JOB_TYPES[name] == "(helper)":
+            with d.only(S_ROWS):
+                d.rect(-4, y - 3, name_w - 6, rh - 1, rx=5, fill="none", stroke=T.sky, sw=1.6, layer="under")
+        if name == "PlanReparkTrayJob":
+            with d.at(S_WORK):
+                d.rect(-4, y - 3, name_w + len(cols) * cw + 8, rh - 1, rx=5, fill="none", stroke=T.teal, sw=1.4,
+                       dash="5 3", layer="under")
         d.text(0, y + 7, name + "()", size=11.5, family="mono", weight=600, fill=T.fg)
         d.text(0, y + 21, JOB_TYPES[name], size=9.5, family="mono", fill=T.muted)
         for i, (c, kind) in enumerate(cols):
             cx = name_w + i * cw + cw / 2
-            if kind == "call":
-                hit = re.search(r"\b" + c + r"\(", b) is not None and c != name
-                col = T.teal
-            elif kind == "make":
-                hit = re.search(r"make_shared<(volley::)?" + c + r">", b) is not None
-                col = EVENT_COLOR[c]
-            else:
-                tok = "UpdateLastEntityEvent" if c == "A" else "UpdateLeafDependencies"
-                hit = tok in b
-                col = T.fg2
-            if hit:
-                d.circle(cx, y + 11, 7, fill=col)
+            col = T.teal if kind == "call" else EVENT_COLOR[c] if kind == "make" else T.fg2
+            if hit_of(name, c, kind):
+                with d.at(0, group_step[kind] - 1):
+                    d.circle(cx, y + 11, 2, fill=T.border_soft)
+                with d.at(group_step[kind]):
+                    d.circle(cx, y + 11, 7, fill=col)
             else:
                 d.circle(cx, y + 11, 2, fill=T.border_soft)
         y += rh
@@ -707,8 +833,9 @@ def bay_events(d: Doc, m: Map, nid: int, items, *, dy=0, dx=0):
     y0 = y + (STALL_W + 0.9) * m.s / 2 + 16 + dy
     for k, (n, text, col) in enumerate(items):
         yy = y0 + k * 24
-        num_badge(d, x - 50 + dx, yy, n, col, r=10)
-        d.text(x - 36 + dx, yy, text, size=10.5, family="mono", fill=col, halo=T.bg_deep, halo_w=3)
+        with _maybe_at(d, n):
+            num_badge(d, x - 50 + dx, yy, n, col, r=10)
+            d.text(x - 36 + dx, yy, text, size=10.5, family="mono", fill=col, halo=T.bg_deep, halo_w=3)
 
 
 @figure("42_job_retrieve", "TYPE_RETRIEVE: PlanRetrieveJob", DOC1)
@@ -1362,6 +1489,23 @@ def job_method_dataflow():
             "Read-only inputs, the context it changes in place, local scratch state, the return value, and the "
             "external side effects some job methods have.")
     MUT, RO, OUT, LOC, EXT = T.amber, T.sky, T.green, T.fg2, T.red
+    # ---- animation: follow the data through one call, then the effects outside the signature
+    S_SIG = d.step("The declaration: a context pointer, the job's payload id and its job_index go in; a "
+                   "{success, message, retain_job} tuple comes out. That is all the signature tells you.")
+    S_RO = d.step("Read-only inputs flow in: Scheduler members (layout_, gg_), the job's fields and "
+                  "ctx->initial_state. ctx->disabledness_filters is meant to be read, but operator[] can insert a key.")
+    S_LOC = d.step("Inside, the method builds a local working_state: a copy of initial_state with the existing events "
+                   "applied. Its edits (e.g. setting the bay to READY_TO_RETRIEVE) touch only this copy.")
+    S_CTX = d.step("The shared ScheduleContext is read and written through ctx while the method runs: before this "
+                   "first job, ctx->events and last_entity_event are empty.")
+    S_AFT = d.step("After the call: four new events (all job_index 0), five edges and three last_entity_event entries. "
+                   "This is the real output, and none of it appears in the return type.")
+    S_RET = d.step("The return value only reports the outcome: {true, \"\", false} on success, or {false, msg, "
+                   "retain_job} so Dispatch can keep a job that cannot run yet.")
+    S_EXT = d.step("Some job methods also reach outside the plan: PlanInsertJob sends a bay-reset request to Dispatch "
+                   "during expansion, and Plan() fires clean_garage_request_fn_ on an INSERT failure.")
+    S_PURE = d.step("A sketch of a pure alternative (not in the code): return the events, edges and follow-up requests "
+                    "as a value and let Plan() commit them, so the signature shows everything.")
     _sig = [("std::tuple<bool, std::string, bool>", "// RETURNED: {success, message, retain_job}"),
             ("Scheduler::PlanRetrieveJob(ScheduleContextSPtr ctx,", "// the shared_ptr is copied; *ctx is shared and CHANGED"),
             ("                           const GuidMsg& payload_id,", "// read-only"),
@@ -1371,50 +1515,56 @@ def job_method_dataflow():
     y0 = sig.y1 + 34
     # ---- left: read-only ----
     lw = 330
-    ro = _panel(d, 0, y0, lw, "Read-only inputs", [
-        ("this->layout_", "bay prioritisation, inbound heading, resource windows"),
-        ("this->gg_  (and table_ via filters)", "pose -> graph vertex"),
-        ("payload_id, job_index", "the job's fields, by const& / by value"),
-        ("ctx->initial_state", "copied, never changed"),
-        ("ctx->disabledness_filters[id]", "read, but operator[] on a std::unordered_map inserts a default entry "
-                                          "if id is missing"),
-    ], RO)
+    with d.at(S_RO):
+        ro = _panel(d, 0, y0, lw, "Read-only inputs", [
+            ("this->layout_", "bay prioritisation, inbound heading, resource windows"),
+            ("this->gg_  (and table_ via filters)", "pose -> graph vertex"),
+            ("payload_id, job_index", "the job's fields, by const& / by value"),
+            ("ctx->initial_state", "copied, never changed"),
+            ("ctx->disabledness_filters[id]", "read, but operator[] on a std::unordered_map inserts a default entry "
+                                              "if id is missing"),
+        ], RO)
     # ---- centre: the function and its local scratch ----
     cx, cw = lw + 50, 330
     d.rect(cx, y0, cw, 228, rx=12, fill=T.card, stroke=T.fg2, sw=1.6)
     d.text(cx + cw / 2, y0 + 22, "PlanRetrieveJob(...)", size=13.5, family="mono", weight=700, fill=T.fg,
            anchor="middle")
     d.text(cx + cw / 2, y0 + 42, "plus nested PlanReparkTrayJob calls", size=11, fill=T.muted, anchor="middle")
-    d.rect(cx + 16, y0 + 62, cw - 32, 150, rx=8, fill=T.bg_deep, stroke=LOC, sw=1, dash="4 3")
-    d.text(cx + 28, y0 + 80, "local scratch (gone at return)", size=11, weight=600, fill=LOC)
-    for k, ln in enumerate(["working_state = ctx->initial_state;", "ctx->events.Apply(working_state);",
-                            "payload_opt, tray, bay_opt, bay_pose,", "dest_pose, cmd ...",
-                            "bay_opt->state = READY_TO_RETRIEVE;", "  // edits the local copy only"]):
-        d.text(cx + 28, y0 + 102 + k * 17, ln, size=10.5, family="mono", fill=T.fg2 if k < 5 else T.faint)
+    with d.at(S_LOC):
+        d.rect(cx + 16, y0 + 62, cw - 32, 150, rx=8, fill=T.bg_deep, stroke=LOC, sw=1, dash="4 3")
+        d.text(cx + 28, y0 + 80, "local scratch (gone at return)", size=11, weight=600, fill=LOC)
+        for k, ln in enumerate(["working_state = ctx->initial_state;", "ctx->events.Apply(working_state);",
+                                "payload_opt, tray, bay_opt, bay_pose,", "dest_pose, cmd ...",
+                                "bay_opt->state = READY_TO_RETRIEVE;", "  // edits the local copy only"]):
+            d.text(cx + 28, y0 + 102 + k * 17, ln, size=10.5, family="mono", fill=T.fg2 if k < 5 else T.faint)
     fb = BBox(cx, y0, cx + cw, y0 + 228)
     # ---- right: returned ----
     rx = cx + cw + 50
     rw = W - rx
-    out = _panel(d, rx, y0, rw, "Returned", [
-        ("{true, \"\", false}", "success; Plan() then appends the job to scheduled_jobs"),
-        ("{false, msg, retain_job}", "failure; retain_job = true asks Dispatch to keep the job (no bay free, "
-                                     "VECS busy)"),
-    ], OUT, sub="the only output visible in the signature")
-    connect(d, [(ro.x1, y0 + 60), (fb.x0, y0 + 60)], kind="flow", color=RO, size=9, sw=2)
-    connect(d, [(fb.x1, y0 + 60), (out.x0, y0 + 60)], kind="flow", color=OUT, size=9, sw=2)
+    with d.at(S_RET):
+        out = _panel(d, rx, y0, rw, "Returned", [
+            ("{true, \"\", false}", "success; Plan() then appends the job to scheduled_jobs"),
+            ("{false, msg, retain_job}", "failure; retain_job = true asks Dispatch to keep the job (no bay free, "
+                                         "VECS busy)"),
+        ], OUT, sub="the only output visible in the signature")
+        connect(d, [(fb.x1, y0 + 60), (out.x0, y0 + 60)], kind="flow", color=OUT, size=9, sw=2)
+    with d.at(S_RO):
+        connect(d, [(ro.x1, y0 + 60), (fb.x0, y0 + 60)], kind="flow", color=RO, size=9, sw=2)
     # ---- bottom: mutated in place ----
     my = max(ro.y1, fb.y1, out.y1) + 56
-    connect(d, [(fb.cx - 30, my), (fb.cx - 30, fb.y1)], kind="flow", color=MUT, size=9, sw=2)
-    connect(d, [(fb.cx + 30, fb.y1), (fb.cx + 30, my)], kind="flow", color=MUT, size=9, sw=2)
-    label_pill(d, fb.cx + 40, (fb.y1 + my) / 2, "read and written through ctx", color=MUT, size=10.5,
-               anchor="start", bg=T.bg)
     mh = 236
-    d.rect(0, my, W, mh, rx=12, fill=T.tint(MUT, 0.06, T.bg), stroke=MUT, sw=1.6)
-    d.text(14, my + 20, "Changed in place through ctx: the real output, not visible in the return type", size=12.5,
-           weight=600, fill=MUT)
+    with d.at(S_CTX):
+        connect(d, [(fb.cx - 30, my), (fb.cx - 30, fb.y1)], kind="flow", color=MUT, size=9, sw=2)
+        connect(d, [(fb.cx + 30, fb.y1), (fb.cx + 30, my)], kind="flow", color=MUT, size=9, sw=2)
+        label_pill(d, fb.cx + 40, (fb.y1 + my) / 2, "read and written through ctx", color=MUT, size=10.5,
+                   anchor="start", bg=T.bg)
+        d.rect(0, my, W, mh, rx=12, fill=T.tint(MUT, 0.06, T.bg), stroke=MUT, sw=1.6)
+        d.text(14, my + 20, "Changed in place through ctx: the real output, not visible in the return type", size=12.5,
+               weight=600, fill=MUT)
     hx = [14, 250, 560]
-    for x, h in zip(hx, ["member of *ctx", "before the call (first job)", "after the call"]):
-        d.text(x, my + 46, h, size=10.5, family="mono", weight=600, fill=T.muted)
+    for k_, (x, h) in enumerate(zip(hx, ["member of *ctx", "before the call (first job)", "after the call"])):
+        with d.at(S_AFT if k_ == 2 else S_CTX):
+            d.text(x, my + 46, h, size=10.5, family="mono", weight=600, fill=T.muted)
     rows = [("ctx->events", "{ }  (no events, no edges)",
              ["+4 events, all job_index 0:", "  e1 B21 TO_RETRIEVE   e2 T21 -> ?", "  e3 T17 -> B21        e4 B21 PROCESS_RETRIEVE",
               "+5 edges: e1->e2, e2->e3, e1->e3, e3->e4, e1->e4"]),
@@ -1423,31 +1573,36 @@ def job_method_dataflow():
             ("ctx->disabledness_filters", "one entry per collision id", ["unchanged, unless operator[] inserted a key"])]
     yy = my + 68
     for name, before, after in rows:
-        d.text(hx[0], yy, name, size=11.5, family="mono", weight=700, fill=T.fg)
-        d.text(hx[1], yy, before, size=11, family="mono", fill=T.muted)
-        for k, ln in enumerate(after):
-            d.text(hx[2], yy + k * 17, ln, size=11, family="mono", fill=T.fg)
+        with d.at(S_CTX):
+            d.text(hx[0], yy, name, size=11.5, family="mono", weight=700, fill=T.fg)
+            d.text(hx[1], yy, before, size=11, family="mono", fill=T.muted)
+        with d.at(S_AFT):
+            for k, ln in enumerate(after):
+                d.text(hx[2], yy + k * 17, ln, size=11, family="mono", fill=T.fg)
         yy += 17 * max(1, len(after)) + 10
-    d.text(14, my + mh - 16, "Not touched by job methods: ctx->scheduled_jobs (Plan() appends after success), "
-                             "ctx->first_tray_event (tray assignment), ctx->initial_state.", size=11, fill=T.fg2)
+    with d.at(S_CTX):
+        d.text(14, my + mh - 16, "Not touched by job methods: ctx->scheduled_jobs (Plan() appends after success), "
+                                 "ctx->first_tray_event (tray assignment), ctx->initial_state.", size=11, fill=T.fg2)
     # ---- external side effects + pure alternative ----
     ey = my + mh + 26
-    ext = _panel(d, 0, ey, 420, "Side effects outside the plan (other job methods)", [
-        ("PlanInsertJob -> reset_bay_state_request_fn_(bay, READY_TO_INSERT)",
-         "an async ROS request to Dispatch (TransitionBayToInsert), sent during expansion, even if a later "
-         "stage fails the plan"),
-        ("Plan() on INSERT failure -> clean_garage_request_fn_()", "an async Trigger request to Dispatch"),
-    ], EXT)
-    pure = code_panel(d, 450, ey, W - 450, [
-        "// sketch: same work, everything visible in the signature",
-        "struct JobPlan { std::vector<ScheduleEventSPtr> events;",
-        "                 std::vector<Edge> edges;          // rules A, B, C",
-        "                 std::vector<FollowUp> requests; }; // instead of callbacks",
-        "std::expected<JobPlan, JobFailure>",
-        "PlanRetrieveJob(const PlanView& view,   // working_state, DAG, last events: const&",
-        "                const RetrieveJob& job, size_t job_index) const;",
-        "// Plan(): if(plan) Commit(*plan_ctx, *plan) else FailJob(...)",
-    ], title="A pure alternative (not in the code)", size=10.5)
+    with d.at(S_EXT):
+        _panel(d, 0, ey, 420, "Side effects outside the plan (other job methods)", [
+            ("PlanInsertJob -> reset_bay_state_request_fn_(bay, READY_TO_INSERT)",
+             "an async ROS request to Dispatch (TransitionBayToInsert), sent during expansion, even if a later "
+             "stage fails the plan"),
+            ("Plan() on INSERT failure -> clean_garage_request_fn_()", "an async Trigger request to Dispatch"),
+        ], EXT)
+    with d.at(S_PURE):
+        code_panel(d, 450, ey, W - 450, [
+            "// sketch: same work, everything visible in the signature",
+            "struct JobPlan { std::vector<ScheduleEventSPtr> events;",
+            "                 std::vector<Edge> edges;          // rules A, B, C",
+            "                 std::vector<FollowUp> requests; }; // instead of callbacks",
+            "std::expected<JobPlan, JobFailure>",
+            "PlanRetrieveJob(const PlanView& view,   // working_state, DAG, last events: const&",
+            "                const RetrieveJob& job, size_t job_index) const;",
+            "// Plan(): if(plan) Commit(*plan_ctx, *plan) else FailJob(...)",
+        ], title="A pure alternative (not in the code)", size=10.5)
     frame(d, title="What PlanRetrieveJob reads, changes and returns",
           subtitle="The return type only says whether the job worked. The events, the edges and the entity "
                    "bookkeeping are written into the shared ScheduleContext as the method runs, including from "

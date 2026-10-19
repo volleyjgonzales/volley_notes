@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import math
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -190,6 +192,7 @@ class TextRec:
     text: str
     layer: str
     allow_overlap: bool = False
+    steps: tuple | None = None   # (first, last) animation step, last = -1 for "to the end"; None = always
 
 
 class Doc:
@@ -209,6 +212,31 @@ class Doc:
         self._ids = 0
         self._clip: tuple[str, BBox] | None = None
         self._clips: dict = {}
+        # ---- animation: captions, one per step; elements drawn inside `with d.at(a, b)` carry
+        # data-s / data-e and are shown only for steps a..b. The static image shows step `poster`.
+        self.steps: list[str] = []
+        self.poster: int | None = None
+        self._range: tuple | None = None
+
+    # ---- animation ---------------------------------------------------------------------
+    @contextmanager
+    def at(self, first, last=None):
+        """Everything drawn inside is visible from step `first` to step `last` (inclusive;
+        None = until the last step). Steps are 0-based indexes into `self.steps`."""
+        old = self._range
+        self._range = (first, -1 if last is None else last)
+        try:
+            yield
+        finally:
+            self._range = old
+
+    def only(self, k):
+        return self.at(k, k)
+
+    def step(self, caption: str) -> int:
+        """Append a step with its caption; returns its index."""
+        self.steps.append(caption)
+        return len(self.steps) - 1
 
     # ---- clipping ----------------------------------------------------------------------
     def clip_on(self, bb: BBox, rx: float = 10):
@@ -232,6 +260,9 @@ class Doc:
         self.bounds = bb if self.bounds is None else self.bounds.union(bb)
 
     def raw(self, s: str, layer="main", bbox: BBox | None = None):
+        if self._range is not None:
+            i = s.find(" ")
+            s = s[:i] + f' data-s="{self._range[0]}" data-e="{self._range[1]}"' + s[i:]
         if self._clip is not None:
             cid, cb = self._clip
             i = s.find(" ")
@@ -337,7 +368,7 @@ class Doc:
                         style=";".join(style_attr) if style_attr else None, opacity=opacity)
         self.raw(f"<text {a} xml:space=\"preserve\">{escape(s)}</text>", layer, bb.pad(halo_w / 2 if halo else 0))
         if self._clip is None or self._clip[1].intersects(bb):
-            self.texts.append(TextRec(bb, s, layer, allow_overlap))
+            self.texts.append(TextRec(bb, s, layer, allow_overlap, self._range))
         return bb
 
     def text_lines(self, x, y, lines: Iterable[str], *, size=13, lh=1.35, **kw) -> BBox:
@@ -412,17 +443,35 @@ class Doc:
         body = []
         body.append(f'<rect class="bg" x="{x0}" y="{y0}" width="{w}" height="{h}" rx="{radius}" fill="{bg}"/>')
         content = []
+        anim_attr, anim_meta, anim_css = "", "", ""
+        if self.steps:
+            n = len(self.steps)
+            poster = n - 1 if self.poster is None else self.poster
+
+            def mark(el: str) -> str:
+                m = re.search(r' data-s="(-?\d+)" data-e="(-?\d+)"', el[:el.find(">")])
+                if not m:
+                    return el
+                a, b = int(m.group(1)), int(m.group(2))
+                on = a <= poster and (b < 0 or poster <= b)
+                return el.replace(m.group(0), m.group(0) + (' class="anim-on"' if on else ""), 1) if on else el
+            for k in self.LAYERS:
+                self.layers[k] = [mark(el) for el in self.layers[k]]
+            anim_attr = f' data-steps="{n}" data-poster="{poster}"'
+            anim_meta = f'<metadata id="steps-{self.name}">{escape(json.dumps(self.steps))}</metadata>\n'
+            anim_css = "[data-s]{transition:opacity .35s ease}[data-s]:not(.anim-on){opacity:0;pointer-events:none}"
         for k in self.LAYERS:
             if self.layers[k]:
                 content.append(f'<g data-layer="{k}">' + "".join(self.layers[k]) + "</g>")
-        script = PANZOOM_JS if interactive else ""
+        script = (PANZOOM_JS + (STEP_JS if self.steps else "")) if interactive else ""
         return (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x0} {y0} {w} {h}" width="{w}" height="{h}" '
-            f'role="img" aria-labelledby="t-{self.name} d-{self.name}" data-figure="{self.name}">\n'
+            f'role="img" aria-labelledby="t-{self.name} d-{self.name}" data-figure="{self.name}"{anim_attr}>\n'
             f'<title id="t-{self.name}">{escape(self.title)}</title>\n'
             f'<desc id="d-{self.name}">{escape(self.desc)}</desc>\n'
-            f'<defs><style>{self._font_css()}text{{font-kerning:normal;}}</style>{"".join(self.defs)}</defs>\n'
+            f'<defs><style>{self._font_css()}text{{font-kerning:normal;}}{anim_css}</style>{"".join(self.defs)}</defs>\n'
+            + anim_meta
             + f'<g id="viewport">\n' + "\n".join(body) + "\n" + "\n".join(content) + "\n</g>\n"
             + script
             + "</svg>\n"
@@ -435,6 +484,11 @@ class Doc:
         for i in range(len(ts)):
             for j in range(i + 1, len(ts)):
                 a, b = ts[i], ts[j]
+                if a.steps and b.steps:
+                    ae = 10**6 if a.steps[1] < 0 else a.steps[1]
+                    be = 10**6 if b.steps[1] < 0 else b.steps[1]
+                    if ae < b.steps[0] or be < a.steps[0]:
+                        continue          # never on screen together
                 if a.bbox.intersects(b.bbox, tol):
                     issues.append((a.text, b.text))
         return issues
@@ -452,7 +506,7 @@ def _subset_woff2(path: Path, chars: str) -> str:
     opts.layout_features = ["kern", "liga", "calt"] if "plex" in path.name else ["kern"]
     opts.name_IDs = []
     opts.notdef_outline = True
-    font = TTFont(str(path))
+    font = TTFont(str(path), recalcTimestamp=False)  # deterministic bytes: no build-time timestamp
     sub = ft_subset.Subsetter(opts)
     sub.populate(text=chars)
     sub.subset(font)
@@ -526,6 +580,25 @@ PANZOOM_JS = r"""<script><![CDATA[
   svg.addEventListener('pointerup',up); svg.addEventListener('pointercancel',up);
   svg.addEventListener('dblclick',reset);
   document.addEventListener('keydown',function(e){ if(e.key==='+'||e.key==='=') zoomAt(X0+W/2,Y0+H/2,1.25); else if(e.key==='-') zoomAt(X0+W/2,Y0+H/2,0.8); else if(e.key==='0') reset(); });
+})();
+]]></script>
+"""
+
+
+# Standalone stepping for animated figures (the website has its own player with buttons).
+STEP_JS = r"""<script><![CDATA[
+(function(){
+  var svg=document.documentElement; var n=+svg.getAttribute('data-steps'); if(!n) return;
+  var k=+svg.getAttribute('data-poster'), els=svg.querySelectorAll('[data-s]');
+  var caps=JSON.parse(svg.querySelector('metadata').textContent);
+  var NS='http://www.w3.org/2000/svg', lab=document.createElementNS(NS,'text');
+  lab.setAttribute('font-family',"'IBM Plex Sans','Segoe UI',sans-serif"); lab.setAttribute('font-size','13'); lab.setAttribute('fill','#CBD5E1');
+  var vb=svg.viewBox.baseVal; lab.setAttribute('x',vb.x+16); lab.setAttribute('y',vb.y+vb.height-10); svg.appendChild(lab);
+  function show(){ for(var i=0;i<els.length;i++){ var a=+els[i].getAttribute('data-s'), b=+els[i].getAttribute('data-e');
+      els[i].classList.toggle('anim-on', a<=k && (b<0||k<=b)); }
+    lab.textContent='Step '+(k+1)+' / '+n+' — '+caps[k]+'   (← → to step)'; }
+  document.addEventListener('keydown',function(e){ if(e.key==='ArrowRight'){k=Math.min(n-1,k+1);show();} else if(e.key==='ArrowLeft'){k=Math.max(0,k-1);show();} });
+  show();
 })();
 ]]></script>
 """

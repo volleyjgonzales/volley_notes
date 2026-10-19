@@ -68,6 +68,30 @@ const text = (value: string): Text => ({ type: 'text', value });
 const cls = (n: Element) => ([] as unknown[]).concat(n.properties?.className ?? []).map(String);
 const NO_LINK_INSIDE = new Set(['math', 'a', 'code', 'pre', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'button', 'summary']);
 
+/** Animated figures (an SVG with data-steps) are inlined so the page can step through them.
+ *  Returns the SVG prepared for inlining, plus its step captions; null for a static figure. */
+const ANIM_SVGS = new Map<string, string>();
+function animFigure(file: string, name: string): { steps: string[]; poster: number } | null {
+  const raw = fs.readFileSync(path.join(FIG_DIR, file), 'utf8');
+  const m = /data-steps="(\d+)" data-poster="(\d+)"/.exec(raw.slice(0, 1200));
+  if (!m) return null;
+  const meta = /<metadata id="steps-[^"]*">([\s\S]*?)<\/metadata>/.exec(raw);
+  if (!meta) throw new BuildError(`figure ${file}: data-steps without step captions`);
+  const unescape = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  const steps = (JSON.parse(unescape(meta[1])) as string[]).map((s) => s.replaceAll(' -> ', ' → '));
+  const svg = raw
+    .replace(/<\?xml[^>]*\?>\s*/, '')
+    .replace(/<script>[\s\S]*?<\/script>\s*/g, '')
+    .replace(/<metadata[\s\S]*?<\/metadata>\s*/, '')
+    .replace(' id="viewport"', '')
+    // the embedded font subsets get figure-local family names, so they cannot shadow the page's fonts
+    .replaceAll("'IBM Plex Sans'", `'figsans-${name}'`)
+    .replaceAll("'JetBrains Mono'", `'figmono-${name}'`)
+    .replace(/(<svg [^>]*?) width="\d+" height="\d+"/, '$1 class="anim-svg" preserveAspectRatio="xMidYMid meet"');
+  ANIM_SVGS.set(name, svg);
+  return { steps, poster: +m[2] };
+}
+
 function svgSize(file: string): { width?: number; height?: number } {
   try {
     const head = fs.readFileSync(path.join(FIG_DIR, file), 'utf8').slice(0, 600);
@@ -266,6 +290,42 @@ function frameFigures(p: Parsed) {
     const name = file.replace(/\.svg$/, '');
     const alt = String(img.properties.alt ?? '');
     const size = svgSize(file);
+    const anim = animFigure(file, name);
+    if (anim) {
+      node.properties.className = ['fig', 'fig-anim'];
+      node.properties.dataCaptions = JSON.stringify(anim.steps);
+      const btn = (act: string, label: string, title: string) =>
+        h('button.anim-btn', { type: 'button', 'data-act': act, title, 'aria-label': title }, label);
+      node.children = [
+        h('div.anim-stage', { 'data-anim': name, role: 'img', 'aria-label': alt }),
+        h('div.anim-bar', [
+          btn('reset', '⟲', 'Reset to the first step'),
+          btn('prev', '◀', 'Previous step (←)'),
+          btn('play', '▶ Play', 'Play / pause (space)'),
+          btn('next', '▶|', 'Next step (→)'),
+          h('span.anim-count', `Step 1 / ${anim.steps.length}`),
+          h('span.anim-dots', anim.steps.map((_, i) => h('button.anim-dot', { type: 'button', 'data-go': String(i), 'aria-label': `Go to step ${i + 1}` }))),
+          h('span.anim-view', [
+            btn('zoom-out', '−', 'Zoom out (−)'),
+            h('span.anim-zoom', '100%'),
+            btn('zoom-in', '+', 'Zoom in (+)'),
+            btn('fit', 'Fit', 'Fit the whole figure (0)'),
+            btn('full', '⛶ Full screen', 'Full screen (F, Esc to exit)'),
+          ]),
+        ]),
+        h('p.anim-caption', { 'aria-live': 'polite' }, anim.steps[0]),
+        h('figcaption', [
+          h('span.fig-label', `Figure ${num}`),
+          h('span.fig-anim-tag', 'Animated'),
+          ...((cap?.children ?? [text(alt)]) as ElementContent[]),
+          h('span.fig-tools', [
+            h('a', { href: `figures/viewer.html#${name}`, target: '_blank', rel: 'noopener' }, 'Gallery viewer (final step)'),
+            h('a', { href: src, target: '_blank', rel: 'noopener' }, 'SVG'),
+          ]),
+        ]),
+      ];
+      return SKIP;
+    }
     node.properties.className = ['fig'];
     node.children = [
       h('button.fig-media', { type: 'button', 'data-zoom': '', 'aria-label': `Enlarge Figure ${num}: ${alt}` }, [
@@ -705,7 +765,13 @@ export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: Resolve
       })
       .use(rehypeStringify);
     const tree = (await proc.run(p.tree)) as Root;
-    out.push({ config: p.config, title: p.title, html: proc.stringify(tree), headings: p.headings, figureCount: p.figures });
+    // inline the animated SVGs last, so no text pass (keywords, links) ever touches them
+    const html = proc.stringify(tree).replace(/<div class="anim-stage" data-anim="([^"]+)"([^>]*)><\/div>/g, (m0, name, rest) => {
+      const svg = ANIM_SVGS.get(name);
+      if (!svg) throw new BuildError(`animated figure ${name}: SVG not prepared`);
+      return `<div class="anim-stage" data-anim="${name}"${rest}>${svg}</div>`;
+    });
+    out.push({ config: p.config, title: p.title, html, headings: p.headings, figureCount: p.figures });
   }
   const shiki = unified()
     .use(rehypeShiki, {

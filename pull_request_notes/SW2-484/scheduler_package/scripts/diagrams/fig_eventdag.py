@@ -379,53 +379,72 @@ def event_dag_copy_queue():
     d = Doc("66_event_dag_copy_queue", "DoAgvAssignments consumes a shallow copy of the DAG",
             "Rounds of DoAgvAssignments: the copy loses its roots one by one while ctx->events gains AGV events; "
             "both point at the same event objects.")
-    RW = 300
-    G = 40
-    rounds = [
-        ("start", "auto event_dag_copy(ctx->events);", ORDER, EDG, {"a": "hi", "e": "hi"}, "roots {a, e}"),
-        ("round 1 · phase 1", "apply + Remove non-tray roots", ["b", "c", "d", "e", "f"],
-         [e for e in EDG if "a" not in e], {"b": "hi", "e": "hi"}, "a applied and removed; roots {b, e}"),
-        ("round 1 · phase 2", "match AGVs to tray roots, Remove them", ["c", "d", "f"],
-         [("c", "d")], {"c": "hi", "f": "hi"}, "b -> AGV 1, e -> AGV 2 (SetAgvId)"),
-        ("rounds 2 and 3", "c, f matched; then d applied", [], [], {}, "copy empty: loop ends"),
+    # step k: (nodes left in the copy, roots highlighted, title, code line)
+    S_ = [
+        (ORDER, {"a", "e"}, "start", "auto event_dag_copy(ctx->events);"),
+        (["b", "c", "d", "e", "f"], {"b", "e"}, "round 1 · phase 1", "apply + Remove the non-tray root a"),
+        (["c", "d", "f"], {"c", "f"}, "round 1 · phase 2", "match AGVs to tray roots b, e; Remove them"),
+        (["d"], {"d"}, "round 2 · phase 2", "match AGVs to tray roots c, f; Remove them"),
+        ([], set(), "round 3 · phase 1", "apply + Remove d; the copy is empty"),
     ]
-    for i, (title, sub, nodes, edges, states, res) in enumerate(rounds):
-        x = i * (RW + G)
-        d.rect(x, 0, RW, 210, rx=10, fill=T.card, stroke=T.amber, sw=1.3)
-        d.text(x + 14, 18, title, size=12.5, weight=600, fill=T.amber)
-        d.text(x + 14, 36, sub, size=11, family="mono", fill=T.fg2)
-        if nodes:
-            _mini_dag(d, x + 18, 74, nodes=nodes, edges=edges, states=states, gx=70)
-        removed = [k for k in ORDER if k not in nodes]
-        for k in removed:
-            c, r = POS[k]
-            _node(d, x + 18 + c * 70, 74 + r * 58, k, state="gone")
-        d.text(x + 14, 196, res, size=S.small, fill=T.fg)
-        if i < len(rounds) - 1:
-            connect(d, [(x + RW, 105), (x + RW + G, 105)], kind="flow", color=T.amber, size=8)
-    # ctx->events strip
-    y1 = 250
-    d.rect(0, y1, 4 * RW + 3 * G, 150, rx=10, fill=T.tint(T.sky, 0.05, T.bg), stroke=T.sky, sw=1.3)
-    d.text(14, y1 + 18, "ctx->events at the same time: never shrinks, keeps every vertex index", size=12.5, weight=600,
-           fill=T.sky)
-    grow = [("6 events", "the plan from tray assignment"),
-            ("6 events", "a applied to working_state; no edges added"),
-            ("6 + AGV events", "approach, lift, lower for b and e; edges"),
-            ("6 + AGV events", "for c and f, then path repair, Reduce")]
-    for i, (a, b) in enumerate(grow):
-        x = i * (RW + G) + 14
-        d.text(x, y1 + 52, a, size=13, family="mono", weight=700, fill=T.fg)
-        d.text(x, y1 + 74, b, size=S.small, fill=T.fg2)
-    d.text(14, y1 + 112, "Every SetAgvId(...) on a root of the copy is visible in ctx->events: both DAGs hold the same "
-           "TrayMove objects.", size=S.small, fill=T.muted)
-    d.text(14, y1 + 132, "New AGV events are added only to ctx->events, so they never become roots of the copy.",
+    d.step("Start: the copy has the same six events (the same objects) as ctx->events. Its roots, a and e, are the "
+           "events with no unprocessed prerequisite.")
+    d.step("Phase 1 drains the non-tray roots: the bay transition a is applied to working_state and removed from the "
+           "copy. Removing a makes b a root. ctx->events is unchanged.")
+    d.step("Phase 2 matches AGVs to the TrayMove roots b and e (BottleneckAssignment), calls SetAgvId on them and "
+           "removes them from the copy. Their approach, lift and lower events are added to ctx->events only.")
+    d.step("Round 2: no non-tray roots, so phase 2 matches c and f. Their AGV events go into ctx->events; d becomes "
+           "the only root.")
+    d.step("Round 3: d is applied and removed. The copy is empty and the loop ends; path repair, Reduce() and "
+           "AddDepsAfterAmiga then run on ctx->events.")
+    GX = 96
+    # ---- left: the copy
+    W1 = 470
+    d.rect(0, 0, W1, 262, rx=10, fill=T.card, stroke=T.amber, sw=1.3)
+    d.text(14, 18, "event_dag_copy (the work queue)", size=12.5, weight=600, fill=T.amber)
+    for k, (nodes, roots, title, code) in enumerate(S_):
+        with d.only(k):
+            d.text(14, 40, f"{title}: {code}", size=11, family="mono", fill=T.fg2)
+            states = {n: "hi" for n in roots}
+            if nodes:
+                _mini_dag(d, 30, 96, nodes=nodes, edges=[e for e in EDG if e[0] in nodes and e[1] in nodes],
+                          states=states, gx=GX)
+            for n in ORDER:
+                if n not in nodes:
+                    c, r = POS[n]
+                    _node(d, 30 + c * GX, 96 + r * 58, n, state="gone")
+            d.text(14, 230, "roots: " + (", ".join(sorted(roots)) if roots else "none (empty)"), size=S.small,
+                   fill=T.fg)
+    # ---- right: ctx->events
+    X2 = W1 + 40
+    W2 = 640
+    d.rect(X2, 0, W2, 262, rx=10, fill=T.tint(T.sky, 0.05, T.bg), stroke=T.sky, sw=1.3)
+    d.text(X2 + 14, 18, "ctx->events: never shrinks, keeps every vertex index", size=12.5, weight=600, fill=T.sky)
+    _mini_dag(d, X2 + 30, 76, gx=GX)
+    agv = {"b": ("AGV 1", 2), "e": ("AGV 2", 2), "c": ("AGV 1", 3), "f": ("AGV 3", 3)}
+    for n, (who, k) in agv.items():
+        c, r = POS[n]
+        with d.at(k):
+            d.text(X2 + 30 + c * GX + 25, 76 + r * 58 + 40, who, size=10.5, family="mono", weight=600, fill=T.green,
+                   anchor="middle")
+    rows = [("b, e", "approach, lift, lower for b (AGV 1) and e (AGV 2), with edges", 2),
+            ("c, f", "approach, lift, lower for c (AGV 1) and f (AGV 3), with edges", 3),
+            ("then", "EnsureAgvMovePathsClear, Reduce(), AddDepsAfterAmiga", 4)]
+    d.text(X2 + 14, 204, "added AGV events:", size=S.small, weight=600, fill=T.fg2)
+    for i, (who, txt, k) in enumerate(rows):
+        with d.at(k):
+            d.text(X2 + 130, 204 + i * 20, f"{who}: {txt}", size=S.small, fill=T.fg)
+    with d.at(0, 1):
+        d.text(X2 + 130, 204, "none yet", size=S.small, fill=T.muted)
+    d.text(0, 292, "Every SetAgvId(...) on a root of the copy is visible in ctx->events: both DAGs hold the same TrayMove "
+           "objects. New AGV events are added only to ctx->events, so they never become roots of the copy.",
            size=S.small, fill=T.muted)
     frame(d, title="DoAgvAssignments consumes a shallow copy of the DAG",
           subtitle="The copy is a work queue (Kahn's algorithm in rounds): its roots are the events whose "
                    "prerequisites are all assigned. Phase 1 drains non-tray roots, phase 2 matches AGVs to the "
                    "TrayMove roots with BottleneckAssignment.",
           badge_key="illustrative",
-          legend=[("box", T.green, "roots of the copy after this step"), ("dashbox", T.faint, "already removed from the copy"),
+          legend=[("box", T.green, "roots of the copy at this step"), ("dashbox", T.faint, "already removed from the copy"),
                   ("box", T.sky, "ctx->events")],
           footnote="AGV numbers are illustrative; the matching depends on costs. In the code, unmatched TrayMove roots "
                    "stay in the copy for the next round.")
@@ -514,12 +533,39 @@ def topological_priority():
             "Kahn's algorithm with a min-priority queue on job index, step by step on the example DAG, compared with "
             "the Boost DFS order DagBase would give.")
     d.text(0, 0, "Example DAG (job index: a, b, c, d = 0; e = 1; f = 2)", size=13, weight=600, fill=T.fg)
-    _mini_dag(d, 10, 40)
+    steps = [("a:0  e:1", "a", "a"), ("b:0  e:1", "b", "a b"), ("c:0  e:1", "c", "a b c"),
+             ("d:0  e:1", "d", "a b c d"), ("e:1", "e", "a b c d e"), ("f:2", "f", "a b c d e f")]
+    # ---- animation: step 0 = the start, step i = the i-th pop from the heap
+    d.step("Start: count each event's incoming edges. a and e have none, so both go on the min-heap, keyed by "
+           "job index: a (job 0), e (job 1).")
+    why = {"a": "a has the lowest job index (0) of the ready events. Popping it removes a -> b and a -> c; "
+                "b now has no incoming edge and joins the heap.",
+           "b": "b (job 0) beats e (job 1). Its edge b -> c goes, so c becomes ready.",
+           "c": "c (job 0) beats e (job 1). Removing c -> d makes d ready.",
+           "d": "d (job 0) is still ahead of e: job 0 finishes first wherever the edges allow.",
+           "e": "Only e is ready. Popping it makes f ready.",
+           "f": "f is last. Six events were popped, as many as the DAG has, so there is no cycle and the order is returned."}
+    for i, (_, take, _) in enumerate(steps):
+        d.step(f"Pop {take}. " + why[take])
+    ready_at = [{"a", "e"}, {"b", "e"}, {"c", "e"}, {"d", "e"}, {"e"}, {"f"}, set()]
+    for k in range(len(steps) + 1):
+        done = set(steps[k - 1][2].split()) if k else set()
+        cur = steps[k - 1][1] if k else None
+        states = {}
+        for n in "abcdef":
+            if n == cur:
+                states[n] = "hi"
+            elif n in done:
+                states[n] = "gone"
+            elif n in ready_at[k]:
+                states[n] = "new"
+        with d.only(k):
+            _mini_dag(d, 10, 40, states=states)
+    d.text(0, 196, "green = popped now   blue = ready (on the heap)   dashed = already in the order", size=S.small,
+           fill=T.muted)
     # steps table
     tx = 380
     d.text(tx, 0, "ScheduleEventDag: take the ready event with the lowest job index", size=13, weight=600, fill=T.fg)
-    steps = [("a:0  e:1", "a", "a"), ("b:0  e:1", "b", "a b"), ("c:0  e:1", "c", "a b c"),
-             ("d:0  e:1", "d", "a b c d"), ("e:1", "e", "a b c d e"), ("f:2", "f", "a b c d e f")]
     hx = [tx, tx + 50, tx + 210, tx + 270]
     for x, h in zip(hx, ["step", "ready  (event:job)", "take", "order so far"]):
         d.text(x, 30, h, size=10.5, family="mono", weight=600, fill=T.muted)
@@ -527,10 +573,14 @@ def topological_priority():
     for i, (rdy, take, so) in enumerate(steps):
         if i % 2 == 0:
             d.rect(tx - 6, yy - 12, 520, 24, rx=5, fill=T.tint(T.card, 0.55, T.bg), layer="under")
-        d.text(hx[0], yy, str(i + 1), size=11.5, family="mono", fill=T.fg2)
-        d.text(hx[1], yy, rdy, size=11.5, family="mono", fill=T.fg)
-        d.text(hx[2], yy, take, size=11.5, family="mono", weight=700, fill=T.green)
-        d.text(hx[3], yy, so, size=11.5, family="mono", fill=T.fg2)
+        with d.only(i + 1):
+            d.rect(tx - 6, yy - 12, 520, 24, rx=5, fill=T.tint(T.green, 0.16, T.bg), stroke=T.green, sw=1.2,
+                   layer="under")
+        with d.at(i + 1):
+            d.text(hx[0], yy, str(i + 1), size=11.5, family="mono", fill=T.fg2)
+            d.text(hx[1], yy, rdy, size=11.5, family="mono", fill=T.fg)
+            d.text(hx[2], yy, take, size=11.5, family="mono", weight=700, fill=T.green)
+            d.text(hx[3], yy, so, size=11.5, family="mono", fill=T.fg2)
         yy += 26
     # comparison
     cy = max(yy, 200) + 30

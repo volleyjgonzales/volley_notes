@@ -3,8 +3,8 @@ AssignDestForUntargetedMove (with ResolveBlockingTrays)."""
 from __future__ import annotations
 
 from components import label_pill, num_badge
-from facility import STALL_W
-from fig_jobs import (GENERAL, TRAY, BAYC, bay_pill, intent, job_figure)
+from facility import STALL_L, STALL_W
+from fig_jobs import (GENERAL, TRAY, BAYC, _EV_STEP, _intent, bay_pill, ghost, job_figure)
 from registry import figure
 from theme import T
 
@@ -12,6 +12,22 @@ DOC1 = "01-software-background.html"
 
 LEGEND = [("box", TRAY, "TrayMove"), ("dashbox", TRAY, "event before the call (blank shown as ?)"),
           ("arrow", TRAY, "edge added by the call"), ("ring", T.fg2, "? = blank field")]
+
+
+def ring(d, m, nid, color, *, w=None, h=None, dx=0, dy=0):
+    """Transient highlight ring around a node / stall."""
+    x, y = m.P(nid)
+    w = w or STALL_L * m.s - 2
+    h = h or STALL_W * m.s - 2
+    d.rect(x + dx - w / 2, y + dy - h / 2, w, h, rx=8, fill="none", stroke=color, sw=2.4, dash="4 3", layer="top")
+
+
+def xmark(d, m, nid, color=T.red, *, dx=0, dy=0):
+    x, y = m.P(nid)
+    x, y = x + dx, y + dy
+    d.circle(x, y, 9, fill=T.bg_deep, stroke=color, sw=1.6, layer="top")
+    d.line(x - 4, y - 4, x + 4, y + 4, stroke=color, sw=2, layer="top")
+    d.line(x - 4, y + 4, x + 4, y - 4, stroke=color, sw=2, layer="top")
 
 
 def wave(d, m, nid, n, *, dx=0, dy=-18, color=T.sky):
@@ -43,6 +59,9 @@ def assign_tray_id():
     ]
 
     def draw(d, m):
+        # steps: 0 start, 1 dest check, 2 start vertex, 3 filter, 4 search, 5 fail check (skipped),
+        # 6 tray id written, 7 heading check, 8 return
+        _EV_STEP[2] = 6                       # the "after" box appears when the tray id is written
         bay_pill(d, m, 21, "B21 READY_TO_RETRIEVE (empty)")
         m.tray(23, "T23 (empty)", emphasis=True, chip_pos="bl")
         m.tray(15, "T15 (empty)", chip_pos="bl")
@@ -50,16 +69,56 @@ def assign_tray_id():
         m.tray(19, "T19", payload=True, chip_pos="bl")
         m.tray(20, "T20", payload=True, chip_pos="bl")
         m.tray(24, "T24", payload=True, chip_pos="bl")
-        wave(d, m, 21, 0, dx=40)
-        wave(d, m, 41, 1)
-        wave(d, m, 22, 2, dx=18)
-        wave(d, m, 25, 3, dx=18)
-        wave(d, m, 18, 3, dx=18)
-        wave(d, m, 23, 3, dx=-40, dy=-26, color=T.green)
-        x, y = m.P(23)
-        label_pill(d, x + 20, y - 66, "goal: tray without payload", color=T.green, size=10, anchor="middle",
-                   bg=T.bg_deep, border=T.green)
-        intent(d, m, 23, 21, 1, TRAY, bend=0.3, dst_off=(40, 0), num_t=0.55)
+        bx, by = m.P(21)
+        with d.at(0, 5):                      # the blank: which tray?
+            d.circle(bx + 40, by + 34, 12, fill=T.bg_deep, stroke=TRAY, sw=2, layer="top")
+            d.text(bx + 40, by + 34.5, "?", size=14, family="mono", weight=700, fill=TRAY, anchor="middle",
+                   layer="top")
+            label_pill(d, bx + 58, by + 34, "tray_id ? -> B21", color=TRAY, size=10, anchor="start", bg=T.bg_deep,
+                       border=TRAY)
+        with d.only(1):                       # dest is set
+            ring(d, m, 21, T.green, w=STALL_L * m.s - 20, h=STALL_W * m.s - 14)
+            label_pill(d, bx + 58, by - 30, "dest {node_id: 21, heading: -90}", color=T.green, size=10,
+                       anchor="start", bg=T.bg_deep, border=T.green)
+        with d.at(2):                         # start vertex
+            wave(d, m, 21, 0, dx=40)
+        with d.only(2):
+            label_pill(d, bx + 58, by - 30, "start = B21 (dest pose)", color=T.sky, size=10, anchor="start",
+                       bg=T.bg_deep, border=T.sky)
+        with d.only(3):                       # filter: trays and AGVs are not obstacles
+            for nid in (23, 15, 17, 19, 20, 24):
+                ring(d, m, nid, T.sky)
+            x, y = m.P(19)
+            label_pill(d, x, y, "trays + AGVs left out: not obstacles", color=T.sky, size=10, bg=T.bg_deep,
+                       border=T.sky)
+        with d.at(4):                         # search: order the nodes are reached
+            wave(d, m, 41, 1)
+            wave(d, m, 22, 2, dx=18)
+            wave(d, m, 25, 3, dx=18)
+            wave(d, m, 18, 3, dx=18)
+            wave(d, m, 23, 3, dx=-40, dy=-26, color=T.green)
+            x, y = m.P(23)
+            label_pill(d, x + 20, y - 66, "goal: tray without payload", color=T.green, size=10, anchor="middle",
+                       bg=T.bg_deep, border=T.green)
+        with d.only(4):                       # candidates considered
+            ring(d, m, 23, T.green)
+            x, y = m.P(15)
+            label_pill(d, x, y - 14, "also empty, farther: not reached", color=T.muted, size=10, bg=T.bg_deep,
+                       border=T.faint)
+        with d.at(6):                         # tray id written: T23 -> B21
+            _intent(d, m, 23, 21, 1, TRAY, bend=0.3, dst_off=(40, 0), num_t=0.55)
+        with d.only(6):
+            ring(d, m, 23, TRAY)
+        with d.only(7):                       # heading check
+            ring(d, m, 23, T.fg2)
+            x, y = m.P(23)
+            label_pill(d, x, y + 16, "T23 faces 90 = dest axis: keep", color=T.fg2, size=10, bg=T.bg_deep,
+                       border=T.fg2)
+        with d.at(8):                         # next: blocking-tray loop on T23's path
+            m.route([23, 22, 41, 21], T.sky, sw=2, dash="2 4", offset=(0, 12), head=True)
+            x, y = m.P(41)
+            label_pill(d, x - 20, y + 30, "next: blocking-tray loop on this path", color=T.sky, size=10,
+                       bg=T.bg_deep, border=T.sky)
 
     return job_figure(
         "55_assign_tray_id_empty", heading="AssignTrayIdForEmptyMove: which empty tray?",
@@ -142,6 +201,10 @@ def assign_dest():
     ]
 
     def draw(d, m):
+        # steps: 0 start, 1 tray check, 2 payload, 3 call RBT, 4 1st search, 5 blocker resolution,
+        # 6 record + apply to private copy, 7 search again, 8 dest set, 9 blocker events, 10 root move, 11 return
+        _EV_STEP.clear()
+        _EV_STEP.update({2: 9, 3: 10})        # event 2 at row 9; the 'after' event and its edge at row 10
         m.tray(21, "T21 (empty)", emphasis=True, chip_pos="tr")
         bay_pill(d, m, 21, "B21: tray must leave")
         m.tray(23, "T23 (empty)", chip_pos="bl")
@@ -150,12 +213,63 @@ def assign_dest():
         m.tray(15, "T15", chip_pos="bl")
         m.tray(17, "T17", payload=True, chip_pos="bl")
         m.tray(20, "T20", payload=True, chip_pos="bl")
-        m.route([21, 41, 22, 23, 24], T.red, sw=2.5, dash="3 4", offset=(0, -10), num=1, num_at=1)
-        x, y = m.P(24)
-        label_pill(d, x, y - 30, "1st search: P24, T23 in the way", color=T.red, size=10, bg=T.bg_deep,
-                   border=T.red)
-        intent(d, m, 23, 24, 2, TRAY, bend=0.35, num_t=0.5, src_off=(20, 8), dst_off=(-20, 8))
-        intent(d, m, 21, 23, 3, T.green, bend=-0.22, src_off=(40, 10), dst_off=(-30, 12), num_t=0.6, dash=None)
+        bx, by = m.P(21)
+        with d.at(0, 7):                      # the blank destination
+            _intent(d, m, 21, None, 1, TRAY, src_off=(40, 10), q_off=(70, 60), num_t=0.5)
+        with d.only(1):
+            ring(d, m, 21, T.green, w=STALL_L * m.s - 20, h=STALL_W * m.s - 14)
+        with d.only(2):
+            label_pill(d, bx - 30, by + 40, "T21 empty: any heading", color=T.green, size=10, anchor="start",
+                       bg=T.bg_deep, border=T.green)
+        b = m.box
+        with d.at(3, 7):                      # ResolveBlockingTrays works on a private copy
+            d.rect(b.x0 + 4, b.y0 + 4, b.w - 8, b.h - 8, rx=9, fill="none", stroke=T.teal, sw=2, dash="8 5",
+                   layer="top")
+            label_pill(d, b.x1 - 14, b.y1 - 18, "inside ResolveBlockingTrays: private copy of the garage",
+                       color=T.teal, size=10, anchor="end", bg=T.bg_deep, border=T.teal)
+        with d.at(4):                         # tier-1 search: P24, T23 in the way
+            m.route([21, 41, 22, 23, 24], T.red, sw=2.5, dash="3 4", offset=(0, -10), num=1, num_at=1)
+            x, y = m.P(24)
+            label_pill(d, x, y - 30, "1st search: P24, T23 in the way", color=T.red, size=10, bg=T.bg_deep,
+                       border=T.red)
+        with d.only(4):
+            ring(d, m, 23, T.red)
+            ring(d, m, 25, T.amber, w=STALL_L * m.s - 30)
+        with d.at(5, 6):                      # off-limits for the blocker
+            for nid, dx in ((41, 0), (22, 0), (23, -60)):
+                xmark(d, m, nid, dx=dx, dy=18)
+            x, y = m.P(22)
+            label_pill(d, x - 12, y + 40, "off-limits for T23", color=T.red, size=10, anchor="end", bg=T.bg_deep,
+                       border=T.red)
+        with d.at(5):                         # blocker pushed one stall deeper
+            _intent(d, m, 23, 24, 2, TRAY, bend=0.35, num_t=0.5, src_off=(20, 8), dst_off=(-20, 8))
+        with d.at(6, 8):                      # applied to the private copy only
+            ghost(d, m, 24, "")
+            gx, gy = m.P(24)
+            d.text(gx + 22, gy + 26, "T23 (private copy)", size=10.5, family="mono", fill=TRAY, anchor="middle", halo=T.bg_deep,
+                   halo_w=3)
+        with d.at(9):                         # applied to working_state as event 2
+            ghost(d, m, 24, "")
+            gx, gy = m.P(24)
+            d.text(gx + 22, gy + 26, "T23 after event 2", size=10.5, family="mono", fill=TRAY, anchor="middle", halo=T.bg_deep,
+                   halo_w=3)
+        with d.only(7):                       # second search: P23, nothing in the way
+            m.route([21, 41, 22, 23], T.green, sw=2.5, dash="3 4", offset=(0, 10))
+            ring(d, m, 23, T.green)
+            x, y = m.P(23)
+            label_pill(d, x, y - 30, "2nd search: P23 free", color=T.green, size=10, bg=T.bg_deep,
+                       border=T.green)
+        with d.at(8):                         # destination written
+            _intent(d, m, 21, 23, 3, T.green, bend=-0.22, src_off=(40, 10), dst_off=(-30, 12), num_t=0.6,
+                    dash=None)
+        with d.only(8):
+            x, y = m.P(23)
+            label_pill(d, x - 85, y - 30, "dest {node_id: 23, heading: 90}", color=T.green, size=10, anchor="start",
+                       bg=T.bg_deep,
+                       border=T.green)
+        with d.only(11):
+            label_pill(d, bx - 30, by + 40, "main blocking-tray loop skipped", color=T.fg2, size=10, anchor="start",
+                       bg=T.bg_deep, border=T.fg2)
 
     return job_figure(
         "56_assign_dest_untargeted", heading="AssignDestForUntargetedMove: where should this tray go?",

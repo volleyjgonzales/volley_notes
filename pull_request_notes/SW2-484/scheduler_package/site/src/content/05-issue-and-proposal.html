@@ -16,7 +16,7 @@
 -->
 <h1>05 — Issue &amp; proposal: the scheduler core refactor</h1>
 <p>This tab explains <em>what</em> the refactor changes and <em>why</em>, using the code in <code>sources/repomix-scheduler.xml</code> as evidence. It assumes the first four tabs: in particular the plan call and <code>ScheduleContext</code> (sections <a class="ref bare" href="#bg-one-plan-call-step-by-step">10</a> and <a class="ref bare" href="#bg-schedulecontext-the-per-call-workspace">13</a> of the <a href="#doc-background">Background</a> tab), and tray and AGV assignment (sections <a class="ref bare" href="#bg-tray-assignment-dotrayassignments">4</a> and <a class="ref bare" href="#bg-agv-assignment-doagvassignments">5</a> of the <a href="#doc-task-planning">Task planning</a> tab). Code snippets follow the conventions of the Background tab: every snippet says which class it lives in, what <code>this</code> is, and the type of each variable that is not obvious. Snippets marked <strong>proposed</strong> do not exist in the repository.</p>
-<p><strong>How this tab is organised.</strong> <a class="ref" href="#pr-the-pipeline-the-refactor-works-on">Section 2</a> places the ticket in that pipeline, sections <a class="ref" href="#pr-where-the-two-algorithms-sit-today">3</a>–<a class="ref" href="#pr-current-versus-target-responsibilities">5</a> describe the two algorithms and what moves where, <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> decides how the code is organised by stage (folders or packages), and sections <a class="ref" href="#pr-target-architecture">7</a>–<a class="ref" href="#pr-next-actions">14</a> design the tray module and the naming boundary, list the invariants, risks and decisions, and lay out the staged plan. <a class="ref" href="#nm-proposed-future-work-naming">Section 15</a> is future work: a catalogue of renames and small struct refactors across the whole stack, of which this refactor adopts only the rows for <code>scheduler</code> and <code>planner_core</code>.</p>
+<p><strong>How this tab is organised.</strong> <a class="ref" href="#pr-the-pipeline-the-refactor-works-on">Section 2</a> places the ticket in that pipeline, sections <a class="ref" href="#pr-where-the-two-algorithms-sit-today">3</a>–<a class="ref" href="#pr-current-versus-target-responsibilities">5</a> describe the two algorithms and what moves where, <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> decides how the code is organised by stage (folders or packages), and sections <a class="ref" href="#pr-target-architecture">7</a>–<a class="ref" href="#pr-next-actions">14</a> design the tray module and the naming boundary, list the invariants, risks and decisions, and lay out the staged plan. Two sections are future work beyond this ticket: <a class="ref" href="#pr-swappable-motion-planners">section 15</a> puts motion planning behind the same kind of interface as the tray and AGV solvers, and <a class="ref" href="#nm-proposed-future-work-naming">section 16</a> is a catalogue of renames and small struct refactors across the whole stack, of which this refactor adopts only the rows for <code>scheduler</code> and <code>planner_core</code>.</p>
 <table>
   <thead>
     <tr>
@@ -539,7 +539,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
 <ol>
   <li><strong><code>action_graph</code> first.</strong> It is already free functions, its inputs are lower-package types once narrowed, and it is the natural unit to test against the ADG rules of the Action graph tab. It can be promoted as soon as stage C0 has narrowed its inputs (stage J of the plan).</li>
   <li><strong><code>task_planning</code> after the benchmarks.</strong> Its interfaces are what this ticket designs; they should stay internal until stage G's benchmarks and stage H's cleanup show they are stable. Promotion then needs <code>scheduler_core</code> as well.</li>
-  <li><strong><code>motion_planning</code> never.</strong> The algorithm already lives in <code>motion_planner</code>; the adapter belongs to the orchestrator.</li>
+  <li><strong><code>motion_planning</code> never.</strong> The algorithm already lives in <code>motion_planner</code>; the adapter belongs to the orchestrator. When motion planners become swappable (<a class="ref" href="#pr-swappable-motion-planners">section 15</a>), the solver interface goes into <code>motion_planner</code> and the adapter stays here.</li>
 </ol>
 <p>A stage folder is ready to become a package when all of these hold:</p>
 <ul>
@@ -1663,6 +1663,163 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
   <li>Confirm the branch matches this snapshot; keep edits in small reviewable commits.</li>
   <li>Map symbol use from the repository root: <code>rg -n 'ResolveBlockingTrays|DoTrayAssignments|DoAgvAssignments|first_tray_event|BottleneckAssignment'</code>. Compare with <a class="ref" href="#pr-fig-34_coupling_matrix">Figure 1</a>, and rebuild <a class="ref" href="#pr-fig-34_coupling_matrix">Figure 1</a> (<code>python3 scripts/diagrams/build.py 34</code>) after replacing <code>sources/repomix-scheduler.xml</code> with a newer snapshot.</li>
 </ol>
+<h2 data-num id="pr-swappable-motion-planners">Future work: swappable motion planners</h2>
+<p>The tray and AGV solvers of this ticket put task planning behind interfaces. Motion planning is the natural next step: keep CHUGG, but make it one implementation of a common interface, so that other solvers (CBS, priority-based search, newer large-scale MAPF solvers, a learned planner) can be tried, benchmarked and swapped without touching the scheduler. This section is future work beyond SW2-484. It builds on the comparison of CHUGG's inputs with the standard MAPF problem in the Motion planning tab (<a class="ref" href="#mp-solver-inputs-and-outputs">section 5</a>).</p>
+<figure id="pr-fig-99_motion_solver_interface">
+  <img src="figures/99_motion_solver_interface.svg" alt="Swappable motion planners">
+  <figcaption><strong>Swappable motion planners.</strong> The scheduler's <code>motion_planning/</code> folder builds a solver-neutral <code>MotionProblem</code> from the event DAG, selects a solver, and validates the returned <code>MotionPlan</code> before the action graph is built. The problem types and the interface live in <code>motion_planner</code>, next to the solvers that implement them. This is a proposal, not existing code.</figcaption>
+</figure>
+<h3 data-num id="pr-why-motion-planning-is-harder-to-swap">Why this is harder than the task-planning interfaces</h3>
+<ul>
+  <li><strong>The input is the scheduler's task vocabulary.</strong> CHUGG takes the <code>ScheduleEventDag</code> and has one planning routine per event class, so a second solver would have to understand <code>planner_core</code> events, or the events have to be translated into something neutral first.</li>
+  <li><strong>Part of the problem is hidden inside CHUGG.</strong> The start-state replay, the static obstacles, the footprint changes when an AGV lifts a tray, the “an arrival counts only if the AGV can stay there” rule and the bay-door wait are decisions made inside CHUGG and <code>SippAgv</code>. A new solver must make the same decisions, or the problem description must state them.</li>
+  <li><strong>The output feeds the action graph.</strong> The action DAG maps every motion back to its event (today through the event's vertex index in <code>Motion</code>), so any solver must tag its motions with the goal they serve.</li>
+  <li><strong>The scheduler steers CHUGG through the DAG.</strong> Node-arrival edges, path repair and <code>Reduce()</code> exist partly to make prioritized planning succeed. A solver that searches over orders (CBS) may not need them, and may do worse with them, so the problem should separate real precedence from edges added only to guide CHUGG.</li>
+</ul>
+<h3 data-num id="pr-the-motion-solver-interface">The interface</h3>
+<p>The four parts of the problem description (world, start, tasks, settings) become one value type, and the solver contract mirrors the tray solver's: a <code>const</code> function from a read-only problem to an <code>stdx::Expected</code> result.</p>
+<pre><code class="language-cpp">// PROPOSED — motion_planner/include/motion_planner/motion_problem.hpp
+namespace volley::motion {
+
+using GoalId = std::size_t;
+
+struct Capabilities {                          // what a solver can be given, or what a problem uses
+  bool goal_sequences, precedence, load_dependent_footprints, device_actions, continuous_time;
+};
+
+struct Goal {                                  // one thing one entity must achieve
+  GoalId id;
+  GarageEntityIdMsg entity;                    // which AGV, bay or VECS
+  std::variant&lt;DriveTo, PickUp, PutDown, DeviceChange> what;  // pose, tray, or a timed state change
+};
+
+struct MotionProblem {
+  // world: fixed per site
+  const MotionGraph&amp; graph;                    // poses and transitions (GarageGraph today)
+  const CollisionTable&amp; conflicts;             // which footprint at which vertex or edge overlaps which other
+  const cost::MotionCostModel&amp; timing;         // edge, turn, lift and device durations
+  // start: per plan call
+  Interval::Timepoint start_time;
+  std::vector&lt;AgentStart> agents;              // pose, footprint, carried tray, available or not
+  StaticObstacles blocked;                     // parked trays, disabled nodes and entities
+  // tasks: per plan call
+  std::vector&lt;Goal> goals;                     // per entity, in the order that entity must do them
+  std::vector&lt;std::pair&lt;GoalId, GoalId>> precedence;  // a must finish before b starts (across entities)
+  // settings
+  Objective objective = Objective::kFirstFeasible;     // or sum of costs, makespan
+  std::optional&lt;std::chrono::milliseconds> time_budget;
+
+  [[nodiscard]] Capabilities Needs() const;    // which features this problem uses (precedence, devices, ...)
+};
+
+struct MotionPlan {
+  ContinuousState timeline;                    // timed motions per entity
+  std::unordered_map&lt;GoalId, std::vector&lt;MotionRef>> motions_by_goal;  // which motions serve which goal
+};
+
+class Solver {
+public:
+  virtual ~Solver() = default;
+  [[nodiscard]] virtual Capabilities GetCapabilities() const = 0;
+  [[nodiscard]] virtual stdx::Expected&lt;MotionPlan> Solve(const MotionProblem&amp; problem) const = 0;
+};
+
+// one validator for every solver: goals reached, precedence respected, no conflicts
+[[nodiscard]] stdx::Result Validate(const MotionProblem&amp; problem, const MotionPlan&amp; plan);
+
+}  // namespace volley::motion
+</code></pre>
+<p>A classic MAPF instance is the case with one <code>DriveTo</code> goal per agent, no precedence, and footprints that conflict only on the same vertex or edge. That makes the standard MAPF benchmarks (Stern et al. 2019) usable as tests for every solver, alongside the site scenarios of SW2-487.</p>
+<h3 data-num id="pr-where-the-motion-pieces-live">Where the pieces live</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Piece</th>
+      <th>Package and folder</th>
+      <th>Why there</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>MotionProblem</code>, <code>MotionPlan</code>, <code>Solver</code>, <code>Validate</code></td>
+      <td><code>motion_planner</code></td>
+      <td>Solvers live there and must implement the interface without depending on <code>scheduler</code>. The types use only <code>common_ros</code>, <code>cost_functions</code>, <code>interfaces</code> and <code>motion_planner</code>'s own timeline types, so <code>motion_planner</code> stops needing <code>planner_core</code>'s event classes once CHUGG reads goals instead of events</td>
+    </tr>
+    <tr>
+      <td><code>ChuggSolver</code></td>
+      <td><code>motion_planner</code></td>
+      <td>Wraps today's <code>Chugg</code>; first by rebuilding a <code>ScheduleEventDag</code> from the goals, later by planning goals directly</td>
+    </tr>
+    <tr>
+      <td>New solvers (<code>CbsSolver</code>, ...)</td>
+      <td><code>motion_planner</code>, or a package of their own</td>
+      <td>A solver with heavy dependencies (a MILP solver, a learned model) can live in its own package that depends on <code>motion_planner</code></td>
+    </tr>
+    <tr>
+      <td><code>BuildMotionProblem</code>, solver selection, the call to <code>Validate</code></td>
+      <td><code>scheduler</code>, <code>motion_planning/</code></td>
+      <td>Only the scheduler knows the event classes; this is the adapter of <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a>, which grows from 60 lines to the translation between the two vocabularies</td>
+    </tr>
+  </tbody>
+</table>
+<p>The adapter maps each event class to goals: an <code>AgvMove</code> to one <code>DriveTo</code>; a <code>TrayMove</code> to <code>DriveTo</code> (under the tray), <code>PickUp</code>, <code>DriveTo</code> (destination) and <code>PutDown</code> for its AGV; a <code>BayTransition</code> or <code>VecsTransition</code> to one <code>DeviceChange</code> with its duration from the cost model. Event edges become precedence between the last goal of one event and the first goal of the next, exactly as they become action-DAG edges today.</p>
+<h3 data-num id="pr-solvers-that-support-less">Solvers that support less than the full problem</h3>
+<p><code>MotionProblem::Needs()</code> (what this problem uses) is compared with the solver's <code>GetCapabilities()</code> before calling it. When a solver lacks something, there are three options, in order of preference:</p>
+<ol>
+  <li><strong>Refuse and fall back.</strong> Return an error naming the missing capability; the scheduler falls back to CHUGG. Always safe.</li>
+  <li><strong>Decompose.</strong> Split the goals into waves: a wave holds the goals whose predecessors are all in earlier waves, at most one goal per agent. Each wave is a classic MAPF instance that starts where the previous one ended. This handles precedence and goal sequences with a solver that knows neither, at the cost of optimality across waves.</li>
+  <li><strong>Extend the solver.</strong> Add the capability (CBS with precedence constraints, multi-goal CBS, a <code>CollisionTable</code>-based conflict test, continuous-time CBS). The literature has a version of each.</li>
+</ol>
+<h3 data-num id="pr-motion-staged-plan">A staged plan for motion planning</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
+      <th>Change</th>
+      <th>Exit criterion</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>M0 — capture</td>
+      <td>Record CHUGG's <code>ContinuousState</code> and the action DAG for the stage A baseline fixtures; add the solver-independent <code>Validate</code> and run it on every recorded plan</td>
+      <td>Every baseline plan validates</td>
+    </tr>
+    <tr>
+      <td>M1 — wrap</td>
+      <td><code>motion_planning::PlanMotions</code> (stage C2) calls CHUGG through a <code>Solver</code> interface whose input is still today's (event DAG, start state, services): <code>ChuggSolver</code></td>
+      <td>Byte-identical <code>ContinuousState</code> on the fixtures; exceptions from CHUGG become <code>stdx</code> errors</td>
+    </tr>
+    <tr>
+      <td>M2 — neutral problem</td>
+      <td>Add <code>MotionProblem</code> and <code>BuildMotionProblem</code>; <code>ChuggSolver</code> rebuilds the event DAG from the goals internally; separate real precedence from guide-only edges (mark the edges <code>AddNodeArrivalDeps</code> and path repair add)</td>
+      <td>Same <code>ContinuousState</code> as M1; a round-trip test event DAG → problem → event DAG</td>
+    </tr>
+    <tr>
+      <td>M3 — second solver</td>
+      <td>A <code>CbsSolver</code> on <code>SippAgv</code> (its landmark and avoid constraints already exist), first for problems without precedence, with wave decomposition for the rest</td>
+      <td>Passes <code>Validate</code> on the MAPF benchmarks and the site scenarios; results recorded next to CHUGG's</td>
+    </tr>
+    <tr>
+      <td>M4 — selection</td>
+      <td>A ROS parameter chooses the solver; capability check and fallback to CHUGG; per-solver metrics in the benchmark CSV (<a class="ref" href="#vr-benchmark-method">section 5</a> of the Verification tab)</td>
+      <td>Switching solvers is a configuration change</td>
+    </tr>
+    <tr>
+      <td>M5 — CHUGG on goals</td>
+      <td>CHUGG reads goals instead of events; <code>motion_planner</code> drops its dependency on <code>planner_core</code>'s event classes</td>
+      <td>Same results as M1; dependency removed from <code>package.xml</code></td>
+    </tr>
+  </tbody>
+</table>
+<p>M0 and M1 fit naturally into this ticket's stage C2, when <code>PlanMotions</code> moves into <code>motion_planning/</code>. The rest is separate work and does not block the Definition of Done.</p>
+<h3 data-num id="pr-motion-decisions">Decisions for the motion-planning work</h3>
+<ul>
+  <li><strong>Objective.</strong> CHUGG has none beyond feasibility in priority order. Comparing solvers needs one: sum of arrival times, makespan, or the action DAG's critical path (<a class="ref" href="#ad-timing-critical-path-and-slack">section 4.4</a> of the Action graph tab), which is what execution actually waits for.</li>
+  <li><strong>Determinism.</strong> Parity tests and replays need the same plan for the same input. Randomized or time-budgeted solvers need a seed and a deterministic fallback.</li>
+  <li><strong>Time budget.</strong> CHUGG has no time limit beyond the 5,000,000-expansion cap per search. An anytime solver needs a budget per <code>Plan()</code> call, and the scheduler needs to know what to do when it runs out.</li>
+  <li><strong>Guide edges.</strong> Whether edges added only to make prioritized planning succeed should be passed to other solvers at all; leaving them out may let a solver find better plans, at the risk of different behaviour.</li>
+</ul>
 <h2 data-num id="nm-proposed-future-work-naming">Proposed future work: the naming catalogue and small struct refactors</h2>
 <p>This section is future work beyond this ticket: a catalogue of names to keep open while refactoring. It covers the whole stack the scheduler touches: the ROS messages in <code>interfaces</code>, the garage model in <code>common_ros</code>, the events and DAG in <code>planner_core</code>, and the <code>scheduler</code> package itself. Each row gives the current name, the proposed one, where it lives, how expensive the change is, and why. The rules in <a class="ref" href="#nm-naming-rules">section 2</a> produce the proposals, so a name not listed here can be decided the same way.</p>
 <blockquote><p><strong>Scope.</strong> This refactor adopts only the rows for <code>scheduler</code> and <code>planner_core</code> (<a class="ref" href="#pr-naming-and-the-ros-boundary">section 9</a>). Rows for <code>common_ros</code> and the ROS interfaces wait: the scheduler reaches them through one translation header and its own internal types, so its code can use the good names now and drop the translation when <code>common_ros</code> catches up.</p></blockquote>

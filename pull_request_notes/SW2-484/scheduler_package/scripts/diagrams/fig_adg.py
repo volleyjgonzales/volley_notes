@@ -268,13 +268,28 @@ def adg_construction():
                          ", ...),  each action ", ("sym", "a", "i", "k"), " = (start time ",
                          ("sym", "t", "i", "k"), ", start cell ", ("sym", "s", "i", "k"), ", goal cell ",
                          ("sym", "g", "i", "k"), ")"], size=13.5, fill=T.fg2)
+    d.step("Start from the timed plans: one row per action. The ADG gets one vertex per action, placed in a lane "
+           "per robot. No edges yet.")
+    d.step("Type 1 edges: each robot's actions stay in order. AGV 1 does A -> B before B -> C; AGV 2 does D -> B "
+           "before B -> E. AGV 3 has one action, so no Type 1 edge.")
+    d.step("Type 2, cell C: AGV 3 leaves C at t = 0 and AGV 1 enters C at t = 1. The earlier action must finish "
+           "first, so the edge points from AGV 3's action to AGV 1's.")
+    d.step("Type 2, cell B: AGV 1 leaves B at t = 1 and AGV 2 enters B at t = 2, so AGV 1's B -> C must finish "
+           "before AGV 2's D -> B starts. That is every edge: the ADG is done, and it keeps only these orders.")
+    d.step("The times only decided each edge's direction. When two robots swap or rotate at the same instant, the "
+           "rule gives a cycle (inset): such a plan is safe only with perfectly synchronous moves.")
     hx = [tx, tx + 110, tx + 200, tx + 320, tx + 430]
     for h, lab in zip(hx, ["AGV", "action", "start time", "start cell", "goal cell"]):
         d.text(h, ty + 36, lab, size=11.5, weight=600, fill=T.muted)
     yy = ty + 62
+    hl_rows = {2: {(3, 1), (1, 2)}, 3: {(1, 2), (2, 1)}}
     for i, acts in PLANS.items():
         for k, (t, s0, g0) in enumerate(acts, 1):
             d.rect(tx - 10, yy - 13, 540, 26, rx=4, fill=T.tint(ACOL[i], 0.08, T.bg))
+            for stp, keys in hl_rows.items():
+                if (i, k) in keys:
+                    with d.only(stp):
+                        d.rect(tx - 10, yy - 13, 540, 26, rx=4, fill="none", stroke=T2, sw=1.8)
             d.text(hx[0], yy, f"AGV {i}", size=12, family="mono", weight=600, fill=ACOL[i])
             sym(d, hx[1], yy, "a", str(i), str(k), size=15, sup_italic=False, sub_italic=False)
             d.text(hx[2], yy, f"{t}", size=12.5, family="mono", fill=T.fg)
@@ -312,12 +327,17 @@ def adg_construction():
     N[(2, 2)] = anode(d, cols[3], r[2], 2, 2, "B -> E", 3, A2)
     for nm, yy_, col in (("AGV 1", r[1], A1), ("AGV 3", r[3], A3), ("AGV 2", r[2], A2)):
         d.text(0, yy_ + 4, nm, size=12, family="mono", weight=600, fill=col)
-    arrow(d, N[(1, 1)], N[(1, 2)], T1, label="Type 1", label_at=((N[(1, 1)].x1 + N[(1, 2)].x0) / 2, r[1] - 16))
-    arrow(d, N[(2, 1)], N[(2, 2)], T1, label="Type 1", label_at=((N[(2, 1)].x1 + N[(2, 2)].x0) / 2, r[2] - 16))
-    arrow(d, N[(3, 1)], N[(1, 2)], T2, dash="7 4")
-    label_pill(d, N[(3, 1)].x0, r[3] + 50, "Type 2: AGV 3 leaves C before AGV 1 enters C", color=T2, anchor="start")
-    arrow(d, N[(1, 2)], N[(2, 1)], T2, dash="7 4")
-    label_pill(d, cols[2] - 60, r[1] + 44, "Type 2: AGV 1 leaves B before AGV 2 enters B", color=T2, anchor="start")
+    with d.at(1):
+        arrow(d, N[(1, 1)], N[(1, 2)], T1, label="Type 1", label_at=((N[(1, 1)].x1 + N[(1, 2)].x0) / 2, r[1] - 16))
+        arrow(d, N[(2, 1)], N[(2, 2)], T1, label="Type 1", label_at=((N[(2, 1)].x1 + N[(2, 2)].x0) / 2, r[2] - 16))
+    with d.at(2):
+        arrow(d, N[(3, 1)], N[(1, 2)], T2, dash="7 4")
+        label_pill(d, N[(3, 1)].x0, r[3] + 50, "Type 2: AGV 3 leaves C before AGV 1 enters C", color=T2,
+                   anchor="start")
+    with d.at(3):
+        arrow(d, N[(1, 2)], N[(2, 1)], T2, dash="7 4")
+        label_pill(d, cols[2] - 60, r[1] + 44, "Type 2: AGV 1 leaves B before AGV 2 enters B", color=T2,
+                   anchor="start")
     # rules
     nx = 1040
     d.rect(nx, gy0 - 20, 470, 250, rx=10, fill=T.tint(T.card, 0.7, T.bg), stroke=T.border_soft)
@@ -337,6 +357,8 @@ def adg_construction():
     d.text(nx + 16, gy0 + 212, "Execution then ignores them.", size=12, fill=T.muted)
     # cycle inset
     cx, cy = nx + 235, gy0 + 345
+    _inset = d.at(4)
+    _inset.__enter__()
     d.text(nx, cy - 75, "4  A cycle: three robots rotate at the same instant", size=13, weight=600, fill=T.fg)
     tri = [(cx - 120, cy + 40), (cx, cy - 30), (cx + 120, cy + 40)]
     labs = [("X -> Y", A1, 1), ("Y -> Z", A2, 2), ("Z -> X", A3, 3)]
@@ -346,6 +368,7 @@ def adg_construction():
     arrow(d, bs[1], bs[0], RED, dash="7 4")
     d.text(cx, cy + 92, "each waits for another to leave: a cycle,", size=11.5, fill=RED, anchor="middle")
     d.text(cx, cy + 108, "safe only with perfectly synchronous moves", size=11.5, fill=RED, anchor="middle")
+    _inset.__exit__(None, None, None)
     frame(d, title="Building an action dependency graph",
           subtitle="Each action of each robot becomes a vertex. Type 1 edges keep each robot's own order; Type 2 "
                    "edges say who must clear a cell before someone else enters it. The ADG keeps the plan's order "
@@ -411,44 +434,52 @@ def adg_statuses():
     move = {(1, 1): ("A -> B", 0), (1, 2): ("B -> C", 1), (3, 1): ("C -> F", 0), (2, 1): ("D -> B", 2),
             (2, 2): ("B -> E", 3)}
     sy = y + 140
-    d.text(0, sy - 10, "2  Dispatching the example ADG (from the previous figure), one event at a time", size=14,
+    d.text(0, sy - 10, "2  Dispatching the example ADG (from the construction figure), one event at a time", size=14,
            weight=600, fill=T.fg)
     rowh = 200
+    y0 = sy + 30
+    d.rect(0, y0, 1400, rowh - 40, rx=10, fill=T.tint(T.card, 0.45, T.bg), stroke=T.border_soft)
+
+    def ak(t):
+        return (t.replace("a11", "a[1,1]").replace("a12", "a[1,2]").replace("a31", "a[3,1]")
+                .replace("a21", "a[2,1]").replace("a22", "a[2,2]"))
+
+    def uk(t):   # plain-text form for the step captions under the figure
+        for s_, u_ in (("a11", "a¹₁"), ("a12", "a¹₂"), ("a31", "a³₁"), ("a21", "a²₁"), ("a22", "a²₂")):
+            t = t.replace(s_, u_)
+        return t
     for n, (title, st, why) in enumerate(snaps):
-        y0 = sy + 30 + n * rowh
-        d.rect(0, y0, 1400, rowh - 18, rx=10, fill=T.tint(T.card, 0.45, T.bg), stroke=T.border_soft)
-        def ak(t):
-            return (t.replace("a11", "a[1,1]").replace("a12", "a[1,2]").replace("a31", "a[3,1]")
-                    .replace("a21", "a[2,1]").replace("a22", "a[2,2]"))
-        mtext(d, 16, y0 + 22, f"{n + 1}.  {ak(title)}", size=13, fill=T.fg)
-        mtext(d, 16, y0 + rowh - 34, ak(why), size=12, fill=T.fg2)
-        pos = {(1, 1): (110, 60), (1, 2): (290, 60), (3, 1): (110, 112), (2, 1): (470, 112), (2, 2): (650, 112)}
-        B = {}
-        for key, (px_, py_) in pos.items():
-            i, k = key
-            B[key] = anode(d, px_, y0 + py_, i, k, move[key][0], move[key][1], ACOL[i], w=150, h=46,
-                           status=st[key], sw=1.4)
-        for v, u in preds1.items():
-            arrow(d, B[u], B[v], T1, sw=1.5)
-        for v, us in preds2.items():
-            for u in us:
-                arrow(d, B[u], B[v], T2, dash="6 4", sw=1.5)
-        # queues
-        qx = 820
-        d.text(qx, y0 + 22, "command queues (front first)", size=11.5, weight=600, fill=T.muted)
-        for j, i in enumerate((1, 2, 3)):
-            qy = y0 + 52 + j * 36
-            d.text(qx, qy, f"AGV {i}", size=12, family="mono", weight=600, fill=ACOL[i])
-            items = [key for key in sorted(st) if key[0] == i and st[key] == "enqueued"]
-            cx_ = qx + 70
-            if not items:
-                d.text(cx_, qy, "empty", size=11.5, fill=T.faint)
-            for key in items:
-                w_ = 64
-                d.rect(cx_, qy - 13, w_, 26, rx=6, fill=T.tint(EN, 0.22, T.bg), stroke=EN, sw=1.2)
-                sym(d, cx_ + w_ / 2, qy, "a", str(key[0]), str(key[1]), size=13, anchor="middle",
-                    sup_italic=False, sub_italic=False)
-                cx_ += w_ + 8
+        d.step(f"{uk(title)}. {uk(why)}")
+    for n, (title, st, why) in enumerate(snaps):
+        with d.only(n):
+            mtext(d, 16, y0 + 22, f"{n + 1}.  {ak(title)}", size=13, fill=T.fg)
+            pos = {(1, 1): (110, 60), (1, 2): (290, 60), (3, 1): (110, 112), (2, 1): (470, 112), (2, 2): (650, 112)}
+            B = {}
+            for key, (px_, py_) in pos.items():
+                i, k = key
+                B[key] = anode(d, px_, y0 + py_, i, k, move[key][0], move[key][1], ACOL[i], w=150, h=46,
+                               status=st[key], sw=1.4)
+            for v, u in preds1.items():
+                arrow(d, B[u], B[v], T1, sw=1.5)
+            for v, us in preds2.items():
+                for u in us:
+                    arrow(d, B[u], B[v], T2, dash="6 4", sw=1.5)
+            # queues
+            qx = 820
+            d.text(qx, y0 + 22, "command queues (front first)", size=11.5, weight=600, fill=T.muted)
+            for j, i in enumerate((1, 2, 3)):
+                qy = y0 + 52 + j * 36
+                d.text(qx, qy, f"AGV {i}", size=12, family="mono", weight=600, fill=ACOL[i])
+                items = [key for key in sorted(st) if key[0] == i and st[key] == "enqueued"]
+                cx_ = qx + 70
+                if not items:
+                    d.text(cx_, qy, "empty", size=11.5, fill=T.faint)
+                for key in items:
+                    w_ = 64
+                    d.rect(cx_, qy - 13, w_, 26, rx=6, fill=T.tint(EN, 0.22, T.bg), stroke=EN, sw=1.2)
+                    sym(d, cx_ + w_ / 2, qy, "a", str(key[0]), str(key[1]), size=13, anchor="middle",
+                        sup_italic=False, sub_italic=False)
+                    cx_ += w_ + 8
     frame(d, title="Executing an ADG: statuses over time",
           subtitle="The dispatcher sends an action when its rule holds; the robot runs its queue in order and "
                    "reports each completion; each report may release more actions.",

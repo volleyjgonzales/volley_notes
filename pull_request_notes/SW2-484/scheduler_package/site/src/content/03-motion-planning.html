@@ -16,7 +16,7 @@
 -->
 <h1>03 — Motion planning: from the event DAG to timed motions</h1>
 <p><em>Stage 4 of the pipeline: CHUGG turns the finished event DAG into timed, collision-free motions for every AGV, bay and VECS (VRC commands are added later, in the action DAG). This is the multi-agent path finding (MAPF) step.</em></p>
-<p>This tab builds on the finished event DAG from the Task planning tab. It first places motion planning between the two DAGs of the pipeline, then opens CHUGG and SIPP, then derives the timing model behind every duration, and ends with <code>ContinuousState</code>, the timeline CHUGG returns and the Action graph tab starts from.</p>
+<p>This tab builds on the finished event DAG from the Task planning tab. It first places motion planning between the two DAGs of the pipeline, then opens CHUGG and SIPP, then derives the timing model behind every duration, then <code>ContinuousState</code>, the timeline CHUGG returns and the Action graph tab starts from, and ends by comparing CHUGG's inputs with the standard multi-agent path finding problem, as groundwork for swappable motion planners.</p>
 <h2 data-num id="bg-motion-planning-and-the-response">Where motion planning sits: two DAGs around one planner</h2>
 <p>Motion planning sits between the two DAGs of the pipeline (besides the working copies some stages make). The first, the event DAG, is its input; the second, the action DAG, is built from its output, and only that second one is an action dependency graph. The order is the one in the literature: motion planning first, then the ADG, then execution.</p>
 <figure id="bg-fig-91_planning_pipeline">
@@ -102,6 +102,10 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
 <p>How CHUGG uses these inputs, and why the scheduler has to prepare the event DAG carefully, is the subject of the next two subsections.</p>
 <h3 data-num id="bg-inside-solvesequential">Inside SolveSequential: one event at a time</h3>
 <p><code>SolveSequential</code> is <em>prioritized planning</em>: it plans one event at a time, each against everything planned before it, and never goes back. The priority order is not a ranking of robots, as in most prioritized MAPF planners, but the topological order of the event DAG.</p>
+<figure id="mp-fig-97_prioritized_planning">
+  <img src="figures/97_prioritized_planning.svg" alt="Prioritized planning with safe intervals">
+  <figcaption><strong>Prioritized planning on a small example.</strong> Two AGVs cross at vertex 3, and the event order puts AGV 1's event first. Step through it: AGV 1 is planned alone, its motions are carved into AGV 2's safe-interval table, and SIPP then plans AGV 2, which waits at vertex 6 until vertex 3 is safe. The figure below shows the real loop with all its event types.</figcaption>
+</figure>
 <figure id="bg-fig-93_chugg_sequential">
   <img src="figures/93_chugg_sequential.svg" alt="SolveSequential step by step">
   <figcaption><code>SolveSequential</code> from <code>chugg_common.cpp</code> and <code>chugg_sequential.cpp</code>. Setup runs once. The loop visits every event in one topological order; an AGV or tray event is planned by SIPP on that AGV's safe-interval table, while bays and VECS just get a fixed duration. Committed motions are carved out of every other AGV's table. A pairwise collision check over all new motions closes the call.</figcaption>
@@ -481,3 +485,96 @@ cont_state.SetTrajectory(volley::AgvId(2u), a2_traj);
 auto [action_nodes_opt, message] = scheduler.ResponseFromTrajectories(ctx, cont_state);
 </code></pre>
 <p>Two details worth knowing. The test's comment calls the fourth argument <code>JobId</code>, but everywhere in CHUGG and the response code it is the event's vertex in the event DAG; with one event per job in this test the two coincide. And because a <code>Motion</code> stores the footprint (<code>GetCollisionId()</code>), the response code can tell a loaded AGV from an empty one without replaying the discrete state.</p>
+<h2 data-num id="mp-solver-inputs-and-outputs">Solver inputs and outputs: CHUGG and the standard MAPF problem</h2>
+<p>CHUGG is the only motion planner the scheduler has, and its interface was shaped by the scheduler's data rather than by a standard problem definition: it takes the event DAG itself. This section compares its inputs with the textbook multi-agent path finding (MAPF) problem that solvers such as conflict-based search (CBS) expect, asks whether either can take the other's input, and ends with a solver-neutral description of the problem. The <a href="#doc-proposal">Issue &amp; proposal</a> tab turns that description into an interface (<a class="ref" href="#pr-swappable-motion-planners">section 15</a>).</p>
+<h3 data-num id="mp-the-standard-mapf-problem">The standard MAPF problem, and CBS</h3>
+<p>A classic MAPF instance (Stern et al., “Multi-Agent Pathfinding: Definitions, Variants, and Benchmarks”, SoCS 2019) has three parts:</p>
+<ul>
+  <li><strong>A graph</strong> <span class="math">G = (V, E)</span>: the places agents can be, and the moves between them.</li>
+  <li><strong>Agents</strong> <span class="math">1, \ldots, k</span>, each with a <strong>start</strong> <span class="math">s_i \in V</span> and a <strong>goal</strong> <span class="math">g_i \in V</span>.</li>
+  <li><strong>Rules</strong>: time advances in unit steps; at each step an agent moves along one edge or waits. Two agents conflict if they are on the same vertex at the same step (vertex conflict) or swap along one edge (edge conflict).</li>
+</ul>
+<p>A solution is one path per agent, from <span class="math">s_i</span> to <span class="math">g_i</span>, with no conflicts; the usual objectives are the sum of arrival times (sum of costs) or the latest arrival (makespan). Solvers differ in how they search: <strong>prioritized planning</strong> plans agents one at a time in a fixed order, each avoiding the ones before it (fast, but neither complete nor optimal); <strong>CBS</strong> (Sharon et al., Artificial Intelligence 2015) plans every agent alone, then resolves conflicts by branching on which agent must avoid the contested place and time, and is optimal for sum of costs. Both use a single-agent planner underneath, and SIPP is a common choice for it.</p>
+<figure id="mp-fig-98_cbs_example">
+  <img src="figures/98_cbs_example.svg" alt="Conflict-based search on the same example">
+  <figcaption><strong>CBS on the example of <a class="ref" href="#mp-fig-97_prioritized_planning">Figure 1</a>.</strong> Step through the constraint tree: the root plans each AGV alone and finds the conflict at vertex 3; each branch forbids one AGV from vertex 3 while the other is there and replans only that AGV; the cheaper conflict-free node is the solution. CBS finds a total of 12 s where prioritized planning, committed to e1 first, needed 16 s.</figcaption>
+</figure>
+<p>The literature has extended this core in the directions the garage needs: goal <em>sequences</em> per agent (multi-goal MAPF and pickup-and-delivery), precedence constraints between goals of different agents (MAPF-PC, Zhang et al., AAMAS 2022), large agents whose footprint covers several places, and continuous time with real durations (CCBS, Andreychuk et al., Artificial Intelligence 2022). Each extension changes the input, not the idea.</p>
+<h3 data-num id="mp-what-chugg-receives">What CHUGG receives instead</h3>
+<p>The seven arguments of the <code>Chugg</code> constructor (<a class="ref" href="#bg-chugg-the-motion-planner">section 2</a>) cover the same three parts, each in a richer form:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Part</th>
+      <th>Classic MAPF</th>
+      <th>CHUGG today</th>
+      <th>Why it is richer</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Graph</td>
+      <td><span class="math">G = (V, E)</span></td>
+      <td><code>GarageGraph</code>: vertices are poses (node + heading), edges carry a transition type (drive, strafe, rotate, ride a VRC) and a length</td>
+      <td>An AGV's heading matters, and turning in place is a move of its own</td>
+    </tr>
+    <tr>
+      <td>Time</td>
+      <td>Unit steps</td>
+      <td>Continuous time: <code>edge_durations</code> and the cost model (trapezoid profiles, run extension, wheel-turn delays, lift times)</td>
+      <td>Moves take very different times (a 90° turn takes as long as 9 m of driving)</td>
+    </tr>
+    <tr>
+      <td>Conflicts</td>
+      <td>Same vertex or swapped edge at the same step</td>
+      <td><code>CollisionTable</code>: which footprint at which vertex or edge overlaps which other; the footprint depends on what the AGV carries</td>
+      <td>Bodies are rectangles of different sizes, and a move sweeps an area</td>
+    </tr>
+    <tr>
+      <td>Agents and starts</td>
+      <td><span class="math">s_i</span> per agent</td>
+      <td>The initial <code>ContinuousState</code>: every AGV, tray, bay and VECS standing still from <code>start_time</code>; disabled and unused entities become static obstacles</td>
+      <td>Trays are carried, not driven; bays and VECS change state but never move</td>
+    </tr>
+    <tr>
+      <td>Goals</td>
+      <td>One <span class="math">g_i</span> per agent</td>
+      <td>The event DAG: per AGV, a <em>sequence</em> of goals (drive to a pose, lift, carry a tray, lower), plus timed state changes for bays and VECS</td>
+      <td>One plan call moves many trays with few AGVs</td>
+    </tr>
+    <tr>
+      <td>Order between goals</td>
+      <td>None</td>
+      <td>The event DAG's edges, across entities (“the tray arrives before the bay processes the retrieve”)</td>
+      <td>Task logic: bays, VECS and trays depend on each other</td>
+    </tr>
+    <tr>
+      <td>Objective</td>
+      <td>Sum of costs or makespan</td>
+      <td>None stated: the first feasible plan in the priority order; SIPP's own cost adds a 3 s penalty per step</td>
+      <td>A design choice: one fast pass, with no search over who goes first</td>
+    </tr>
+    <tr>
+      <td>Output</td>
+      <td>One path per agent</td>
+      <td><code>ContinuousState</code>: timed motions per entity, each tagged with the event it implements</td>
+      <td>The action DAG needs to know which motion belongs to which event</td>
+    </tr>
+  </tbody>
+</table>
+<p>Two things about the form of the input matter more than its content. First, the goals arrive as <code>planner_core</code> event objects (<code>AgvMove</code>, <code>TrayMove</code>, <code>BayTransition</code>, ...), and CHUGG has one planning routine per event class, so <code>motion_planner</code> depends on the scheduler's task vocabulary. Second, some inputs are not arguments at all but rules inside CHUGG: the start state is replayed from the event DAG, the static obstacles are derived from it, and the goal of a <code>TrayMove</code> (approach, lift, carry, lower, and the footprint at each step) is decided inside <code>SippAgv::AddEventGoal</code>. The code's own comments ask for a simpler input: “Simplify inputs with schedule context object” on the constructor, and “a simpler AgvEvents struct that contains events and constraints for a single agv” above <code>SippAgv</code>.</p>
+<h3 data-num id="mp-can-chugg-take-a-cbs-style-input">Can CHUGG take a CBS-style input, and can CBS take CHUGG's?</h3>
+<ul>
+  <li><strong>Classic instance into CHUGG: yes, through an adapter.</strong> A classic instance is a special case of CHUGG's: one <code>AgvMove</code> per agent to its goal pose, no edges in the event DAG, a start state with each AGV on its start pose and nothing else in the garage. CHUGG would then run prioritized planning over the agents in the event order (job index, then insertion order). Two of its rules still apply and differ from classic MAPF: a goal counts only if the AGV can stay there forever, and moves are timed by the cost model, not in unit steps.</li>
+  <li><strong>CHUGG's input into a classic CBS: not without extensions.</strong> A textbook CBS has no goal sequences, no precedence across agents, no load-dependent footprints and no fixed-duration actions for bays and VECS. Each gap has a known extension (multi-goal CBS, CBS with precedence constraints, a pluggable conflict test that asks the <code>CollisionTable</code>, continuous-time CBS), and CHUGG's low level is already prepared for one: <code>SippAgv</code> accepts CBS-style landmark and avoid constraints, which the unfinished <code>SolveCbs</code> uses.</li>
+  <li><strong>So standardize on the richer problem.</strong> If the common input can express goal sequences, precedence, footprints and timed actions, a classic instance is just the case with one goal per agent and no edges, and a solver that cannot handle the full problem can say so, or be given a sub-problem it can handle.</li>
+</ul>
+<h3 data-num id="mp-a-solver-neutral-problem">A solver-neutral description of the problem</h3>
+<p>Everything a motion planner needs here falls into four parts, none of which has to be a scheduler type:</p>
+<ol>
+  <li><strong>World</strong>, fixed per site: the motion graph, the conflict model (which footprint at which vertex or edge overlaps which other) and the timing model (edge, turn, lift and device durations).</li>
+  <li><strong>Start</strong>, per plan call: the start time; each agent's pose, footprint and what it carries; the places that are blocked for this call (parked trays, disabled AGVs and nodes); devices (bays, VECS) and their states.</li>
+  <li><strong>Tasks</strong>, per plan call: a set of goals, each for one entity (drive to a pose, pick up or put down a tray, a device state change of known duration), and precedence edges between goals. This is the event DAG without the scheduler's classes.</li>
+  <li><strong>Settings</strong>: the objective, a time budget, and whether a partial or suboptimal answer is acceptable.</li>
+</ol>
+<p>The output is a timeline per entity in which every motion names the goal it serves, so that the action DAG can be built the same way whichever solver produced it. Any output, from any solver, can be checked by one solver-independent validator: every goal reached, every precedence edge respected, and no two motions in conflict according to the conflict model. CHUGG already ends with such a check (<code>CheckCollisions</code>); the validator would make it a shared contract rather than one solver's last step.</p>
