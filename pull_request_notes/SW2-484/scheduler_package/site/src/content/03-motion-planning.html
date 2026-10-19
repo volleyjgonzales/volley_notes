@@ -16,7 +16,7 @@
 -->
 <h1>03 — Motion planning: from the event DAG to timed motions</h1>
 <p><em>Stage 4 of the pipeline: CHUGG turns the finished event DAG into timed, collision-free motions for every AGV, bay and VECS (VRC commands are added later, in the action DAG). This is the multi-agent path finding (MAPF) step.</em></p>
-<p>This tab builds on the finished event DAG from the Task planning tab. It first places motion planning between the two DAGs of the pipeline, then opens CHUGG and SIPP, then derives the timing model behind every duration, then <code>ContinuousState</code>, the timeline CHUGG returns and the Action graph tab starts from, and ends by comparing CHUGG's inputs with the standard multi-agent path finding problem, as groundwork for swappable motion planners.</p>
+<p>This tab builds on the finished event DAG from the Task planning tab. It first places motion planning between the two DAGs of the pipeline, then opens CHUGG and SIPP, then derives the timing model behind every duration, then <code>ContinuousState</code>, the timeline CHUGG returns and the Action graph tab starts from, then the code itself as UML class and sequence diagrams, and ends by comparing CHUGG's inputs with the standard multi-agent path finding problem, as groundwork for swappable motion planners.</p>
 <h2 data-num id="bg-motion-planning-and-the-response">Where motion planning sits: two DAGs around one planner</h2>
 <p>Motion planning sits between the two DAGs of the pipeline (besides the working copies some stages make). The first, the event DAG, is its input; the second, the action DAG, is built from its output, and only that second one is an action dependency graph. The order is the one in the literature: motion planning first, then the ADG, then execution.</p>
 <figure id="bg-fig-91_planning_pipeline">
@@ -418,7 +418,11 @@ auto trajectories_opt = motion_planner.SolveSequential(audit_ptr);       // std:
 </table>
 <p>So CHUGG charges 1.5 s for a strafe-then-turn that the cost model says is free, and the assignment stage ignores wheel turns entirely. Each difference is small, but they add up along paths with many mode changes, and they make the assignment cost and CHUGG's timing disagree in a consistent direction. A refactor that moves cost estimation behind one interface would be the natural place to pick one rule.</p>
 <h2 data-num id="bg-continuousstate-the-timeline"><code>ContinuousState</code>: the timeline CHUGG reads and writes</h2>
-<p>“Continuous” refers to time, not space. A <code>DiscreteGarageState</code> is one snapshot: where every AGV, tray, bay, VECS and VRC is <em>now</em>. A <code>ContinuousState</code> is a <code>Trajectory</code> per entity (a <code>std::unordered_map&lt;GarageEntityIdMsg, Trajectory></code>), and a trajectory is a time-ordered <code>std::set</code> of <code>Motion</code>s that may not overlap (<code>AddMotion</code> returns <code>false</code> if one would). Times are <code>std::chrono::system_clock</code> time points.</p>
+<p>“Continuous” refers to time, not space. A <code>DiscreteGarageState</code> is one snapshot: where every AGV, tray, bay, VECS and VRC is <em>now</em>. A <code>ContinuousState</code> is a <code>Trajectory</code> per entity (a <code>std::unordered_map&lt;GarageEntityIdMsg, Trajectory></code>), and a trajectory is a time-ordered <code>std::set</code> of <code>Motion</code>s that may not overlap (<code>AddMotion</code> returns <code>false</code> if one would; why a set, and what it implies, is in <a class="ref" href="#mp-why-trajectory-is-a-set">section 4.1</a>). Times are <code>std::chrono::system_clock</code> time points.</p>
+<figure id="mp-fig-102_uml_timeline_data">
+  <img src="figures/102_uml_timeline_data.svg" alt="ContinuousState, Trajectory and Motion">
+  <figcaption><strong>The timeline types.</strong> A <code>ContinuousState</code> owns one <code>Trajectory</code> per entity; a <code>Trajectory</code> owns its <code>Motion</code>s in a <code>std::set</code> ordered by start time; a <code>Motion</code> owns an <code>Interval</code>, a location (a pose or an edge) and, for motions that change something, a serialized <code>DiscreteGarageEventMsg</code>. The scheduler later merges all trajectories into one set with a full tie-break to build the action DAG.</figcaption>
+</figure>
 <p><strong>What a <code>Motion</code> is.</strong> An entity, an <code>Interval</code>, a footprint (<code>collision_id</code>), an <code>action_id</code>, a location (a <code>Pose</code> or an <code>Edge</code> of two poses), and optionally a <em>delta</em>, the serialized discrete change it causes. The constructor decides which:</p>
 <table>
   <thead>
@@ -485,6 +489,204 @@ cont_state.SetTrajectory(volley::AgvId(2u), a2_traj);
 auto [action_nodes_opt, message] = scheduler.ResponseFromTrajectories(ctx, cont_state);
 </code></pre>
 <p>Two details worth knowing. The test's comment calls the fourth argument <code>JobId</code>, but everywhere in CHUGG and the response code it is the event's vertex in the event DAG; with one event per job in this test the two coincide. And because a <code>Motion</code> stores the footprint (<code>GetCollisionId()</code>), the response code can tell a loaded AGV from an empty one without replaying the discrete state.</p>
+<h3 data-num id="mp-why-trajectory-is-a-set">Why a <code>Trajectory</code> is a <code>std::set</code>, and the alternative</h3>
+<p>A trajectory is naturally an ordered list of motions, and it is stored as one: <code>std::set</code> is an <em>ordered</em> container (a balanced binary tree, usually red-black), not a hash set. Iterating a <code>std::set&lt;Motion></code> visits the motions in the order given by <code>Motion::operator&lt;</code>, and that operator compares start times only:</p>
+<pre><code class="language-cpp">// trajectory.hpp
+bool operator&lt;(const Motion&amp; other) const { return interval_.Before(other.GetInterval()); }
+// interval.hpp
+bool Before(const Interval&amp; other) const { return begin_ &lt; other.begin_; }
+bool StrictlyBefore(const Interval&amp; other) const { return end_ &lt;= other.begin_; }
+</code></pre>
+<p>So time is the ordering key, as it should be. What the set adds, and what it does not, follows from that key:</p>
+<ul>
+  <li><strong>Uniqueness means one motion per start time.</strong> A set treats two elements as the same when neither is less than the other. Two motions that start at the same instant are therefore one key, whatever else differs; a <code>Trajectory</code> can hold only one of them. <code>Motion::operator==</code> compares every field, but the set never uses it: <code>RemoveMotion(m)</code> erases whichever stored motion starts when <code>m</code> starts.</li>
+  <li><strong>No overlap is a rule of <code>AddMotion</code>, not of the set.</strong> <code>AddMotion</code> uses <code>lower_bound</code> to find the first motion starting at or after the new one, and accepts the new motion only if it ends no later than that motion starts and starts no earlier than the previous one ends. Touching is allowed (<code>end_ &lt;= begin_</code>), so consecutive motions abut. Anything else returns <code>false</code> and stores nothing.</li>
+  <li><strong>The return value is ignored.</strong> Every <code>AddMotion</code> call in CHUGG, in <code>SippAgv::SolutionToTrajectory</code> and in <code>GetUpdatedContinuousState</code> discards the <code>bool</code>. If a bug ever produced an overlapping motion, it would disappear from the plan without an error; the final <code>CheckCollisions</code> would not notice, because the motion is no longer there.</li>
+  <li><strong>Zero-length motions are avoided on purpose.</strong> <code>SolutionToTrajectory</code> skips SIPP states of zero duration. A zero-length motion at time <em>t</em> would block any other motion starting at <em>t</em> (the same key), which is the case step 4 of the figure shows.</li>
+</ul>
+<figure id="mp-fig-104_trajectory_storage">
+  <img src="figures/104_trajectory_storage.svg" alt="How a Trajectory stores its motions">
+  <figcaption><strong>How a <code>Trajectory</code> stores its motions.</strong> Step through three <code>AddMotion</code> calls on one AGV's trajectory, shown as a timeline, as today's <code>std::set</code> tree and as a sorted <code>std::vector</code>: an append (the only case CHUGG uses), an overlapping motion that is refused, and a second motion at the same start time, also refused. The last step highlights how the code uses a trajectory.</figcaption>
+</figure>
+<p><strong>How the code uses a trajectory.</strong> The tree's strengths are cheap inserts anywhere, an automatic order whatever the insertion order, and iterators that survive inserts and erases. The code uses none of them:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Operation</th>
+      <th>Where</th>
+      <th><code>std::set</code> today</th>
+      <th>Sorted <code>std::vector</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Append after the last motion</td>
+      <td>Every <code>AddMotion</code> in the sequential solver: each entity's time only moves forward, and the one edit (a tray's open-ended parked motion shortened at pick-up) removes and re-adds the last element</td>
+      <td>O(log n) plus one allocation</td>
+      <td>Amortised O(1)</td>
+    </tr>
+    <tr>
+      <td>Insert in the middle</td>
+      <td>Nowhere in the sequential solver</td>
+      <td>O(log n)</td>
+      <td>O(n) shift</td>
+    </tr>
+    <tr>
+      <td>Last (or first) motion</td>
+      <td><code>SetEventSafeIntervals</code>, lifts, <code>GetInterval</code>, <code>MakeRootNode</code></td>
+      <td><code>rbegin()</code>, <code>begin()</code></td>
+      <td><code>back()</code>, <code>front()</code></td>
+    </tr>
+    <tr>
+      <td>All motions in time order</td>
+      <td>Deconfliction, collision checks, the response code, logging</td>
+      <td>In-order walk</td>
+      <td>Linear scan</td>
+    </tr>
+    <tr>
+      <td>The motion of a given event</td>
+      <td><code>GetDependencyCompletionTime</code></td>
+      <td>Linear scan</td>
+      <td>Linear scan</td>
+    </tr>
+    <tr>
+      <td>Access by position</td>
+      <td><code>CoalesceTrajectory</code> (copies the set into a <code>std::vector</code> first)</td>
+      <td>Not available</td>
+      <td>Direct</td>
+    </tr>
+    <tr>
+      <td>Motions overlapping an interval</td>
+      <td><code>FindInInterval</code>, <code>RemoveInInterval</code> (no callers in the snapshots)</td>
+      <td>Linear <code>find_if</code> (the tree is not used)</td>
+      <td>Binary search</td>
+    </tr>
+    <tr>
+      <td>Copy</td>
+      <td>Initial state into every result, the result out of <code>PlanMotions</code> and again in <code>Plan()</code></td>
+      <td>One allocation per motion</td>
+      <td>One allocation</td>
+    </tr>
+  </tbody>
+</table>
+<p>The API (<code>FindInInterval</code>, <code>RemoveInInterval</code>, <code>RemoveMotion(iterator)</code>) and the landmark goals of <code>SippAgv</code> suggest the type was designed for editing trajectories in the middle, as the unfinished CBS solver would. In the code that runs, a trajectory is built front to back and read front to back, which is the access pattern of a <code>std::vector</code>. A <code>std::list</code> would add nothing: it keeps the iterator stability of the set, which nothing needs, and loses both binary search and indexing.</p>
+<p><strong>Recommendation.</strong> Keep <code>Trajectory</code>'s interface and change its storage to a <code>std::vector&lt;Motion></code> kept sorted by start time:</p>
+<ul>
+  <li><code>AddMotion</code> appends when the new motion starts at or after the last one ends, and otherwise binary-searches the insert position (<code>std::upper_bound</code> on the start time) with the same overlap check. Mark it <code>[[nodiscard]]</code>, so callers either handle a refusal or say why they ignore it.</li>
+  <li>Decide the rule for equal start times explicitly (for example: allowed only when the earlier motion has zero length), instead of inheriting it from the set's equivalence.</li>
+  <li>Add <code>Front()</code>, <code>Back()</code> and <code>Size()</code>, so <code>rbegin()</code> / <code>rend()</code> (already marked “get rid of these eventually”) can go; <code>begin()</code> / <code>end()</code> stay, so range-<code>for</code> loops in the scheduler do not change.</li>
+  <li>Rewrite <code>FindInInterval</code> with <code>std::partition_point</code>, or delete it with <code>RemoveInInterval</code> if nothing needs them.</li>
+</ul>
+<p>The change is local to <code>motion_planner</code> and renames nothing. The gain is clarity and fewer surprises, more than speed: trajectories are short, and SIPP dominates CHUGG's run time. It is worth doing before other solvers start filling trajectories (<a class="ref" href="#pr-motion-decisions">section 15.6</a>), and the parity tests of the refactor cover it, because the motion order does not change.</p>
+<h2 data-num id="mp-code-structure">The code: classes and the call sequence</h2>
+<p>The previous sections describe what CHUGG does. This section shows how the code is organised: which classes exist, who owns what, and the order of calls in one <code>PlanMotions</code> call. Read it with <code>chugg_sequential.cpp</code> open; the diagrams are abridged but use the real names.</p>
+<h3 data-num id="mp-where-the-classes-live">Where the classes live</h3>
+<p>All of it is in the <code>motion_planner</code> package, namespace <code>volley</code>. For motion planning the scheduler includes <code>chugg.hpp</code> and <code>garage_graph_pathing.hpp</code>, plus <code>continuous_state.hpp</code>, <code>trajectory.hpp</code> and <code>interval.hpp</code> to read the result; task planning includes the search headers (<code>blocking_tray_search.hpp</code>, <code>agv_hiding_search.hpp</code>, <code>static_graph_filtering.hpp</code>).</p>
+<table>
+  <thead>
+    <tr>
+      <th>Header</th>
+      <th>Main types and functions</th>
+      <th>Role in a plan call</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>chugg.hpp</code> (sources: <code>chugg_common.cpp</code>, <code>chugg_sequential.cpp</code>, <code>chugg_cbs.cpp</code>)</td>
+      <td><code>Chugg</code>, <code>Chugg::Node</code></td>
+      <td>The multi-agent planner: event order, setup, the per-event loop. <code>chugg_cbs.cpp</code> is never reached.</td>
+    </tr>
+    <tr>
+      <td><code>sipp_agv.hpp</code></td>
+      <td><code>SippAgv</code></td>
+      <td>One AGV's planner: its goals, its safe-interval table, and the conversion from SIPP states to <code>Motion</code>s</td>
+    </tr>
+    <tr>
+      <td><code>safe_interval_path_planning.hpp</code></td>
+      <td><code>SippState</code>, <code>SippGoal</code>, <code>SippEnvironment</code></td>
+      <td>The SIPP search problem: states, goals, neighbours, heuristic</td>
+    </tr>
+    <tr>
+      <td><code>path_search.hpp</code></td>
+      <td><code>SearchEnvironment&lt;State, Cost></code>, <code>SingleSourceSearch</code>, <code>SearchSolution</code></td>
+      <td>The generic A* used by SIPP and by the single-agent searches of task planning</td>
+    </tr>
+    <tr>
+      <td><code>safe_interval_table.hpp</code>, <code>interval.hpp</code></td>
+      <td><code>SafeIntervalTable</code>, <code>IntervalSet</code>, <code>Interval</code></td>
+      <td>When each vertex and edge is safe, per footprint type</td>
+    </tr>
+    <tr>
+      <td><code>static_graph_filtering.hpp</code></td>
+      <td><code>GraphFilterProperties</code>, <code>GetAllStaticFilters</code></td>
+      <td>Vertices and edges blocked for the whole plan</td>
+    </tr>
+    <tr>
+      <td><code>continuous_state.hpp</code>, <code>trajectory.hpp</code></td>
+      <td><code>ContinuousState</code>, <code>Trajectory</code>, <code>Motion</code></td>
+      <td>The timeline CHUGG reads and returns (<a class="ref" href="#bg-continuousstate-the-timeline">section 4</a>)</td>
+    </tr>
+    <tr>
+      <td><code>garage_graph_pathing.hpp</code></td>
+      <td><code>GetEdgeDurations</code>, <code>GetAllPairsMinCost</code>, <code>GarageGraphEnvironment</code>, <code>GetPosePath</code></td>
+      <td>The per-call inputs (edge times, heuristic table) and plain shortest paths</td>
+    </tr>
+  </tbody>
+</table>
+<h3 data-num id="mp-chugg-and-its-collaborators">CHUGG and its collaborators</h3>
+<figure id="mp-fig-100_uml_chugg_classes">
+  <img src="figures/100_uml_chugg_classes.svg" alt="CHUGG and its collaborators">
+  <figcaption><strong>CHUGG and its collaborators.</strong> <code>Scheduler::PlanMotions</code> creates the initial <code>ContinuousState</code> and a <code>Chugg</code>, then calls <code>SolveSequential</code>. <code>Chugg</code> holds its seven inputs by const reference, keeps the event order and the static filters (<code>constraints_</code>), and plans into one <code>Chugg::Node</code>: the new motions per entity and one <code>SippAgv</code> per movable AGV. Grey members belong to the unfinished CBS solver.</figcaption>
+</figure>
+<ul>
+  <li><strong>Ownership is by reference, lifetime by scope.</strong> <code>Chugg</code>, every <code>SippAgv</code> and every <code>SippEnvironment</code> hold const references to the graph, collision table, cost model and the two per-call tables. That is safe because <code>PlanMotions</code> creates all of them as locals and <code>Chugg</code> lives only for that call; any refactor that keeps a planner longer must keep its inputs alive too.</li>
+  <li><strong><code>Chugg::Node</code> is a CBS search node used by the sequential solver.</strong> The header says so (“Node is really for CBS, but it is used in the sequential planning functions because it was convenient”). It holds the plan being built: <code>trajectories</code> (new motions only) and <code>planners</code>. Its cost fields (<code>makespan</code>, <code>flowtime</code>) are computed but never read by the sequential path.</li>
+  <li><strong>Each <code>SippAgv</code> carries its AGV's whole view of the world.</strong> Its <code>sit_</code> holds every reservation made by other entities so far, and its goal list holds every AgvMove and TrayMove of that AGV in order. <code>PlanEvents</code> plans one of those goals at a time.</li>
+  <li><strong>Five overloads, one loop.</strong> <code>PlanNodeSequential</code> casts each event to its concrete type and calls the matching <code>PlanEventSequential</code> overload; there are overloads for AgvMove, TrayMove, BayTransition, VecsTransition and VrcTransition, and the loop has no branch for the last one.</li>
+</ul>
+<h3 data-num id="mp-the-search-classes">The search classes: SIPP on a generic A*</h3>
+<figure id="mp-fig-101_uml_sipp_classes">
+  <img src="figures/101_uml_sipp_classes.svg" alt="SIPP and the generic A* search">
+  <figcaption><strong>SIPP and the generic A* search.</strong> <code>SingleSourceSearch</code> is one A* function template that calls back into a <code>SearchEnvironment</code>. <code>SippEnvironment</code> implements it for <code>SippState</code> (a move or wait with its time interval and goal index) and reads the AGV's <code>SafeIntervalTable</code>, which keeps an <code>IntervalSet</code> of safe times per footprint and vertex or edge. <code>GarageGraphEnvironment</code> is the second implementation, for plain shortest paths.</figcaption>
+</figure>
+<ul>
+  <li><strong>Strategy by template, not by virtual call.</strong> <code>SingleSourceSearch</code> is a template over the environment type, so the A* loop is compiled once per environment and the callbacks can be inlined; <code>SearchEnvironment</code>'s virtual functions document the contract and are checked with a <code>static_assert</code>.</li>
+  <li><strong>The environment is rebuilt for each event.</strong> <code>PlanEvents</code> constructs a <code>SippEnvironment</code> over references to the current goals and table, runs the search, and discards it. Nothing about a search survives except the motions it returns.</li>
+  <li><strong>Safety is stored per footprint.</strong> The table key is (footprint type, vertex) or (footprint type, edge). A bare AGV and an AGV carrying a large tray conflict with different places, so carving one motion touches every footprint the AGV will use (<code>all_collision_ids_</code>).</li>
+</ul>
+<h3 data-num id="mp-one-planmotions-call">One <code>PlanMotions</code> call, call by call</h3>
+<figure id="mp-fig-103_seq_plan_motions">
+  <img src="figures/103_seq_plan_motions.svg" alt="One PlanMotions call, call by call">
+  <figcaption><strong>One <code>PlanMotions</code> call.</strong> Step through it: the scheduler builds the inputs; <code>SolveSequential</code> sets up the static filters and one <code>SippAgv</code> per AGV, carving every existing motion into the other AGVs' tables; the loop then plans each event (SIPP for AGV events, a fixed duration for bays and VECS) and carves the result into everyone else; a pairwise collision check closes the call.</figcaption>
+</figure>
+<p>The same sequence in code, abridged to the calls the figure shows:</p>
+<pre><code class="language-cpp">// chugg_sequential.cpp, abridged
+std::optional&lt;ContinuousState> Chugg::SolveSequential(cost::CostVector* audit) {
+  SolveInitialization();                       // movable AGVs, planning_start_, constraints_
+  Node solution_node = MakeRootNode();         // one SippAgv per AGV, initial reservations, goals
+  if(!PlanNodeSequential(solution_node)) return std::nullopt;
+  if(!ContinuousState::CheckCollisions(solution_node.trajectories, geometry_).empty()) return std::nullopt;
+  return GetUpdatedContinuousState(solution_node);   // initial state + new motions
+}
+
+// PlanEventSequential(AgvMove), abridged
+initial_time = max(EntityCurrentTime(node, agv), GetDependencyCompletionTime(node, event_id));
+auto orig_sit = SetEventSafeIntervals(node, working_state, agv_id, tray_id);   // copy, then freeze others
+auto traj_segment = node.planners.at(agv_id).PlanEvents({event_id}, agv_state, initial_time, constraints_);
+node.planners.at(agv_id).SetSafeIntervalTable(std::move(orig_sit));            // restore
+for(auto&amp; motion : *traj_segment) {
+  node.trajectories[agv_ent].AddMotion(motion);
+  DeconflictAgvs(node, motion);                // carve into every other AGV's table
+}
+</code></pre>
+<h3 data-num id="mp-what-the-structure-means">What the structure means for a refactor</h3>
+<ul>
+  <li><strong>Per-event work grows with the plan.</strong> For every AGV or tray event, <code>SetEventSafeIntervals</code> copies the AGV's whole <code>SafeIntervalTable</code>, carves in <em>every</em> motion of every other entity planned so far (most of which <code>DeconflictAgvs</code> has already carved), and the table is copied back afterwards: <code>SetSafeIntervalTable(SafeIntervalTable&amp;&amp; sit)</code> assigns <code>sit_ = sit</code>, which copies, because a named rvalue reference is an lvalue. The total work is roughly quadratic in the number of motions. Carving only the resting motions, and <code>sit_ = std::move(sit)</code>, are small changes to measure with the benchmarks.</li>
+  <li><strong>The heuristic table does not depend on the request.</strong> <code>GetAllPairsMinCost</code> runs Floyd–Warshall over the whole graph on every call (<a class="ref" href="#bg-the-cost-model">section 3.2</a>), although its inputs are only the graph and the cost model. It can be computed once when the layout or parameters change, like <code>gg_</code> and <code>table_</code>.</li>
+  <li><strong>Looking up an event's motions is a scan.</strong> <code>GetDependencyCompletionTime</code> walks each dependency's whole trajectory to find motions with that event's id. A map from event id to its last motion's end time, filled when motions are committed, makes it constant time and gives the response code the same lookup.</li>
+  <li><strong>Failures take two routes.</strong> An infeasible event returns <code>false</code> and ends as <code>std::nullopt</code>; an inconsistent DAG throws <code>std::logic_error</code> from the constructor or the loop. A solver interface (<a class="ref" href="#pr-the-motion-solver-interface">section 15.2</a>) should return both as errors with the event that failed.</li>
+  <li><strong>The CBS code shapes the types.</strong> <code>Node</code>, landmark goals, avoid constraints and the editing functions of <code>Trajectory</code> exist for CBS. If CBS is pursued, they are its starting point; if not, removing them makes the sequential solver's types match what it does.</li>
+</ul>
 <h2 data-num id="mp-solver-inputs-and-outputs">Solver inputs and outputs: CHUGG and the standard MAPF problem</h2>
 <p>CHUGG is the only motion planner the scheduler has, and its interface was shaped by the scheduler's data rather than by a standard problem definition: it takes the event DAG itself. This section compares its inputs with the textbook multi-agent path finding (MAPF) problem that solvers such as conflict-based search (CBS) expect, asks whether either can take the other's input, and ends with a solver-neutral description of the problem. The <a href="#doc-proposal">Issue &amp; proposal</a> tab turns that description into an interface (<a class="ref" href="#pr-swappable-motion-planners">section 15</a>).</p>
 <h3 data-num id="mp-the-standard-mapf-problem">The standard MAPF problem, and CBS</h3>

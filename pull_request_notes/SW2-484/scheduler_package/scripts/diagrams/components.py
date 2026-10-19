@@ -193,6 +193,8 @@ class Box(BBox):
 
 def _member_runs(line: str, accent: str, highlight: dict | None = None):
     """Very small syntax colouring for UML member lines: visibility, name, ': Type' / '= value'."""
+    if highlight and any(k in line for k in highlight.get("__dim__", ())):
+        return [(line, "mono", 400, T.faint)]
     if line.startswith("  "):
         return [(line, "mono", 400, T.muted)]
     vis = ""
