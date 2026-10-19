@@ -10,8 +10,10 @@ sources/repomix-common-ros.xml (layout.cpp, pose_utils.cpp, pose_graph.cpp, gara
 Line numbers "file.cpp L123" are lines inside the file as it appears in the repomix snapshot.
 
 Heading convention (GaragePose.msg, fig 78): degrees, 0 along world +y, counter-clockwise positive,
-so 90 faces west. "Faces" means the AGV's body +y axis, which is its locomote (driving) axis;
-body +x is the strafe axis. GeometricPose.yaw = heading in radians.
+so 90 faces west. "Faces" means the AGV's body +x axis: its long side and its locomote (driving)
+axis; body y (to the left) is the strafe axis. GeometricPose.yaw = heading in radians. The planner's
+geometry code works in a helper frame rotated by -90 deg (x out of the AGV's right side, y forward);
+see the AGV coordinate system section of the Layout file tab.
 """
 from __future__ import annotations
 
@@ -90,7 +92,7 @@ assert slots((7, -90)) == {"LEFT": (31, -90)}
 
 
 def hvec(h):
-    """Unit vector in SVG space of the facing (body +y) of heading h."""
+    """Unit vector in SVG space of the facing (body +x, the long side) of heading h."""
     a = math.radians(h)
     return -math.sin(a), -math.cos(a)
 
@@ -547,7 +549,7 @@ def layout_yaml_to_map():
         "Top level. The parser reads name, parking_window_buffer, parking_windows, nodes and edges here; "
         "floors, vrcs and rotation_circle_tape_radius are absent, so Pecos gets one floor {id 0, z 0} and the "
         "default tape radius. Unknown keys would be ignored silently. Grey dots: the 28 nodes, not yet explained.",
-        "parking_windows and the buffer set the stall size. XL is 5.791 m along the facing (body +y, world x at "
+        "parking_windows and the buffer set the stall size. XL is 5.791 m along the facing (body +x, the AGV's long axis; world x at "
         "heading 90) by 2.21 m. The parser appends TRAY and sorts by area: TRAY 0, COMPACT 1, STANDARD 2, LARGE 3, "
         "XL 4. The buffer (+0.1524, +0.0762) is added only for the PoseGraph's sized-pose overlaps; with it, P19's "
         "footprint reaches 0.15 m into P20's.",
@@ -739,7 +741,7 @@ def layout_yaml_to_map():
           badge_key="yaml",
           legend=[("box", C_PARK, "parking stall (XL window)"), ("dashbox", T.amber, "buffered window"),
                   ("box", C_BAY, "bay"), ("ring", C_CHG, "AGV charger"), ("dot", C_WP, "waypoint"),
-                  ("arrow", PG, "pose heading (facing, body +y)"), ("dashbox", T.fg2, "rotation footprint")],
+                  ("arrow", PG, "pose heading (facing, body +x)"), ("dashbox", T.fg2, "rotation footprint")],
           footnote="Parser behaviour from layout.cpp (Layout(YAML::Node), L82-344), pose_utils.cpp (GetAllowedHeadings), "
                    "polygon_utils.cpp (CalcOverlappingSizedPoses) and collision_geometry.cpp (BuildEntityTable uses "
                    "the unbuffered window). Line numbers in the panel are the file's own.")
@@ -751,8 +753,8 @@ def layout_yaml_to_map():
 # ======================================================================================
 C_LOC, C_STR, C_ROT = T.green, T.amber, T.pink
 SLOT_ORDER = ["FORWARD", "RIGHT", "BACK", "LEFT", "ROT_RIGHT", "ROT_LEFT", "VRC_UP", "VRC_DOWN"]
-SLOT_KIND = {"FORWARD": ("STRAFE", "body +x"), "BACK": ("STRAFE", "body -x"), "LEFT": ("LOCOMOTE", "body +y"),
-             "RIGHT": ("LOCOMOTE", "body -y"), "ROT_RIGHT": ("ROTATION", "clockwise"),
+SLOT_KIND = {"FORWARD": ("STRAFE", "body -y"), "BACK": ("STRAFE", "body +y"), "LEFT": ("LOCOMOTE", "body +x"),
+             "RIGHT": ("LOCOMOTE", "body -x"), "ROT_RIGHT": ("ROTATION", "clockwise"),
              "ROT_LEFT": ("ROTATION", "counter-cw"), "VRC_UP": ("VRC_TRANSITION", "floor up"),
              "VRC_DOWN": ("VRC_TRANSITION", "floor down")}
 KIND_COL = {"STRAFE": C_STR, "LOCOMOTE": C_LOC, "ROTATION": C_ROT, "VRC_TRANSITION": T.violet}
@@ -795,10 +797,10 @@ def rot_arc(d, cx, cy, r, h0, h1, col, label, *, lab_r=None, lab_anchor="middle"
 
 
 def body_axes(d, x, y, h, *, L=58, label=True, col_y=C_LOC, col_x=C_STR):
-    """Body +y (facing, locomote) and body +x (strafe) of an AGV at heading h."""
-    fy = hvec(h)                # body +y in svg space
-    fx = hvec(h - 90)           # body +x = facing rotated clockwise by 90 deg
-    for (ux, uy), col, txt in ((fy, col_y, "+y"), (fx, col_x, "+x")):
+    """Body +x (facing, long side, locomote) and body -y (right side, strafe) of an AGV at heading h."""
+    fy = hvec(h)                # body +x in svg space
+    fx = hvec(h - 90)           # body -y (right side) = facing rotated clockwise by 90 deg
+    for (ux, uy), col, txt in ((fy, col_y, "+x"), (fx, col_x, "-y")):
         tip = (x + ux * L, y + uy * L)
         d.line(x, y, tip[0] - ux * 7, tip[1] - uy * 7, stroke=col, sw=2.2, layer="top", dash="5 3")
         d.arrowhead(tip, (x, y), kind="filled", color=col, size=9, layer="top")
@@ -832,9 +834,9 @@ def node_to_poses():
         "GetAllowedHeadings (pose_utils.cpp) emits Wrap(h) and Wrap(h + 180) for every listed heading and sorts: "
         "node 8 gets four poses, -90, 0, 90, 180; node 9 gets two, -90 and 90. These are poses_[14..17] and "
         "poses_[18..19] of the 60 Pecos poses.",
-        "What a heading means for the AGV. At (8, 90) the body +y axis, the AGV's driving (locomote) axis, points "
-        "west: heading 90 = facing west. Body +x points north; moving along it is a strafe. GeometricPose.yaw is "
-        "the same angle in radians.",
+        "What a heading means for the AGV. At (8, 90) the body +x axis, the AGV's long side and driving (locomote) "
+        "axis, points west: heading 90 = facing west. Its right side (body -y) points north; moving sideways is a "
+        "strafe. GeometricPose.yaw is the same angle in radians.",
         "The eight slots of (8, 90). For each layout neighbour with the same heading, pose_graph.cpp measures the "
         "bearing relative to the heading: 0 is FORWARD (W13, north), 180 BACK (W4), +90 LEFT (W31, west), -90 RIGHT "
         "(W9). Rotation: the nearest clockwise heading is ROT_RIGHT (8, 0), the nearest counter-clockwise is "
@@ -845,8 +847,9 @@ def node_to_poses():
         "(8, 0) and (8, 180) are stepping stones. No neighbour of node 8 has heading 0 or 180, so these poses get "
         "rotation slots only. They turn a 90 to -90 flip into two 90-degree steps; without heading 0 in the YAML, "
         "ROT_LEFT and ROT_RIGHT would both be one 180-degree spin.",
-        "The names describe body x, not driving. FORWARD and BACK are travel along body +x and -x: GarageGraph "
-        "types them STRAFE. LEFT and RIGHT are along body +y and -y: LOCOMOTE, the AGV's normal driving. Node 9 "
+        "The names describe the helper frame, not driving. FORWARD and BACK are travel out of the AGV's right and "
+        "left sides: GarageGraph types them STRAFE. LEFT and RIGHT are along body +x and -x: LOCOMOTE, the AGV's "
+        "normal driving. Node 9 "
         "shows it: (9, 90) FORWARD is the 0.61 m strafe north onto charger C10, LEFT is the drive west to W8; it "
         "has no rotation slots.",
         "Summary for Pecos: 26 nodes with one heading give 2 poses each, nodes 8 and 22 give 4: 60 poses and 480 "
@@ -868,9 +871,9 @@ def node_to_poses():
         m.agv(8, "AGV-1", heading=90, label_side="below")
     with d.only(2):
         body_axes(d, x8, y8, 90, L=92)
-        label_pill(d, m.box.x0 + 12, y8 + 74, "body +y = locomote (driving) axis: west at heading 90",
+        label_pill(d, m.box.x0 + 12, y8 + 74, "body +x = long side, locomote (driving) axis: west at heading 90",
                    color=C_LOC, bg=T.bg_deep, border=C_LOC, anchor="start")
-        label_pill(d, x8 + 18, y8 - 112, "body +x = strafe axis: north at heading 90", color=C_STR, bg=T.bg_deep,
+        label_pill(d, x8 + 18, y8 - 112, "body -y = right side, strafe axis: north at heading 90", color=C_STR, bg=T.bg_deep,
                    border=C_STR, anchor="start")
     with d.only(3):
         slot_arrow(m, 8, 13, "FORWARD", frac=0.55, cut0=40)
@@ -984,9 +987,9 @@ def node_to_poses():
             d.rect(rx + 1, y0 + rh * (i + 1) + 1, tw - 2, rh - 2, rx=3, fill="none", stroke=C_LOC, sw=1.6,
                    layer="top")
     with d.at(6):
-        note(d, rx, tb.y1 + 14, tw, "Naming issue: FORWARD and BACK are strafes (body x), LEFT and RIGHT are "
-                                    "locomotes (body y, the driving axis). The names follow the heading angle used as "
-                                    "body +x in the bearing test, not the way the AGV drives.",
+        note(d, rx, tb.y1 + 14, tw, "Naming issue: FORWARD and BACK are strafes (body y), LEFT and RIGHT are "
+                                    "locomotes (body x, the driving axis). The bearing test uses the heading as a math "
+                                    "angle, which points out of the AGV's right side, not the way it drives.",
              size=11, accent=C_STR)
     # summary
     sy = tb.y1 + 96
@@ -1012,8 +1015,8 @@ def node_to_poses():
           subtitle="Step through node 8 and node 9 of the Pecos YAML: their listed headings, the poses they become, "
                    "what a heading means for the AGV's body, and the eight PoseNeighbor slots pose_graph.cpp fills.",
           badge_key="yaml",
-          legend=[("arrow", PG, "pose heading (facing)"), ("arrow", C_LOC, "LOCOMOTE slot (body +-y)"),
-                  ("arrow", C_STR, "STRAFE slot (body +-x)"), ("arrow", C_ROT, "rotation slot"),
+          legend=[("arrow", PG, "pose heading (facing)"), ("arrow", C_LOC, "LOCOMOTE slot (body +-x)"),
+                  ("arrow", C_STR, "STRAFE slot (body +-y)"), ("arrow", C_ROT, "rotation slot"),
                   ("box", T.green, "AGV (schematic 2.2 x 1.1 m)")],
           footnote="Slots recomputed from the YAML with pose_graph.cpp L58-165 (bearing tolerance 0.1 rad) and checked "
                    "against the report's table; the sign of SignedAngleDist is not in the snapshots and is inferred "
@@ -1052,11 +1055,11 @@ def inbound_heading():
         "GetInboundHeading (layout.cpp L34) returns headings[0] + faces_reciprocal x 180: 90 + 180 = 270 for bay 7. "
         "It does not wrap. GetBayInboundHeading wraps it: Wrap(270) = -90, the only form a GaragePose can hold "
         "(int16 in [-179, 180]).",
-        "The bay pose (7, -90). Heading -90 faces east: AGV-1's body +y, its driving axis, points out of the bay "
+        "The bay pose (7, -90). Heading -90 faces east: AGV-1's body +x, its long and driving axis, points out of the bay "
         "through the garage-side door towards W31. With faces_reciprocal false it would face west, towards the "
-        "patron side (layout.hpp: true = the listed heading has +y towards the patron door).",
+        "patron side (layout.hpp words it as '+y axis', meaning the helper frame's y, which is the AGV's +x).",
         "GetBayOutboundPose (pose_graph.cpp L215) builds the same primary pose and returns its LEFT neighbour: "
-        "(31, -90), 4.902 m east, a LOCOMOTE along body +y. The header promises it is always LEFT; nothing in the "
+        "(31, -90), 4.902 m east, a LOCOMOTE along body +x. The header promises it is always LEFT; nothing in the "
         "snapshots calls it.",
         "The retrieval heading. bay_prioritization_ is [21, 7] (both values 0, ties to the higher id), so "
         "InitRetrievalHeadings takes back() = bay 7, its inbound heading -90 and the reciprocal 90. It caches 90 on "
@@ -1229,7 +1232,7 @@ def inbound_heading():
                    "faces_reciprocal adds, where the AGV's driving axis then points, the poses derived from it, and "
                    "one place where the unwrapped value is compared with a stored heading.",
           badge_key="yaml",
-          legend=[("arrow", PG, "inbound heading (facing, body +y)"), ("arrow", T.amber, "cached retrieval heading"),
+          legend=[("arrow", PG, "inbound heading (facing, body +x)"), ("arrow", T.amber, "cached retrieval heading"),
                   ("arrow", C_LOC, "LOCOMOTE slot"), ("box", T.green, "AGV (schematic 2.2 x 1.1 m)"),
                   ("dashbox", BAD, "comparison that fails")],
           footnote="Code from layout.cpp, pose_graph.cpp and scheduler.cpp (line numbers inside each file of the "

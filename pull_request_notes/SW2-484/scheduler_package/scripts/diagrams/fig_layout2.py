@@ -120,9 +120,9 @@ def resource_windows():
     d.text(cx + bl * K / 2 + 34, cy + 10, "all four", size=10.5, fill=T.muted)
     d.text(cx + bl * K / 2 + 126, cy + 10, "buffered", size=10.5, fill=T.muted)
     # axes
-    d.text(22, 44, "length_m runs along body +y, the facing / locomote axis (world x at heading 90 or -90);",
+    d.text(22, 44, "length_m runs along body +x, the AGV's long / locomote axis (world x at heading 90 or -90);",
            size=11, fill=T.muted)
-    d.text(22, 60, "width_m along body x. The four YAML windows share width 2.21 m, so only the ends differ.",
+    d.text(22, 60, "width_m along body y. The four YAML windows share width 2.21 m, so only the ends differ.",
            size=11, fill=T.muted)
 
     # ---------------- 2: parser result table ----------------
@@ -398,8 +398,8 @@ def edge_classification():
     k0 = d.step("Pose (8, 90): W8 at heading 90. PoseGraph measures each edge against yaw = 90 x pi/180 = pi/2 "
                 "rad in the atan2 frame (0 = +x, counter-clockwise), which points to +y. The four wedges are the "
                 "translation slots: FORWARD at relative bearing 0, LEFT at +pi/2, BACK at pi, RIGHT at -pi/2, each "
-                "+-0.1 rad (5.7 deg) wide. The pose faces -x, so LEFT is the facing direction: LEFT and RIGHT are "
-                "locomotes, FORWARD and BACK strafes. All eight slots start at -1 (kInvalidIndex).")
+                "+-0.1 rad (5.7 deg) wide. The yaw used as a math angle points out of the AGV's right side; the AGV "
+                "faces -x, so LEFT is the facing direction: LEFT and RIGHT are locomotes, FORWARD and BACK strafes. All eight slots start at -1 (kInvalidIndex).")
     k1 = d.step("Neighbour 31 (28.0253, 12.7753) also allows heading 90, so pose (31, 90) exists. dx = -2.857, "
                 "dy = 0: bearing atan2(0, -2.857) = 180 deg; relative to the yaw: +90 deg, inside the LEFT wedge. "
                 "Slot LEFT (3) = (31, 90): a locomote toward the approach of bay 7.")

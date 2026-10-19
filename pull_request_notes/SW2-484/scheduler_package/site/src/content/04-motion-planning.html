@@ -711,6 +711,12 @@ for(auto&amp; motion : *traj_segment) {
   <li><strong>Agents</strong> <span class="math">1, \ldots, k</span>, each with a <strong>start</strong> <span class="math">s_i \in V</span> and a <strong>goal</strong> <span class="math">g_i \in V</span>.</li>
   <li><strong>Rules</strong>: time advances in unit steps; at each step an agent moves along one edge or waits. Two agents conflict if they are on the same vertex at the same step (vertex conflict) or swap along one edge (edge conflict).</li>
 </ul>
+<p>Formally, a solution assigns each agent a path <span class="math">\pi_i</span>, a sequence of vertices indexed by time step, that starts at <span class="math">s_i</span>, ends at <span class="math">g_i</span> and moves along at most one edge per step:</p>
+<div class="math">\pi_i : \{0, 1, \ldots, T_i\} \to V, \qquad \pi_i(0) = s_i, \quad \pi_i(T_i) = g_i, \quad \pi_i(t+1) \in \{\pi_i(t)\} \cup N\big(\pi_i(t)\big),</div>
+<p>where <span class="math">N(v)</span> is the set of neighbours of <span class="math">v</span> and an agent waits at its goal after <span class="math">T_i</span>. Two agents <span class="math">i \ne j</span> are in conflict at step <span class="math">t</span> if</p>
+<div class="math">\underbrace{\pi_i(t) = \pi_j(t)}_{\text{vertex conflict}} \qquad \text{or} \qquad \underbrace{\pi_i(t) = \pi_j(t+1) \;\wedge\; \pi_i(t+1) = \pi_j(t)}_{\text{edge (swap) conflict}},</div>
+<p>and the two usual objectives are</p>
+<div class="math">\mathrm{SOC} = \sum_{i=1}^{k} T_i \quad \text{(sum of costs)}, \qquad \mathrm{MS} = \max_{i} T_i \quad \text{(makespan)}.</div>
 <p>A solution is one path per agent, from <span class="math">s_i</span> to <span class="math">g_i</span>, with no conflicts; the usual objectives are the sum of arrival times (sum of costs) or the latest arrival (makespan). Solvers differ in how they search: <strong>prioritized planning</strong> plans agents one at a time in a fixed order, each avoiding the ones before it (fast, but neither complete nor optimal); <strong>CBS</strong> (Sharon et al., Artificial Intelligence 2015) plans every agent alone, then resolves conflicts by branching on which agent must avoid the contested place and time, and is optimal for sum of costs. Both use a single-agent planner underneath, and SIPP is a common choice for it.</p>
 <figure id="mp-fig-98_cbs_example">
   <img src="figures/98_cbs_example.svg" alt="Conflict-based search on the same example">
@@ -780,12 +786,79 @@ for(auto&amp; motion : *traj_segment) {
   </tbody>
 </table>
 <p>Two things about the form of the input matter more than its content. First, the goals arrive as <code>planner_core</code> event objects (<code>AgvMove</code>, <code>TrayMove</code>, <code>BayTransition</code>, ...), and CHUGG has one planning routine per event class, so <code>motion_planner</code> depends on the scheduler's task vocabulary. Second, some inputs are not arguments at all but rules inside CHUGG: the start state is replayed from the event DAG, the static obstacles are derived from it, and the goal of a <code>TrayMove</code> (approach, lift, carry, lower, and the footprint at each step) is decided inside <code>SippAgv::AddEventGoal</code>. The code's own comments ask for a simpler input: “Simplify inputs with schedule context object” on the constructor, and “a simpler AgvEvents struct that contains events and constraints for a single agv” above <code>SippAgv</code>.</p>
+<h3 data-num id="mp-chuggs-problem-in-symbols">CHUGG's problem in the same notation</h3>
+<p>Writing CHUGG's input in the notation above shows exactly where it departs from the classic problem, and therefore which parts of the MAPF literature apply. Each item maps to a part of the code.</p>
+<ul>
+  <li><strong>Graph.</strong> The vertices are poses <span class="math">P = \{(v, \theta)\}</span> and the edges are typed transitions <span class="math">E_P \subseteq P \times P</span> (locomote, strafe, rotate, ride a VRC), each with a duration <span class="math">\tau(e) > 0</span> from the cost model: the <code>GarageGraph</code> and <code>edge_durations</code>.</li>
+  <li><strong>Motions instead of steps.</strong> An agent's plan is a sequence of motions <span class="math">m = (e, [a, b), f)</span>: a transition or a wait <span class="math">e</span>, a time interval with <span class="math">b - a \ge \tau(e)</span>, and a footprint <span class="math">f</span> (bare AGV, or AGV with a tray of some size class). Consecutive motions abut: <span class="math">b_k = a_{k+1}</span>. This is a <code>Trajectory</code> of <code>Motion</code>s.</li>
+  <li><strong>Conflicts by footprint overlap.</strong> With <span class="math">\mathcal{C}(e, f)</span> the set of (location, footprint) pairs that the collision table says overlap footprint <span class="math">f</span> on <span class="math">e</span>, two motions of different agents conflict when
+    <div class="math">[a, b) \cap [a', b') \ne \varnothing \quad \wedge \quad (e', f') \in \mathcal{C}(e, f).</div>
+    With unit footprints and <span class="math">\mathcal{C}(e)</span> = “the same vertex, or the same edge reversed” this reduces to the vertex and swap conflicts above; with real footprints it is the large-agent conflict of Li et al. (“Multi-Agent Path Finding for Large Agents”, AAAI 2019).</li>
+  <li><strong>Goals with precedence.</strong> The events <span class="math">\mathcal{E}</span> of the event DAG, partially ordered by its edges <span class="math">\prec</span>. Each event <span class="math">\varepsilon</span> belongs to one entity <span class="math">\alpha(\varepsilon)</span> and has a goal <span class="math">g(\varepsilon)</span>: a pose to reach, a lift to perform, or a fixed-duration state change. A plan is feasible only if every event starts after its predecessors have finished:
+    <div class="math">\mathrm{start}(\varepsilon') \;\ge\; \mathrm{end}(\varepsilon) \qquad \forall\, \varepsilon \prec \varepsilon'.</div>
+    This is MAPF with precedence constraints (MAPF-PC), with goal sequences per agent.</li>
+  <li><strong>Arrival is “stay forever”.</strong> A pose goal is met at time <span class="math">t</span> only if the pose is safe on <span class="math">[t, \infty)</span> given everything planned so far (<a class="ref" href="#bg-sipp-the-single-agv-search">section 3.2</a>), the usual rule in prioritized planning.</li>
+  <li><strong>No objective.</strong> CHUGG returns the first feasible plan it finds; nothing is minimised across agents.</li>
+</ul>
+<p><strong>How <code>SolveSequential</code> solves it.</strong> It fixes one topological order <span class="math">\sigma</span> of <span class="math">(\mathcal{E}, \prec)</span> (lowest job index first) and plans one event at a time against a growing set of reservations <span class="math">\mathcal{R}_k</span>, the motions already committed plus every other entity frozen at its last pose:</p>
+<div class="math">\begin{aligned}
+t_0(\sigma_k) &= \max\Big(\, \mathrm{end}\big(\text{last motion of } \alpha(\sigma_k)\big),\; \max_{\varepsilon \prec \sigma_k} \mathrm{end}(\varepsilon) \Big),\\
+\pi_{\sigma_k} &= \mathrm{SIPP}\big(\alpha(\sigma_k),\, g(\sigma_k),\, t_0(\sigma_k),\, \mathcal{R}_k\big), \qquad \mathcal{R}_{k+1} = \mathcal{R}_k \cup \pi_{\sigma_k}.
+\end{aligned}</div>
+<p>SIPP searches over (location, safe interval) pairs. For a location <span class="math">\ell</span> (a pose or a transition) and the footprint <span class="math">f</span> the AGV will have there, the safe set is what the reservations leave free,</p>
+<div class="math">S_f(\ell) = [t_0, \infty) \setminus \bigcup_{\substack{m \in \mathcal{R}_k \\ (\ell, f) \in \mathcal{C}(m)}} [a_m, b_m),</div>
+<p>split into maximal intervals; that is a <code>SafeIntervalTable</code> entry. A* expands states with <span class="math">F = G + H</span>, where <span class="math">H</span> sums the all-pairs travel times <span class="math">d(\cdot,\cdot)</span> (Floyd–Warshall over <span class="math">\tau</span>) along the remaining goals, and each move to a state with <span class="math">n</span> predecessors costs <span class="math">\tau(e) + \tau_{\text{turn}} + 3n</span> seconds (the step penalty of <a class="ref" href="#bg-sipp-the-single-agv-search">section 3.2</a>). In the literature's terms this is <strong>prioritized planning with SIPP</strong> on a <strong>MAPF-PC instance with large agents and continuous time</strong>, with the priority order fixed by the event DAG. It is fast and incomplete: if <span class="math">\mathrm{SIPP}</span> fails for some <span class="math">\sigma_k</span>, nothing earlier is replanned.</p>
 <h3 data-num id="mp-can-chugg-take-a-cbs-style-input">Can CHUGG take a CBS-style input, and can CBS take CHUGG's?</h3>
 <ul>
   <li><strong>Classic instance into CHUGG: yes, through an adapter.</strong> A classic instance is a special case of CHUGG's: one <code>AgvMove</code> per agent to its goal pose, no edges in the event DAG, a start state with each AGV on its start pose and nothing else in the garage. CHUGG would then run prioritized planning over the agents in the event order (job index, then insertion order). Two of its rules still apply and differ from classic MAPF: a goal counts only if the AGV can stay there forever, and moves are timed by the cost model, not in unit steps.</li>
   <li><strong>CHUGG's input into a classic CBS: not without extensions.</strong> A textbook CBS has no goal sequences, no precedence across agents, no load-dependent footprints and no fixed-duration actions for bays and VECS. Each gap has a known extension (multi-goal CBS, CBS with precedence constraints, a pluggable conflict test that asks the <code>CollisionTable</code>, continuous-time CBS), and CHUGG's low level is already prepared for one: <code>SippAgv</code> accepts CBS-style landmark and avoid constraints, which the unfinished <code>SolveCbs</code> uses.</li>
   <li><strong>So standardize on the richer problem.</strong> If the common input can express goal sequences, precedence, footprints and timed actions, a classic instance is just the case with one goal per agent and no edges, and a solver that cannot handle the full problem can say so, or be given a sub-problem it can handle.</li>
 </ul>
+<h3 data-num id="mp-from-chugg-to-standard-solvers">From CHUGG towards the standard solvers</h3>
+<p>Each family of MAPF solvers relaxes one of CHUGG's simplifications. In the notation above, the differences are small and concrete:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Direction</th>
+      <th>What changes in the formulation</th>
+      <th>What it buys</th>
+      <th>Where CHUGG already has a hook</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Search over priorities</strong> (PBS: Ma et al., “Searching with Consistent Prioritization for Multi-Agent Path Finding”, AAAI 2019)</td>
+      <td>Replace the fixed order <span class="math">\sigma</span> by a priority relation <span class="math">\prec_P \supseteq \prec</span> grown lazily: when <span class="math">i</span> and <span class="math">j</span> conflict, branch on <span class="math">i \prec_P j</span> or <span class="math">j \prec_P i</span></td>
+      <td>Recovers from a bad order; the event DAG stays a hard part of <span class="math">\prec_P</span>, only the job-index tie-break is searched</td>
+      <td><code>SolveSequential</code> is PBS's leaf step; the order is the one choice it would search</td>
+    </tr>
+    <tr>
+      <td><strong>Conflict-based search</strong> with continuous time (CBS; CCBS: Andreychuk et al., Artificial Intelligence 2022)</td>
+      <td>Plan every agent alone, then resolve a conflict between <span class="math">m_i</span> and <span class="math">m_j</span> by branching on constraints <span class="math">\langle i, \ell, [a, b) \rangle</span> (“<span class="math">i</span> may not use <span class="math">\ell</span> during <span class="math">[a, b)</span>”) for one agent or the other</td>
+      <td>Optimal for <span class="math">\mathrm{SOC}</span>; a bounded-suboptimal variant (ECBS: Barer et al., SoCS 2014) trades a factor <span class="math">w \ge 1</span> for speed</td>
+      <td><code>SolveCbs</code>, <code>Chugg::Node</code>, <code>AddAvoidConstraint</code> and <code>AddLandmarkGoal</code> (unfinished); SIPP already takes interval constraints</td>
+    </tr>
+    <tr>
+      <td><strong>Precedence-aware search</strong> (CBS-PC and PBS-PC: Zhang et al., AAMAS 2022)</td>
+      <td>Keep <span class="math">\mathrm{start}(\varepsilon') \ge \mathrm{end}(\varepsilon)</span> as explicit constraints inside the search instead of baking them into one order</td>
+      <td>Complete (CBS-PC) for the problem CHUGG actually has</td>
+      <td>The event DAG is already the precedence input</td>
+    </tr>
+    <tr>
+      <td><strong>Large agents</strong> (Li et al., AAAI 2019)</td>
+      <td>Conflicts are footprint overlaps <span class="math">\mathcal{C}(e, f)</span>, not equal vertices</td>
+      <td>Correct conflicts for rectangles of different sizes</td>
+      <td>The <code>CollisionTable</code> is exactly <span class="math">\mathcal{C}</span></td>
+    </tr>
+    <tr>
+      <td><strong>Large neighbourhood search</strong> (MAPF-LNS2: Li et al., AAAI 2022)</td>
+      <td>Start from a plan (CHUGG's, or one with conflicts), then repeatedly remove a subset <span class="math">A' \subset A</span> of agents or events and replan it against the rest, keeping the result if <span class="math">J</span> improves or conflicts drop</td>
+      <td>Anytime improvement within a time budget, and repair when prioritized planning fails</td>
+      <td><code>SolveSequential</code> as the initial solver; <code>SetEventSafeIntervals</code> already plans one event against all others</td>
+    </tr>
+  </tbody>
+</table>
+<p>All of these need an objective <span class="math">J</span>, which CHUGG does not have. The natural candidates are <span class="math">\mathrm{SOC}</span> over event completion times, <span class="math">\mathrm{MS}</span>, or the length of the action DAG's critical path, <span class="math">J = \max_{\text{paths } p \text{ in the ADG}} \sum_{a \in p} \mathrm{duration}(a)</span>, which is what execution actually waits for (<a class="ref" href="#ad-timing-critical-path-and-slack">section 4.4</a>). A sensible order of work is: an explicit <span class="math">J</span> and a validator (so that solvers can be compared), then PBS over the job-index tie-break (the smallest change to CHUGG, and it keeps every DAG edge), then LNS for anytime improvement, and CBS-PC only if completeness matters more than speed. The interface that makes these swappable is in the Issue &amp; proposal tab (<a class="ref" href="#pr-swappable-motion-planners">section 15</a>).</p>
 <h3 data-num id="mp-a-solver-neutral-problem">A solver-neutral description of the problem</h3>
 <p>Everything a motion planner needs here falls into four parts, none of which has to be a scheduler type:</p>
 <ol>

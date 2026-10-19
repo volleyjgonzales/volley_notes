@@ -105,6 +105,97 @@ table_(gg_, logger),                                   // CollisionTable: which 
     faces_reciprocal: false  # bays and chargers: which reciprocal is the inbound heading
 </code></pre>
 
+<h2 data-num id="ly-agv-coordinate-system">The AGV and garage coordinate systems</h2>
+<p>Three frames appear in the code: the garage frame, in which the layout is written; the AGV's own body frame; and a helper frame that the planner's geometry code uses internally. The heading ties them together. This section states each frame and the files it is read from, because several comments in the code use the word “+y” for different axes.</p>
+<figure id="ly-fig-115_agv_coordinate_frames">
+  <img src="figures/115_agv_coordinate_frames.svg" alt="Animated diagram of the Pecos map around W8 with a side panel and a table: the garage frame, headings measured counter-clockwise from north, AGV-1 at W8 heading 90 with body axes x forward (west) and y left (south), a locomote arrow west to W31 and a strafe arrow north to W13, the planner frame P with x out of the right side and the PoseGraph slot names, footprints built in P and rotated, a 45-degree rotation-sign example, and a table mapping source files to frames.">
+  <figcaption><strong>AGV and garage coordinate systems.</strong> Step through the garage frame G (x east, y north, z up; node positions in metres), the heading <span class="math">\theta</span> (from garage local north, counter-clockwise, 90 = west), the AGV body frame B (x forward along the long side, y left), locomote versus strafe on two real Pecos edges at W8, the planner's helper frame P (B turned by −90°: x out of the right side, y forward) and the PoseGraph slot names that live in it, footprints built in P and rotated by the heading, and a rotation-sign inconsistency that only matters at headings that are not multiples of 90°. The table lists which source file fixes which frame. The AGV is drawn as a 2.2 m × 1.1 m schematic because <code>common/constants.hpp</code> (with <code>kAgvLength</code> and <code>kAgvWidth</code>) is not in the snapshots.</figcaption>
+</figure>
+<h3 data-num id="ly-the-garage-frame">The garage frame</h3>
+<p>Node coordinates <code>x</code>, <code>y</code> (and floor heights <code>z</code>) are metres in a right-handed garage frame with <strong>x east, y north, z up</strong>. The axes are stated in <code>agv_interfaces/msg/NodeAccuracy.msg</code> (“the garage frame, +x (east), +y (north), +z (up)”); the origin is a site choice, recorded for Pecos only as a comment on node 22 (<code># Offset "origin" (take any future measurements from here)</code>). “North” is the garage's local north from the CAD drawing, not geographic north (<code>GaragePose.msg</code>).</p>
+<h3 data-num id="ly-the-heading">The heading</h3>
+<p>A heading <span class="math">\theta</span> is an angle measured <strong>from garage local north, counter-clockwise</strong>: 0 points north (+y), 90 west (−x), −90 east (+x), 180 south. <code>GaragePose.heading</code> stores it as whole degrees in <span class="math">[-179, 180]</span>, and <code>GeometricPose.yaw</code> stores the same angle in radians:</p>
+<pre><code class="language-text">interfaces/msg/GaragePose.msg:
+  # Headings are defined relative to garage local north, a direction that is defined in the CAD file.
+  # Headings are right-hand, and increase in the counter clockwise direction. Thus, heading 90 points west.
+  int16 heading # in degrees, [-179:180]
+</code></pre>
+<p>This is <em>not</em> the usual mathematical angle, which is measured from +x. The code says so where it converts: <code>GarageGraph::LocomoteOrStrafe</code> (<code>garage_graph.cpp</code>) notes that the yaw is in the “Volley heading convention (heading 0 = +y, CCW positive) — NOT the math / atan2 convention (0 = +x)” and adds <span class="math">\pi/2</span> before comparing it with an <code>atan2</code> bearing. The direction a heading points to is therefore</p>
+<div class="math">\mathbf{f}(\theta) = \begin{pmatrix} -\sin\theta \\ \cos\theta \end{pmatrix} = \begin{pmatrix} \cos(\theta + \pi/2) \\ \sin(\theta + \pi/2) \end{pmatrix}, \qquad \mathbf{f}(90^\circ) = \begin{pmatrix} -1 \\ 0 \end{pmatrix}\ \text{(west)}.</div>
+<h3 data-num id="ly-the-agv-body-frame">The AGV body frame</h3>
+<p>The AGV's body frame B has <strong>x along the AGV's long side, pointing in the heading direction</strong> (forward, the driving direction), <strong>y to the AGV's left</strong>, and z up. This is the frame of the AGV's own messages (“in the AGV frame” in <code>NodeAccuracy.msg</code>). The snapshots do not write its axes down anywhere; the definition above is the team's, and it is consistent with every use in the planner listed below. In the garage frame its axes are</p>
+<div class="math">\hat{\mathbf{x}}_B = \mathbf{f}(\theta) = \begin{pmatrix} -\sin\theta \\ \cos\theta \end{pmatrix}, \qquad \hat{\mathbf{y}}_B = \begin{pmatrix} -\cos\theta \\ -\sin\theta \end{pmatrix}, \qquad \mathbf{p}_G = \mathbf{p}_{\text{node}} + R(\theta + \pi/2)\, \mathbf{p}_B,</div>
+<p>where <span class="math">R(\alpha)</span> is the counter-clockwise rotation by <span class="math">\alpha</span>. What the planner does with it:</p>
+<ul>
+  <li><strong>Locomote is along body x, strafe along body y.</strong> <code>IsLocomoteOrStrafe</code> (<code>common_ros/src/agv_motion_type.cpp</code>) calls an edge a LOCOMOTE when its bearing <span class="math">\operatorname{atan2}(\Delta y, \Delta x)</span> is within <span class="math">10^{-3}</span> rad of <span class="math">\theta + \pi/2</span> or its reciprocal, which is <span class="math">\pm\hat{\mathbf{x}}_B</span>, and a STRAFE when it is near <span class="math">\theta</span>, which is <span class="math">\pm\hat{\mathbf{y}}_B</span>. At W8 with heading 90, the edge to W31 (west) is a locomote and the edge to W13 (north) is a strafe.</li>
+  <li><strong>The long dimensions lie along body x.</strong> The AGV's collision footprint has <code>kAgvLength</code> along body x, and a payload window's <code>length_m</code> (the car's length) also lies along body x, so a car rides lengthwise along the AGV. Pecos confirms the orientation: its parking nodes use headings ±90, so an AGV in a stall points west or east, and the XL stalls are 5.791 m long in x and 2.21 m wide in y.</li>
+  <li><strong>Inbound headings use it too.</strong> A bay's inbound heading is the heading in which the AGV's body x points out of the bay into the garage (bay 7: −90, east, towards W31; <a class="ref" href="#ly-faces-reciprocal-and-the-inbound-heading">section 4.5</a>).</li>
+</ul>
+<h3 data-num id="ly-the-planners-helper-frame">The planner's helper frame</h3>
+<p>The geometry code in <code>common_ros</code> does not build footprints in B. It builds them in a frame P that is B turned by −90°: <strong><span class="math">x_P</span> points out of the AGV's right side</strong> (body −y) and <strong><span class="math">y_P</span> points forward</strong> (body +x). In P the heading is an ordinary counter-clockwise rotation from the garage axes:</p>
+<div class="math">\mathbf{p}_G = \mathbf{p}_{\text{node}} + R(\theta)\, \mathbf{p}_P, \qquad \hat{\mathbf{x}}_P = \begin{pmatrix} \cos\theta \\ \sin\theta \end{pmatrix} = -\hat{\mathbf{y}}_B, \qquad \hat{\mathbf{y}}_P = \hat{\mathbf{x}}_B.</div>
+<p>That is why the code reads as if the AGV drove along “+y”. The evidence, file by file:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Source</th>
+      <th>What it says</th>
+      <th>Frame</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>common_ros/src/tape_layout.cpp</code>, <code>AddExtensionNode</code></td>
+      <td>“AGV heading is zero out the right side of the vehicle”; uses <code>BodyToInertial(1, 0, heading)</code></td>
+      <td>P: the unit x vector at angle <span class="math">\theta</span> points out of the right side</td>
+    </tr>
+    <tr>
+      <td><code>common_ros/src/collision_geometry.cpp</code>, <code>AgvEntity::BasePoly</code>, <code>RectangleFromSize</code></td>
+      <td><code>RectangleFromSize(kAgvLength, kAgvWidth)</code>, but the function's signature is <code>RectangleFromSize(double width, double length)</code> and it puts its <em>length</em> argument along x: the AGV's length ends up along <span class="math">y_P</span></td>
+      <td>P, then rotated by the heading in <code>PolyAtPose</code></td>
+    </tr>
+    <tr>
+      <td><code>common_ros/src/collision_geometry.cpp</code>, payload <code>BasePoly</code></td>
+      <td><code>RectangleFromSize(window_.length_m, window_.width_m)</code>: the window length along <span class="math">y_P</span></td>
+      <td>P</td>
+    </tr>
+    <tr>
+      <td><code>common_ros/src/polygon_utils.cpp</code>, <code>CalcOverlappingSizedPoses</code></td>
+      <td>“Everything is a crab, so our parking window lengths are our pose widths”; passes <code>width_m</code> as <code>length_along_heading</code></td>
+      <td>P: “along heading” means along <span class="math">x_P</span>, the AGV's side</td>
+    </tr>
+    <tr>
+      <td><code>common_ros/include/common_ros/layout.hpp</code>, <code>GetInboundHeading</code>; <code>pose_graph.hpp</code>, <code>GetBayOutboundPose</code></td>
+      <td>“an AGV with that heading has a +y axis facing the system interior door”; “the system interior door is in the +y direction in the bay's primary pose”; the outbound move is “always a LEFT action”</td>
+      <td>P: “+y” is <span class="math">y_P</span>, the AGV's forward axis</td>
+    </tr>
+    <tr>
+      <td><code>common_ros/src/pose_graph.cpp</code>, neighbour classification</td>
+      <td>Bearings are measured relative to <span class="math">\theta</span> used as a math angle: FORWARD = <span class="math">+x_P</span>, LEFT = <span class="math">+y_P</span>, BACK = <span class="math">-x_P</span>, RIGHT = <span class="math">-y_P</span></td>
+      <td>P: FORWARD and BACK are strafes, LEFT and RIGHT locomotes</td>
+    </tr>
+    <tr>
+      <td><code>common_ros/src/agv_motion_type.cpp</code>, <code>IsLocomoteOrStrafe</code>; <code>garage_graph.cpp</code>, <code>LocomoteOrStrafe</code></td>
+      <td>Locomote along <span class="math">\theta + \pi/2</span>, strafe along <span class="math">\theta</span>; “heading 0 = +y”</td>
+      <td>G and B: locomote along <span class="math">\hat{\mathbf{x}}_B</span></td>
+    </tr>
+    <tr>
+      <td><code>interfaces/msg/GaragePose.msg</code>, <code>GeometricPose.msg</code>; <code>agv_interfaces/msg/NodeAccuracy.msg</code></td>
+      <td>Heading from local north, counter-clockwise, 90 = west; garage +x east, +y north, +z up; offsets “in the AGV frame”</td>
+      <td>G and the heading; B named but not defined</td>
+    </tr>
+    <tr>
+      <td><code>sources/5675_pecos_combined.yaml</code></td>
+      <td>Parking headings 90, stalls 5.791 m along x</td>
+      <td>Consistent with B: long axis along the heading</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Not in the snapshots:</strong> the values of <code>kAgvLength</code> and <code>kAgvWidth</code> (<code>common/constants.hpp</code>), and the definitions of <code>Wrap</code>, <code>SignedAngleDist</code> and <code>BodyToInertial</code>. The slot names above assume <code>SignedAngleDist(a, b)</code> = <span class="math">b - a</span>, which is what makes <code>GetBayOutboundPose</code>'s “always LEFT” true.</p>
+<h3 data-num id="ly-rotation-sign">One inconsistency: the rotation sign</h3>
+<p>Boost's <code>rotate_transformer</code> rotates clockwise for a positive angle (the comment in <code>polygon_utils.cpp</code> says so). <code>CreateRectangularPolygon</code> and <code>BayOdpEntity::PolyAtPose</code> therefore pass <code>-heading</code> (a net counter-clockwise rotation, as the heading convention requires), but <code>CollisionEntity::PolyAtPose</code>, which places every AGV, tray and payload footprint in the collision table, passes <code>+heading</code> (a net clockwise rotation). A centred rectangle turned by <span class="math">\theta</span> or <span class="math">-\theta</span> is the same shape when <span class="math">\theta</span> is a multiple of 90°, so Pecos and every axis-aligned layout are unaffected; at any other heading (45°, say) the collision table's footprint would be mirrored about the node's north–south axis. This is read from the code, not observed; the fix is a one-character change in <code>common_ros</code>, worth making before any layout uses diagonal headings.</p>
+<h3 data-num id="ly-frames-in-this-pack">How this pack draws the frames</h3>
+<p>Map figures draw an AGV as a rounded rectangle with its long side along body x, a chevron at the front, and the label next to it; heading 90 therefore appears as an AGV pointing left (west). Where a figure needs the helper frame (the PoseGraph slots, the footprint construction), it labels the axes <span class="math">x_P</span> and <span class="math">y_P</span> explicitly.</p>
 <h2 data-num id="ly-nodes">Nodes</h2>
 <p>Every node becomes one <code>GarageNodeMsg</code> in <code>Layout::nodes_</code>, sorted by id. Its fields, in file order:</p>
 
@@ -174,10 +265,10 @@ table_(gg_, logger),                                   // CollisionTable: which 
 
 <h3 data-num id="ly-headings-and-poses"><code>headings</code>: from a node to its poses</h3>
 <p><code>headings</code> lists, in degrees, the orientations an AGV may have at the node. The parser reads each as <code>uint16</code> and sorts them. <code>GetAllowedHeadings</code> then adds every reciprocal (a centred rectangle covers the same area either way, <a class="ref" href="#bg-posegraph-from-nodes-to-poses">section 8.2</a>), and each resulting heading is one pose: a node with <code>[90]</code> has poses −90 and 90; node 8 with <code>[0, 90]</code> has −90, 0, 90 and 180. Pecos has 26 × 2 + 2 × 4 = 60 poses.</p>
-<p>The heading is the direction of the AGV's body +y axis, which is its driving (locomote) axis; 90 means facing west (Background tab, <a href="#bg-node-heading-pose-vertex-the-words-for-places">“Node, heading, pose, vertex”</a>). Moving along body +y is a locomote, along body +x a strafe.</p>
+<p>The heading is the direction of the AGV's body +x axis, which runs along its long side and is its driving (locomote) axis; 90 means facing west. Moving along body x is a locomote, along body y a strafe (<a class="ref" href="#ly-agv-coordinate-system">section 3</a>).</p>
 <figure id="ly-fig-107_node_to_poses">
   <img src="figures/107_node_to_poses.svg" alt="Animated figure: a map crop around waypoints W8 and W9 with an AGV at the poses of node 8, coloured arrows for the FORWARD, BACK, LEFT, RIGHT and rotation slots, and a table of the eight PoseNeighbor slots for poses (8,90), (8,−90), (8,0), (8,180) and (9,90), ending with Pecos totals.">
-  <figcaption><strong>How one node becomes poses and neighbour slots.</strong> Step through node 8 (headings [0, 90], rotation allowed) and node 9 (heading [90]): <code>GetAllowedHeadings</code> adds each reciprocal, so node 8 has four poses and node 9 two; an AGV at each pose shows that the heading is where body +y, the driving axis, points (90 = west). The table fills the eight <code>PoseNeighbor</code> slots as <code>pose_graph.cpp</code> does. FORWARD and BACK turn out to be strafes and LEFT and RIGHT locomotes, and (8, 0) and (8, 180) exist only as stepping stones for rotation. Pecos has 60 poses and 164 filled slots.</figcaption>
+  <figcaption><strong>How one node becomes poses and neighbour slots.</strong> Step through node 8 (headings [0, 90], rotation allowed) and node 9 (heading [90]): <code>GetAllowedHeadings</code> adds each reciprocal, so node 8 has four poses and node 9 two; an AGV at each pose shows that the heading is where body +x, the long and driving axis, points (90 = west). The table fills the eight <code>PoseNeighbor</code> slots as <code>pose_graph.cpp</code> does. FORWARD and BACK turn out to be strafes and LEFT and RIGHT locomotes, and (8, 0) and (8, 180) exist only as stepping stones for rotation. Pecos has 60 poses and 164 filled slots.</figcaption>
 </figure>
 <p>Why headings matter:</p>
 <ul>
@@ -228,12 +319,12 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
 <ul>
   <li><strong>Edges must be axis-aligned with the headings they serve.</strong> Pecos's are exactly horizontal or vertical. A diagonal edge between nodes that share a heading stops the scheduler at start-up; a diagonal edge between nodes with no shared heading is silently useless.</li>
   <li><strong>The two tolerances disagree.</strong> <code>PoseGraph</code> accepts 0.1 rad, but <code>GetMotionType</code>, which classifies a motion as locomote or strafe when commands are built, demands 1e-3 rad and throws otherwise. A short edge (the 0.6096 m charger spurs) with a few millimetres of coordinate error passes the first check and fails the second.</li>
-  <li><strong>The slot names are misleading.</strong> <code>FORWARD</code> and <code>BACK</code> are along body ±x, which is a strafe; <code>LEFT</code> and <code>RIGHT</code> are along body ±y, the driving axis. The names describe a body frame in which the AGV faces +x, the opposite of the heading convention.</li>
+  <li><strong>The slot names are misleading.</strong> <code>FORWARD</code> and <code>BACK</code> are out of the AGV's right and left sides (body ∓y), which is a strafe; <code>LEFT</code> and <code>RIGHT</code> are along body ±x, the driving axis. The names belong to the planner's helper frame, whose x axis points out of the AGV's right side (<a class="ref" href="#ly-the-planners-helper-frame">section 3.4</a>).</li>
   <li><strong>The sandboxes hang on one edge.</strong> Pecos's two YAML sections are joined only by edge 8–13 (4.391 m); a <code>disallowed_edge_orientation</code> of 90 on it would split the garage for every AGV.</li>
 </ul>
 
 <h2 data-num id="ly-parking-windows-and-the-buffer">Parking windows and the buffer</h2>
-<p><code>parking_windows</code> defines the payload size classes, each with <code>name</code>, <code>length_m</code> (along the AGV's driving axis), <code>width_m</code> and an optional <code>height_m</code> (0 means unconstrained; larger than the bay clearance <code>kBayHeight</code> throws). The parser adds a <code>TRAY</code> window of the nominal tray size, sorts all windows by area (TRAY must come out smallest), and requires each to fit inside the next; two windows of equal size throw. A window's position in this list is its <em>resource size index</em>, and the collision entity id of a payload footprint is <code>PAYLOAD (4) + index</code>.</p>
+<p><code>parking_windows</code> defines the payload size classes, each with <code>name</code>, <code>length_m</code> (along the AGV's long, driving axis: body x), <code>width_m</code> and an optional <code>height_m</code> (0 means unconstrained; larger than the bay clearance <code>kBayHeight</code> throws). The parser adds a <code>TRAY</code> window of the nominal tray size, sorts all windows by area (TRAY must come out smallest), and requires each to fit inside the next; two windows of equal size throw. A window's position in this list is its <em>resource size index</em>, and the collision entity id of a payload footprint is <code>PAYLOAD (4) + index</code>.</p>
 <figure id="ly-fig-109_resource_windows">
   <img src="figures/109_resource_windows.svg" alt="Nested rectangles of the five resource windows to scale, a table of their indices and entity ids, two flow lanes showing the buffer unused and the unbuffered windows feeding the collision table, a scaled view of four Pecos stalls with XL and buffered outlines and their clearances, and a Pecos map marking the three TRAY-only chargers.">
   <figcaption><strong>Resource windows.</strong> The parser adds a TRAY window (<code>kTrayLength</code> × <code>kTrayWidth</code>; its size is not in the snapshots, so it is drawn nominal) to the four Pecos windows. It sorts all five by area into indices 0 to 4 (TRAY, COMPACT, STANDARD, LARGE, XL), throws unless each fits inside the next, and gives each a collision entity id PAYLOAD (4) + index. A node's <code>max_resource_size</code> admits sizes 0 up to its own index: XL everywhere except chargers 10, 14 and 16, which are TRAY. The buffer (+0.1524 m length, +0.0762 m width) is applied only inside <code>CalcOverlappingSizedPoses</code>, whose result nothing in the snapshots reads; the collision table uses the unbuffered windows. That matters in Pecos: unbuffered, neighbouring stalls clear by 0.2 mm in x and 76 mm in y; buffered, they would overlap by 152.2 mm in x and 0.2 mm in y.</figcaption>
