@@ -63,9 +63,9 @@ def base_schedule_reservation():
             "keep-out filters once, and every later stage avoids those assets; both schedules then run side by side.")
     S0 = d.step("base_state, the snapshot Dispatch sends: AGV-2 is lifted under T15 at P15, AGV-1 is idle at W26, "
                 "AGV-3 is idle at W13, empty tray T24 is at P24 and loaded tray T17 at P17.")
-    S1 = d.step("base_schedule: actions Dispatch has already released and keeps executing during the call. a1 moves "
-                "AGV-2 P15 -> P19, a2 moves it P19 -> P23 (carrying T15), b1 sends B21 TRANSITION_TO_RETRIEVE. "
-                "The scheduler must assume all of them complete.")
+    S1 = d.step("base_schedule: every action of Dispatch's schedule that is not completed yet. a1 moves AGV-2 "
+                "P15 -> P19, a2 moves it P19 -> P23 (carrying T15), a3 lowers T15 at P23, b1 sends B21 "
+                "TRANSITION_TO_RETRIEVE. The scheduler must assume all of them complete.")
     S2 = d.step("The loop in Plan() reserves what they use: AGV-2 is disabled; P15, P19 and P23 (every source and "
                 "destination) and B21 go into disabled_nodes_; bay B21 is disabled. The snapshot is not advanced: "
                 "in initial_state AGV-2 is still at P15.")
@@ -143,9 +143,10 @@ def base_schedule_reservation():
     tx = mb.x1 + 34
     tw = 470
     y = mb.y0
-    c1 = _card(d, tx, y, tw, "base_schedule (running; Dispatch executes it)", [
+    c1 = _card(d, tx, y, tw, "base_schedule (every incomplete action)", [
         ("a1  AGV_COMMAND  AGV-2  P15@90 -> P19@90", BUSY, S1),
         ("a2  AGV_COMMAND  AGV-2  P19@90 -> P23@90", BUSY, S1),
+        ("a3  AGV_COMMAND  AGV-2  lower @P23", BUSY, S1),
         ("b1  BAY_COMMAND  B21  TRANSITION_TO_RETRIEVE", BUSY, S1)], accent=BUSY, k=S0)
     y = c1.y1 + 12
     c2 = _card(d, tx, y, tw, "initial_state after the loop", [
@@ -359,3 +360,249 @@ def apply_call_chain():
           badge_key="as-built",
           legend=[("arrow", T.fg2, "call"), ("dep", T.muted, "return BoolStringPair")])
     return d
+
+
+# --------------------------------------------------------------------------------------
+# 122 — what closing a node does, data structure by data structure
+# --------------------------------------------------------------------------------------
+# Geometry rule (illustrative, axis-aligned rectangles, no buffer): a reserved node blocks the XL window
+# (STALL_L x STALL_W, long side along x at heading 90) centred on it. An AGV pose (2.2 m x 1.1 m, long side
+# along x) is off if its rectangle overlaps that window; an edge is off if the box swept between its two end
+# footprints overlaps it. The real sets come from CollisionTable::Query(PAYLOAD + index(XL), AGV, {node, h}).
+AGV_L, AGV_W = 2.2, 1.1
+ZOOM_X, ZOOM_Y = (27.6, 46.4), (17.9, 25.4)
+
+
+def _rect_at(nid, L, W):
+    n = NODES[nid]
+    return (n.x - L / 2, n.y - W / 2, n.x + L / 2, n.y + W / 2)
+
+
+def _overlap(a, b):
+    return a[0] < b[2] - 1e-6 and b[0] < a[2] - 1e-6 and a[1] < b[3] - 1e-6 and b[1] < a[3] - 1e-6
+
+
+def _keep_out(reserved):
+    vols = [_rect_at(r, STALL_L, STALL_W) for r in reserved]
+    poses = {nid for nid in NODES if any(_overlap(_rect_at(nid, AGV_L, AGV_W), v) for v in vols)}
+    edges = set()
+    for a, b in EDGES:
+        ra, rb = _rect_at(a, AGV_L, AGV_W), _rect_at(b, AGV_L, AGV_W)
+        sweep = (min(ra[0], rb[0]), min(ra[1], rb[1]), max(ra[2], rb[2]), max(ra[3], rb[3]))
+        if any(_overlap(sweep, v) for v in vols):
+            edges.add((a, b))
+    return poses, edges
+
+
+PATH_RES = [26, 27, 24]
+P_POSES, P_EDGES = _keep_out(PATH_RES)
+GAP_RES = [25, 27]
+G_POSES, G_EDGES = _keep_out(GAP_RES)
+assert {26, 27, 24} <= P_POSES and (26, 27) in P_EDGES and (24, 27) in P_EDGES
+assert 26 not in G_POSES and (25, 26) in G_EDGES and (26, 27) in G_EDGES and (23, 26) not in G_EDGES
+
+
+@figure("122_closing_a_node", "What closing a node does, data structure by data structure (animated)", DOC)
+def closing_a_node():
+    d = Doc("122_closing_a_node", "What closing a node does",
+            "Animated: two one-edge AGV commands in base_schedule, followed from the reservation loop through "
+            "DiscreteGarageState, GetStaticFilter and CollisionTable::Query to the boolean masks of "
+            "GraphFilterProperties that every search reads. The last step shows the gap left by a command that "
+            "spans several nodes.")
+    S0 = d.step("base_schedule holds two commands for AGV-1, each one graph edge: c1 W26@90 -> W27@90 and c2 "
+                "W27@90 -> P24@90. Scheduler-built schedules always look like this: one CHUGG motion per edge, one "
+                "ActionNode per motion.")
+    S1 = d.step("The reservation loop: SetAgvDisabled(1) sets agvs_[1].disabled; SetNodeDisabled adds the source "
+                "and destination of each command to disabled_nodes_ (a std::set<uint32_t>). W27 is the end of c1 "
+                "and the start of c2, so the whole route is covered: {24, 26, 27}.")
+    S2 = d.step("GetStaticFilter(AGV, ...) copies disabled_nodes_ into all_disabled_nodes and adds the node of every "
+                "disabled entity (AGV-1 stands on W26). For each node it takes the largest window the node allows "
+                "(max_resource_size_index; XL here) as a footprint, PAYLOAD + index(XL).")
+    S3 = d.step("For each heading of the node it asks the CollisionTable: Query(PAYLOAD + index(XL), AGV, {27, 90}) "
+                "returns every pose and edge where an AGV would overlap that window. Both go into disabled_poses "
+                "and disabled_edges.")
+    S4 = d.step("All three nodes together: the route, both edges of it and every edge touching its stops are off, "
+                "plus any pose whose footprint reaches into a window. The graph itself is not edited: Layout, "
+                "PoseGraph, GarageGraph and CollisionTable stay as they are.")
+    S5 = d.step("GraphFilterProperties(gg_, disabled_poses, disabled_edges) builds two boolean masks over the "
+                "graph, all true, then false for each listed pose and edge. disabledness_filters keeps one per "
+                "footprint (AGV, TRAY, each payload window); CHUGG builds the same masks as constraints_.")
+    S6 = d.step("The gap, a different request: AGV-1 stands on W25 and its one command c W25@90 -> W27@90 passes "
+                "through W26. Only W25 and W27 are reserved. "
+                "Their windows block the edges W25-W26 and W26-W27, but the pose W26 and the edge P23-W26 stay on, "
+                "so a new plan could park an AGV on W26, in the running AGV's way.")
+    s = 34
+    m = Map(d, 0, 0, s, ZOOM_X, ZOOM_Y)
+    m.base(labels=True, zones=False, axes=False)
+    mb = m.box
+
+    def vol(nid, k):
+        x, y = m.P(nid)
+        w, h = STALL_L * s, STALL_W * s
+        with k:
+            d.rect(x - w / 2, y - h / 2, w, h, rx=5, fill=KEEP, opacity=0.13, layer="over")
+            d.rect(x - w / 2, y - h / 2, w, h, rx=5, fill="none", stroke=KEEP, sw=1.8, dash="6 4", layer="over")
+
+    def xmark(nid, col=KEEP):
+        x, y = m.P(nid)
+        d.line(x - 7, y - 7, x + 7, y + 7, stroke=col, sw=2.6, layer="top")
+        d.line(x - 7, y + 7, x + 7, y - 7, stroke=col, sw=2.6, layer="top")
+
+    def edge_off(a, b):
+        (x0, y0), (x1, y1) = m.P(a), m.P(b)
+        d.line(x0, y0, x1, y1, stroke=KEEP, sw=3, dash="4 4", layer="over")
+
+    # base-schedule commands (S0..S5)
+    with d.at(S0, S5):
+        m.route([26, 27], BUSY, sw=3.5, dash="7 5", offset=(0, -10), num=1, num_at=0)
+        m.route([27, 24], BUSY, sw=3.5, dash="7 5", offset=(10, 0), num=2, num_at=0)
+    # S1 rings on reserved nodes
+    for nid in PATH_RES:
+        x, y = m.P(nid)
+        with d.at(S1, S5):
+            d.circle(x, y, 15, fill="none", stroke=KEEP, sw=2.4, layer="top")
+    # S2 + S3: W27 alone
+    vol(27, d.only(S2))
+    vol(27, d.only(S3))
+    p27, e27 = _keep_out([27])
+    with d.only(S3):
+        for a, b in sorted(e27):
+            edge_off(a, b)
+        for nid in sorted(p27):
+            xmark(nid)
+    # S4, S5: all three
+    for nid in PATH_RES:
+        vol(nid, d.at(S4, S5))
+    with d.at(S4, S5):
+        for a, b in sorted(P_EDGES):
+            edge_off(a, b)
+        for nid in sorted(P_POSES):
+            xmark(nid)
+    # S6: gap case
+    for nid in GAP_RES:
+        vol(nid, d.only(S6))
+    with d.only(S6):
+        m.route([25, 26, 27], BUSY, sw=3.5, dash="7 5", offset=(0, -10))
+        for a, b in sorted(G_EDGES):
+            edge_off(a, b)
+        for nid in sorted(G_POSES):
+            xmark(nid)
+        x, y = m.P(26)
+        d.circle(x, y, 17, fill="none", stroke=T.amber, sw=2.6, layer="top")
+        m.route([23, 26], T.amber, sw=3, offset=(10, 0))
+        label_pill(d, x + 6, y + 30, "W26 still on", color=T.amber, bg=T.bg_deep, border=T.amber, size=11)
+    sc = Scene(m)
+    sc.agv("AGV-1", 26, heading=90, color=BUSY, label_side="above")
+    sc.jump(S6, "AGV-1", 25)
+    sc.draw()
+
+    # right: the data structures, top to bottom
+    tx = mb.x1 + 34
+    tw = 520
+    y = mb.y0
+    cards = {}
+
+    def card(key, title, sub, rows, col):
+        """rows: (text, first_step, last_step); rows sharing a slot are alternatives in time."""
+        nonlocal y
+        slots = sorted({r[3] for r in rows})
+        h = 50 + 20 * len(slots) + 6
+        d.rect(tx, y, tw, h, rx=9, fill=T.card, stroke=T.tint(col, 0.7, T.bg), sw=1.3)
+        d.text(tx + 12, y + 16, title, size=12, family="mono", weight=700, fill=col)
+        d.text(tx + 12, y + 33, sub, size=10.5, fill=T.muted)
+        for text, k0, k1, slot in rows:
+            with d.at(k0, k1):
+                d.text(tx + 14, y + 54 + 20 * slot, text, size=11, family="mono",
+                       fill=T.amber if k0 == S6 else T.fg2)
+        cards[key] = BBox(tx, y, tx + tw, y + h)
+        y += h + 9
+
+    card("bs", "PlanRequest.base_schedule : Schedule", "input, read once by the loop",
+         [("nodes[0]  c1  AGV-1  src {26, 90}  dst {27, 90}", S0, S5, 0),
+          ("nodes[1]  c2  AGV-1  src {27, 90}  dst {24, 90}", S0, S5, 1),
+          ("nodes[0]  c   AGV-1  src {25, 90}  dst {27, 90}  (via W26)", S6, S6, 0)], BUSY)
+    card("dgs", "initial_state : DiscreteGarageState", "common_ros; changed by the loop",
+         [("agvs_[1].disabled = true", S1, S6, 0),
+          ("disabled_nodes_ = {24, 26, 27}   // std::set<uint32_t>", S1, S5, 1),
+          ("disabled_nodes_ = {25, 27}       // W26 is not added", S6, S6, 1)], KEEP)
+    card("loc", "GetStaticFilter locals", "motion_planner; built per call, per footprint",
+         [("all_disabled_nodes = {24, 26, 27}   // + nodes of disabled assets", S2, S5, 0),
+          ("all_disabled_nodes = {25, 27}       // AGV-1 stands on W25", S6, S6, 0),
+          ("footprint of a node = PAYLOAD + index(XL)", S2, S6, 1),
+          ("disabled_poses : unordered_set<GaragePose>", S2, S6, 2),
+          ("disabled_edges : unordered_set<array<GaragePose, 2>>", S2, S6, 3)], KEEP)
+    card("gfp", "GraphFilterProperties", "one per footprint; what every search reads",
+         [("vertex_filter_ : VertexVectorPropertyMap<bool>", S5, S6, 0),
+          ("edge_filter_   : EdgeVectorPropertyMap<bool>", S5, S6, 1),
+          ("IsEnabled(v) / IsEnabled(e): unchecked index", S5, S6, 2)], KEEP)
+    card("ctx", "ctx->disabledness_filters", "unordered_map<CollisionEntityId_t, GraphFilterProperties>",
+         [("[AGV], [TRAY], [PAYLOAD + k] for each car size present", S5, S6, 0),
+          ("CHUGG: constraints_ = GetAllStaticFilters(...) (same masks)", S5, S6, 1)], KEEP)
+    hl = {S0: ["bs"], S1: ["dgs"], S2: ["loc"], S3: ["loc"], S4: ["loc"], S5: ["gfp", "ctx"], S6: ["dgs", "loc"]}
+    for k, keys in hl.items():
+        with d.only(k):
+            for key in keys:
+                bb = cards[key]
+                d.rect(bb.x0 - 4, bb.y0 - 4, bb.w + 8, bb.h + 8, rx=12, fill="none", stroke=T.sky, sw=2.2,
+                       layer="under")
+    # vertex mask strip
+    vy = max(mb.y1, y) + 26
+    verts = [25, 26, 27, 22, 23, 24, 19, 20]
+    d.text(0, vy, "vertex_filter_[AGV] for the poses on this map (all headings are 90 here)", size=12, weight=600,
+           fill=T.fg)
+    cw = 82
+    for i, nid in enumerate(verts):
+        x0 = i * (cw + 6)
+        lbl = NODES[nid].label + "@90"
+        d.rect(x0, vy + 14, cw, 46, rx=7, fill=T.card, stroke=T.border, sw=1)
+        d.text(x0 + cw / 2, vy + 28, lbl, size=11, family="mono", fill=T.fg2, anchor="middle")
+        with d.before(S5) if hasattr(d, "before") else _Upto(d, S4):
+            d.text(x0 + cw / 2, vy + 47, "true", size=11.5, family="mono", weight=700, fill=FREE, anchor="middle")
+        on5 = nid not in P_POSES
+        on6 = nid not in G_POSES
+        with d.only(S5):
+            d.text(x0 + cw / 2, vy + 47, "true" if on5 else "false", size=11.5, family="mono", weight=700,
+                   fill=FREE if on5 else KEEP, anchor="middle")
+        with d.only(S6):
+            d.text(x0 + cw / 2, vy + 47, "true" if on6 else "false", size=11.5, family="mono", weight=700,
+                   fill=(T.amber if nid == 26 else FREE) if on6 else KEEP, anchor="middle")
+    cp = code_panel(d, 0, vy + 80, tx + tw, [
+        "// motion_planner/src/static_graph_filtering.cpp, GetStaticFilter (abridged)",
+        "std::set<uint32_t> all_disabled_nodes(disabled_nodes.begin(), disabled_nodes.end());",
+        "for(const auto& [agv_id, agv] : dgs.GetAgvs()) if(agv.disabled) all_disabled_nodes.insert(agv.pose.node_id);",
+        "for(const auto& node_id : all_disabled_nodes) {",
+        "  auto node = gg.GetLayout()->GetNodeById(node_id).value();          // throws if the id is unknown",
+        "  auto footprint = node.max_resource_size_index > 0 ? PAYLOAD + node.max_resource_size_index : TRAY;",
+        "  for(auto head : node.headings) {",
+        "    auto [poses, edges] = ctable.Query(footprint, collision_id, ConstructGaragePose(node_id, head));",
+        "    disabled_poses.insert(poses.begin(), poses.end());  disabled_edges.insert(edges.begin(), edges.end());",
+        "  }",
+        "}",
+        "return {gg, disabled_poses, disabled_edges};   // GraphFilterProperties: masks all true, listed ones false",
+    ], title="from closed nodes to masks", size=11)
+    for k, (a, b) in {S2: (1, 5), S3: (6, 8), S4: (3, 10), S5: (11, 11), S6: (1, 2)}.items():
+        with d.only(k):
+            _hl_code(d, cp, a, b, size=11)
+    frame(d, title="What closing a node does",
+          subtitle="Nothing is removed from the graph. Closing a node adds its id to a set; every filter built "
+                   "from the state then switches off the poses and edges that touch the node's largest window. "
+                   "Overlaps are drawn with plain rectangles and no buffer; the real sets come from the "
+                   "CollisionTable.",
+          badge_key="yaml+hyp",
+          legend=[("dash", BUSY, "base_schedule command"), ("ring", KEEP, "node in disabled_nodes_"),
+                  ("dashbox", KEEP, "largest window of a closed node"), ("dash", KEEP, "edge switched off"),
+                  ("ring", T.amber, "left on: the gap")])
+    return d
+
+
+class _Upto:
+    """Visible from step 0 to step k (inclusive)."""
+
+    def __init__(self, d, k):
+        self.ctx = d.at(0, k)
+
+    def __enter__(self):
+        return self.ctx.__enter__()
+
+    def __exit__(self, *a):
+        return self.ctx.__exit__(*a)

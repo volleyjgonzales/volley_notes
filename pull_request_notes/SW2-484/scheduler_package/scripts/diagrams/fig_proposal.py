@@ -539,7 +539,7 @@ def module_layout():
 # 99 — swappable motion planners: problem, solvers, validator
 # --------------------------------------------------------------------------------------
 
-@figure("99_motion_solver_interface", "Swappable motion planners", "06-issue-and-proposal.html")
+@figure("99_motion_solver_interface", "Swappable motion planners", "07-issue-and-proposal.html")
 def motion_solver_interface():
     d = Doc("99_motion_solver_interface", "Swappable motion planners",
             "The scheduler's motion_planning folder turns the event DAG into a solver-neutral MotionProblem; any "

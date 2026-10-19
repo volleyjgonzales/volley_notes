@@ -1,7 +1,7 @@
 <!--
   01 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
-  Conventions (shared by all seven documents)
+  Conventions (shared by all eight documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
     No number in the text.
   - Every heading and figure has a stable id. Ids keep the prefix of the document they were first
@@ -24,7 +24,7 @@
   <p><strong>Viewing the figures.</strong> Click a figure to open it full screen with pan and zoom; "Pan / zoom viewer" under each caption opens the gallery of all figures (<a href="figures/viewer.html"><code>figures/viewer.html</code></a>). Every figure carries a status badge: <strong>AS-BUILT</strong>, <strong>PROPOSED</strong>, <strong>ILLUSTRATIVE</strong>, <strong>SCHEMATIC</strong>, <strong>CONCEPTUAL</strong>, or <strong>YAML GEOMETRY · HYPOTHETICAL OCCUPANCY</strong>.</p>
 </blockquote>
 <h2 id="bg-how-to-use-this-guide">How to use this study pack</h2>
-<p>The study pack has seven tabs. The first five describe the scheduler as it is: the whole, the site layout it is built from, then the stages in the order a plan call runs; the last two describe the refactor. Each tab assumes the ones before it.</p>
+<p>The study pack has eight tabs. The first five describe the scheduler as it is: the whole, the site layout it is built from, then the stages in the order a plan call runs; the sixth outlines Dispatch, the scheduler's only client; the last two describe the refactor. Each tab assumes the ones before it.</p>
 <table>
   <thead>
     <tr>
@@ -60,12 +60,17 @@
       <td>Explain why execution is safe when robots run early or late, and how the response is built</td>
     </tr>
     <tr>
-      <td>06 · <a href="#doc-proposal">Issue &amp; proposal</a></td>
+      <td>06 · <a href="#doc-dispatch">Dispatch</a></td>
+      <td>An outline of the <code>central</code> package: the job queue, when Dispatch calls the scheduler, how it fills the request, what it checks in the response and how it executes the schedule</td>
+      <td>Explain where each <code>PlanRequest</code> field comes from, why <code>base_schedule</code> is empty today, and what Dispatch accepts back</td>
+    </tr>
+    <tr>
+      <td>07 · <a href="#doc-proposal">Issue &amp; proposal</a></td>
       <td>The refactor: where the code is, what changes, the module layout, the solver interfaces, the staged plan, and proposed naming work</td>
       <td>Review the design and pick up a stage of the plan</td>
     </tr>
     <tr>
-      <td>07 · <a href="#doc-verification">Verification</a></td>
+      <td>08 · <a href="#doc-verification">Verification</a></td>
       <td>Parity tests and benchmarks for the extracted solvers</td>
       <td>Show that a refactoring step changed no behaviour</td>
     </tr>
@@ -1250,10 +1255,10 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
   <li><strong>Ids have different widths.</strong> AGV, tray, bay and VECS ids are <code>uint16</code> in state and job messages but <code>uint32</code> in <code>ActionNode</code> and <code>GarageNode</code>. A heading is an <code>int16</code> in degrees in <span class="math">[-179, 180]</span>, so the reciprocal of 90 is −90.</li>
 </ul>
 <h3 data-num id="bg-planrequest-one-moment-in-a-running-schedule"><code>PlanRequest</code>: one moment in a running schedule</h3>
-<p>A request is easiest to read against the schedule Dispatch is already executing. Dispatch does not stop the fleet to plan: it keeps sending part of its current schedule while the call runs, and asks the scheduler to plan new jobs around that part. Every field of <code>PlanRequest</code> describes one piece of that picture.</p>
+<p>A request is easiest to read against the schedule Dispatch is already executing. The interface is designed so that Dispatch does not have to stop the fleet to plan: it sends what is still running, and asks the scheduler to plan new jobs around it. Every field of <code>PlanRequest</code> describes one piece of that picture. How Dispatch (the <code>central</code> package) fills each field is read from <code>Dispatch::GetPlannerServiceRequest</code>; the Dispatch tab gives the wider context (<a class="ref" href="#ds-what-goes-into-a-planrequest">section 3</a>).</p>
 <figure id="bg-fig-118_plan_request_timeline">
   <img src="figures/118_plan_request_timeline.svg" alt="A PlanRequest on the time line">
-  <figcaption><strong>A <code>PlanRequest</code> on the time line.</strong> Step through it: the schedule Dispatch is running, the moment the request is built, the split between actions that keep running (<code>base_schedule</code>) and actions held back, the three job lists, and finally what <code>Plan()</code> does with them. The scenario is the one of the reservation figure in <a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 10</a>.</figcaption>
+  <figcaption><strong>A <code>PlanRequest</code> on the time line.</strong> Step through it: the schedule Dispatch is running, how it fills <code>base_state</code>, <code>base_schedule</code> and the three job lists, what it expects back, and why, with today's settings, a call is only made once no job is active. The scenario is the one of the reservation figure in <a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 10</a>.</figcaption>
 </figure>
 <table>
   <thead>
@@ -1274,40 +1279,41 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
     <tr>
       <td><code>base_state</code></td>
       <td><code>DiscreteGarageState</code></td>
-      <td>The garage <strong>now</strong>, as a discrete snapshot: where every AGV, tray and car is, each bay's and VECS's state, and what is out of service</td>
+      <td>The garage <strong>now</strong>, as a discrete snapshot: where every AGV, tray and car is, each bay's and VECS's state, and what is out of service. Dispatch sends <code>GetLatest()</code>, its own copy of the garage advanced by completion events, not the state at the end of its schedule</td>
       <td><code>ValidateBaseState</code> turns it into <code>initial_state</code>; an invalid snapshot is the only case that returns <code>success = false</code></td>
     </tr>
     <tr>
       <td><code>base_schedule</code></td>
       <td><code>Schedule</code></td>
-      <td>“The immutable portion of the current schedule”: actions Dispatch keeps sending during the call. The scheduler “is to assume that all of these actions will be completed”</td>
+      <td>“The immutable portion of the current schedule”; the scheduler “is to assume that all of these actions will be completed”. Dispatch fills it with <strong>every action of its schedule that is not completed</strong>, parents renumbered. A split that would keep back actions beyond a 30 s command horizon (<code>SplitSchedule</code>, <code>outside_split</code>) exists, but its call is commented out</td>
       <td>Read once, by the reservation loop: every AGV, bay and VECS it uses, and every AGV command's source and destination node, become unavailable (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 10</a>)</td>
     </tr>
     <tr>
       <td><code>planned_jobs</code></td>
       <td><code>SchedulerJob[]</code></td>
-      <td>Jobs that <code>base_schedule</code> finishes</td>
+      <td>By the message comment, jobs that <code>base_schedule</code> finishes. <strong>Never filled</strong> by Dispatch: always empty</td>
       <td>Not read</td>
     </tr>
     <tr>
       <td><code>active_jobs</code></td>
       <td><code>SchedulerJob[]</code></td>
-      <td>Jobs that have actions in <code>base_schedule</code> but are not finished by it</td>
-      <td>Not read</td>
+      <td>By the message comment, jobs with actions in <code>base_schedule</code> that it does not finish. Dispatch sends its whole <code>jobs_active_</code> list: every job whose actions are still in its schedule, which are exactly the jobs of the <code>base_schedule</code> nodes</td>
+      <td>Not read; the scheduler works from <code>base_schedule</code> instead</td>
     </tr>
     <tr>
       <td><code>pending_jobs</code></td>
       <td><code>SchedulerJob[]</code></td>
-      <td>Jobs to plan in this call, in the order Dispatch wants them tried</td>
+      <td>Queued jobs that pass <code>ShouldPendingJobBePlanned</code>, in queue order, capped by Dispatch's current request strategy</td>
       <td>Planned one by one, in order; each gets an entry in <code>PlanResponse.scheduled_jobs</code></td>
     </tr>
   </tbody>
 </table>
-<p>Three consequences follow from the table:</p>
+<p>How the fields relate to each other:</p>
 <ul>
-  <li><strong>The snapshot and the running schedule disagree on purpose.</strong> <code>base_state</code> shows AGV-2 at P15, but <code>base_schedule</code> will take it to P23. The scheduler does not replay <code>base_schedule</code> onto the snapshot; it reserves what the schedule touches instead. That is the root of the reservation logic.</li>
-  <li><strong>Only pending jobs are planned.</strong> <code>planned_jobs</code> and <code>active_jobs</code> describe Dispatch's bookkeeping; the scheduler never reads them. Whatever remains of an active job after the split (the held-back lower <code>a3</code> in the figure) is Dispatch's to handle; the snapshots do not show how.</li>
-  <li><strong>The response holds only new actions.</strong> Its <code>schedule</code> is a fresh DAG with fresh guids. It has no edges into <code>base_schedule</code>; Dispatch joins the two.</li>
+  <li><strong><code>base_schedule</code> and <code>active_jobs</code> describe the same work.</strong> One lists the remaining actions, the other the jobs they belong to (every <code>ActionNode.job_id</code> in <code>base_schedule</code> is the <code>guid</code> of an active job). <code>planned_jobs</code> would split that list by whether <code>base_schedule</code> finishes the job, but Dispatch never fills it. <code>pending_jobs</code> are disjoint from both: jobs with no actions yet.</li>
+  <li><strong>The snapshot and the running schedule disagree on purpose.</strong> <code>base_state</code> shows AGV-2 at P15, but <code>base_schedule</code> will take it to P23. The scheduler does not replay <code>base_schedule</code> onto the snapshot; it reserves what the schedule touches instead (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 11</a>). Dispatch chose this deliberately: a comment in <code>GetPlannerServiceRequest</code> says that sending the end state instead would make the planner assume everything is there at time 0, and would lose the dependencies between the running part and the new part.</li>
+  <li><strong>Dispatch expects the base schedule back.</strong> <code>PlanClientCallback</code> rejects a response unless it contains every <code>base_schedule</code> node, field for field, and it rebuilds its schedule from the response alone. The intended contract is therefore “return the base schedule plus the new actions, with edges from old to new”. Today's scheduler returns only the new actions, with no edges into <code>base_schedule</code>.</li>
+  <li><strong>In practice both lists are empty.</strong> <code>enable_overlapping_planning_</code> is <code>false</code> and no parameter sets it, so <code>ShouldCallPlanner</code> makes no call while any job is active. Every call made today has an empty <code>base_schedule</code> and empty <code>active_jobs</code>, so the mismatch above never shows and the reservation loop never fires. Turning overlapping planning on would need the scheduler to return the base nodes (and ideally edges into them) first.</li>
 </ul>
 <h3 data-num id="bg-base-state-the-garage-snapshot"><code>base_state</code>: the garage snapshot</h3>
 <p><code>DiscreteGarageState</code> lists every asset in flat arrays. Records point at each other by id, and at the layout by node id. The scheduler does not use the message directly: <code>ValidateBaseState</code> rebuilds a <code>DiscreteGarageState</code> object from it by replaying one existence event per record through <code>OnEvent</code> (<a class="ref" href="#bg-what-onevent-is">section 12.3</a>), then checks it against the layout.</p>
@@ -1497,7 +1503,7 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
     <tr><td><code>bay_id</code> + <code>bay_command</code></td><td>The bay and <code>TRANSITION_TO_INSERT</code> / <code>PROCESS_RETRIEVE</code> / <code>TRANSITION_TO_RETRIEVE</code> / <code>MOVE_LIFT_TO_FLOOR</code></td><td><code>bay_id</code></td><td>for bay transitions</td></tr>
     <tr><td><code>vecs_id</code> + <code>vecs_command</code></td><td>The VECS and <code>START_CHARGING</code> / <code>STOP_CHARGING</code></td><td><code>vecs_id</code></td><td>from the VECS state change</td></tr>
     <tr><td><code>vrc_id</code> + <code>vrc_command</code></td><td>The VRC and <code>MOVE</code> to <code>requested_floor</code></td><td>no (<a class="ref" href="#bg-what-the-reservation-loop-marks">section 10.1</a>)</td><td>VRC trips added by the action-graph code</td></tr>
-    <tr><td><code>status</code>, <code>outside_split</code></td><td>Dispatch's progress tracking: received / completed; held back during a plan call</td><td>no</td><td>left at defaults</td></tr>
+    <tr><td><code>status</code>, <code>outside_split</code></td><td>Dispatch's progress tracking: not received / received / completed; <code>outside_split</code> would mark actions held back during a plan call, but the split is never applied</td><td>no</td><td>left at defaults</td></tr>
   </tbody>
 </table>
 <p>Only the fields of the node's <code>type</code> are meaningful; the other id/command pairs keep default values. This is why the reservation loop switches on <code>type</code> before reading <code>agv_id</code>, <code>bay_id</code> or <code>vecs_id</code>.</p>
@@ -1918,6 +1924,7 @@ for(const SchedulerJobMsg&amp; job : request_data.pending_jobs) {
 </table>
 <h2 data-num id="bg-the-base-schedule-reserved-assets-and-keep-out-filters">The base schedule: reserved assets and keep-out filters</h2>
 <p>Before any job is planned, <code>Plan()</code> takes out of play everything the already-running schedule uses. It does this with the same <code>disabled</code> flags that mark an asset as out of service, and it then builds <code>disabledness_filters</code>, which turn those flags into graph vertices and edges that no new motion may use. This section explains why the scheduler does this, what the flags mean, and where every later stage reads them.</p>
+<p><strong>Status in today's configuration.</strong> Dispatch only calls <code>Plan()</code> when no job is active, so <code>base_schedule</code> is empty in every real call and this loop does nothing (<a class="ref" href="#bg-planrequest-one-moment-in-a-running-schedule">section 6.2</a>). It matters as soon as overlapping planning is turned on, and that is the case this section explains.</p>
 <figure id="bg-fig-116_base_schedule_reservation">
   <img src="figures/116_base_schedule_reservation.svg" alt="Reserving what the running schedule uses">
   <figcaption><strong>Reserving what the running schedule uses.</strong> Step through one request. AGV-2 has two moves and bay B21 one command in <code>base_schedule</code>. The loop marks AGV-2 and B21 disabled and adds every source and destination node to <code>disabled_nodes_</code>; the keep-out filters follow. A pending MOVE_AGV for AGV-2 then fails, a repark of T24 succeeds, AGV assignment skips AGV-2, and in the last two steps both schedules run side by side without sharing an asset.</figcaption>
@@ -1957,9 +1964,65 @@ for(const SchedulerJobMsg&amp; job : request_data.pending_jobs) {
 <p>Three details of the setters (common_ros <code>discrete_garage_state.cpp</code>):</p>
 <ul>
   <li><strong>Unknown ids are ignored silently.</strong> <code>SetAgvDisabled</code>, <code>SetBayDisabled</code> and <code>SetVecsDisabled</code> look the id up and change nothing if it is missing. A node id always goes into <code>disabled_nodes_</code>, even if the layout has no such node; <code>GetStaticFilter</code> later throws on that (“a disabled node that does not exist in the layout”).</li>
-  <li><strong>Only the ends of each AGV command are reserved.</strong> A route sent as one command per edge is covered end to end, because every intermediate stop is the destination of one command and the source of the next. If one command spans several nodes, the nodes between its ends are not added; whether Dispatch sends such commands is not visible in the snapshots.</li>
+  <li><strong>Only the ends of each AGV command are reserved</strong>, but for a schedule this scheduler built that covers the whole route, edges included; a command that spans several nodes leaves a gap (<a class="ref" href="#bg-what-closing-a-node-does">section 11.2</a>).</li>
   <li><strong>Trays are not reserved by name.</strong> A tray carried by a busy AGV stays usable in the bookkeeping, but it stands on a reserved node (the AGV's source), so the keep-out filters treat it as an obstacle and <code>IsTrayAvailable</code> does not count it as an empty tray.</li>
 </ul>
+<h3 data-num id="bg-what-closing-a-node-does">What closing a node does to the graph</h3>
+<p>The loop reserves the source and destination of every AGV command, not the path between them. Whether that leaves part of the route open depends on how long one command is, and on what “closing” a node actually changes.</p>
+<p><strong>For schedules this scheduler builds, the whole route is closed.</strong> CHUGG plans one motion per graph edge, and the response turns every motion that changes something into its own <code>ActionNode</code>. Only VRC floor rides are merged into one motion; chains of ground moves are left as they are (a TODO in <code>DoTrayAssignments</code> notes that they could be collapsed). A route W26 → W27 → P24 therefore arrives as two commands, W26→W27 and W27→P24. Every stop is the destination of one command and the source of the next, so every stop is reserved, and every edge of the route ends at a reserved stop. Lifts and rotations have the same source and destination node and close that node.</p>
+<p><strong>Closing a node edits no graph.</strong> <code>Layout</code>, <code>PoseGraph</code>, <code>GarageGraph</code> and <code>CollisionTable</code> are built once per <code>Scheduler</code> and never change. Closing a node adds its id to a set, and every filter built from the state afterwards switches off poses and edges near it. <a class="ref" href="#bg-fig-122_closing_a_node">Figure 1</a> follows one example through each data structure.</p>
+<figure id="bg-fig-122_closing_a_node">
+  <img src="figures/122_closing_a_node.svg" alt="What closing a node does">
+  <figcaption><strong>What closing a node does, data structure by data structure.</strong> Two one-edge commands of AGV-1 put W26, W27 and P24 into <code>disabled_nodes_</code>. <code>GetStaticFilter</code> turns each closed node into the footprint of its largest window, asks the <code>CollisionTable</code> which AGV poses and edges overlap it, and builds boolean masks with those entries set to <code>false</code>. The last step is a different request: one command that passes through W26 reserves only its two ends and leaves W26 open. Overlaps are drawn with plain rectangles; the real sets come from the <code>CollisionTable</code>.</figcaption>
+</figure>
+<table>
+  <thead>
+    <tr>
+      <th>Data structure</th>
+      <th>Owner and type</th>
+      <th>What closing W27 does to it</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>disabled_nodes_</code></td>
+      <td><code>DiscreteGarageState</code> (common_ros), <code>std::set&lt;uint32_t></code></td>
+      <td>Gets the id 27. A busy AGV's own flag is <code>agvs_[id].disabled</code>; a bay or VECS gets its flag and its id in this set</td>
+    </tr>
+    <tr>
+      <td><code>all_disabled_nodes</code></td>
+      <td>local of <code>GetStaticFilter</code> (motion_planner), <code>std::set&lt;uint32_t></code></td>
+      <td>A copy of <code>disabled_nodes_</code> plus the node of every disabled AGV, tray and bay. AGV-1's own node is closed this way even if no command starts there</td>
+    </tr>
+    <tr>
+      <td>footprint of the closed node</td>
+      <td><code>CollisionEntityId_t</code></td>
+      <td>The largest window W27 allows (<code>max_resource_size_index</code>; XL in Pecos), as <code>PAYLOAD + index</code>, or <code>TRAY</code> if the node allows no car. A closed node is treated as if the largest possible car stood on it</td>
+    </tr>
+    <tr>
+      <td><code>CollisionTable::Query(footprint, collision_id, {27, h})</code></td>
+      <td><code>CollisionTable</code> (common_ros), returns <code>PoseSet</code>, <code>EdgeSet</code></td>
+      <td>Called once per heading of the node: every pose and every edge where the filter's footprint (an AGV here) would overlap that window. Nothing is computed geometrically at this point; the table was precomputed at start-up</td>
+    </tr>
+    <tr>
+      <td><code>disabled_poses</code>, <code>disabled_edges</code></td>
+      <td>locals of <code>GetStaticFilter</code>, <code>unordered_set&lt;GaragePose></code>, <code>unordered_set&lt;array&lt;GaragePose, 2>></code></td>
+      <td>Collect the query results of every closed node, every obstacle entity and, for payload footprints, every pose too small for the car</td>
+    </tr>
+    <tr>
+      <td><code>vertex_filter_</code>, <code>edge_filter_</code></td>
+      <td><code>GraphFilterProperties</code>, <code>VertexVectorPropertyMap&lt;bool></code>, <code>EdgeVectorPropertyMap&lt;bool></code></td>
+      <td>One boolean per vertex and per edge of the <code>GarageGraph</code>, all <code>true</code>, then <code>false</code> for each listed pose and edge. <code>IsEnabled(v)</code> is an unchecked index into them</td>
+    </tr>
+    <tr>
+      <td><code>ctx->disabledness_filters</code></td>
+      <td><code>ScheduleContext</code>, <code>unordered_map&lt;CollisionEntityId_t, GraphFilterProperties></code></td>
+      <td>One mask pair per footprint (<code>AGV</code>, <code>TRAY</code>, each car size present), built once in <code>Plan()</code>. Every other <code>GetStaticFilter</code> call, including CHUGG's <code>constraints_</code>, builds masks with the same closed nodes</td>
+    </tr>
+  </tbody>
+</table>
+<p>So a closed node switches off more than the node: in the figure, closing W26, W27 and P24 also switches off the edges W25–W26, P23–W26 and P23–P24, because an AGV on them would reach into a closed window. Searches that read the masks (<code>GetPosePath</code>, SIPP's <code>GetTraversableEdges</code>) never enter those poses or edges, for the whole plan.</p>
+<p><strong>The gap.</strong> The interface allows one command to cover several nodes: <code>AgvCommand.msg</code> says “There may be other poses between src and dst”. Such a command reserves only its two ends. The nodes in between stay open unless a reserved window happens to cover them; on a long straight run, the middle of the run can stay open too. In the last step of the figure, W26 and the edge P23–W26 stay on, so a new plan could send an AGV to W26 while AGV-1 is still passing through. Commands the scheduler builds never span several nodes. Whether Dispatch merges commands, or receives them from elsewhere, is not visible in the snapshots. If it can, the loop should reserve every node on the path between <code>src</code> and <code>dst</code>, not just the two ends.</p>
 <h3 data-num id="bg-why-reserve-the-assets-that-still-have-to-move">Why reserve the assets that still have to move</h3>
 <p>The assets in <code>base_schedule</code> are not idle; they are busy. They move during the call, under commands Dispatch released before it. In this loop, “disabled” does not mean “broken”: it means <strong>owned by the running schedule, do not use</strong>. Reading <code>SetAgvDisabled</code> as “reserve this AGV” is accurate. Reservation serves the goal of a <code>Plan()</code> call rather than working against it, for four reasons:</p>
 <ul>
@@ -2046,7 +2109,7 @@ for(const SchedulerJobMsg&amp; job : request_data.pending_jobs) {
       <td>Action graph</td>
       <td><code>ResponseFromTrajectories</code></td>
       <td>—</td>
-      <td>Nothing: base actions are not part of the response; Dispatch joins the two schedules</td>
+      <td>Nothing: base actions are not part of the response, although Dispatch requires them to be (<a class="ref" href="#bg-planrequest-one-moment-in-a-running-schedule">section 6.2</a>)</td>
     </tr>
   </tbody>
 </table>

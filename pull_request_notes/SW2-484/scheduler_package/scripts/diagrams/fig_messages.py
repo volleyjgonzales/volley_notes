@@ -8,6 +8,10 @@ Facts drawn, each from the snapshots:
   execution of the base schedule"; active_jobs "have actions in the base schedule but will not be completed by
   the base schedule"; pending_jobs "need to be planned". ActionNode.outside_split: "outside the split in the
   schedule while waiting on the plan call response and will not be sent".
+* central (Dispatch::GetPlannerServiceRequest): base_state = GetLatest(); base_schedule = every incomplete node
+  when jobs_active_ is non-empty (SplitSchedule call commented out); active_jobs = jobs_active_; planned_jobs never
+  filled. PlanClientCallback rejects a response that lacks any base_schedule node unchanged.
+  enable_overlapping_planning_ = false with no parameter, so ShouldCallPlanner refuses while jobs are active.
 * Scheduler::Plan reads request_data.id, base_state (ValidateBaseState), base_schedule (reservation loop) and
   pending_jobs; planned_jobs, active_jobs and outside_split are never read in src/.
 * DiscreteGarageState::Set (common_ros) rebuilds the state from existence events in the order: fault, AGVs
@@ -42,23 +46,26 @@ JA, JB, JN = T.amber, T.teal, T.sky      # job colours: J-A (active), J-B (plann
 @figure("118_plan_request_timeline", "A PlanRequest on the time line (animated)", DOC)
 def plan_request_timeline():
     d = Doc("118_plan_request_timeline", "A PlanRequest on the time line",
-            "Animated: what each PlanRequest field means relative to the schedule Dispatch is already running: "
-            "base_state is the garage now, base_schedule the actions that keep running during the call, and the "
-            "three job lists sort jobs by how much of them that schedule covers.")
-    S0 = d.step("The schedule Dispatch is running when it calls Plan(). Each box is one ActionNode on the lane of "
-                "the asset that executes it. Faded boxes are finished. The line marks now, when the request is built.")
-    S1 = d.step("id is a fresh Guid that the response echoes. base_state is the garage at now, as a discrete "
-                "snapshot: AGV-2 has lifted T15 at P15 (a0 is finished) and waits for a1.")
-    S2 = d.step("The split. Actions before it keep being sent while the call is in flight: they form "
-                "base_schedule (a1, a2, b1), which the scheduler must assume will complete. Actions after it are "
-                "held back (outside_split = true) and are not sent.")
-    S3 = d.step("planned_jobs: jobs that base_schedule finishes (J-B, the bay transition). active_jobs: jobs "
-                "with actions in base_schedule that it does not finish (J-A: its lower, a3, is held back).")
-    S4 = d.step("pending_jobs: jobs to plan now (j0 and j1). They have no actions yet. Plan() reads only id, "
-                "base_state, base_schedule and pending_jobs; planned_jobs and active_jobs are not read.")
-    S5 = d.step("Plan() reserves AGV-2 and B21 from now to the end of the new plan, plans j1 on AGV-1 and fails "
-                "j0 (it needs AGV-2). The response holds only the new actions; joining them to the running schedule "
-                "is Dispatch's job.")
+            "Animated: how Dispatch (central package) fills each PlanRequest field from the schedule it is "
+            "running, what it expects back, and why, with today's settings, base_schedule and active_jobs are "
+            "always empty.")
+    S0 = d.step("The schedule Dispatch is running when its planner timer fires. Each box is one ActionNode on the "
+                "lane of the asset that executes it. Faded boxes are completed. The line marks now.")
+    S1 = d.step("id is a fresh Guid that the response must echo. base_state is GetLatest(): Dispatch's own copy of "
+                "the garage, advanced by completion events. AGV-2 has lifted T15 at P15 (a0 is done).")
+    S2 = d.step("base_schedule is every action not yet completed (a1, a2, a3, b1), with parent indices "
+                "renumbered. Dispatch also has a split (SplitSchedule, a 30 s command horizon, outside_split), but "
+                "the call is commented out, so nothing is held back.")
+    S3 = d.step("active_jobs is every job in Dispatch's jobs_active_ list: the jobs those actions belong to (J-A "
+                "and J-B). planned_jobs is never filled by Dispatch.")
+    S4 = d.step("pending_jobs: queued jobs that pass ShouldPendingJobBePlanned, in queue order, capped by the "
+                "current request strategy. They have no actions yet.")
+    S5 = d.step("What Dispatch expects back: every base_schedule node, unchanged, plus the new nodes with parents "
+                "pointing into them. It rebuilds its schedule from the response alone. Today's scheduler reserves "
+                "AGV-2 and B21 and returns only n1..n5, so Dispatch would reject this response.")
+    S6 = d.step("What happens today: enable_overlapping_planning_ is false and no parameter sets it, so "
+                "ShouldCallPlanner refuses while any job is active. Plan() runs only after J-A and J-B finish, with "
+                "an empty base_schedule and empty active_jobs.")
 
     x0 = 150                      # lane label column
     tmin, tmax = -24.0, 44.0
@@ -104,25 +111,25 @@ def plan_request_timeline():
     A1 = act("AGV-2", 1, 11, "a1", "P15->P19", JA)
     A2 = act("AGV-2", 11, 21, "a2", "P19->P23", JA)
     B1 = act("B21 (bay)", 2, 24, "b1", "TRANSITION_TO_RETRIEVE", JB)
-    A3 = act("AGV-2", 26, 32, "a3", "lower @P23", JA, held=True)
+    A3 = act("AGV-2", 24, 30, "a3", "lower @P23", JA)
     # now line
     d.line(X(0), y_top - 18, X(0), ya, stroke=T.fg, sw=2, layer="over")
     label_pill(d, X(0), y_top - 22, "now", color=T.fg, size=11.5, bg=T.bg)
-    # split
-    xs = X(24.5)
+    # base_schedule region and the (disabled) split
+    xs = X(30)
+    with d.at(S2, S5):
+        d.rect(X(0) + 2, y_top - 4, X(31) - X(0) - 4, ya - y_top + 2, rx=8, fill=BUSY, opacity=0.06,
+               layer="under")
+        d.text((X(0) + X(31)) / 2, ya - 8, "base_schedule: every incomplete action", size=11.5, family="mono",
+               weight=700, fill=BUSY, anchor="middle", halo=T.bg, halo_w=3)
     with d.at(S2):
-        d.line(xs, y_top - 18, xs, ya, stroke=T.amber, sw=2, dash="7 5", layer="over")
-        label_pill(d, xs, y_top - 22, "split", color=T.amber, size=11.5, bg=T.bg)
-        d.rect(X(0) + 2, y_top - 4, xs - X(0) - 4, ya - y_top + 2, rx=8, fill=BUSY, opacity=0.06, layer="under")
-        d.text((X(0) + xs) / 2, ya - 8, "base_schedule", size=11.5, family="mono", weight=700, fill=BUSY,
-               anchor="middle", halo=T.bg, halo_w=3)
-        d.text(xs + 8, ya - 8, "outside_split = true: held back", size=11, family="mono", fill=T.amber,
-               halo=T.bg, halo_w=3)
+        d.line(xs + 12, y_top - 18, xs + 12, ya, stroke=T.faint, sw=1.6, dash="3 5", layer="over")
+        label_pill(d, xs + 12, ya + 52, "30 s horizon: split not applied", color=T.muted, size=10.5, bg=T.bg)
     # base_state column
     with d.at(S1):
         d.rect(X(0) - 4, y_top - 6, 8, ya - y_top + 6, rx=3, fill=T.fg, opacity=0.25, layer="under")
     # S5: reservation hatch and new plan
-    with d.at(S5):
+    with d.only(S5):
         for ln in ("AGV-2", "B21 (bay)"):
             y = Y[ln]
             d.rect(X(0), y + 2, x_end - X(0) - 2, lh - 14, rx=5, fill=KEEP, opacity=0.08, layer="under")
@@ -132,7 +139,15 @@ def plan_request_timeline():
                    halo=T.bg, halo_w=3, layer="top")
     for (t0, t1, nm, lb) in ((1, 8, "n1", "W26->W27"), (8, 15, "n2", "W27->P24"), (15, 19, "n3", "lift"),
                              (19, 28, "n4", "P24->P20"), (28, 32, "n5", "lower")):
-        act("AGV-1", t0, t1, nm, lb, JN, k=S5)
+        with d.only(S5):
+            act("AGV-1", t0, t1, nm, lb, JN)
+    # S6: base schedule done, call made afterwards
+    with d.only(S6):
+        d.rect(X(0) + 2, y_top - 4, X(31) - X(0) - 4, ya - y_top + 2, rx=8, fill=T.bg, opacity=0.72, layer="top")
+        d.line(X(31), y_top - 18, X(31), ya, stroke=T.sky, sw=2, layer="top")
+        label_pill(d, X(31), y_top - 22, "Plan() called here", color=T.sky, size=11.5, bg=T.bg, layer="top")
+        d.text(X(15.5), Y["AGV-3"] + 27, "no plan call while J-A, J-B are active", size=12, family="mono",
+               weight=700, fill=T.fg, anchor="middle", layer="top")
 
     # right-hand cards: the request fields
     cx = x_end + 40
@@ -162,22 +177,24 @@ def plan_request_timeline():
                                               "B21: READY_TO_INSERT",
                                               "trays T15, T17 (+ car), T24"], T.violet, S1, S1)
     card("base_schedule : Schedule", ["a1  AGV-2  P15@90 -> P19@90", "a2  AGV-2  P19@90 -> P23@90",
-                                      "b1  B21  TRANSITION_TO_RETRIEVE"], BUSY, S2, S2)
-    card("planned_jobs : SchedulerJob[]", ["J-B  TRANSITION_BAY_TO_RETRIEVE  B21"], JB, S3, S3)
-    card("active_jobs : SchedulerJob[]", ["J-A  REPARK_TRAY  T15 -> P23"], JA, S3, S3)
+                                      "a3  AGV-2  lower @P23", "b1  B21  TRANSITION_TO_RETRIEVE"], BUSY, S2, S2)
+    card("active_jobs : SchedulerJob[]", ["J-A  REPARK_TRAY  T15 -> P23", "J-B  TRANSITION_BAY_TO_RETRIEVE  B21"],
+         JA, S3, S3)
+    card("planned_jobs : SchedulerJob[]", ["(never filled by Dispatch)"], T.faint, S3, S3)
     card("pending_jobs : SchedulerJob[]", ["j0  MOVE_AGV     AGV-2 -> C14", "j1  REPARK_TRAY  T24 -> P20"], JN,
          S4, S4)
-    with d.at(S5):
-        d.text(cx + 14, y + 8, "response: j1 -> n1..n5 (STATE_EXECUTING)", size=11.5, family="mono", fill=JN)
-        d.text(cx + 14, y + 29, "response: j0 -> STATE_ERROR, \"disabled agv 2\"", size=11.5, family="mono",
-               fill=KEEP)
+    with d.only(S5):
+        d.text(cx + 14, y + 8, "expected: a1 a2 a3 b1 (unchanged) + new", size=11.5, family="mono", fill=T.fg2)
+        d.text(cx + 14, y + 29, "today:    n1..n5 only -> rejected", size=11.5, family="mono", fill=KEEP)
+    with d.only(S6):
+        d.text(cx + 14, y + 8, "today: base_schedule = [], active_jobs = []", size=11.5, family="mono", fill=T.sky)
+        d.text(cx + 14, y + 29, "the reservation loop has nothing to do", size=11.5, family="mono", fill=T.sky)
     frame(d, title="A PlanRequest on the time line",
-          subtitle="The request describes one moment in a schedule that keeps running. Lane colours: violet = "
-                   "assets busy in base_schedule. Durations and the place of the split are illustrative; where "
-                   "Dispatch draws the split is not in the snapshots.",
+          subtitle="Read from Dispatch::GetPlannerServiceRequest, ShouldCallPlanner and PlanClientCallback in the "
+                   "central package. Lane colours: violet = assets busy in base_schedule. Durations are illustrative.",
           badge_key="conceptual",
-          legend=[("box", JA, "J-A: active job"), ("box", JB, "J-B: planned job"), ("box", JN, "j1: new plan"),
-                  ("dashbox", T.amber, "held back (outside_split)"), ("dashbox", KEEP, "reserved lane")])
+          legend=[("box", JA, "J-A: active job"), ("box", JB, "J-B: active job"), ("box", JN, "j1: new plan"),
+                  ("dashbox", KEEP, "reserved lane")])
     return d
 
 

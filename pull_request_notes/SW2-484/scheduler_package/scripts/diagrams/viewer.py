@@ -73,7 +73,7 @@ const FIGS = __FIGS__;
 const nav=document.getElementById('nav'), stage=document.getElementById('stage');
 let cur=-1, svg=null, vb0=null, vb=null;
 const groups={};
-const DOCS={'01-background.html':'01 · Background','02-layout-file.html':'02 · Layout file','03-task-planning.html':'03 · Task planning','04-motion-planning.html':'04 · Motion planning','05-action-graph.html':'05 · Action graph','06-issue-and-proposal.html':'06 · Issue & proposal','07-verification.html':'07 · Verification'};
+const DOCS={'01-background.html':'01 · Background','02-layout-file.html':'02 · Layout file','03-task-planning.html':'03 · Task planning','04-motion-planning.html':'04 · Motion planning','05-action-graph.html':'05 · Action graph','06-dispatch.html':'06 · Dispatch','07-issue-and-proposal.html':'07 · Issue & proposal','08-verification.html':'08 · Verification'};
 FIGS.forEach((f,i)=>{(groups[f.doc]=groups[f.doc]||[]).push(i)});
 for(const [doc,idx] of Object.entries(groups)){
   const h=document.createElement('h2'); h.textContent=DOCS[doc]||doc; nav.appendChild(h);
@@ -124,8 +124,8 @@ const start=FIGS.findIndex(f=>'#'+f.name===location.hash); show(start>=0?start:0
 """
 
 # Reading order = figure numbering in the documents (site/src/content/*.html), in tab order.
-CONTENT = ("01-background.html", "02-layout-file.html", "03-task-planning.html", "04-motion-planning.html", "05-action-graph.html",
-           "06-issue-and-proposal.html", "07-verification.html")
+CONTENT = ("01-background.html", "02-layout-file.html", "03-task-planning.html", "04-motion-planning.html", "05-action-graph.html", "06-dispatch.html",
+           "07-issue-and-proposal.html", "08-verification.html")
 FIRST_DOC: dict = {}   # figure name -> the document it first appears in
 def _doc_order():
     """Figure order and per-document numbers, read from the <img> order in the HTML sources."""

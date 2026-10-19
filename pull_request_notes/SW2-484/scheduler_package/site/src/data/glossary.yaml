@@ -356,3 +356,9 @@
   code: [prioritization_value, bay_prioritization_]
   to: ly-bay-only-fields
   def: "Layout key on bays; bays are ordered by it, highest first (ties: higher bay id first). Pecos order is [21, 7]."
+
+- term: Dispatch
+  code: [Dispatch, DispatchRos, central, "Dispatch::GetPlannerServiceRequest", PlanClientCallback, ShouldCallPlanner]
+  text: [Dispatch]
+  to: ds-the-central-package-at-a-glance
+  def: "The dispatcher in the central package: queues jobs, calls the scheduler's Plan service, checks the response and executes the schedule. The scheduler's only client."

@@ -1,7 +1,7 @@
 <!--
   05 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
-  Conventions (shared by all seven documents)
+  Conventions (shared by all eight documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
     No number in the text.
   - Every heading and figure has a stable id. Ids keep the prefix of the document they were first
@@ -746,10 +746,10 @@ if(delta->type == "AgvPoseChanged") {
 <h3 data-num id="ad-persistent-planning-base-schedule-and-the-split">Persistent planning: <code>base_schedule</code> and the split</h3>
 <p>The fleet keeps moving while <code>Plan()</code> runs, so a new schedule must fit around actions that are already committed. The interface handles this with a <em>split</em>:</p>
 <ul>
-  <li><code>PlanRequest.base_schedule</code> is "the immutable portion of the current schedule". The scheduler "is to assume that all of these actions will be completed". <code>planned_jobs</code> and <code>active_jobs</code> list the jobs it covers.</li>
+  <li><code>PlanRequest.base_schedule</code> is "the immutable portion of the current schedule". The scheduler "is to assume that all of these actions will be completed". Dispatch fills it with every incomplete action of its schedule; <code>active_jobs</code> lists their jobs.</li>
   <li><code>ActionNode.outside_split</code>: "this node is outside the split in the schedule while waiting on the plan call response and will not be sent".</li>
 </ul>
-<p>In other words, while a plan call is in flight, the dispatcher keeps executing the actions before the split and holds back the rest. The scheduler does not add edges into the base schedule. Instead, <code>Plan()</code> makes every resource the base schedule uses unavailable:</p>
+<p>The design is that, while a plan call is in flight, the dispatcher keeps executing the actions before the split and holds back the rest. In the current Dispatch code the split is not applied (the <code>SplitSchedule</code> call is commented out), and with overlapping planning off no call is made while jobs are active. The scheduler does not add edges into the base schedule. Instead, <code>Plan()</code> makes every resource the base schedule uses unavailable:</p>
 <pre><code class="language-cpp">// src/scheduler.cpp — Scheduler::Plan (abridged)
 for(const auto&amp; node : request_data.base_schedule.nodes) {
   if(node.type == ActionNodeMsg::TYPE_AGV_COMMAND) {
@@ -761,7 +761,7 @@ for(const auto&amp; node : request_data.base_schedule.nodes) {
   else if(node.type == ActionNodeMsg::TYPE_VECS_COMMAND) { initial_state.SetVecsDisabled(node.vecs_id); }
 }
 </code></pre>
-<p>So the new ADG cannot conflict with the committed one, because they share no AGV, bay, VECS or start and goal node. The cost is that a busy AGV is unavailable for the whole new plan, even if it would be free a few seconds in. The Background tab traces every place the reservation is read and what could replace it (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 14</a>). VRC commands in the base schedule are not handled in this loop. How the dispatcher joins the new schedule onto the base one is on its side of the interface.</p>
+<p>So the new ADG cannot conflict with the committed one, because they share no AGV, bay, VECS or start and goal node. The cost is that a busy AGV is unavailable for the whole new plan, even if it would be free a few seconds in. The Background tab traces every place the reservation is read and what could replace it (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 14</a>). VRC commands in the base schedule are not handled in this loop. Dispatch, for its part, expects the response to contain every base node unchanged and rebuilds its schedule from the response alone; the Dispatch tab describes that check (<a class="ref" href="#ds-what-dispatch-does-with-the-response">section 4</a>).</p>
 
 <h3 data-num id="ad-what-this-means-for-the-refactor">What this means for the refactor</h3>
 <ul>

@@ -9,7 +9,7 @@ export interface Part {
 
 export interface DocConfig {
   key: string;
-  num: '01' | '02' | '03' | '04' | '05' | '06' | '07';
+  num: '01' | '02' | '03' | '04' | '05' | '06' | '07' | '08';
   file: string;
   prefix: string;
   tab: string;
@@ -70,17 +70,25 @@ export const DOCS: DocConfig[] = [
     ],
   },
   {
-    key: 'proposal',
+    key: 'dispatch',
     num: '06',
-    file: 'src/content/06-issue-and-proposal.html',
+    file: 'src/content/06-dispatch.html',
+    prefix: 'ds',
+    tab: 'Dispatch',
+    summary: 'The central package: how Dispatch queues jobs, calls the scheduler, checks the response and executes the schedule. An outline, open to expansion.',
+  },
+  {
+    key: 'proposal',
+    num: '07',
+    file: 'src/content/07-issue-and-proposal.html',
     prefix: 'pr',
     tab: 'Issue & proposal',
     summary: 'The refactor: where the code is, what changes, module layout, solver interfaces, staged plan, and proposed naming work.',
   },
   {
     key: 'verification',
-    num: '07',
-    file: 'src/content/07-verification.html',
+    num: '08',
+    file: 'src/content/08-verification.html',
     prefix: 'vr',
     tab: 'Verification',
     summary: 'Regression parity and benchmarks for the extracted solvers.',

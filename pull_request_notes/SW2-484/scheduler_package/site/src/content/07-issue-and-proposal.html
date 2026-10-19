@@ -1,7 +1,7 @@
 <!--
-  06 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  07 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
-  Conventions (shared by all seven documents)
+  Conventions (shared by all eight documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
     No number in the text.
   - Every heading and figure has a stable id. Ids keep the prefix of the document they were first
@@ -14,7 +14,7 @@
   - Links to another tab: <a href="#doc-KEY">Tab name</a>. Keyword links (glossary.yaml) and code
     highlighting are added at build time.
 -->
-<h1>06 — Issue &amp; proposal: the scheduler core refactor</h1>
+<h1>07 — Issue &amp; proposal: the scheduler core refactor</h1>
 <p>This tab explains <em>what</em> the refactor changes and <em>why</em>, using the code in <code>sources/repomix-scheduler.xml</code> as evidence. It assumes the first four tabs: in particular the plan call and <code>ScheduleContext</code> (sections <a class="ref bare" href="#bg-one-plan-call-step-by-step">10</a> and <a class="ref bare" href="#bg-schedulecontext-the-per-call-workspace">13</a> of the <a href="#doc-background">Background</a> tab), and tray and AGV assignment (sections <a class="ref bare" href="#bg-tray-assignment-dotrayassignments">4</a> and <a class="ref bare" href="#bg-agv-assignment-doagvassignments">5</a> of the <a href="#doc-task-planning">Task planning</a> tab). Code snippets follow the conventions of the Background tab: every snippet says which class it lives in, what <code>this</code> is, and the type of each variable that is not obvious. Snippets marked <strong>proposed</strong> do not exist in the repository.</p>
 <p><strong>How this tab is organised.</strong> <a class="ref" href="#pr-the-pipeline-the-refactor-works-on">Section 2</a> places the ticket in that pipeline, sections <a class="ref" href="#pr-where-the-two-algorithms-sit-today">3</a>–<a class="ref" href="#pr-current-versus-target-responsibilities">5</a> describe the two algorithms and what moves where, <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> decides how the code is organised by stage (folders or packages), and sections <a class="ref" href="#pr-target-architecture">7</a>–<a class="ref" href="#pr-next-actions">14</a> design the tray module and the naming boundary, list the invariants, risks and decisions, and lay out the staged plan. Two sections are future work beyond this ticket: <a class="ref" href="#pr-swappable-motion-planners">section 15</a> puts motion planning behind the same kind of interface as the tray and AGV solvers, and <a class="ref" href="#nm-proposed-future-work-naming">section 16</a> is a catalogue of renames and small struct refactors across the whole stack, of which this refactor adopts only the rows for <code>scheduler</code> and <code>planner_core</code>.</p>
 <table>

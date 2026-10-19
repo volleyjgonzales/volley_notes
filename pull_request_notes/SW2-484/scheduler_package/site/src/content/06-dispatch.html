@@ -1,0 +1,116 @@
+<!--
+  06 — source of truth for this document. Edit this file; the site build (site/) renders it.
+
+  Conventions: as in the other documents (see 05-action-graph.html). Ids use the prefix "ds-".
+  Source: sources/repomix-central.xml (the central package, tests excluded). This tab is an outline,
+  written to be expanded.
+-->
+<h1>06 — Dispatch: the scheduler's only client</h1>
+<p><em>The <code>central</code> package runs the garage: it queues jobs, decides when to plan, calls the scheduler, checks the answer and sends commands to the machines. This tab outlines it from the scheduler's side: what Dispatch sends, what it expects back and what it does with the result. It is an overview, meant to be expanded.</em></p>
+<p>The earlier tabs read the scheduler as a pure function of one <code>PlanRequest</code>. This tab is about where that request comes from. Read it after the Background tab's message sections (<a class="ref" href="#bg-ros-messages-and-services">section 6</a>) and before the proposal: several proposal items depend on what Dispatch accepts.</p>
+
+<h2 data-num id="ds-the-central-package-at-a-glance">The <code>central</code> package at a glance</h2>
+<p><code>central</code> is a set of ROS 2 components. Only one of them, the dispatcher, talks to the scheduler, through one service call.</p>
+<figure id="ds-fig-123_central_components">
+  <img src="figures/123_central_components.svg" alt="The central package around the scheduler">
+  <figcaption><strong>The central package around the scheduler.</strong> Jobs come in through the dispatcher's services; the garage tracker is the source of truth for the garage; the dispatcher sends a <code>PlanRequest</code> to <code>/scheduler/plan</code>, turns the response into commands for the machines, and watches their reports. The monitors check versions, batteries and status.</figcaption>
+</figure>
+<table>
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>What it does</th>
+      <th>Link to the scheduler</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>dispatcher</code> (<code>Dispatch</code>, <code>DispatchRos</code>)</td><td>Holds the job queue and the executing schedule; calls the planner; sends commands; publishes the schedule, job lists and reports</td><td>The only client of <code>/scheduler/plan</code>. Also publishes each request and response on a topic so they can be recorded in bags</td></tr>
+    <tr><td><code>garage_tracker</code></td><td>The source of truth for the garage: turns machine reports into <code>DiscreteGarageState</code>, discrete events and continuous info; owns the <code>set_*_disabledness</code> services</td><td>Indirect: <code>PlanRequest.base_state</code> is Dispatch's copy of this state</td></tr>
+    <tr><td><code>consistency_monitor</code></td><td>Compares the git hash and layout checksum reported by every component</td><td>The scheduler's version info is checked too; a mismatch stops the dispatcher</td></tr>
+    <tr><td><code>agv_monitor</code></td><td>Disables AGVs whose battery is low</td><td>Shows up as <code>agv.disabled</code> in <code>base_state</code></td></tr>
+    <tr><td><code>garage_monitor</code>, <code>metrics_recorder</code>, <code>mqtt_bridge</code>, <code>safety_hardware_monitor</code></td><td>Garage status, metrics, cloud bridge, logging</td><td>None</td></tr>
+  </tbody>
+</table>
+
+<h2 data-num id="ds-jobs-in-dispatch">Jobs in Dispatch</h2>
+<p>Dispatch keeps every job as a <code>Job</code> object (one subclass per <code>SchedulerJob</code> type) and moves its guid between three lists:</p>
+<ul>
+  <li><strong><code>jobs_pending_</code></strong>: registered, not yet planned, in arrival order. These become <code>pending_jobs</code>.</li>
+  <li><strong><code>jobs_active_</code></strong>: planned; their actions are in the executing schedule. Each job stores the guids of the actions that must complete (from <code>ScheduledJobData.node_indices</code>). These become <code>active_jobs</code>.</li>
+  <li><strong><code>jobs_completed_</code></strong>: finished with SUCCESS (all its actions complete) or ERROR.</li>
+</ul>
+<p>Jobs come from the dispatcher's services (retrieve, move AGV, move or repark a tray, charge a payload, transition a bay, clean, rebalance), from bay events (a car driven into a bay creates an INSERT), and from Dispatch itself: a clean and a rebalance when it starts in automatic mode or when the last active job finishes, charge jobs for idle AGVs, and a periodic clean while idle. <code>READY_FOR_INSERT</code> and <code>READY_FOR_RETRIEVE</code> jobs exist as classes but are never created by Dispatch.</p>
+
+<h2 data-num id="ds-what-goes-into-a-planrequest">The plan loop and what goes into a <code>PlanRequest</code></h2>
+<figure id="ds-fig-124_plan_call_sequence">
+  <img src="figures/124_plan_call_sequence.svg" alt="One plan call seen from Dispatch">
+  <figcaption><strong>One plan call seen from Dispatch.</strong> Step through it: the timer decides to plan, the request is built and sent, the scheduler answers, Dispatch checks the answer, builds a new execution state, updates the jobs, sends ready commands and completes jobs as the machines report.</figcaption>
+</figure>
+<p><strong>When Dispatch plans.</strong> A timer fires every 850 ms and calls <code>ShouldCallPlanner()</code>. It returns true only if all of these hold:</p>
+<ol>
+  <li>the dispatcher is RUNNING;</li>
+  <li>no plan call is in flight (there is never more than one);</li>
+  <li>no job is active, because <code>enable_overlapping_planning_</code> is <code>false</code> and nothing sets it;</li>
+  <li>at least one enabled, active AGV has no remaining move in the schedule;</li>
+  <li>some pending job is worth planning (a RETRIEVE that is waiting for a bay is skipped until a bay will be ready).</li>
+</ol>
+<p><strong>What it sends.</strong> <code>GetPlannerServiceRequest</code> fills the request:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Field</th>
+      <th>Filled with</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>A new Guid, remembered with the call</td></tr>
+    <tr><td><code>base_state</code></td><td><code>GetLatest()</code>: Dispatch's copy of the garage, advanced by completion events. Not the state at the end of the schedule</td></tr>
+    <tr><td><code>base_schedule</code></td><td>Only if some job is active: every incomplete node of the current schedule, parents renumbered, also remembered with the call. The split that would hold back nodes beyond the 30 s command horizon is commented out</td></tr>
+    <tr><td><code>active_jobs</code></td><td>Every job in <code>jobs_active_</code></td></tr>
+    <tr><td><code>planned_jobs</code></td><td>Never filled</td></tr>
+    <tr><td><code>pending_jobs</code></td><td>Pending jobs marked worth planning, in queue order, capped by the request strategy. While jobs are active, the loop stops at the first CLEAN_GARAGE</td></tr>
+  </tbody>
+</table>
+<p>With condition 3 in place, every call made today has an empty <code>base_schedule</code> and empty <code>active_jobs</code>. The fields and the scheduler's reservation logic are ready for overlapping planning, but it is switched off (Background, <a class="ref" href="#bg-planrequest-one-moment-in-a-running-schedule">section 6.2</a>).</p>
+<p><strong>Request strategy.</strong> By default every worth-planning job is sent. When a response comes back with more than one job and all of them failed, Dispatch rejects it and steps down to a smaller request: at most as many jobs as active AGVs, then as many as free AGVs, then one job at a time. The strategy resets to unlimited when no job is active.</p>
+
+<h2 data-num id="ds-what-dispatch-does-with-the-response">What Dispatch does with the response</h2>
+<p><code>PlanClientCallback</code> checks the response in this order; any failure rejects the whole response (<code>RejectPlanResponse</code>) and the jobs stay pending:</p>
+<ol>
+  <li>an execution state exists, and the response <code>id</code> matches the call in flight;</li>
+  <li><code>success</code> is true (the scheduler returns <code>false</code> only for an invalid <code>base_state</code>);</li>
+  <li>the execution state has not diverged from the garage;</li>
+  <li>every node of the <code>base_schedule</code> it sent is in the response, <strong>field for field unchanged</strong>;</li>
+  <li>if more than one job was sent, not all of them failed (otherwise: retry counter, smaller strategy, reject).</li>
+</ol>
+<p>It then builds a new <code>ExecutionState</code> from the <strong>response nodes alone</strong>: nodes already completed are skipped, parents are renumbered, AGV command source and destination fields are rewritten from Dispatch's future state (the lift flags of a move, the poses of a lift), and every node is applied to the future state. Each returned job is then moved:</p>
+<ul>
+  <li><strong>STATE_EXECUTING</strong>: pending to active, with the guids of its <code>node_indices</code> as the actions to complete; a RETRIEVE also stores <code>bay_id</code> and <code>bay_arrival_node_guid</code>, and Dispatch computes <code>seconds_to_bay_arrival</code> itself from the schedule.</li>
+  <li><strong>STATE_ERROR</strong>: completed with an error, except a RETRIEVE, which stays pending if <code>retain_job</code> is set, or is moved to the back of the queue up to ten times.</li>
+</ul>
+
+<h2 data-num id="ds-executing-the-schedule">Executing the schedule</h2>
+<p>An <code>ExecutionState</code> holds the schedule (the action DAG as an array, with a status per node) and two garage states: <em>latest</em>, advanced as actions complete, and <em>future</em>, the garage after the whole schedule. Appending a node requires that it depends on the previous action of the same machine, so every machine's actions form a chain.</p>
+<p>Commands are sent when an action is ready (its parents are complete), it is expected to start within the 30 s command horizon, and the safety checker (<code>GarageSafetyChecker</code>, common_ros) accepts it. Consecutive AGV moves are chained into one command list. As the garage tracker reports discrete events, each one completes the matching action and advances the latest state; a job whose actions are all complete becomes SUCCESS. If an event does not match the schedule, the execution state is marked diverged, and the dispatcher stops (it also stops on stale reports, a garage fault or an inconsistent version report), which errors out every pending and active job.</p>
+
+<h2 data-num id="ds-interface-notes">What this means for the scheduler</h2>
+<p>Read from Dispatch's side, the interface has these properties and gaps:</p>
+<ul>
+  <li><strong>Plans happen only when the fleet has no active job.</strong> The reservation of <code>base_schedule</code> (Background, <a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 11</a>) never fires today.</li>
+  <li><strong>Overlapping planning needs a scheduler change first.</strong> Dispatch expects the response to contain every <code>base_schedule</code> node unchanged, plus the new nodes; the scheduler returns only the new nodes. Turning the flag on today would reject every response made while jobs are active.</li>
+  <li><strong>The intended design is to append, with dependencies.</strong> A comment in <code>GetPlannerServiceRequest</code> explains why the running schedule is sent rather than the end state: the planner should build dependencies between the existing part of the schedule and the new part. That matches the time-bounded reservation idea in the proposal (<a class="ref" href="#pr-base-schedule-reservation">section 7.5</a>).</li>
+  <li><strong>Some fields are ignored or overwritten.</strong> <code>planned_jobs</code> is never sent; <code>seconds_to_bay_arrival</code> is computed by Dispatch; AGV command ids and parts of <code>src</code> / <code>dst</code> are rewritten when nodes are appended.</li>
+  <li><strong><code>success = false</code> is rare by design</strong>, and Dispatch relies on per-job states. A job missing from <code>scheduled_jobs</code> silently stays pending.</li>
+  <li><strong>Dispatch-side issues seen while reading</strong> (for the central owners): no timeout on a lost plan response, so planning stops until the next mismatched response; the CLEAN_GARAGE <code>break</code> blocks every job queued behind it (only while jobs are active); the free-AGV count used by one request strategy is reset to 0, so that strategy always sends one job.</li>
+</ul>
+
+<h2 data-num id="ds-to-expand">To expand</h2>
+<p>Topics this outline leaves for later:</p>
+<ul>
+  <li>The <code>Job</code> classes and the services that create them, one by one.</li>
+  <li><code>ExecutionState</code> and <code>Schedule</code> in depth: motion batches, chaining, the safety checker, completion matching for each event type.</li>
+  <li>The garage tracker: how reports become discrete events, recovery from MySQL, disabledness services.</li>
+  <li>Charging mode (<code>ChargeAgvs</code>), garage dirtiness and the idle clean and rebalance jobs.</li>
+  <li>The split (<code>SplitSchedule</code>, <code>outside_split</code>) and what overlapping planning would need on both sides.</li>
+  <li>Stop, pause and restart behaviour, and what happens to jobs and the schedule.</li>
+</ul>
