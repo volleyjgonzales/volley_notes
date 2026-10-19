@@ -16,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from registry import FIGURES  # noqa: E402
-import fig_flow, fig_uml, fig_facility, fig_misc, fig_code, fig_code2, fig_code3, fig_code4, fig_jobs, fig_concepts, fig_trace, fig_trayassign, fig_proposal, fig_context, fig_eventdag, fig_garagemodel, fig_naming, fig_adg, fig_motion, fig_mpcode, fig_layout, fig_layout2, fig_vrc, fig_frames, fig_reserve, fig_messages, fig_dispatch  # noqa: E402,F401
+import fig_flow, fig_uml, fig_facility, fig_misc, fig_code, fig_code2, fig_code3, fig_code4, fig_jobs, fig_concepts, fig_trace, fig_trayassign, fig_proposal, fig_context, fig_eventdag, fig_garagemodel, fig_naming, fig_adg, fig_motion, fig_mpcode, fig_layout, fig_layout2, fig_vrc, fig_frames, fig_reserve, fig_messages, fig_dispatch, fig_formulation  # noqa: E402,F401
 import viewer  # noqa: E402
 
 ROOT = HERE.parent.parent

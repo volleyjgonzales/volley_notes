@@ -217,7 +217,7 @@
     <tr>
       <td>Greedy, one job at a time</td>
       <td>Each job is expanded against the garage earlier jobs leave behind, with no search or backtracking, so every corner case needs its own rule</td>
-      <td>A search- or optimisation-based tray and AGV solver behind the same interfaces</td>
+      <td>A search- or optimisation-based tray and AGV solver behind the same interfaces (<a class="ref" href="#pr-evaluating-the-event-graph-strategy">section 14</a> evaluates the options)</td>
       <td>Out of scope (a later ticket)</td>
     </tr>
   </tbody>
@@ -1695,6 +1695,144 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
   <li>Confirm the branch matches this snapshot; keep edits in small reviewable commits.</li>
   <li>Map symbol use from the repository root: <code>rg -n 'ResolveBlockingTrays|DoTrayAssignments|DoAgvAssignments|first_tray_event|BottleneckAssignment'</code>. Compare with <a class="ref" href="#pr-fig-34_coupling_matrix">Figure 1</a>, and rebuild <a class="ref" href="#pr-fig-34_coupling_matrix">Figure 1</a> (<code>python3 scripts/diagrams/build.py 34</code>) after replacing <code>sources/repomix-scheduler.xml</code> with a newer snapshot.</li>
 </ol>
+<h2 data-num id="pr-evaluating-the-event-graph-strategy">Evaluating the event-graph strategy</h2>
+<p>The refactor keeps the scheduler's strategy: build an event DAG, then plan motions for it, then turn the motions into an action DAG. This section steps back and asks whether that strategy fits the problem. It covers what the problem actually is, what the event DAG represents, where it helps and where it costs, and which other formulations from the literature could take its place or improve it. It is an analysis to inform future tickets, not part of this ticket's scope.</p>
+
+<h3 data-num id="pr-the-problem-the-scheduler-solves">The problem the scheduler solves</h3>
+<p>Stated without reference to the code, one <code>Plan()</code> call solves this:</p>
+<blockquote><p>Given the garage now (where every AGV, tray and car is, and the state of every bay, VECS and VRC), the work already running, and a list of jobs, each a desired outcome such as “this car is handed over in some bay” or “this tray is parked”, choose the physical actions that achieve as many jobs as possible, decide which machine does each one, and order them so that the fleet can execute them without collision, whatever the actual speeds turn out to be. Do it within about a second, again and again as jobs arrive.</p></blockquote>
+<p>A job is a <strong>goal condition</strong>, not a sequence of moves. A retrieve does not say “move T21 out of B21, then move T17 in”; it says “the car is in a bay that is processing a retrieve”. Everything between the condition and the moves is the planner's choice. The domain shapes that choice through the following requirements:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Requirement</th>
+      <th>In this garage</th>
+      <th>Consequence for any formulation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Goals are conditions with open choices</td><td>Which bay, which empty tray, which parking spot, which AGV, which charger are all free; only the outcome is fixed</td><td>Task allocation and goal selection are part of the problem, not inputs to it</td></tr>
+    <tr><td>Dense storage with passive obstacles</td><td>Trays (with or without cars) stand on parking nodes and block each other; reaching one may require moving others</td><td>A rearrangement problem: blockers create extra tasks, and the set of tasks depends on routes (puzzle-based storage, navigation among movable obstacles)</td></tr>
+    <tr><td>Carry by lifting</td><td>An AGV drives under a tray, lifts it, carries it and lowers it; with the lift down it can pass under trays whose legs allow</td><td>Agents change footprint and capability during a plan; pickup and delivery are separate goals of one agent</td></tr>
+    <tr><td>Large agents, headings, motion types</td><td>Footprints overlap several nodes; heading matters; locomote, strafe and rotate have different durations; rotation only on some nodes</td><td>Conflicts are footprint overlaps (large-agent MAPF), states are poses, not vertices; time is continuous</td></tr>
+    <tr><td>Stateful non-AGV resources</td><td>Bays switch modes and process cars, VECS charge, VRCs carry AGVs between floors; their door areas block traffic in some states</td><td>Resources with state machines and durations, some of them unbounded (a patron's insert), and some that change the map</td></tr>
+    <tr><td>Hard precedence from the domain</td><td>A bay must be in retrieve mode before a tray enters; the car must be in the bay before the hand-over; a tray cannot enter an occupied node</td><td>Some orderings are real constraints and must be kept in every plan</td></tr>
+    <tr><td>Execution is uncertain</td><td>Speeds, acceleration, patron behaviour and reports vary; actions are released by Dispatch when their parents finish</td><td>The output must be an <em>order</em> that is safe at any speed (an ADG), not a timetable</td></tr>
+    <tr><td>Online and persistent</td><td>Jobs arrive continuously; Dispatch plans every 850 ms when allowed; the fleet keeps moving</td><td>Lifelong planning: new plans must fit around running ones, and planning time is bounded</td></tr>
+    <tr><td>Objectives are about people and throughput</td><td>A patron waits for a retrieve; bays must be ready for inserts; trays and AGVs must be balanced and charged</td><td>The main cost is retrieve waiting time and bay readiness, not makespan or sum of costs alone</td></tr>
+    <tr><td>Safety, determinism, explainability</td><td>No collision is acceptable; failures must be reported per job; operators and engineers must understand why a plan looks the way it does</td><td>Sound (never unsafe) beats optimal; deterministic, inspectable intermediate results are valuable</td></tr>
+  </tbody>
+</table>
+
+<h3 data-num id="pr-what-the-event-dag-is">What the event DAG is</h3>
+<p>Seen from the motion planner, the event DAG is a set of goal sequences with ordering constraints between them. CHUGG reads it as exactly that, an instance of multi-agent path finding with precedence constraints (MAPF-PC; Zhang et al., AAMAS 2022). Each AGV gets a sequence of goals (poses to reach, lifts to perform), and the edges become precedence constraints between goals of different agents (Motion planning tab, <a class="ref" href="#mp-chuggs-problem-in-symbols">section 7.3</a>):</p>
+<div class="math">\text{MAPF-PC: } \big(G,\ \{s_i\},\ \{(g_i^1, \dots, g_i^{m_i})\},\ \mathcal{P}\big), \qquad (g_i^a, g_j^b) \in \mathcal{P} \;\Rightarrow\; t(g_i^a) \le t(g_j^b).</div>
+<p>But the goal sequences and the precedence set are the <em>end</em> of the task-planning layer, not its purpose. Before anything reaches CHUGG, the event DAG has already been used to make every discrete decision of the problem: which bay, which tray, which parking spot, which blockers to move, which AGV. A more complete description is:</p>
+<ul>
+  <li><strong>It is a partial-order plan.</strong> Each event is an action with a precondition and an effect on the discrete garage state (checked by <code>OnEvent</code>), and the edges are a partial order <span class="math">\prec</span> on the events. The intended invariant is that every linear extension of <span class="math">\prec</span> replays without a failed precondition and ends in a state where every planned job's goal condition holds. This is the classical partial-order causal-link (POCL) plan of AI planning (Ghallab, Nau and Traverso, <em>Automated Planning</em>, 2004), built by hand-written rules instead of a generic planner.</li>
+  <li><strong>It is the common workspace of three decision stages.</strong> Job expansion writes intent with open slots (HTN-style methods: each job method is a recipe that decomposes a goal into events). Tray assignment fills the slots and adds blocker moves (a rearrangement subproblem). AGV assignment binds events to agents and adds approach, lift and lower events (a task-allocation subproblem). The DAG is how these stages talk to each other.</li>
+  <li><strong>It is the interface to the motion planner.</strong> Only at the end is it read as goal sequences plus precedence.</li>
+</ul>
+<p>So the high-level goal of the strategy is: <strong>decide what must happen and who does it, and fix enough ordering that the discrete plan is causally valid, before any timing or geometry is planned</strong>. The weak point is the last clause. The DAG's edges do not only record the orders the problem requires.</p>
+
+<h3 data-num id="pr-four-kinds-of-edge">Four kinds of edge</h3>
+<p>Every edge of the event DAG becomes a hard precedence constraint in CHUGG, but the edges exist for different reasons. Classifying them by reason shows what the current strategy gives away:</p>
+<figure id="pr-fig-125_event_dag_edge_kinds">
+  <img src="figures/125_event_dag_edge_kinds.svg" alt="Four kinds of edge in the event DAG">
+  <figcaption><strong>Four kinds of edge in the event DAG.</strong> Step through one small example. Causal edges are needed in every valid plan. A path-dependent edge exists only because a route was chosen before motion planning. A resource-order edge needs some order, but its direction is free. A conservative edge is not needed at all. Today all four reach CHUGG as hard precedence.</figcaption>
+</figure>
+<table>
+  <thead>
+    <tr>
+      <th>Kind</th>
+      <th>Meaning</th>
+      <th>Created by (today)</th>
+      <th>Where it belongs</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Causal</td><td>An effect of one event is a precondition of the other (POCL causal link)</td><td>Job recipes (bay mode before a tray enters: rule C; car in bay before the hand-over); destination occupancy in tray assignment</td><td>Hard precedence in every formulation</td></tr>
+    <tr><td>Path-dependent</td><td>Needed only for the route fixed during task planning (a tray must leave a node the chosen route crosses)</td><td><code>freeing_moves</code> occupancy edges, blocking-path edges in AGV assignment, path repairs</td><td>Space-time conflicts for the path planner, or soft hints</td></tr>
+    <tr><td>Resource order</td><td>Two events need the same AGV, tray, bay or VECS, so one goes first; either direction is valid (a disjunctive constraint)</td><td>Rule A (same entity, in request order), AGV chains from assignment</td><td>A choice for the solver: <span class="math">\mathrm{end}(\varepsilon) \le \mathrm{start}(\varepsilon') \,\vee\, \mathrm{end}(\varepsilon') \le \mathrm{start}(\varepsilon)</span></td></tr>
+    <tr><td>Conservative</td><td>Not required by the domain</td><td>Rule B (a new event waits for all current leaves of its job)</td><td>Dropped, or kept only as a tie-break</td></tr>
+  </tbody>
+</table>
+<p>Because ordering is fixed before timing and geometry exist, the motion planner cannot recover parallelism that the task layer gave away, and a bad order cannot be undone: CHUGG either finds a plan in that order or fails. In POCL terms, the current code resolves every <em>threat</em> (two actions that could interfere) by committing to one order immediately, using request order and greedy assignment, instead of leaving the choice open.</p>
+
+<h3 data-num id="pr-strengths-and-costs">Strengths and costs of the current strategy</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Strengths</th>
+      <th>Costs</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Standard layering.</strong> Task planning, path planning and execution are separated the way most warehouse systems separate them; each layer can be tested alone</td><td><strong>Early commitment.</strong> Orders, routes and assignments are fixed before their cost is known; later stages can only fail, not revise (greedy, no backtracking across stages)</td></tr>
+    <tr><td><strong>The right interfaces.</strong> Goal sequences plus precedence (MAPF-PC) and an action DAG (ADG) are well-studied representations with solvers and execution guarantees</td><td><strong>Over-constraint.</strong> Path-dependent, resource-order and conservative edges all become hard constraints, which serialises work and lengthens retrieve times</td></tr>
+    <tr><td><strong>Cheap validation.</strong> Discrete replay through <code>OnEvent</code> catches most inconsistencies in microseconds and with readable messages</td><td><strong>Geometry is approximated twice.</strong> Task planning uses static filters and discrete teleports; real conflicts appear only in CHUGG, which can throw</td></tr>
+    <tr><td><strong>Explainable.</strong> Every event and edge can be printed and traced to a rule; per-job failures are natural</td><td><strong>No objective.</strong> Only AGV matching minimises something (the bottleneck cost); nothing optimises retrieve waiting time, and CHUGG returns its first plan</td></tr>
+    <tr><td><strong>Fast enough</strong> for the 850 ms planning cadence on the garages it runs on</td><td><strong>Not lifelong yet.</strong> Each call plans from scratch; the base-schedule path is a coarse reservation, and Dispatch plans only when the fleet is idle (Dispatch tab, <a class="ref" href="#ds-interface-notes">section 6</a>)</td></tr>
+  </tbody>
+</table>
+
+<h3 data-num id="pr-related-formulations">Related formulations</h3>
+<p>Each part of the problem has a well-studied formulation. None covers all of it, which is why real systems combine several:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Formulation</th>
+      <th>What it models</th>
+      <th>Fit to this garage</th>
+      <th>What it leaves out</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>MAPF-PC</strong> (Zhang et al., AAMAS 2022; CBS-PC, PBS-PC)</td><td>Goal sequences per agent and precedence between goals of different agents</td><td>Exactly CHUGG's input; PBS-PC searches the priorities CHUGG fixes</td><td>Assignment, goal selection, blockers, non-AGV resources: all decided before</td></tr>
+    <tr><td><strong>Large-agent and continuous-time MAPF</strong> (Li et al., AAAI 2019; CCBS, Andreychuk et al., AIJ 2022)</td><td>Footprints that cover several places; real durations</td><td>Matches the collision table and the cost model</td><td>Task layer</td></tr>
+    <tr><td><strong>TAPF and CBS-TA</strong> (Ma and Koenig, AAMAS 2016; Hönig et al., AAMAS 2018)</td><td>Assignment of goals to agents inside the path search</td><td>Replaces greedy AGV matching with assignment that sees conflicts</td><td>Precedence, multi-goal sequences, rearrangement (extensions exist but are research code)</td></tr>
+    <tr><td><strong>MAPD and lifelong MAPF</strong> (Ma et al., AAMAS 2017: token passing; Li et al., AAAI 2021: rolling-horizon collision resolution)</td><td>A stream of pickup-and-delivery tasks, planned continuously over a window</td><td>Matches Dispatch's online loop and the base-schedule problem; windowed planning bounds time</td><td>Precedence between tasks, stateful resources, blockers</td></tr>
+    <tr><td><strong>Puzzle-based storage and NAMO</strong> (Gue and Kim, Naval Research Logistics 2007; Stilman and Kuffner, 2005)</td><td>Retrieving items from dense grids by moving the items in the way</td><td>Automated parking garages are a textbook case of puzzle-based storage; this is the blocking-tray problem</td><td>Multi-agent timing; usually one retrieval at a time</td></tr>
+    <tr><td><strong>POCL and temporal planning</strong> (PDDL 2.1 durative actions; simple temporal networks, Dechter, Meiri and Pearl, AIJ 1991)</td><td>Actions with preconditions and effects; minimal causal ordering; flexible timing</td><td>Events already have preconditions and effects; a POCL view yields only the causal edges and keeps threats open</td><td>Geometry and paths; general planners are slow at this scale</td></tr>
+    <tr><td><strong>HTN planning</strong></td><td>Goals decomposed by methods into subtasks</td><td>Job methods are HTN methods written in C++</td><td>Search over method choices (the code takes the first that applies)</td></tr>
+    <tr><td><strong>Scheduling: RCPSP, flexible job shop with transport robots</strong> (constraint programming, for example CP-SAT)</td><td>Tasks with durations, precedence, disjunctive resources and objectives such as weighted completion time</td><td>Natural for bays, VECS, VRCs, AGV sequencing and patron waiting time; disjunctive constraints are exactly the resource-order edges</td><td>Collision-free paths (needs travel-time estimates and a MAPF stage after it)</td></tr>
+  </tbody>
+</table>
+
+<h3 data-num id="pr-alternative-architectures">Alternative architectures</h3>
+<p>The alternatives differ mainly in <strong>which layer owns which decision</strong>. Today every decision except paths and times is owned by task planning:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Approach</th>
+      <th>Goals and blockers</th>
+      <th>Assignment</th>
+      <th>Order</th>
+      <th>Paths and times</th>
+      <th>Main trade-off</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Today</strong>: event DAG, then prioritized MAPF-PC</td><td>task planning (greedy)</td><td>task planning (bottleneck matching)</td><td>task planning (all edges hard)</td><td>CHUGG (fixed priority)</td><td>Fast and explainable; over-constrained, no recovery from early choices</td></tr>
+    <tr><td><strong>A. Typed event DAG + PBS-PC</strong></td><td>task planning</td><td>task planning</td><td>causal edges in task planning; resource and path orders chosen by the solver</td><td>priority-based search over the remaining orders</td><td>Smallest change; keeps the IR and the refactor's interfaces; recovers parallelism and fixes bad priorities; still greedy above</td></tr>
+    <tr><td><strong>B. Assignment inside the search</strong> (CBS-TA style)</td><td>task planning</td><td>MAPF solver</td><td>solver</td><td>solver</td><td>Better AGV choices; search cost grows with candidates; research-grade with precedence</td></tr>
+    <tr><td><strong>C. Schedule first</strong> (CP model of jobs, bays, VECS, AGVs; then MAPF)</td><td>task planning or CP</td><td>CP</td><td>CP, with an explicit objective (retrieve waiting time)</td><td>MAPF-PC on the chosen order</td><td>Optimises what matters to patrons; needs travel-time estimates, and a path stage that can still fail</td></tr>
+    <tr><td><strong>D. Lifelong rolling horizon</strong> (MAPD / windowed planning)</td><td>per task as it arrives</td><td>online (token passing or matching)</td><td>within a window</td><td>windowed MAPF, replanned continuously</td><td>Natural fit for Dispatch and the running schedule; plans only a short horizon, so long rearrangements need care</td></tr>
+    <tr><td><strong>E. Integrated search over discrete states</strong></td><td>search over <code>DiscreteGarageState</code> (already hashable)</td><td>search</td><td>search</td><td>MAPF-PC afterwards</td><td>Finds blocker sequences greedy rules miss; only tractable for small subproblems (the blocking-tray search already does this locally)</td></tr>
+  </tbody>
+</table>
+<p>The approaches combine. A realistic end state is A plus D, with C for the bay and charging decisions that matter most to patrons.</p>
+
+<h3 data-num id="pr-recommendation-formulation">Recommendation</h3>
+<p>The event DAG is a sound intermediate representation for this domain and should stay; the problem is how much is decided before it reaches the solver. In order of cost:</p>
+<ol>
+  <li><strong>Make the representation explicit</strong> (fits the refactor's solver interfaces). Store each edge with its kind (causal, path, resource, conservative) and the rule that created it. Nothing else changes; parity tests stay valid, and the motion-solver interface (<a class="ref" href="#pr-swappable-motion-planners">section 15</a>) can carry the kinds to any solver.</li>
+  <li><strong>Measure the cost of over-constraint.</strong> On the benchmark set (Verification tab), compare CHUGG's makespan and retrieve arrival times with all edges against causal edges only plus a conflict check. If the gap is small, stop here.</li>
+  <li><strong>Let the solver choose the free orders</strong> (approach A). Pass resource-order edges as disjunctions and path-dependent edges as hints to a priority-based search (PBS-PC) that keeps the causal edges hard. CHUGG's sequential planner is already PBS's inner step.</li>
+  <li><strong>Make planning lifelong</strong> (approach D, with Dispatch). Seed the motion planner with the running schedule as fixed motions and return edges from it into the new plan, so overlapping planning can be turned on (Background, <a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 11</a>).</li>
+  <li><strong>Give the planner an objective</strong> (approach C for the decisions that matter). Start with bay choice and job ordering, scored by predicted retrieve waiting time, behind the tray and AGV solver interfaces of this refactor.</li>
+</ol>
+<p>Questions to settle before step 3: what the primary objective is (retrieve waiting time, throughput, or a weighted mix); how long a planning call may take; whether durations of bay and patron actions can be bounded; and how far ahead Dispatch should plan once overlapping planning is on.</p>
 <h2 data-num id="pr-swappable-motion-planners">Future work: swappable motion planners</h2>
 <p>The tray and AGV solvers of this ticket put task planning behind interfaces. Motion planning is the natural next step: keep CHUGG, but make it one implementation of a common interface, so that other solvers (CBS, priority-based search, newer large-scale MAPF solvers, a learned planner) can be tried, benchmarked and swapped without touching the scheduler. This section is future work beyond SW2-484. It builds on the comparison of CHUGG's inputs with the standard MAPF problem in the Motion planning tab (<a class="ref" href="#mp-solver-inputs-and-outputs">section 5</a>).</p>
 <figure id="pr-fig-99_motion_solver_interface">
