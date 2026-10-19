@@ -761,7 +761,7 @@ for(const auto&amp; node : request_data.base_schedule.nodes) {
   else if(node.type == ActionNodeMsg::TYPE_VECS_COMMAND) { initial_state.SetVecsDisabled(node.vecs_id); }
 }
 </code></pre>
-<p>So the new ADG cannot conflict with the committed one, because they share no AGV, bay, VECS or start and goal node. The cost is that a busy AGV is unavailable for the whole new plan, even if it would be free a few seconds in. VRC commands in the base schedule are not handled in this loop. How the dispatcher joins the new schedule onto the base one is on its side of the interface.</p>
+<p>So the new ADG cannot conflict with the committed one, because they share no AGV, bay, VECS or start and goal node. The cost is that a busy AGV is unavailable for the whole new plan, even if it would be free a few seconds in. The Background tab traces every place the reservation is read and what could replace it (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 14</a>). VRC commands in the base schedule are not handled in this loop. How the dispatcher joins the new schedule onto the base one is on its side of the interface.</p>
 
 <h3 data-num id="ad-what-this-means-for-the-refactor">What this means for the refactor</h3>
 <ul>

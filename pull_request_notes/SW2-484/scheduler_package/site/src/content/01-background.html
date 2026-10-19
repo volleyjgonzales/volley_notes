@@ -667,7 +667,7 @@ table_(gg_, logger),                                  // volley::CollisionTable,
   ├── base_schedule: Schedule (already running) └── scheduled_jobs: ScheduledJobData[]
   └── planned_jobs / active_jobs / pending_jobs: SchedulerJob[]
 </code></pre>
-<p>Only <code>pending_jobs</code> are planned. <code>base_schedule</code> is the immutable part of a schedule that is already executing: <code>Plan()</code> marks every AGV, node, bay and VECS used by it as <strong>disabled</strong> in the initial state, so the new plan cannot reuse them.</p>
+<p>Only <code>pending_jobs</code> are planned. <code>base_schedule</code> is the immutable part of a schedule that is already executing: <code>Plan()</code> marks every AGV, node, bay and VECS used by it as <strong>disabled</strong> in the initial state, so the new plan cannot reuse them. Here “disabled” means “reserved by the running schedule” (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 14</a>).</p>
 <h2 data-num id="bg-discretegaragestate-the-bridge-between-the-garage-and-the-planner"><code>DiscreteGarageState</code>: the bridge between the garage and the planner</h2>
 <p><code>DiscreteGarageState</code> is the most important type in the system. The Scheduler never plans over geometry directly; it plans over this structured snapshot of AGVs, trays, bays, payloads, VECS, VRCs and disabled nodes. The ROS message carries them as arrays; inside the class they are <code>std::map</code>s keyed by id (<code>agvs_</code>, <code>trays_</code>, <code>bays_</code>, <code>vexen_</code>, <code>vrcs_</code>; <code>payloads_</code> by GUID) plus a <code>std::set</code> of disabled node ids. Ordered maps are deliberate: the state's hash depends on iteration order. Every physical fact the planner cares about must be expressible in it.</p>
 <figure id="bg-fig-16_discrete_garage_state_bridge">
@@ -1975,8 +1975,212 @@ ScheduleContextSPtr plan_ctx =
 plan_ctx->disabledness_filters =
     volley::GetDisabledEntitiesFilters(gg_, plan_ctx->initial_state, table_);
 </code></pre>
-<p><a class="ref" href="#bg-schedulecontext-the-per-call-workspace">Section 7</a> describes each field of the new <code>ScheduleContext</code> and which stage reads or changes it.</p>
+<p>The loop and the filters are explained in <a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 14</a>. <a class="ref" href="#bg-schedulecontext-the-per-call-workspace">Section 7</a> describes each field of the new <code>ScheduleContext</code> and which stage reads or changes it.</p>
 <p>Why can a <code>const</code> method change anything at all? <code>Plan()</code> cannot modify <code>*this</code>, but <code>plan_ctx</code> is a local <code>shared_ptr</code> to a <strong>non-const</strong> <code>ScheduleContext</code>. The same holds for <code>DoTrayAssignments(ScheduleContextSPtr ctx) const</code> and friends: the Scheduler's graphs and tables stay fixed, and all planning state lives in <code>*ctx</code>. Do not read <code>const</code> as “thread-safe”, though: <code>costaudit_</code> and <code>printdags_</code> are <code>mutable</code>, and <code>CreateActionGuid()</code> uses a plain static counter. The <code>plan</code> service runs in the node's default callback group, so plan calls are handled one at a time today.</p>
+<h2 data-num id="bg-the-base-schedule-reserved-assets-and-keep-out-filters">The base schedule: reserved assets and keep-out filters</h2>
+<p>Before any job is planned, <code>Plan()</code> takes out of play everything the already-running schedule uses. It does this with the same <code>disabled</code> flags that mark an asset as out of service, and it then builds <code>disabledness_filters</code>, which turn those flags into graph vertices and edges that no new motion may use. This section explains why the scheduler does this, what the flags mean, and where every later stage reads them.</p>
+<figure id="bg-fig-116_base_schedule_reservation">
+  <img src="figures/116_base_schedule_reservation.svg" alt="Reserving what the running schedule uses">
+  <figcaption><strong>Reserving what the running schedule uses.</strong> Step through one request. AGV-2 has two moves and bay B21 one command in <code>base_schedule</code>. The loop marks AGV-2 and B21 disabled and adds every source and destination node to <code>disabled_nodes_</code>; the keep-out filters follow. A pending MOVE_AGV for AGV-2 then fails, a repark of T24 succeeds, AGV assignment skips AGV-2, and in the last two steps both schedules run side by side without sharing an asset.</figcaption>
+</figure>
+<h3 data-num id="bg-what-the-reservation-loop-marks">What the loop marks</h3>
+<table>
+  <thead>
+    <tr>
+      <th><code>ActionNode.type</code> in <code>base_schedule</code></th>
+      <th>Call</th>
+      <th>Field set in <code>initial_state</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>TYPE_AGV_COMMAND</code></td>
+      <td><code>SetAgvDisabled(agv_id)</code>, <code>SetNodeDisabled(src)</code>, <code>SetNodeDisabled(dst)</code></td>
+      <td><code>agvs_[agv_id].disabled = true</code>; the command's source and destination node ids go into <code>disabled_nodes_</code></td>
+    </tr>
+    <tr>
+      <td><code>TYPE_BAY_COMMAND</code></td>
+      <td><code>SetBayDisabled(bay_id)</code></td>
+      <td><code>bays_[bay_id].disabled = true</code>, and <code>bay_id</code> goes into <code>disabled_nodes_</code> (a bay's id is its node id)</td>
+    </tr>
+    <tr>
+      <td><code>TYPE_VECS_COMMAND</code></td>
+      <td><code>SetVecsDisabled(vecs_id)</code></td>
+      <td><code>vexen_[vecs_id].disabled = true</code>, and <code>vecs_id</code> goes into <code>disabled_nodes_</code> (a VECS's id is its node id)</td>
+    </tr>
+    <tr>
+      <td><code>TYPE_VRC_COMMAND</code></td>
+      <td>none</td>
+      <td>nothing: a VRC with commands in the running schedule stays available (<a class="ref" href="#ly-vrc-support-status">section 8</a>)</td>
+    </tr>
+  </tbody>
+</table>
+<p>Three details of the setters (common_ros <code>discrete_garage_state.cpp</code>):</p>
+<ul>
+  <li><strong>Unknown ids are ignored silently.</strong> <code>SetAgvDisabled</code>, <code>SetBayDisabled</code> and <code>SetVecsDisabled</code> look the id up and change nothing if it is missing. A node id always goes into <code>disabled_nodes_</code>, even if the layout has no such node; <code>GetStaticFilter</code> later throws on that (“a disabled node that does not exist in the layout”).</li>
+  <li><strong>Only the ends of each AGV command are reserved.</strong> A route sent as one command per edge is covered end to end, because every intermediate stop is the destination of one command and the source of the next. If one command spans several nodes, the nodes between its ends are not added; whether Dispatch sends such commands is not visible in the snapshots.</li>
+  <li><strong>Trays are not reserved by name.</strong> A tray carried by a busy AGV stays usable in the bookkeeping, but it stands on a reserved node (the AGV's source), so the keep-out filters treat it as an obstacle and <code>IsTrayAvailable</code> does not count it as an empty tray.</li>
+</ul>
+<h3 data-num id="bg-why-reserve-the-assets-that-still-have-to-move">Why reserve the assets that still have to move</h3>
+<p>The assets in <code>base_schedule</code> are not idle; they are busy. They move during the call, under commands Dispatch released before it. In this loop, “disabled” does not mean “broken”: it means <strong>owned by the running schedule, do not use</strong>. Reading <code>SetAgvDisabled</code> as “reserve this AGV” is accurate. Reservation serves the goal of a <code>Plan()</code> call rather than working against it, for four reasons:</p>
+<ul>
+  <li><strong>A call plans only <code>pending_jobs</code>.</strong> The request says <code>base_schedule</code> is “the immutable portion of the current schedule” and that the scheduler “is to assume that all of these actions will be completed”. The jobs it serves are listed in <code>planned_jobs</code> and <code>active_jobs</code> and are not planned again. The busy assets already have their work; reserving them protects it.</li>
+  <li><strong>Each asset follows one command queue.</strong> An AGV runs its actions in order (Type 1 edges, <a class="ref" href="#ad-our-edges-versus-type-1-and-type-2">section 7.3</a>). If the new plan also gave AGV-2 commands, Dispatch would hold two schedules for one robot with no order between them. A bay or VECS could likewise receive a second command while its first transition is still running.</li>
+  <li><strong>The snapshot is not advanced.</strong> <code>base_state</code> is the garage now, before the base actions finish. They are <code>ActionNode</code>s, not <code>ScheduleEvent</code>s, so the scheduler does not replay them, and their timing is Dispatch's. It therefore does not know where a busy AGV will be at a given moment. Keeping the AGV's current footprint and reserving both ends of each of its commands covers every place it can be while the new plan runs.</li>
+  <li><strong>The two schedules share no edges.</strong> The scheduler adds no dependency from a base action to a new one (<a class="ref" href="#ad-persistent-planning-base-schedule-and-the-split">section 7.5</a>). Excluding every shared asset is what makes that safe: two schedules that use different AGVs, bays, VECS and nodes cannot conflict, whatever their relative timing.</li>
+</ul>
+<p>The price is conservatism. A busy AGV is unavailable for the <em>whole</em> new plan, even if its last base action ends seconds after the call. A pending job that needs a reserved asset fails instead of waiting for it, and Dispatch must send it again in a later request.</p>
+<h3 data-num id="bg-one-flag-two-meanings">One flag, two meanings</h3>
+<p><code>disabled</code> already means something before the loop runs. <code>base_state</code> carries assets taken out of service by an operator or by the fault system, and nodes closed off. They are set through <code>SetResourceDisabledness.srv</code> and recorded as <code>AgvDisablednessChanged</code>, <code>BayDisablednessChanged</code>, <code>VecsDisablednessChanged</code>, <code>TrayDisablednessChanged</code> and <code>NodeDisablednessChanged</code> events, each with its own <code>OnEvent</code> handler. The loop writes the same fields, so after it runs nothing in <code>initial_state</code> tells the two apart:</p>
+<ul>
+  <li><strong>Failure messages name the wrong cause.</strong> A MOVE_AGV job for a busy AGV fails with “Tried to move a disabled agv 2”, and CHARGE_AGV with “Can't charge &lt;AGV> because it's disabled.” Whoever reads the job's error sees “disabled”, not “busy”.</li>
+  <li><strong>Duration is lost.</strong> An out-of-service asset is unavailable until someone re-enables it; a reserved one is free once its last base action ends. The flag has no room for that difference.</li>
+  <li><strong>Logs hide the running schedule.</strong> The logged <code>initial_state</code> lists reserved assets as disabled, so how much of the garage the running schedule holds is not visible.</li>
+</ul>
+<h3 data-num id="bg-where-the-reservation-is-read">Where the flags are read</h3>
+<p>The flags are read in two ways: directly (<code>agv.disabled</code>, <code>bay.disabled</code>, <code>GetDisabledNodes()</code>) and through filters built from them. Every stage of <code>Plan()</code> sees them.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
+      <th>Function</th>
+      <th>Reads</th>
+      <th>Effect on a reserved asset</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Job expansion</td>
+      <td><code>PlanAgvMoveJob</code></td>
+      <td><code>agv.disabled</code>; <code>disabledness_filters</code> at the destination</td>
+      <td>“Tried to move a disabled agv”; a reserved destination is “a disabled location”</td>
+    </tr>
+    <tr>
+      <td>Job expansion</td>
+      <td><code>PlanAgvChargeJob</code></td>
+      <td><code>agv.disabled</code>; <code>disabledness_filters[AGV]</code> per charger</td>
+      <td>The job fails; reserved chargers are skipped</td>
+    </tr>
+    <tr>
+      <td>Job expansion</td>
+      <td><code>PlanRetrieveJob</code>, <code>ClassifyBays</code></td>
+      <td><code>disabledness_filters</code> at the payload's tray; <code>bay.disabled</code></td>
+      <td>A payload in reserved space fails (“in a disabled area”); a reserved bay is <code>NOT_USABLE</code></td>
+    </tr>
+    <tr>
+      <td>Job expansion</td>
+      <td><code>PlanReparkTrayJob</code>, <code>PlanInsertJob</code>, <code>PlanBayTransitionJob</code>, <code>PlanUnstashWaypointTraysJob</code></td>
+      <td><code>tray.disabled</code>, <code>bay.disabled</code>, <code>disabledness_filters</code> at the destination</td>
+      <td>The job fails or the asset is skipped (some bay commands skip the check, <a class="ref" href="#bg-gotchas-2">section 4.16</a>)</td>
+    </tr>
+    <tr>
+      <td>Bay rebalancing</td>
+      <td><code>ComputeBayRebalancingActions</code> via <code>CountEmptyTrays</code></td>
+      <td><code>IsTrayAvailable</code>: tray on a disabled node, or disabled</td>
+      <td>Not counted as an empty tray</td>
+    </tr>
+    <tr>
+      <td>Tray and AGV assignment</td>
+      <td><code>IsMovePossible</code></td>
+      <td><code>disabledness_filters</code>, then <code>GetStaticFilter</code> on the working state</td>
+      <td>A reserved destination is refused before any path search</td>
+    </tr>
+    <tr>
+      <td>AGV assignment</td>
+      <td><code>DoAgvAssignments</code>, <code>TryClearBlockedAgvMove</code></td>
+      <td><code>agv_state.disabled</code></td>
+      <td>Never a candidate; never counted as an AGV that could move out of the way</td>
+    </tr>
+    <tr>
+      <td>Every path search</td>
+      <td><code>GetStaticFilter</code></td>
+      <td>disabled AGVs, trays and bays (their node joins <code>all_disabled_nodes</code>); <code>GetDisabledNodes()</code></td>
+      <td>Each disabled node blocks the volume of its largest window at every heading</td>
+    </tr>
+    <tr>
+      <td>Motion planning</td>
+      <td><code>Chugg::GetMovableAgvs</code>, <code>HideAgvs</code></td>
+      <td><code>agv.disabled</code></td>
+      <td>No <code>SippAgv</code>: the AGV is a static obstacle at its current pose for the whole plan</td>
+    </tr>
+    <tr>
+      <td>Action graph</td>
+      <td><code>ResponseFromTrajectories</code></td>
+      <td>—</td>
+      <td>Nothing: base actions are not part of the response; Dispatch joins the two schedules</td>
+    </tr>
+  </tbody>
+</table>
+<h3 data-num id="bg-disabledness-filters-the-keep-out-map"><code>disabledness_filters</code>: the keep-out map</h3>
+<p>Right after the loop, <code>Plan()</code> calls <code>volley::GetDisabledEntitiesFilters(gg_, plan_ctx->initial_state, table_)</code> (motion_planner, <code>static_graph_filtering.cpp</code>):</p>
+<pre><code class="language-cpp">// motion_planner/src/static_graph_filtering.cpp (abridged)
+std::unordered_map&lt;CollisionEntityId_t, GraphFilterProperties> GetDisabledEntitiesFilters(
+    const GarageGraph&amp; gg, const DiscreteGarageState&amp; dgs, const CollisionTable&amp; ctable) {
+  std::unordered_set&lt;uint16_t> ignore_agvs, ignore_trays, ignore_bays;
+  const auto&amp; disabled_nodes = dgs.GetDisabledNodes();
+  for(const auto&amp; [agv_id, agv] : dgs.GetAgvs()) {
+    // ignore every AGV that is neither disabled nor standing on a disabled node
+    if(!disabled_nodes.count(agv.pose.node_id) &amp;&amp; !agv.disabled) ignore_agvs.insert(agv_id);
+  }
+  // ... the same for trays (tray.pose.node_id) and bays (the bay id is its node id)
+  return GetAllStaticFilters(gg, dgs, ctable, ignore_trays, ignore_agvs, ignore_bays);
+}
+</code></pre>
+<p>Read it from the return statement backwards. <code>GetAllStaticFilters</code> is the general tool: for the AGV footprint, the empty-tray footprint and every payload window found on a tray, it calls <code>GetStaticFilter</code>, which switches off each vertex and edge where that footprint would collide with an entity that is not ignored, with every disabled node, or (for payloads) with a pose too small for the payload. <code>GetDisabledEntitiesFilters</code> ignores every entity that is neither disabled nor on a disabled node. What remains as an obstacle is exactly the set of things the new plan may never use:</p>
+<ul>
+  <li>disabled AGVs, trays and bays, at their current pose: AGV-2 at P15 in <a class="ref" href="#bg-fig-116_base_schedule_reservation">Figure 1</a>;</li>
+  <li>any entity standing on a disabled node: T15, under AGV-2;</li>
+  <li>every disabled node, as the volume of the largest window the node allows (<code>max_resource_size_index</code>), at every heading the node has.</li>
+</ul>
+<p>The value type, <code>GraphFilterProperties</code>, holds two boolean property maps, one per vertex and one per edge, and <code>IsEnabled(v)</code> is an unchecked index into them. The map is keyed by <code>CollisionEntityId_t</code>, the footprint type, because whether a place is usable depends on the size of what goes there.</p>
+<p><strong>Why it is needed.</strong> Planning asks two different questions about a place, and the code keeps one structure for each:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Question</th>
+      <th>Answered by</th>
+      <th>Built from</th>
+      <th>Built</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Is this place usable at all in this plan?</td>
+      <td><code>ctx->disabledness_filters[footprint]</code></td>
+      <td>reserved and out-of-service assets and nodes only</td>
+      <td>once per call, from <code>initial_state</code></td>
+    </tr>
+    <tr>
+      <td>Is this place free now, after the events replayed so far?</td>
+      <td><code>GetStaticFilter(footprint, gg_, working_state, table_, ignore...)</code></td>
+      <td>every entity in <code>working_state</code> except the ones the caller expects to move</td>
+      <td>on demand, many times per call</td>
+    </tr>
+  </tbody>
+</table>
+<p>The first answer is fixed for the whole call, so it is built once and read in constant time. Job methods use it to reject a job early with a precise reason (a payload in reserved space, a repark onto a reserved node) before any path search, and <code>IsMovePossible</code> uses it to tell “never usable” from “occupied for now”. The second answer changes with every replayed event, so it is rebuilt where it is needed. Without the keep-out map, each check would have to rebuild a filter with the right ignore sets just to make that distinction. The per-state filters also block reserved assets and nodes, so later path searches respect the reservation as well.</p>
+<p><strong>Is the name good?</strong> No. “Disabledness” is not a word; the entries are usability masks, not degrees of disabledness; and the name hides that most entries come from the running schedule rather than from broken assets. The type name <code>CollistionFilterMap</code> misspells “collision” and names the mechanism instead of the key. The naming catalogue (<a class="ref" href="#nm-schedulecontext">section 15.4.2</a>) proposes <code>keep_out_filter_by_footprint</code>, of type <code>KeepOutFilterByFootprint</code>: “keep-out area” is the usual robotics term for space a robot must not enter, and the <code>&lt;value>_by_&lt;key></code> rule (<a class="ref" href="#nm-rule-maps">section 15.2.6</a>) names the key. The producer, <code>GetDisabledEntitiesFilters</code>, is in motion_planner and keeps its name; the scheduler can wrap it as <code>BuildKeepOutFilters</code>. Every lookup today uses <code>operator[]</code>, which inserts an empty filter for a missing footprint (gotchas of <a class="ref" href="#bg-schedulecontext-the-per-call-workspace">section 16</a>); the wrapper should use <code>find</code> and fail clearly.</p>
+<h3 data-num id="bg-what-to-change">What to change</h3>
+<p>All of the following stays inside <code>scheduler</code>; the <code>common_ros</code> setters and flags are unchanged.</p>
+<ol>
+  <li><strong>Extract and name the loop (no behaviour change).</strong> A free function states the intent and returns a record of what it reserved:
+<pre><code class="language-cpp">// include/scheduler/core/base_schedule_reservation.hpp (proposed)
+struct BaseScheduleReservation {
+  std::set&lt;uint16_t> agvs, bays, vecs;   // assets with actions in base_schedule
+  std::set&lt;uint32_t> nodes;              // sources and destinations of its AGV commands
+  bool HoldsAgv(uint16_t agv_id) const { return agvs.count(agv_id) > 0; }
+};
+
+// Marks every reserved asset disabled in `state` (as today) and returns what it marked.
+BaseScheduleReservation ReserveBaseScheduleAssets(const interfaces::msg::Schedule&amp; base_schedule,
+                                                  volley::DiscreteGarageState&amp; state);
+</code></pre>
+  <code>Plan()</code> keeps the record in the context as <code>reserved_by_base_schedule</code>.</li>
+  <li><strong>Say why a job failed.</strong> Where a check finds <code>disabled</code>, consult the record first: “AGV-2 is reserved by the running schedule” instead of “Tried to move a disabled agv 2”. Only messages change; tests that match the old text need updating.</li>
+  <li><strong>Rename the keep-out map</strong> as above, and build it through <code>BuildKeepOutFilters</code>, which returns a type with a checked lookup.</li>
+  <li><strong>Reserve VRCs.</strong> Add <code>TYPE_VRC_COMMAND</code> to the loop once task planning supports VRCs (<a class="ref" href="#ly-vrc-support-status">section 8</a>); until then it changes nothing.</li>
+  <li><strong>Later, time-bounded reservations (behaviour change).</strong> CHUGG already starts from a <code>ContinuousState</code> whose trajectories have end times, and it starts each AGV when its initial trajectory ends. Seeding those trajectories with the base actions (where each busy AGV goes, and until when) would let a busy AGV take new work after its last base action and free reserved nodes once they are vacated. This is the persistent-planning idea of the Action graph tab. Task planning would then have to start a busy AGV at its base-schedule end pose, and Dispatch would have to agree how a plan that continues a busy AGV's queue is joined. It is listed as a review decision (<a class="ref" href="#pr-decisions-to-resolve-in-review">section 11</a>).</li>
+</ol>
 <h2 data-num id="bg-one-plan-call-step-by-step">One <code>Plan()</code> call, step by step</h2>
 <figure id="bg-fig-22_plan_control_flow">
   <img src="figures/22_plan_control_flow.svg" alt="Plan control flow">
@@ -2191,6 +2395,169 @@ using ScheduleEventSPtr = std::shared_ptr&lt;ScheduleEvent>;
   </tbody>
 </table>
 <p>A <code>TrayMove</code> is <strong>not</strong> an AGV command. Before assignment it may mean “bring <em>some</em> empty tray to this bay” (no tray id) or “put this tray <em>somewhere</em> sensible” (no destination). <code>AgvMove</code> also declares <code>SetSrc</code> and <code>SetDest</code>, but a source comment says they “aren't implemented anywhere”; do not call them.</p>
+<h3 data-num id="bg-inside-agvmove-apply">Inside <code>AgvMove::Apply</code></h3>
+<p>Every subclass's <code>Apply</code> does the same job: translate a planner event into one or more garage event messages and hand each one to <code>DiscreteGarageState::OnEvent</code>. <code>AgvMove::Apply</code> is the shortest example, and it packs several C++ features into three lines:</p>
+<pre><code class="language-cpp">// planner_core/src/schedule_events.cpp
+//   state            -> the working copy being advanced, never ctx->initial_state
+//   discrete_change_ -> std::variant&lt;AgvLiftChangedMsg, AgvPoseChangedMsg>
+// Overrides the pure-virtual ScheduleEvent::Apply.
+BoolStringPair AgvMove::Apply(volley::DiscreteGarageState&amp; state) const {
+  return std::visit(
+      [this, &amp;state](auto&amp;&amp; arg) -> BoolStringPair { return state.OnEvent(arg); },
+      discrete_change_);
+}
+</code></pre>
+<table>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>In this code</th>
+      <th>What it means here</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>const</code> member function</td>
+      <td><code>Apply(...) const</code></td>
+      <td>Inside, <code>this</code> is a <code>const AgvMove*</code>: the method may read <code>discrete_change_</code> but not change it. It must be <code>const</code> because the base declares <code>virtual BoolStringPair Apply(DiscreteGarageState&amp;) const = 0</code>, and that is what lets every stage replay the same shared events. Only the argument <code>state</code> changes.</td>
+    </tr>
+    <tr>
+      <td><code>std::variant</code></td>
+      <td><code>discrete_change_</code></td>
+      <td>A type-safe union: it holds exactly one of <code>AgvLiftChangedMsg</code> (raise or lower) or <code>AgvPoseChangedMsg</code> (drive or rotate), plus an index that says which.</td>
+    </tr>
+    <tr>
+      <td><code>std::visit</code></td>
+      <td><code>std::visit(f, discrete_change_)</code></td>
+      <td>Reads the index at run time and calls <code>f</code> with the alternative the variant holds. It is the variant's equivalent of a virtual call.</td>
+    </tr>
+    <tr>
+      <td>Lambda and capture list</td>
+      <td><code>[this, &amp;state](...) { ... }</code></td>
+      <td>An unnamed function object written in place. <code>&amp;state</code> captures the caller's state by reference, so the lambda changes the real working copy and copies nothing. <code>this</code> is captured but never used; it can be dropped (clang flags it with <code>-Wunused-lambda-capture</code>). The lambda lives only for the duration of the <code>visit</code> call, so the reference cannot dangle.</td>
+    </tr>
+    <tr>
+      <td>Generic lambda, forwarding reference</td>
+      <td><code>auto&amp;&amp; arg</code></td>
+      <td><code>auto</code> in a parameter makes the lambda a template: the compiler writes one body per alternative. <code>auto&amp;&amp;</code> is a forwarding (“universal”) reference: it binds to whatever <code>visit</code> passes without copying. Here the method is <code>const</code>, so <code>visit</code> passes <code>const AgvLiftChangedMsg&amp;</code> or <code>const AgvPoseChangedMsg&amp;</code>, and <code>arg</code> has exactly that type.</td>
+    </tr>
+    <tr>
+      <td>Trailing return type</td>
+      <td><code>-> BoolStringPair</code></td>
+      <td>States the lambda's return type instead of letting the compiler deduce it from <code>return</code>. <code>std::visit</code> requires every alternative's call to return the same type; all <code>OnEvent</code> overloads already return <code>BoolStringPair</code>, so here the annotation documents the contract and turns any future mismatch into a compile error at the lambda.</td>
+    </tr>
+    <tr>
+      <td>Overload resolution</td>
+      <td><code>state.OnEvent(arg)</code></td>
+      <td>In each copy of the lambda, <code>arg</code> has a different static type, so the compiler picks a different <code>OnEvent</code> overload in each: no run-time cost. If an alternative had no matching overload, the code would not compile.</td>
+    </tr>
+    <tr>
+      <td><code>BoolStringPair</code></td>
+      <td>return value</td>
+      <td><code>std::pair&lt;bool, std::string></code>: success and, on failure, a reason. <code>FailedEvent(msg)</code> and <code>SucceededEvent()</code> in common_ros build it with <code>std::make_pair</code>.</td>
+    </tr>
+  </tbody>
+</table>
+<p>Written out by hand, the same method reads:</p>
+<pre><code class="language-cpp">BoolStringPair AgvMove::Apply(volley::DiscreteGarageState&amp; state) const {
+  if(const auto* lift = std::get_if&lt;AgvLiftChangedMsg>(&amp;discrete_change_)) {
+    return state.OnEvent(*lift);         // OnEvent(const AgvLiftChangedMsg&amp;)
+  }
+  // OnEvent(const AgvPoseChangedMsg&amp;)
+  return state.OnEvent(std::get&lt;AgvPoseChangedMsg>(discrete_change_));
+}
+</code></pre>
+<p>The behaviour is identical. The <code>visit</code> form needs no edit when a third alternative is added, and it fails to compile if that alternative has no <code>OnEvent</code>; the hand-written form would silently send it down the last branch. <code>AgvMove::GetAgvId()</code> and <code>ToString()</code> use the same pattern, and <code>GetSrc()</code> / <code>GetDest()</code> use the explicit <code>std::holds_alternative</code> form.</p>
+<h3 data-num id="bg-what-onevent-is">What <code>OnEvent</code> is</h3>
+<p><code>OnEvent</code> is a family of overloaded member functions of <code>DiscreteGarageState</code> in common_ros, one per garage event message: <code>FaultStateChanged</code>; <code>Agv{Existence, Disabledness, Lift, Pose, State}Changed</code>; <code>Bay{Disabledness, Existence, State}Changed</code>; <code>Vecs{Disabledness, Existence, State}Changed</code>; <code>Vrc{Existence, State}Changed</code>; <code>Tray{Existence, Disabledness}Changed</code>; <code>TrayPoseSetManually</code>; <code>PayloadExistenceChanged</code>; <code>NodeDisablednessChanged</code>. A twentieth overload takes the generic <code>DiscreteGarageEventMsg</code>, deserializes it according to its <code>type</code> string and forwards to the typed one, so a state can be fed a stream of garage events as they arrive. Inside the scheduler, the typed overloads are called directly by <code>Apply</code>.</p>
+<p>Every overload has the same shape: <strong>check, then change, then report</strong>. The checks compare the message with the state; the change happens only after them; the result is a <code>BoolStringPair</code>. For the two messages an <code>AgvMove</code> carries:</p>
+<ul>
+  <li><strong><code>OnEvent(const AgvPoseChangedMsg&amp;)</code>.</strong> The AGV must exist and be at <code>node_id_curr@heading_curr</code>, and the move must change something. If it carries a tray, the tray moves to <code>node_id_next</code> too, keeping its reciprocal heading if it had one. If another AGV is on <code>node_id_next</code>, the event fails. Then the AGV's pose becomes <code>node_id_next@heading_next</code>.</li>
+  <li><strong><code>OnEvent(const AgvLiftChangedMsg&amp;)</code>.</strong> The lift must be in the other position. Raising attaches any tray on the AGV's node, and fails if that tray is not parallel or reciprocal to the AGV; lowering detaches the carried tray.</li>
+</ul>
+<p>Two limits matter when reading the planner. The handlers check <strong>consistency, not geometry</strong>: the source says “We do not check for intersections, pose validity, etc.”; footprints and paths are the job of the filters and of CHUGG. And a few handlers <strong>change state before a later check fails</strong>: the pose handler moves a carried tray before it looks for another AGV on the destination, so that failure leaves the tray moved and the AGV not. A state on which <code>Apply</code> failed should be discarded, not reused.</p>
+<p>The other events send these messages:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Event</th>
+      <th>Messages passed to <code>OnEvent</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>AgvMove</code></td>
+      <td><code>AgvLiftChangedMsg</code> or <code>AgvPoseChangedMsg</code></td>
+    </tr>
+    <tr>
+      <td><code>TrayMove</code></td>
+      <td>blank destination: <code>PayloadExistenceChangedMsg</code> and <code>TrayExistenceChangedMsg</code> (removal); no AGV: <code>TrayPoseSetManuallyMsg</code> (a teleport; planner_core aliases it as <code>TrayPoseChangedMsg</code>), also for an occupant pushed to the placeholder pose; with an AGV: <code>AgvPoseChangedMsg</code>, which carries the tray</td>
+    </tr>
+    <tr>
+      <td><code>BayTransition</code></td>
+      <td>through <code>ApplyCommand</code>: <code>BayStateChangedMsg</code>, plus <code>PayloadExistenceChangedMsg</code> for <code>PROCESS_RETRIEVE</code></td>
+    </tr>
+    <tr>
+      <td><code>VecsTransition</code></td>
+      <td><code>VecsStateChangedMsg</code></td>
+    </tr>
+    <tr>
+      <td><code>VrcTransition</code></td>
+      <td>two <code>VrcStateChangedMsg</code> (IDLE → MOVING → IDLE), then <code>AgvPoseChangedMsg</code> per AGV and <code>TrayPoseSetManuallyMsg</code> per loose tray on the platform</td>
+    </tr>
+  </tbody>
+</table>
+<h3 data-num id="bg-why-apply-is-structured-this-way">Why the code is structured this way</h3>
+<p>One replayed <code>AgvMove</code> passes through three choices before any state changes (<a class="ref" href="#bg-fig-117_apply_call_chain">Figure 2</a>). Each answers a different question and is owned by a different package:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Question</th>
+      <th>Mechanism</th>
+      <th>Decided</th>
+      <th>Owner</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Which kind of planner event is this?</td>
+      <td>virtual <code>ScheduleEvent::Apply</code></td>
+      <td>run time, from the object's class</td>
+      <td>planner_core</td>
+    </tr>
+    <tr>
+      <td>Which change did this <code>AgvMove</code> record?</td>
+      <td><code>std::visit</code> over <code>discrete_change_</code></td>
+      <td>run time, from the variant's index</td>
+      <td>planner_core</td>
+    </tr>
+    <tr>
+      <td>Which rule updates the garage for that change?</td>
+      <td>overload of <code>DiscreteGarageState::OnEvent</code></td>
+      <td>compile time, from the argument type</td>
+      <td>common_ros</td>
+    </tr>
+  </tbody>
+</table>
+<p>The split has three benefits. <strong>The rules live in one place.</strong> How a lift attaches a tray, or what makes a move invalid, is written once in <code>DiscreteGarageState</code>, and every user of a state gets the same answer. <strong>Planned and reported changes use one vocabulary.</strong> A planner event is translated into the same messages that report changes in the garage, so a replayed plan and a state fed with real events are updated by the same code, and the messages already have <code>std::to_string</code> and YAML support for logs and tests. <strong>Events stay data.</strong> An <code>AgvMove</code> is an <code>AGV_MOVE</code> event for the DAG rules (its <code>GetGarageEntityId()</code> is the AGV, whichever alternative it holds), and the variant keeps one class for lifts and drives instead of two subclasses that every <code>GetType()</code> switch would have to handle.</p>
+<p>The costs are indirection (three hops for a one-line change) and a habit of ignoring the result: in the snapshots, five <code>Apply</code> calls in the scheduler and four in motion_planner discard the returned pair. The refactor proposal replaces <code>BoolStringPair</code> with <code>stdx::Expected</code> marked <code>[[nodiscard]]</code> in the new code (<a class="ref" href="#pr-errors-stdxexpected-instead-of-boolstringpair">section 6.4</a>).</p>
+<figure id="bg-fig-117_apply_call_chain">
+  <img src="figures/117_apply_call_chain.svg" alt="Replaying one AgvMove, call by call">
+  <figcaption><strong>Replaying one <code>AgvMove</code>.</strong> Step through the calls: a caller copies <code>initial_state</code> and asks the DAG to replay itself; the DAG walks its topological order; the virtual call, <code>std::visit</code> and overload resolution choose the code; <code>OnEvent</code> checks and changes the state; the pair travels back, and the first failure stops the replay.</figcaption>
+</figure>
+<h3 data-num id="bg-a-mental-model-for-apply">A mental model: events are checked deltas, a state is a replay</h3>
+<p>Think of each event as a <strong>delta with a precondition</strong>: an <code>AgvPoseChangedMsg</code> says “AGV-1 is at W26@90 and goes to W27@90”, and <code>OnEvent</code> refuses it unless the first half is true. A garage state at any point of the plan is the initial state with every earlier delta applied in order:</p>
+<div class="math">s_0 = s_{\text{init}}, \qquad s_k = \operatorname{apply}(e_{\pi(k)},\, s_{k-1}), \quad k = 1, \dots, n</div>
+<p>where <span class="math">\pi</span> is a topological order of the event DAG. If any precondition fails, the DAG does not describe a possible sequence, and the replay stops. This is why messages carry both the current and the next value (<code>node_id_curr</code> and <code>node_id_next</code>): the current half is the check, the next half the change.</p>
+<p>The calls that use this model, in the order a <code>Plan()</code> call makes them:</p>
+<ol>
+  <li><strong>Build the start once.</strong> <code>ValidateBaseState</code> and the reservation loop produce <code>initial_state</code> (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 14</a>). Nothing changes it afterwards.</li>
+  <li><strong>Job expansion.</strong> Each job method copies <code>initial_state</code>, calls <code>ctx->events.Apply(working_state)</code> to reach the state after all earlier jobs, decides on new events from that state, and often applies each new event to <code>working_state</code> as it adds it.</li>
+  <li><strong>Tray and AGV assignment.</strong> The same replay, one event at a time in topological order, with decisions in between: fill a blank <code>TrayMove</code>, choose an AGV, then <code>Apply</code> the completed event before moving on.</li>
+  <li><strong>Sanity check.</strong> <code>SanityCheckEvents</code> replays the finished DAG once; any failure fails every pending job (<a class="ref" href="#bg-reduce-and-sanitycheckevents">section 18</a>).</li>
+  <li><strong>Motion planning.</strong> CHUGG's <code>InitializeEventOrder</code> replays once and throws on failure; <code>PlanNodeSequential</code> applies each event after planning its motions, so the next event is planned against the right discrete state.</li>
+</ol>
+<p>Two rules follow. Always replay onto a <strong>copy</strong>, never onto <code>ctx->initial_state</code> (the tests do the latter on purpose). And treat a copy whose replay <strong>failed</strong> as spoiled.</p>
 <h2 data-num id="bg-directed-acyclic-graphs-then-scheduleeventdag">Directed acyclic graphs, then <code>ScheduleEventDag</code></h2>
 <p><code>ctx->events</code>, a <code>ScheduleEventDag</code>, <em>is</em> the plan while <code>Plan()</code> runs. Job expansion writes intent into it, tray and AGV assignment extend it, <code>Reduce()</code> thins it, the sanity check replays it, CHUGG plans timed motions from it, and the response builds a <em>second</em> graph, the action DAG, from those motions, copying the event edges into it (<a class="ref" href="#bg-motion-planning-and-the-response">section 20</a>). This section starts with the graph theory (<a class="ref" href="#bg-graph-theory-in-one-paragraph">12.1</a>, <a class="ref" href="#bg-what-a-topological-ordering-is-in-plain-words">12.2</a>), then goes inside the class: its type family (<a class="ref" href="#bg-the-class-dagbaset-and-scheduleeventdag">12.3</a>), what it stores (<a class="ref" href="#bg-what-is-stored-vertices-edges-and-shared-events">12.4</a>), each operation (<a class="ref" href="#bg-the-operations">12.5</a>), how copies behave (<a class="ref" href="#bg-copies-share-events-event_dag_copy-as-a-work-queue">12.6</a>), how the DAG grows during <code>Plan()</code> (<a class="ref" href="#bg-how-the-dag-grows-during-plan">12.7</a>), what <code>Reduce()</code> does (<a class="ref" href="#bg-reduce-fewer-edges-same-order">12.8</a>), and the traps (<a class="ref" href="#bg-gotchas">12.9</a>).</p>
 <h3 data-num id="bg-graph-theory-in-one-paragraph">Graph theory in one paragraph</h3>
@@ -2984,6 +3351,18 @@ colcon test-result --verbose
       <td>One of several alternatives</td>
       <td><code>AgvMove</code> holds a lift <strong>or</strong> a pose change</td>
       <td>Lift changes have no destination (<code>GetDest()</code> empty)</td>
+    </tr>
+    <tr>
+      <td>Generic lambda, <code>auto&amp;&amp;</code>, trailing return type</td>
+      <td>A lambda template; a forwarding reference; an explicit return type</td>
+      <td><code>[this, &amp;state](auto&amp;&amp; arg) -> BoolStringPair { ... }</code> in <code>AgvMove::Apply</code> (<a class="ref" href="#bg-inside-agvmove-apply">section 15.3</a>)</td>
+      <td>All <code>std::visit</code> branches must return the same type</td>
+    </tr>
+    <tr>
+      <td>Overloaded member functions</td>
+      <td>Same name, chosen by argument type at compile time</td>
+      <td><code>DiscreteGarageState::OnEvent</code>, 20 overloads (<a class="ref" href="#bg-what-onevent-is">section 15.4</a>)</td>
+      <td>A message with no overload does not compile; a <code>using</code> alias (<code>TrayPoseChangedMsg</code>) picks the aliased overload</td>
     </tr>
     <tr>
       <td><code>const</code> member functions</td>

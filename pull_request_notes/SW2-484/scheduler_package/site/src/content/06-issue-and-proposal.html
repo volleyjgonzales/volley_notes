@@ -1348,7 +1348,12 @@ ScheduledJobDataMsg ToMsg(const ScheduledJob&amp; job);     // empty optionals b
     </tr>
     <tr>
       <td><code>disabledness_filters</code> (<code>CollistionFilterMap</code>)</td>
-      <td><code>graph_filter_by_footprint</code> (<code>GraphFilterByFootprint</code>)</td>
+      <td><code>keep_out_filter_by_footprint</code> (<code>KeepOutFilterByFootprint</code>)</td>
+      <td>B2</td>
+    </tr>
+    <tr>
+      <td>The <code>base_schedule</code> loop inline in <code>Plan()</code></td>
+      <td><code>ReserveBaseScheduleAssets(const ScheduleMsg&amp;, DiscreteGarageState&amp;) -> BaseScheduleReservation</code>, kept in the context as <code>reserved_by_base_schedule</code></td>
       <td>B2</td>
     </tr>
     <tr>
@@ -1641,6 +1646,11 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
       <td><code>planner_core</code> changes</td>
       <td>None for parity; renames in stage I, after parity (<a class="ref" href="#pr-renames-in-planner-core">7.5</a>). Later candidates: <code>[[nodiscard]]</code> on <code>AddDependency</code> (or an error for missing endpoints), a virtual <code>Clone()</code> on <code>ScheduleEvent</code>, <code>shared_ptr&lt;const ScheduleEvent></code> accessors for read-only users</td>
       <td>Agreement from the <code>planner_core</code> owners; every other planner package depends on it</td>
+    </tr>
+    <tr>
+      <td>Base-schedule reservations</td>
+      <td>Keep the whole-plan reservation for parity, but build it in <code>ReserveBaseScheduleAssets</code> and keep the record, so job failures say "reserved by the running schedule" instead of "disabled". Time-bounded reservations (a busy AGV becomes free when its last base action ends) are a later behaviour change (<a class="ref" href="#bg-what-to-change">section 14.6</a>)</td>
+      <td>How often pending jobs fail or wait because of a busy asset in recorded requests; Dispatch's rules for joining a new schedule onto the running one; whether VRC commands in the base schedule should reserve their VRC</td>
     </tr>
   </tbody>
 </table>
@@ -2203,8 +2213,13 @@ public:
     </tr>
     <tr>
       <td><code>disabledness_filters</code>, type <code>CollistionFilterMap</code></td>
-      <td><code>graph_filter_by_footprint</code>, type <code>GraphFilterByFootprint</code></td>
-      <td>"Disabledness" is not a word, "Collistion" is a typo, and the key is a footprint type</td>
+      <td><code>keep_out_filter_by_footprint</code>, type <code>KeepOutFilterByFootprint</code></td>
+      <td>"Disabledness" is not a word and "Collistion" is a typo. The value is a keep-out mask built once from reserved and disabled assets, which tells it apart from the per-state filters of <code>GetStaticFilter</code>; the key is a footprint type (<a class="ref" href="#bg-disabledness-filters-the-keep-out-map">section 14.4</a>)</td>
+    </tr>
+    <tr>
+      <td>The <code>base_schedule</code> loop inline in <code>Plan()</code></td>
+      <td><code>ReserveBaseScheduleAssets(...)</code> returning <code>BaseScheduleReservation {agvs, bays, vecs, nodes}</code></td>
+      <td>Names the intent (reserve for the running schedule) and keeps a record that error messages can use, while still calling the <code>common_ros</code> setters for parity (<a class="ref" href="#bg-what-to-change">section 14.6</a>)</td>
     </tr>
     <tr>
       <td><code>last_entity_event</code>, type <code>GarageEntityEventMap</code></td>

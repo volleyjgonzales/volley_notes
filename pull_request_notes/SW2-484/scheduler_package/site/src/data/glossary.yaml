@@ -19,12 +19,22 @@
 - term: initial_state
   code: [initial_state, ctx->initial_state]
   to: bg-the-definition-annotated
-  def: The garage at request time, with everything used by base_schedule disabled. Never changed after construction.
+  def: "The garage at request time, with everything used by base_schedule marked disabled (reserved). Never changed after construction."
 
 - term: disabledness_filters
-  code: [disabledness_filters]
-  to: bg-the-definition-annotated
-  def: Per collision-entity type, the graph vertices that disabled entities make unusable.
+  code: [disabledness_filters, "ctx->disabledness_filters", GetDisabledEntitiesFilters]
+  to: bg-disabledness-filters-the-keep-out-map
+  def: "Keep-out map built once per Plan() call: per footprint type, the graph vertices and edges that reserved or disabled assets and nodes make unusable."
+
+- term: base_schedule reservation
+  code: [SetAgvDisabled, SetNodeDisabled, SetBayDisabled, SetVecsDisabled]
+  to: bg-the-base-schedule-reserved-assets-and-keep-out-filters
+  def: "Plan() marks every AGV, bay, VECS and AGV-command source and destination node of the running base_schedule as disabled, so the new plan never uses them."
+
+- term: OnEvent
+  code: [OnEvent, "state.OnEvent", "DiscreteGarageState::OnEvent"]
+  to: bg-what-onevent-is
+  def: "DiscreteGarageState's overloaded event handlers (common_ros): one per garage event message; each checks the event against the state, then changes it, and returns a BoolStringPair."
 
 - term: scheduled_jobs
   code: [scheduled_jobs, plan_ctx->scheduled_jobs, ctx->scheduled_jobs, result.scheduled_jobs]
