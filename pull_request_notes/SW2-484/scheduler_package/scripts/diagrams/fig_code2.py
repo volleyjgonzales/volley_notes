@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from components import (EVENT_COLOR, chip, code_panel, connect, event_box, flow, frame, label_pill, note,
                         num_badge)
-from facility import Map, NODES, STALL_L, STALL_W, C_BAY
+from facility import Map, NODES, Scene, STALL_L, STALL_W, C_BAY
 from registry import figure
 from svgkit import BBox, Doc, text_width, wrap
 from theme import S, T
@@ -39,7 +39,7 @@ def working_state():
                 "The request's snapshot ctx->initial_state still shows T15 at P15. Now PlanRetrieveJob starts "
                 "job 1.")
     S1 = d.step("(1) PlanRetrieveJob copies ctx->initial_state into a local working_state. At this point the copy "
-                "is identical: T15 is still at P15.")
+                "is identical: T15 is still at P15. The dashed arrow previews what replaying event 0 will do.")
     S2 = d.step("(2) ctx->events.Apply(working_state) replays every event planned so far. Event 0 moves T15 "
                 "discretely to P23, so working_state now shows the garage as job 0 will leave it.")
     S3 = d.step("(3) The job reads the payload on T17 from working_state, not from the request. Any choice it "
@@ -83,12 +83,17 @@ def working_state():
         mB.tray(20, "T20", payload=True, chip_pos="bl")
         _bay_state(d, mB, 21, "B21 READY_TO_RETRIEVE")
         d.text(0, y2 - 18, "working_state", size=13, family="mono", weight=700, fill=T.fg)
+    # T15 in working_state: a copy at P15, then Apply(e0) puts it at P23 (straight along P15 -> P19 -> P23;
+    # the dashed arrow in step 1 previews the replay, the tray moves when step 2 replays event 0)
+    sc = Scene(mB)
+    sc.tray("T15", 15, chip_pos="bl", emphasis=True)
+    sc.drive(S2, "T15", [15, 19, 23], color=TRAY)
+    with d.at(S1):
+        sc.draw()
     with d.only(S1):
-        mB.tray(15, "T15", chip_pos="bl")
         d.text(130, y2 - 18, "= copy of ctx->initial_state (identical for now)", size=11.5, fill=T.muted)
     with d.at(S2):
         _ghost(d, mB, 15, "T15 was here")
-        mB.tray(23, "T15", chip_pos="bl", emphasis=True)
         d.text(130, y2 - 18, "= initial_state + Apply(e0) — what PlanRetrieveJob reads", size=11.5, fill=T.muted)
     with d.only(S3):
         x17, yy17 = mB.P(17)
@@ -278,35 +283,62 @@ def retrieve_walkthrough():
             "Pecos example: retrieving the payload on T17 to bay B21. The map numbers match the events, and the "
             "three bands show the event DAG after expansion, tray assignment and AGV assignment.")
     S0 = d.step("The request: one TYPE_RETRIEVE job for the payload on T17. Bay B21 is READY_TO_INSERT and still "
-                "holds the empty tray T21; AGV A is idle at W26. No events exist yet.")
+                "holds the empty tray T21; AGV-1 is idle at W26. No events exist yet.")
     S1 = d.step("Job expansion (PlanRetrieveJob) writes the intent as four events: switch B21 to TO_RETRIEVE, move "
                 "T21 out of the bay (destination unknown), bring T17 into B21, then PROCESS_RETRIEVE.")
     S2 = d.step("Tray assignment gives T21 a destination: P23. Event 1 becomes concrete; the other job events are "
                 "unchanged.")
     S3 = d.step("Tray assignment also finds blocker T15 on T17's critical path and inserts event 4 (T15 -> P19). "
                 "T17's move into the bay now waits for it.")
-    S4 = d.step("AGV assignment wraps every TrayMove in move -> lift -> carry -> lower. In this order AGV A first "
-                "drives to P15 and moves the blocker T15 to P19.")
-    S5 = d.step("Next AGV A drives to B21 and moves T21 to P23. An AddDepsAfterAmiga edge makes lifting T21 wait for "
+    S4 = d.step("AGV assignment wraps every TrayMove in move -> lift -> carry -> lower. In this order AGV-1 first "
+                "drives to P15 and moves the blocker T15 to P19. The dashed arrow previews its first drive.")
+    S5 = d.step("Next AGV-1 drives to B21 and moves T21 to P23. An AddDepsAfterAmiga edge makes lifting T21 wait for "
                 "the bay's TO_RETRIEVE transition (event 0).")
-    S6 = d.step("Finally AGV A fetches T17 at P17 and carries it into B21; after the lower, AddDepsAfterAmiga lets "
+    S6 = d.step("Finally AGV-1 fetches T17 at P17 and carries it into B21; after the lower, AddDepsAfterAmiga lets "
                 "PROCESS_RETRIEVE (event 3) start. The DAG is now ready for Reduce() and the sanity check.")
+    P1 = d.step("Playing the plan: AGV-1 drives from W26 to P15 and stops under the blocker T15 (first row of band 3).")
+    P2 = d.step("AGV-1 lifts T15, carries it to the free stall P19 and lowers it (event 4). P15 is now free.")
+    P3 = d.step("Meanwhile B21 has switched to READY_TO_RETRIEVE (event 0). AGV-1 drives P19 -> W18 -> W22 -> W41 "
+                "into the bay, under the empty tray T21.")
+    P4 = d.step("AGV-1 lifts T21 (this lift waited for event 0), carries it to P23 and lowers it (event 1).")
+    P5 = d.step("AGV-1 drives from P23 to P17, through the stall P15 that T15 has left, and stops under T17.")
+    P6 = d.step("AGV-1 lifts T17 with the car, carries it into B21 and lowers it (event 2). PROCESS_RETRIEVE "
+                "(event 3) hands the car to the customer. Every tray and the AGV are where the plan leaves them.")
     W = 1060
     s = 24
     m = Map(d, 0, 0, s, QA_X, QA_Y)
     m.base(labels=True, zones=False, axes=False)
-    m.tray(15, "T15", chip_pos="bl")
-    m.tray(17, "T17", payload=True, emphasis=True, chip_pos="bl")
-    m.tray(20, "T20", payload=True, chip_pos="bl")
-    m.tray(21, "T21", chip_pos="tr")
-    m.agv(26, "AGV A", heading=90, label_side="above")
-    _bay_state(d, m, 21, "B21 READY_TO_INSERT")
-    # routes (illustrative graph walks), drawn when the pass that fixes them runs
-    with d.at(S2):
+    sc = Scene(m)
+    sc.tray("T15", 15, chip_pos="bl")
+    sc.tray("T17", 17, payload=True, emphasis=True, chip_pos="tr")
+    sc.tray("T20", 20, payload=True, chip_pos="bl")
+    sc.tray("T21", 21, chip_pos="tr")
+    sc.agv("AGV-1", 26, heading=90, label_side="right")
+    sc.drive(P1, "AGV-1", [26, 23, 19, 15])
+    sc.lift(P2, "AGV-1")
+    sc.drive(P2, "AGV-1", [15, 19], color=TRAY)
+    sc.lower(P3, "AGV-1")
+    sc.drive(P3, "AGV-1", [19, 18, 22, 41, 21])
+    sc.lift(P4, "AGV-1")
+    sc.drive(P4, "AGV-1", [21, 41, 22, 23], color=TRAY)
+    sc.lower(P5, "AGV-1")
+    sc.drive(P5, "AGV-1", [23, 22, 18, 13, 15, 17])
+    sc.lift(P6, "AGV-1")
+    sc.drive(P6, "AGV-1", [17, 15, 13, 18, 22, 41, 21], color=TRAY)
+    sc.draw()
+    with d.at(S0, P2):
+        _bay_state(d, m, 21, "B21 READY_TO_INSERT")
+    with d.at(P3, P5):
+        _bay_state(d, m, 21, "B21 READY_TO_RETRIEVE")
+    with d.at(P6):
+        _bay_state(d, m, 21, "B21 PROCESS_RETRIEVE")
+    # planned tray moves (illustrative graph walks), drawn when the pass that fixes them runs; the playback
+    # steps replace them with the moving AGV
+    with d.at(S2, S6):
         m.route([21, 41, 22, 23], TRAY, sw=3, offset=(0, -7), num=1, num_at=0, dash="7 5")
-    with d.at(S3):
+    with d.at(S3, S6):
         m.route([15, 19], TRAY, sw=3, offset=(-14, 0), num=4, num_at=0, dash="7 5")
-    with d.at(S1):
+    with d.at(S1, S6):
         m.route([17, 15, 13, 18, 22, 41, 21], TRAY, sw=3.5, offset=(0, 7), num=2, num_at=0)
     mb = m.box
     # scenario panel
@@ -314,7 +346,7 @@ def retrieve_walkthrough():
     pw = W - px
     d.text(px, 10, "Request", size=13, weight=600, fill=T.fg)
     facts = [("job 0", "TYPE_RETRIEVE, payload on T17"), ("bay", "B21 is READY_TO_INSERT, empty T21 inside"),
-             ("trays", "T15 empty at P15, T20 loaded at P20"), ("AGV", "A idle at W26")]
+             ("trays", "T15 empty at P15, T20 loaded at P20"), ("AGV", "AGV-1 idle at W26")]
     yy = 34
     for k, v in facts:
         d.text(px, yy, k, size=11.5, family="mono", fill=T.muted)
@@ -362,22 +394,27 @@ def retrieve_walkthrough():
         connect(d, [(e4.cx, e4.y1), (e4.cx, e4.y1 + 14), (b2[2].cx + 30, e4.y1 + 14), (b2[2].cx + 30, b2[2].y1)],
                 kind="flow", color=TRAY, size=8, sw=1.6)
     # band 3: after AGV assignment
-    t3 = band("3 · after DoAgvAssignments()", "AGV A gets move -> lift -> carry -> lower around every TrayMove (one valid order)",
+    t3 = band("3 · after DoAgvAssignments()", "AGV-1 gets move -> lift -> carry -> lower around every TrayMove (one valid order)",
               268, AGV, S4, S6)
     bw3 = 138
     rows = [
-        [("AgvMove", "A -> P15", None, "new"), ("AgvMove", "lift", None, "new"), ("TrayMove", "T15 -> P19", 4, "solid"),
-         ("AgvMove", "lower", None, "new")],
-        [("AgvMove", "A -> B21", None, "new"), ("AgvMove", "lift", None, "new"), ("TrayMove", "T21 -> P23", 1, "solid"),
-         ("AgvMove", "lower", None, "new")],
-        [("AgvMove", "A -> P17", None, "new"), ("AgvMove", "lift", None, "new"), ("TrayMove", "T17 -> B21", 2, "solid"),
-         ("AgvMove", "lower", None, "new")],
+        [("AgvMove", "AGV-1 -> P15", None, "new"), ("AgvMove", "AGV-1 lift", None, "new"),
+         ("TrayMove", "T15 -> P19", 4, "solid"), ("AgvMove", "AGV-1 lower", None, "new")],
+        [("AgvMove", "AGV-1 -> B21", None, "new"), ("AgvMove", "AGV-1 lift", None, "new"),
+         ("TrayMove", "T21 -> P23", 1, "solid"), ("AgvMove", "AGV-1 lower", None, "new")],
+        [("AgvMove", "AGV-1 -> P17", None, "new"), ("AgvMove", "AGV-1 lift", None, "new"),
+         ("TrayMove", "T17 -> B21", 2, "solid"), ("AgvMove", "AGV-1 lower", None, "new")],
     ]
     left = 210
     rb = []
     for i, r in enumerate(rows):
         with d.at(S4 + i):
             rb.append(_chain(d, left, t3 + 6 + i * 74, r, bw=bw3, gap=22))
+    for k, i, j0, j1 in ((P1, 0, 0, 0), (P2, 0, 1, 3), (P3, 1, 0, 0), (P4, 1, 1, 3), (P5, 2, 0, 0), (P6, 2, 1, 3)):
+        with d.only(k):
+            bx0, bx1 = rb[i][j0].x0 - 6, rb[i][j1].x1 + 6
+            d.rect(bx0, rb[i][j0].y0 - 6, bx1 - bx0, rb[i][j0].h + 12, rx=10, fill="none", stroke=T.sky, sw=2,
+                   layer="over")
     with d.at(S4):
         e0b = event_box(d, 16, t3 + 80, "BayTransition", "B21: TO_RETRIEVE", n=0, w=170, size=11.5)
     with d.at(S6):
@@ -397,7 +434,7 @@ def retrieve_walkthrough():
     frame(d, title="One RETRIEVE job, stage by stage",
           subtitle="The map shows the intended tray moves (numbers = event ids). Below, the same event DAG grows in "
                    "three passes: job expansion creates intent, tray assignment makes it concrete and unblocks the "
-                   "path, AGV assignment adds who does it.",
+                   "path, AGV assignment adds who does it. The last six steps play the plan on the map.",
           badge_key="yaml+hyp",
           legend=[("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),
                   ("ring", T.muted, "added in this pass"), ("dasharrow", BAYC, "AddDepsAfterAmiga edge")])

@@ -80,18 +80,18 @@ def _bar(d: Doc, x0, px, row_y, t0, t1, text, color, *, h=26, dash=None, fill_a=
 def adg_delay():
     d = Doc("84_adg_delay", "Why a timed plan needs an ADG",
             "Three Gantt panels for two AGVs crossing cell B: the plan, execution by the clock after a delay "
-            "(both AGVs in B), and execution by dependencies (AGV 2 waits).")
+            "(both AGVs in B), and execution by dependencies (AGV-2 waits).")
     px = 110
     x0 = 170
     panels = [
-        ("1  The plan", [(A1, "AGV 1", [(0, 1, "A->B"), (1, 2, "B->C")]),
-                         (A2, "AGV 2", [(2, 3, "D->B"), (3, 4, "B->E")])], None, None),
-        ("2  Execute by the clock: AGV 1's first move takes 2.5 instead of 1", [
-            (A1, "AGV 1", [(0, 2.5, "A->B (slow)"), (2.5, 3.5, "B->C")]),
-            (A2, "AGV 2", [(2, 3, "D->B"), (3, 4, "B->E")])], (2.5, 3.0), None),
+        ("1  The plan", [(A1, "AGV-1", [(0, 1, "A->B"), (1, 2, "B->C")]),
+                         (A2, "AGV-2", [(2, 3, "D->B"), (3, 4, "B->E")])], None, None),
+        ("2  Execute by the clock: AGV-1's first move takes 2.5 instead of 1", [
+            (A1, "AGV-1", [(0, 2.5, "A->B (slow)"), (2.5, 3.5, "B->C")]),
+            (A2, "AGV-2", [(2, 3, "D->B"), (3, 4, "B->E")])], (2.5, 3.0), None),
         ("3  Execute by dependencies: D->B may start only after B->C has finished", [
-            (A1, "AGV 1", [(0, 2.5, "A->B (slow)"), (2.5, 3.5, "B->C")]),
-            (A2, "AGV 2", [(3.5, 4.5, "D->B"), (4.5, 5.5, "B->E")])], None, (3.5, 2.0)),
+            (A1, "AGV-1", [(0, 2.5, "A->B (slow)"), (2.5, 3.5, "B->C")]),
+            (A2, "AGV-2", [(3.5, 4.5, "D->B"), (4.5, 5.5, "B->E")])], None, (3.5, 2.0)),
     ]
     y = 0
     for title, rows, conflict, wait in panels:
@@ -107,8 +107,8 @@ def adg_delay():
             cx0, cx1 = x0 + conflict[0] * px, x0 + conflict[1] * px
             d.rect(cx0, ry - 22, cx1 - cx0, 84, fill=T.tint(RED, 0.22, T.bg), stroke=RED, sw=1.4, dash="4 3",
                    layer="over")
-            d.text(x0 + 4.1 * px, ry + 20, "AGV 1 is still in B (until B->C ends)", size=11.5, fill=RED)
-            d.text(x0 + 4.1 * px, ry + 36, "while AGV 2 drives into B", size=11.5, fill=RED)
+            d.text(x0 + 4.1 * px, ry + 20, "AGV-1 is still in B (until B->C ends)", size=11.5, fill=RED)
+            d.text(x0 + 4.1 * px, ry + 36, "while AGV-2 drives into B", size=11.5, fill=RED)
         if wait:
             t_end, t_plan = wait
             d.line(x0 + t_plan * px, ry + 40, x0 + t_end * px, ry + 40, stroke=T2, sw=2, dash="4 3")
@@ -127,14 +127,14 @@ def adg_delay():
     for k, (gx, gy) in pos.items():
         d.circle(mx + gx * s, my + gy * s, 16, fill=T.card, stroke=T.fg2 if k != "B" else RED, sw=1.6)
         d.text(mx + gx * s, my + gy * s, k, size=13, family="mono", weight=700, fill=T.fg, anchor="middle")
-    d.text(mx - 20, my - 66, "Map: AGV 1 goes A -> B -> C,", size=11.5, fill=A1)
-    d.text(mx - 20, my - 50, "AGV 2 goes D -> B -> E", size=11.5, fill=A2)
+    d.text(mx - 20, my - 66, "Map: AGV-1 goes A -> B -> C,", size=11.5, fill=A1)
+    d.text(mx - 20, my - 50, "AGV-2 goes D -> B -> E", size=11.5, fill=A2)
     frame(d, title="Why a timed plan is not enough",
           subtitle="A planner hands out times. Real AGVs are late or early. Executing by the clock lets a late "
                    "robot collide with one that is on time; executing by dependencies keeps the planned order "
                    "and lets the times slide.",
           badge_key="illustrative",
-          legend=[("box", A1, "AGV 1"), ("box", A2, "AGV 2"), ("dashbox", RED, "both in cell B"),
+          legend=[("box", A1, "AGV-1"), ("box", A2, "AGV-2"), ("dashbox", RED, "both in cell B"),
                   ("dash", T2, "waiting for a dependency")],
           footnote="Unit-time moves on a five-cell map; an AGV occupies its start cell until its move ends.")
     return d
@@ -270,12 +270,12 @@ def adg_construction():
                          ("sym", "g", "i", "k"), ")"], size=13.5, fill=T.fg2)
     d.step("Start from the timed plans: one row per action. The ADG gets one vertex per action, placed in a lane "
            "per robot. No edges yet.")
-    d.step("Type 1 edges: each robot's actions stay in order. AGV 1 does A -> B before B -> C; AGV 2 does D -> B "
-           "before B -> E. AGV 3 has one action, so no Type 1 edge.")
-    d.step("Type 2, cell C: AGV 3 leaves C at t = 0 and AGV 1 enters C at t = 1. The earlier action must finish "
-           "first, so the edge points from AGV 3's action to AGV 1's.")
-    d.step("Type 2, cell B: AGV 1 leaves B at t = 1 and AGV 2 enters B at t = 2, so AGV 1's B -> C must finish "
-           "before AGV 2's D -> B starts. That is every edge: the ADG is done, and it keeps only these orders.")
+    d.step("Type 1 edges: each robot's actions stay in order. AGV-1 does A -> B before B -> C; AGV-2 does D -> B "
+           "before B -> E. AGV-3 has one action, so no Type 1 edge.")
+    d.step("Type 2, cell C: AGV-3 leaves C at t = 0 and AGV-1 enters C at t = 1. The earlier action must finish "
+           "first, so the edge points from AGV-3's action to AGV-1's.")
+    d.step("Type 2, cell B: AGV-1 leaves B at t = 1 and AGV-2 enters B at t = 2, so AGV-1's B -> C must finish "
+           "before AGV-2's D -> B starts. That is every edge: the ADG is done, and it keeps only these orders.")
     d.step("The times only decided each edge's direction. When two robots swap or rotate at the same instant, the "
            "rule gives a cycle (inset): such a plan is safe only with perfectly synchronous moves.")
     hx = [tx, tx + 110, tx + 200, tx + 320, tx + 430]
@@ -290,7 +290,7 @@ def adg_construction():
                 if (i, k) in keys:
                     with d.only(stp):
                         d.rect(tx - 10, yy - 13, 540, 26, rx=4, fill="none", stroke=T2, sw=1.8)
-            d.text(hx[0], yy, f"AGV {i}", size=12, family="mono", weight=600, fill=ACOL[i])
+            d.text(hx[0], yy, f"AGV-{i}", size=12, family="mono", weight=600, fill=ACOL[i])
             sym(d, hx[1], yy, "a", str(i), str(k), size=15, sup_italic=False, sub_italic=False)
             d.text(hx[2], yy, f"{t}", size=12.5, family="mono", fill=T.fg)
             d.text(hx[3], yy, s0, size=12.5, family="mono", fill=T.fg)
@@ -305,7 +305,7 @@ def adg_construction():
     d.text(big.cx, big.y0 + 76, "B -> C, t = 1", size=15, family="mono", fill=T.fg, anchor="middle")
     notes = [
         (big.y0 + 22, ["a  =  an ", "action", ": one move, lift or command by one robot"]),
-        (big.y0 + 44, ["superscript 1  =  which robot: AGV 1"]),
+        (big.y0 + 44, ["superscript 1  =  which robot: AGV-1"]),
         (big.y0 + 66, ["subscript 2  =  which of that robot's actions: its 2nd, counting from 1"]),
         (big.y0 + 88, ["B -> C  =  start cell ", ("sym", "s", "1", "2"), " = B,  goal cell ", ("sym", "g", "1", "2"), " = C"]),
         (big.y0 + 110, ["t = 1  =  planned start time ", ("sym", "t", "1", "2"),
@@ -325,18 +325,18 @@ def adg_construction():
     N[(3, 1)] = anode(d, cols[0], r[3], 3, 1, "C -> F", 0, A3)
     N[(2, 1)] = anode(d, cols[2], r[2], 2, 1, "D -> B", 2, A2, hl=True)
     N[(2, 2)] = anode(d, cols[3], r[2], 2, 2, "B -> E", 3, A2)
-    for nm, yy_, col in (("AGV 1", r[1], A1), ("AGV 3", r[3], A3), ("AGV 2", r[2], A2)):
+    for nm, yy_, col in (("AGV-1", r[1], A1), ("AGV-3", r[3], A3), ("AGV-2", r[2], A2)):
         d.text(0, yy_ + 4, nm, size=12, family="mono", weight=600, fill=col)
     with d.at(1):
         arrow(d, N[(1, 1)], N[(1, 2)], T1, label="Type 1", label_at=((N[(1, 1)].x1 + N[(1, 2)].x0) / 2, r[1] - 16))
         arrow(d, N[(2, 1)], N[(2, 2)], T1, label="Type 1", label_at=((N[(2, 1)].x1 + N[(2, 2)].x0) / 2, r[2] - 16))
     with d.at(2):
         arrow(d, N[(3, 1)], N[(1, 2)], T2, dash="7 4")
-        label_pill(d, N[(3, 1)].x0, r[3] + 50, "Type 2: AGV 3 leaves C before AGV 1 enters C", color=T2,
+        label_pill(d, N[(3, 1)].x0, r[3] + 50, "Type 2: AGV-3 leaves C before AGV-1 enters C", color=T2,
                    anchor="start")
     with d.at(3):
         arrow(d, N[(1, 2)], N[(2, 1)], T2, dash="7 4")
-        label_pill(d, cols[2] - 60, r[1] + 44, "Type 2: AGV 1 leaves B before AGV 2 enters B", color=T2,
+        label_pill(d, cols[2] - 60, r[1] + 44, "Type 2: AGV-1 leaves B before AGV-2 enters B", color=T2,
                    anchor="start")
     # rules
     nx = 1040
@@ -375,7 +375,7 @@ def adg_construction():
                    "and forgets its exact times.",
           badge_key="illustrative",
           legend=[("arrow", T1, "Type 1 (same robot)"), ("dasharrow", T2, "Type 2 (cell hand-over)"),
-                  ("dasharrow", RED, "cycle"), ("box", A1, "AGV 1"), ("box", A2, "AGV 2"), ("box", A3, "AGV 3")],
+                  ("dasharrow", RED, "cycle"), ("box", A1, "AGV-1"), ("box", A2, "AGV-2"), ("box", A3, "AGV-3")],
           footnote="Construction as in Algorithm 1 of Hönig et al., RA-L 2019. In the inset the cells are X, Y, Z "
                    "and each robot's only action is its first.")
     return d
@@ -419,16 +419,16 @@ def adg_statuses():
     snaps = [
         ("t = 0  start", {(1, 1): "enqueued", (3, 1): "enqueued", (1, 2): "staged", (2, 1): "staged", (2, 2): "staged"},
          "a11 and a31 have no predecessors: sent at once. a12 waits: its Type 2 predecessor a31 is not finished."),
-        ("AGV 3 reports a31 done", {(1, 1): "enqueued", (3, 1): "finished", (1, 2): "enqueued", (2, 1): "staged",
+        ("AGV-3 reports a31 done", {(1, 1): "enqueued", (3, 1): "finished", (1, 2): "enqueued", (2, 1): "staged",
                                     (2, 2): "staged"},
          "a12 is sent: a11 (Type 1) is only enqueued, which is enough; a31 (Type 2) is finished. It queues behind a11."),
-        ("AGV 1 reports a11 done", {(1, 1): "finished", (3, 1): "finished", (1, 2): "enqueued", (2, 1): "staged",
+        ("AGV-1 reports a11 done", {(1, 1): "finished", (3, 1): "finished", (1, 2): "enqueued", (2, 1): "staged",
                                     (2, 2): "staged"},
-         "AGV 1 starts a12 from its own queue; the dispatcher does nothing."),
-        ("AGV 1 reports a12 done", {(1, 1): "finished", (3, 1): "finished", (1, 2): "finished", (2, 1): "enqueued",
+         "AGV-1 starts a12 from its own queue; the dispatcher does nothing."),
+        ("AGV-1 reports a12 done", {(1, 1): "finished", (3, 1): "finished", (1, 2): "finished", (2, 1): "enqueued",
                                     (2, 2): "enqueued"},
          "a21 is sent (its Type 2 predecessor a12 is finished), and a22 with it (Type 1 predecessor enqueued)."),
-        ("AGV 2 reports a21, a22 done", {k: "finished" for k in [(1, 1), (3, 1), (1, 2), (2, 1), (2, 2)]},
+        ("AGV-2 reports a21, a22 done", {k: "finished" for k in [(1, 1), (3, 1), (1, 2), (2, 1), (2, 2)]},
          "All finished. Each robot drove as fast as it could; only the order was enforced."),
     ]
     move = {(1, 1): ("A -> B", 0), (1, 2): ("B -> C", 1), (3, 1): ("C -> F", 0), (2, 1): ("D -> B", 2),
@@ -469,7 +469,7 @@ def adg_statuses():
             d.text(qx, y0 + 22, "command queues (front first)", size=11.5, weight=600, fill=T.muted)
             for j, i in enumerate((1, 2, 3)):
                 qy = y0 + 52 + j * 36
-                d.text(qx, qy, f"AGV {i}", size=12, family="mono", weight=600, fill=ACOL[i])
+                d.text(qx, qy, f"AGV-{i}", size=12, family="mono", weight=600, fill=ACOL[i])
                 items = [key for key in sorted(st) if key[0] == i and st[key] == "enqueued"]
                 cx_ = qx + 70
                 if not items:
@@ -539,7 +539,7 @@ def adg_critical_path():
     px = 80
     x0 = 120
     d.text(0, gy - 24, "Earliest-start schedule (critical path in green)", size=13, weight=600, fill=T.fg)
-    rows = [("AGV 1", ["a[1,1]", "a[1,2]"]), ("AGV 3", ["a[3,1]"]), ("AGV 2", ["a[2,1]", "a[2,2]"])]
+    rows = [("AGV-1", ["a[1,1]", "a[1,2]"]), ("AGV-3", ["a[3,1]"]), ("AGV-2", ["a[2,1]", "a[2,2]"])]
     for i, (nm, vs) in enumerate(rows):
         yy = gy + 20 + i * 38
         d.text(0, yy, nm, size=12, family="mono", weight=600, fill=col[vs[0]])
@@ -547,13 +547,13 @@ def adg_critical_path():
             _bar(d, x0, px, yy, S[v], C[v], "", T.green if v in crit else col[v], fill_a=0.3 if v in crit else 0.18)
             sym(d, x0 + (S[v] + C[v]) / 2 * px, yy, "a", v[2], v[4], size=14, anchor="middle", sup_italic=False,
                 sub_italic=False)
-        if nm == "AGV 3":
+        if nm == "AGV-3":
             _bar(d, x0, px, yy, C[v], LF[v], "slack", T.amber, dash="4 3", fill_a=0.06)
     _axis(d, x0, gy + 20 + 3 * 38 - 10, px, 0, M, label="t [s]")
     note(d, x0 + M * px + 60, gy - 10, 380,
          f"S(v) = max over predecessors u of C(u);  C(v) = S(v) + d(v). Makespan = max C = {M}. "
-         "A delay on a critical action delays the end by the same amount. A delay on AGV 3's action is absorbed "
-         f"up to its slack ({slack['a[3,1]']}); beyond that, AGV 1's second action starts late and the end moves.",
+         "A delay on a critical action delays the end by the same amount. A delay on AGV-3's action is absorbed "
+         f"up to its slack ({slack['a[3,1]']}); beyond that, AGV-1's second action starts late and the end moves.",
          title="The recurrence", accent=T.green, size=12)
     frame(d, title="Timing on an ADG: earliest start, critical path, slack",
           subtitle="Given durations, the earliest each action can start is the latest completion of its "
@@ -578,10 +578,10 @@ def adg_in_scheduler():
     EV, CH = T.teal, T.sky
     # ---- 1. event DAG ----
     d.text(0, 0, "1  Event DAG (ctx->events): what, and in which order", size=14, weight=600, fill=T.fg)
-    e0 = vnode(d, 90, 60, "e0 AgvMove", "A -> P1", EV, w=160)
-    e1 = vnode(d, 300, 60, "e1 TrayMove", "T5 P1 -> B4 by A", EV, w=180)
+    e0 = vnode(d, 90, 60, "e0 AgvMove", "AGV-1 -> P1", EV, w=160)
+    e1 = vnode(d, 300, 60, "e1 TrayMove", "T5 P1 -> B4 by AGV-1", EV, w=190)
     e3 = vnode(d, 520, 60, "e3 BayTransition", "B4 PROCESS_RETRIEVE", EV, w=190)
-    e2 = vnode(d, 90, 135, "e2 AgvMove", "B W2 -> W3", EV, w=160)
+    e2 = vnode(d, 90, 135, "e2 AgvMove", "AGV-2: W2 -> W3", EV, w=160)
     arrow(d, e0, e1, EV)
     arrow(d, e1, e3, EV)
     # ---- 2. CHUGG output ----
@@ -589,12 +589,12 @@ def adg_in_scheduler():
     d.text(0, gy, "2  CHUGG's motions (waits dropped), sorted by start time", size=14, weight=600, fill=T.fg)
     px, x0 = 34, 90
     motions = {
-        "AGV A": [(0, 3, "a1 W1->P1", "e0"), (3, 5, "a2 lift", "e1"), (5, 8, "a3 P1->W2", "e1"),
+        "AGV-1": [(0, 3, "a1 W1->P1", "e0"), (3, 5, "a2 lift", "e1"), (5, 8, "a3 P1->W2", "e1"),
                   (8, 11, "a4 W2->B4", "e1"), (11, 13, "a5 lower", "e1")],
-        "AGV B": [(0, 2, "b1 W2->W3", "e2")],
+        "AGV-2": [(0, 2, "b1 W2->W3", "e2")],
         "bay B4": [(13, 20, "c1 retrieve", "e3")],
     }
-    colm = {"AGV A": A1, "AGV B": A2, "bay B4": A3}
+    colm = {"AGV-1": A1, "AGV-2": A2, "bay B4": A3}
     for i, (ent, ms) in enumerate(motions.items()):
         yy = gy + 40 + i * 44
         d.text(0, yy, ent, size=12, family="mono", weight=600, fill=colm[ent])
@@ -607,13 +607,13 @@ def adg_in_scheduler():
            weight=600, fill=T.fg)
     yA, yB = ay + 90, ay + 200
     xs = [90, 260, 430, 600, 770, 940]
-    a1 = vnode(d, xs[0], yA, "a1", "A W1->P1", A1, w=120, h=46)
-    a2 = vnode(d, xs[1], yA, "a2", "A lift P1", A1, w=120, h=46)
-    a3 = vnode(d, xs[2], yA, "a3", "A P1->W2", A1, w=120, h=46)
-    a4 = vnode(d, xs[3], yA, "a4", "A W2->B4", A1, w=120, h=46)
-    a5 = vnode(d, xs[4], yA, "a5", "A lower B4", A1, w=120, h=46)
+    a1 = vnode(d, xs[0], yA, "a1", "AGV-1 W1->P1", A1, w=120, h=46)
+    a2 = vnode(d, xs[1], yA, "a2", "AGV-1 lift P1", A1, w=120, h=46)
+    a3 = vnode(d, xs[2], yA, "a3", "AGV-1 P1->W2", A1, w=120, h=46)
+    a4 = vnode(d, xs[3], yA, "a4", "AGV-1 W2->B4", A1, w=120, h=46)
+    a5 = vnode(d, xs[4], yA, "a5", "AGV-1 lower B4", A1, w=120, h=46)
     c1 = vnode(d, xs[5], yA, "c1", "B4 retrieve", A3, w=120, h=46)
-    b1 = vnode(d, xs[1], yB, "b1", "B W2->W3", A2, w=120, h=46)
+    b1 = vnode(d, xs[1], yB, "b1", "AGV-2 W2->W3", A2, w=120, h=46)
     for u, v in ((a1, a2), (a2, a3), (a3, a4), (a4, a5)):
         arrow(d, u, v, T1)
     arrow(d, b1, a3, T2, dash="7 4", via=[(b1.x1 + 30, b1.cy), (a3.cx, b1.cy)], label="occupancy: W2",
@@ -705,7 +705,7 @@ def _par_panel(d: Doc, x0, y0, title, verts, edges, redundant=(), *, w=330):
     robots = sorted({rb for rb, _, _ in verts.values()})
     for j, rb in enumerate(robots):
         yy = gy + j * 32
-        d.text(x0, yy, f"AGV {rb}", size=11.5, family="mono", weight=600, fill=ACOL[rb])
+        d.text(x0, yy, f"AGV-{rb}", size=11.5, family="mono", weight=600, fill=ACOL[rb])
         for v, (r_, dv, _) in verts.items():
             if r_ == rb:
                 bx = x0 + 62 + S[v] * px
@@ -749,7 +749,7 @@ def adg_parallelism():
           subtitle="Two actions can run at the same time only if neither reaches the other. A graph whose "
                    "transitive reduction is one chain is a strict sequence, however many robots it involves.",
           badge_key="illustrative",
-          legend=[("box", A1, "AGV 1"), ("box", A2, "AGV 2"), ("arrow", T.fg2, "dependency"),
+          legend=[("box", A1, "AGV-1"), ("box", A2, "AGV-2"), ("arrow", T.fg2, "dependency"),
                   ("dasharrow", RED, "implied edge (removed by Reduce)")],
           footnote="Durations invented. Gantt charts are earliest-start schedules (every action starts as soon as "
                    "its predecessors finish). Width = largest set of pairwise unordered actions, computed by brute force.")
@@ -821,7 +821,7 @@ def adg_topo_vs_parallel():
         rows = [1, 3, 2]
         for j, rb in enumerate(rows):
             yy = y + 30 + j * 30
-            d.text(gx, yy, f"AGV {rb}", size=11.5, family="mono", weight=600, fill=ACOL[rb])
+            d.text(gx, yy, f"AGV-{rb}", size=11.5, family="mono", weight=600, fill=ACOL[rb])
             for key, (s0, c0) in sched.items():
                 if key[0] == rb:
                     d.rect(x0 + s0 * px, yy - 11, (c0 - s0) * px, 22, rx=5, fill=T.tint(ACOL[rb], 0.24, T.bg),

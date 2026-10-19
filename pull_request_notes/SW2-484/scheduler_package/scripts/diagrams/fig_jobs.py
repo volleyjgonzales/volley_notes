@@ -15,7 +15,7 @@ import math
 import re
 
 from components import (EVENT_COLOR, chip, code_panel, connect, event_box, frame, label_pill, note, num_badge)
-from facility import Map, NODES, STALL_L, STALL_W, C_BAY
+from facility import Map, NODES, EDGES, STALL_L, STALL_W, C_BAY, Scene
 from fig_code4 import _source_files, _strip_comments
 from registry import figure
 from svgkit import BBox, Doc, text_width, wrap, pts_to_path
@@ -33,12 +33,19 @@ ENT_COL = {"tray": TRAY, "agv": AGV, "bay": BAYC, "vecs": VECS}
 # job_figure fills _EV_STEP (event number -> step that creates it) before the map is drawn, so the
 # numbered map marks (intent arrows, bay events) appear with their event.
 _EV_STEP: dict = {}
+# After the planning rows, job_figure appends "Playing the plan" steps that execute the events on the map.
+# _PLAN_END = last planning step while a job figure is drawn (map previews end there); _JOB = state of the
+# job figure being drawn (scene, registered bay / VECS state chips).
+_PLAN_END = None
+_JOB: dict = {}
 
 
 class _maybe_at:
-    """`with _maybe_at(d, n):` = `with d.at(step of event n)` while a job figure is being drawn."""
-    def __init__(self, d, n):
-        self.cm = d.at(_EV_STEP[n]) if n in _EV_STEP else None
+    """`with _maybe_at(d, n):` = `with d.at(step of event n)` while a job figure is being drawn.
+    until=True ends it at the last planning step (map previews that the playback replaces)."""
+    def __init__(self, d, n, until=False):
+        last = _PLAN_END if until else None
+        self.cm = d.at(_EV_STEP[n], last) if n in _EV_STEP else (d.at(0, last) if last is not None else None)
 
     def __enter__(self):
         if self.cm:
@@ -54,6 +61,15 @@ class _maybe_at:
 # --------------------------------------------------------------------------------------
 
 def bay_pill(d: Doc, m: Map, nid: int, text: str, color=C_BAY, below=False):
+    """Bay label above (or below) the bay. In a job figure a state label ("B21 READY_TO_INSERT ...") is
+    registered instead and drawn by job_figure with the state the playback steps give it."""
+    if _JOB and color == C_BAY and re.match(r"B\d+ [A-Z_]+", text):
+        _JOB["marks"].append(("bay", nid, text, below))
+        return
+    _bay_pill(d, m, nid, text, color, below)
+
+
+def _bay_pill(d, m, nid, text, color=C_BAY, below=False):
     x, y = m.P(nid)
     off = (STALL_W + 0.9) * m.s / 2 + 12
     label_pill(d, x, y + off if below else y - off, text, color=color, bg=T.bg_deep, border=color, size=10.5)
@@ -72,6 +88,15 @@ def vecs_mark(d: Doc, m: Map, nid: int, text: str):
     x, y = m.P(nid)
     w, h = STALL_L * m.s - 3, STALL_W * m.s - 3
     d.rect(x - w / 2, y - h / 2, w, h, rx=4, fill="none", stroke=VECS, sw=2, dash="6 3", layer="under")
+    if _JOB:
+        _JOB["marks"].append(("vecs", nid, text, False))
+        return
+    _vecs_text(d, m, nid, text)
+
+
+def _vecs_text(d, m, nid, text):
+    x, y = m.P(nid)
+    h = STALL_W * m.s - 3
     d.text(x, y - h / 2 - 11, text, size=10.5, family="mono", weight=600, fill=VECS, anchor="middle",
            halo=T.bg_deep, halo_w=3, layer="labels")
 
@@ -92,7 +117,7 @@ def odp_area(d: Doc, m: Map, nid: int, text: str, color=T.red):
 def intent(d: Doc, m: Map, src, dst, num, color, **kw):
     """Curved 'intent' arrow (no path is planned at this stage). dst=None -> arrow to a '?' bubble.
     In an animated job figure it appears at the step that creates event `num`."""
-    with _maybe_at(d, num):
+    with _maybe_at(d, num, until=True):
         _intent(d, m, src, dst, num, color, **kw)
 
 
@@ -422,10 +447,175 @@ def notes_row(d: Doc, x, y, w, items, gap=18):
 REGIONS = {"qa": (QA_X, QA_Y), "full": (FULL_X, FULL_Y), "mid": (FULL_X, (9.2, 25.2))}
 
 
+# --------------------------------------------------------------------------------------
+# "Playing the plan": the job's events executed on the map, derived from the event texts
+# --------------------------------------------------------------------------------------
+
+_ADJ: dict = {}
+for _a, _b in EDGES:
+    _ADJ.setdefault(_a, []).append(_b)
+    _ADJ.setdefault(_b, []).append(_a)
+
+
+def _dist(a, b):
+    return math.hypot(NODES[a].x - NODES[b].x, NODES[a].y - NODES[b].y)
+
+
+def graph_route(a, b, blocked=()):
+    """Shortest walk a -> b on the Pecos graph (Euclidean edge length). Bays and chargers are end points
+    only; nodes in `blocked` (other trays, for a loaded AGV) cannot be passed. None if unreachable."""
+    import heapq
+    best, prev, pq = {a: 0.0}, {}, [(0.0, a)]
+    while pq:
+        c, u = heapq.heappop(pq)
+        if u == b:
+            break
+        if c > best[u] + 1e-9 or (u != a and NODES[u].type in ("Bay", "AgvCharge")):
+            continue
+        for v in _ADJ.get(u, []):
+            if v in blocked and v != b:
+                continue
+            nc = c + _dist(u, v) + (1.0 if NODES[v].type == "Parking" and v != b else 0.0)   # prefer aisles
+            if nc < best.get(v, 1e18) - 1e-9:
+                best[v], prev[v] = nc, u
+                heapq.heappush(pq, (nc, v))
+    if b not in best:
+        return None
+    path = [b]
+    while path[-1] != a:
+        path.append(prev[path[-1]])
+    return path[::-1]
+
+
+def _lab(nid):
+    return NODES[nid].label
+
+
+def _rt(route):
+    return " -> ".join(_lab(n) for n in route)
+
+
+_NEW_STATE = {"TRANSITION_TO_RETRIEVE": "READY_TO_RETRIEVE", "TRANSITION_TO_INSERT": "READY_TO_INSERT",
+              "PROCESS_RETRIEVE": "PROCESS_RETRIEVE"}
+
+
+def _playback(d, sc, events, play):
+    """Append the playback steps for `events` (job_figure's list) and register the Scene actions.
+
+    play: carrier = AGV used for tray moves that name none (default: the first AGV in the scene);
+          dest = {event: node} for '?' destinations (illustrative); pre = {event: [(tray, node), ...]}
+          blocker moves played before that event (illustrative, tray assignment adds them later);
+          skip = events not played; notes = {event: text appended to its caption}.
+    Returns [(step, [event numbers], dashed)] for the event-box outlines (dashed = an approach or blocker move
+    done for that event), and the state-chip timeline."""
+    carrier = play.get("carrier") or next((e for e in sc.order if sc.ents[e]["kind"] == "agv"), None)
+    trays = {int(re.match(r"T(\d+)", e).group(1)): e for e in sc.order if sc.ents[e]["kind"] == "tray"}
+    pos = {e: v["at"] for e, v in sc.ents.items()}
+    carrying = {}
+    for e, t in play.get("carrying", {}).items():   # AGVs that already hold a tray at the request
+        carrying[e] = t
+        sc.lift(0, e)
+    marks = {nid: [(0, text)] for kind, nid, text, _ in _JOB["marks"]}
+    pending, out, notes = [], [], play.get("notes", {})
+    first = [True]
+
+    def step(cap, hl, approach=False):
+        pre = ("Playing the plan (one illustrative execution: AGV assignment and motion planning choose the real "
+               "AGV and route): ") if first[0] else "Playing the plan: "
+        first[0] = False
+        k = d.step(pre + cap)
+        for a in pending:
+            sc.lower(k, a)
+        pending.clear()
+        out.append((k, hl, approach))
+        return k
+
+    def set_mark(nid, k, fn):
+        if nid in marks:
+            old = marks[nid][-1][1]
+            new = fn(old)
+            if new != old:
+                marks[nid].append((k, new))
+
+    def tray_at(nid):
+        return [t for t, p in pos.items() if p == nid and sc.ents[t]["kind"] == "tray"]
+
+    def move_tray(tray, dst, i, cap_tail, hl, approach_for, blocker=False):
+        tn = re.match(r"T\d+", tray).group(0)   # "T9 on W25" -> T9 in the captions
+        agv = next((a for a, t in carrying.items() if t == tray), None) or carrier
+        if carrying.get(agv) != tray:
+            if pos[agv] != pos[tray]:
+                r = graph_route(pos[agv], pos[tray])
+                k = step(f"{agv} drives empty {_rt(r)} and stops under {tn} (the approach for "
+                         f"{approach_for}; AGV assignment adds such moves later).", hl, True)
+                sc.drive(k, agv, r)
+                pos[agv] = pos[tray]
+            lift = True
+        else:
+            lift = False
+        blocked = {p for t, p in pos.items() if sc.ents[t]["kind"] == "tray" and t != tray}
+        r = graph_route(pos[tray], dst, blocked)
+        assert r, (d.name, tray, pos[tray], dst, "carry route blocked")
+        what = f"{agv} lifts {tn}, carries it" if lift else f"{agv} carries {tn}"
+        k = step(f"{cap_tail}{what} {_rt(r)} and lowers it.", hl, blocker)
+        if lift:
+            sc.lift(k, agv)
+        sc.drive(k, agv, r, color=TRAY)
+        pending.append(agv)
+        carrying.pop(agv, None)
+        pos[agv] = pos[tray] = dst
+        if NODES[dst].type == "Bay":
+            set_mark(dst, k, lambda s: s.replace(" (empty)", ""))
+        return k
+
+    for i, ev in enumerate(events, 1):
+        kind, text, _job, style = ev[:4]
+        if style == "optional" or i in play.get("skip", ()):
+            continue
+        tail = (" " + notes[i]) if i in notes else ""
+        for tray, dst in play.get("pre", {}).get(i, []):
+            move_tray(tray, dst, i, f"blocker. {tray} stands in the way of event {i}: ", [i], f"moving {tray}", True)
+            d.steps[-1] += (f" {_lab(dst)} is illustrative: this blocker move is added later by tray assignment "
+                            f"(ResolveBlockingTrays), not by the job method.")
+        if kind == "TrayMove":
+            mt = re.match(r"(?:tray_id\s+|T)(\d+):", text)
+            md = re.search(r"->\s*(?:\{node_id:\s*(\d+)|[PWBCV](\d+)|(\?))", text)
+            tray = trays[int(mt.group(1))]
+            dst = int(md.group(1) or md.group(2)) if not md.group(3) else play["dest"][i]
+            move_tray(tray, dst, i, f"event {i}. ", [i], f"event {i}")
+            if md.group(3):
+                d.steps[-1] += (f" The destination {_lab(dst)} is illustrative: tray assignment fills the '?' "
+                                f"later.")
+            d.steps[-1] += tail
+        elif kind == "AgvMove":
+            agv = re.match(r"(AGV-\d+):", text).group(1)
+            md = re.search(r"->\s*(?:\{node_id:\s*(\d+)|[PWBCV](\d+))", text)
+            dst = int(md.group(1) or md.group(2))
+            r = graph_route(pos[agv], dst)
+            k = step(f"event {i}. {agv} drives {_rt(r)}." + tail, [i])
+            sc.drive(k, agv, r)
+            pos[agv] = dst
+        else:   # BayTransition / VecsTransition: the state chip changes
+            mb = re.match(r"([BV])(\d+):\s*(.*)$", text)
+            nid, cmd = int(mb.group(2)), mb.group(3).strip()
+            new = cmd.split("->")[-1].strip() if "->" in cmd else _NEW_STATE.get(cmd, cmd)
+            what = {"PROCESS_RETRIEVE": "processes the retrieve: the car is handed to the customer"}.get(
+                cmd, f"switches to {new}")
+            k = step(f"event {i}. {mb.group(1)}{nid} {what}." + tail, [i])
+            set_mark(nid, k, lambda s, new=new: re.sub(r"^([BV]\d+) [A-Z_]+", lambda m_: f"{m_.group(1)} {new}", s))
+    for a in pending:
+        sc.lower(len(d.steps) - 1, a)
+    if out:
+        d.steps[-1] += " Every tray and AGV is now where the plan leaves it."
+    return out, marks
+
+
 def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, events, edges, steps,
                notes=(), outside=(), legend_extra=(), bw=320, badge="yaml+hyp", request_title="Request", scale=None,
                legend_override=None, events_title="Events appended to ctx->events",
-               events_sub="numbered in creation order; arrows = edges this method adds"):
+               events_sub="numbered in creation order; arrows = edges this method adds", play=None):
+    """play: options for the "Playing the plan" steps (see _playback); play=False adds none."""
+    global _PLAN_END
     d = Doc(name, heading, subtitle)
     # ---- animation: step 0 = the request, step r + 1 = row r of the method table
     _EV_STEP.clear()
@@ -445,7 +635,25 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
     s = W / (xl[1] - xl[0])
     m = Map(d, 0, 0, s, xl, yl)
     m.base(labels=True, zones=False, axes=False)
-    draw_map(d, m)
+    sc = Scene(m)
+    _PLAN_END = len(d.steps) - 1
+    _JOB.update(marks=[], sc=sc)
+    try:
+        draw_map(d, m, sc)
+        played, marks = _playback(d, sc, events, play or {}) if play is not False else ([], {})
+        sc.draw()
+        for kind, nid, _text, below in _JOB["marks"]:
+            tl = marks.get(nid, [(0, _text)])
+            for j, (k0, text) in enumerate(tl):
+                k1 = tl[j + 1][0] - 1 if j + 1 < len(tl) else None
+                with d.at(k0, k1):
+                    if kind == "bay":
+                        _bay_pill(d, m, nid, text, C_BAY, below)
+                    else:
+                        _vecs_text(d, m, nid, text)
+    finally:
+        _JOB.clear()
+        _PLAN_END = None
     mb = m.box
     d.text(0, -16, map_caption, size=12.5, family="mono", weight=600, fill=T.fg2)
     y2 = mb.y1 + 44
@@ -461,6 +669,12 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
     if events:
         boxes = event_column(d, ex, y2 + 50, events, edges, bw=bw)
         yr = boxes[-1].y1
+        for k, hl, approach in played:   # the event the playback step executes
+            for i in hl:
+                b = boxes[i - 1]
+                with d.only(k):
+                    d.rect(b.x0 - 6, b.y0 - 6, b.w + 12, b.h + 12, rx=12, fill="none", stroke=T.sky, sw=2.2,
+                           dash="5 4" if approach else None, layer="over")
     else:
         yr = y2 + 50
     y = max(yl_, yr) + 46
@@ -840,12 +1054,12 @@ def bay_events(d: Doc, m: Map, nid: int, items, *, dy=0, dx=0):
 
 @figure("42_job_retrieve", "TYPE_RETRIEVE: PlanRetrieveJob", DOC1)
 def job_retrieve():
-    def draw(d, m):
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(17, "T17", payload=True, emphasis=True, chip_pos="bl")
-        m.tray(20, "T20", payload=True, chip_pos="bl")
-        m.tray(21, "T21", chip_pos="tr")
-        m.agv(11, "AGV A", heading=90, label_side="above")
+    def draw(d, m, sc):
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T17", 17, payload=True, emphasis=True, chip_pos="bl")
+        sc.tray("T20", 20, payload=True, chip_pos="bl")
+        sc.tray("T21", 21, chip_pos="tr")
+        sc.agv("AGV-1", 11, heading=90, label_side="above")
         bay_pill(d, m, 21, "B21 READY_TO_INSERT")
         bay_pill(d, m, 7, "B7 disabled", color=T.red)
         intent(d, m, 21, None, 2, TRAY, q_off=(118, -30), bend=0.1, num_t=0.78, src_off=(30, -8))
@@ -899,8 +1113,9 @@ def job_retrieve():
                 "on a VECS in an unexpected state, it is true: FailJob() copies it so Dispatch keeps the job and "
                 "retries later.", T.sky),
                ("Not decided yet", "Where T21 parks, which trays block T17's path, which AGV does the work and the "
-                "exact route are all chosen by the later stages (tray assignment, AGV assignment, motion planning).", T.border)],
-        bw=300)
+                "exact route are all chosen by the later stages (tray assignment, AGV assignment, motion planning). "
+                "The playback shows one plausible outcome.", T.border)],
+        bw=300, play=dict(dest={2: 23}, pre={3: [("T15", 19)]}))
 
 
 def cost_tag(d, m, nid, text, color, *, dx=0, dy=-26):
@@ -913,12 +1128,19 @@ def cost_tag(d, m, nid, text, color, *, dx=0, dy=-26):
 # --------------------------------------------------------------------------------------
 @figure("40_job_move_agv", "TYPE_MOVE_AGV: PlanAgvMoveJob", DOC1)
 def job_move_agv():
-    def draw(d, m):
-        m.agv(26, "A (empty)", heading=90, label_side="above")
-        m.tray(18, "", chip_pos="bl")
-        m.agv(18, "B carries T9", heading=90, label_side="left", lifted=True)
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(20, "T20", payload=True, chip_pos="bl")
+    def draw(d, m, sc):
+        sc.tray("T9", 18, chip_pos="bl")
+        sc.agv("AGV-1", 26, heading=90, label_side="above")
+        sc.agv("AGV-2", 18, heading=90, label_side="left")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T20", 20, payload=True, chip_pos="bl")
+        with d.at(0, _PLAN_END):
+            x, y = m.P(26)
+            label_pill(d, x + 34, y - 0.55 * m.s - 16, "empty", color=AGV, size=10, anchor="start", bg=T.bg_deep,
+                       border=AGV)
+            x, y = m.P(18)
+            label_pill(d, x - 0.5 * STALL_L * m.s + 4, y - 0.5 * STALL_W * m.s - 12, "AGV-2 carries T9", color=AGV,
+                       size=10, anchor="start", bg=T.bg_deep, border=AGV)
         agv_intent(d, m, 26, 13, 1, bend=0.25, num_t=0.45)
         intent(d, m, 18, 24, 2, TRAY, bend=-0.25, src_off=(30, -6), num_t=0.55)
         bay_pill(d, m, 21, "B21 READY_TO_INSERT")
@@ -927,20 +1149,20 @@ def job_move_agv():
         "40_job_move_agv", heading="TYPE_MOVE_AGV  ->  PlanAgvMoveJob()",
         subtitle="Two MOVE_AGV jobs in one request. An empty AGV produces an AgvMove; an AGV that is carrying a tray "
                  "produces a TrayMove whose AGV is already fixed.",
-        req=[("job 0", "TYPE_MOVE_AGV, agv_id = A, destination = {node_id: 13, heading: 90}"),
-             ("job 1", "TYPE_MOVE_AGV, agv_id = B, destination = {node_id: 24, heading: 90}"),
+        req=[("job 0", "TYPE_MOVE_AGV, agv_id = AGV-1, destination = {node_id: 13, heading: 90}"),
+             ("job 1", "TYPE_MOVE_AGV, agv_id = AGV-2, destination = {node_id: 24, heading: 90}"),
              ("call", "PlanAgvMoveJob(plan_ctx, job.agv_id,\n  job.destination, false, job_index)"),
              ("returns", "BoolStringPair {success, message}")],
-        region="qa", draw_map=draw, map_caption="request state (job 1 also sees A at W13 after replay)",
-        events=[("AgvMove", "AGV A: {node_id: 26, heading: 90} -> {node_id: 13, heading: 90}", 0, "solid"),
-                ("TrayMove", "T9: W18 -> P24, agv = B", 1, "solid", "AGV preset by SetAgvId(); heading may change")],
+        region="qa", draw_map=draw, map_caption="request state (job 1 also sees AGV-1 at W13 after replay)",
+        events=[("AgvMove", "AGV-1: {node_id: 26, heading: 90} -> {node_id: 13, heading: 90}", 0, "solid"),
+                ("TrayMove", "T9: W18 -> P24, agv = AGV-2", 1, "solid", "AGV preset by SetAgvId(); heading may change")],
         edges=[],
         steps=[
             ("working_state = ctx->initial_state;\nctx->events.Apply(working_state);",
-             "Job 0: empty DAG. Job 1: replays event 1, so A is already at W13.", "replay", "ok"),
+             "Job 0: empty DAG. Job 1: replays event 1, so AGV-1 is already at W13.", "replay", "ok"),
             ("if(!agv_id) return {false, \"... not yet supported\"}",
              "Both jobs name an AGV. Moving 'any AGV' is a TODO.", "passes", "ok"),
-            ("agv_opt = working_state.GetAgv(*agv_id);\nmissing or disabled -> fail", "A and B exist and are enabled.",
+            ("agv_opt = working_state.GetAgv(*agv_id);\nmissing or disabled -> fail", "AGV-1 and AGV-2 exist and are enabled.",
              "passes", "ok"),
             ("agv_opt->pose == dest -> return {true, \"\"}", "Neither AGV is at its destination.",
              "no early exit", "skip"),
@@ -951,10 +1173,10 @@ def job_move_agv():
              "Plan() and PlanAgvChargeJob() both pass false, so this branch never runs (and would turn the move "
              "into a no-op if it did).", "never taken", "skip"),
             ("agv.tray_id == 0 -> AgvMove(job_index, pose_change);\nUpdateLastEntityEvent(AGV)  // rule A",
-             "Job 0: A is empty. A has no earlier event, so rule A adds no edge.", "adds 1", "event"),
+             "Job 0: AGV-1 is empty. AGV-1 has no earlier event, so rule A adds no edge.", "adds 1", "event"),
             ("else -> TrayMove: SetTrayId, SetAgvId(agv);\nflip dest if AGV and tray headings are reciprocal;\n"
              "UsePreferredHeading; SetDest; rule A (tray)",
-             "Job 1: B carries T9. The destination is converted from AGV to tray heading, then the parking "
+             "Job 1: AGV-2 carries T9. The destination is converted from AGV to tray heading, then the parking "
              "heading policy may change it.", "adds 2", "event"),
             ("UpdateLeafDependencies(new_event, job_index)", "Each job has only one event: no rule B edge.",
              "no edge", "skip"),
@@ -966,19 +1188,22 @@ def job_move_agv():
                 "already set: the tray is on that AGV, so no other AGV can carry it.", T.amber),
                ("Not checked here", "Whether the path is free, whether other AGVs are in the way and how long "
                 "the move takes. Those come from motion planning.", T.border)],
-        bw=300)
+        bw=460, play=dict(carrying={"AGV-2": "T9"},
+                          notes={2: "No approach drive: T9 was already on AGV-2."}))
 
 
 # --------------------------------------------------------------------------------------
 @figure("41_job_repark_tray", "TYPE_REPARK_TRAY / MOVE_TRAY: PlanReparkTrayJob", DOC1)
 def job_repark():
-    def draw(d, m):
-        m.tray(19, "T19", payload=True, emphasis=True, chip_pos="bl")
-        ghost(d, m, 24, "")
-        d.text(m.P(24)[0] + 20, m.P(24)[1] - 4, "T19 after job 0", size=10.5, family="mono", fill=TRAY, anchor="middle",
-               halo=T.bg_deep, halo_w=3)
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(17, "T17", payload=True, chip_pos="bl")
+    def draw(d, m, sc):
+        sc.tray("T19", 19, payload=True, emphasis=True, chip_pos="bl")
+        with d.at(0, _PLAN_END):
+            ghost(d, m, 24, "")
+            d.text(m.P(24)[0] + 20, m.P(24)[1] - 4, "T19 after job 0", size=10.5, family="mono", fill=TRAY,
+                   anchor="middle", halo=T.bg_deep, halo_w=3)
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T17", 17, payload=True, chip_pos="bl")
+        sc.agv("AGV-1", 26, heading=90, label_side="above")   # invented: job expansion assigns no AGV
         intent(d, m, 19, 24, 1, TRAY, bend=-0.3, num_t=0.5)
         intent(d, m, 24, 23, 2, TRAY, bend=0.45, num_t=0.5)
         bay_pill(d, m, 21, "B21 READY_TO_RETRIEVE")
@@ -1035,18 +1260,19 @@ def job_repark():
                 "check compares against the old position.", T.sky),
                ("allow_reciprocal", "For a loaded tray, step 9 sets the retrieval heading anyway, so the flag "
                 "mostly matters for empty trays.", T.border)],
-        bw=300)
+        bw=300, play=dict(notes={2: "No approach drive: AGV-1 is still under T19 after event 1."}))
 
 
 # --------------------------------------------------------------------------------------
 @figure("43_job_insert", "TYPE_INSERT: PlanInsertJob", DOC1)
 def job_insert():
-    def draw(d, m):
-        m.tray(21, "T21", payload=True, emphasis=True, chip_pos="tr")
+    def draw(d, m, sc):
+        sc.tray("T21", 21, payload=True, emphasis=True, chip_pos="tr")
         bay_pill(d, m, 21, "B21 VEHICLE_INSERTED")
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(20, "T20", payload=True, chip_pos="bl")
-        m.tray(23, "T23", chip_pos="bl")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T20", 20, payload=True, chip_pos="bl")
+        sc.tray("T23", 23, chip_pos="bl")
+        sc.agv("AGV-1", 26, heading=90, label_side="above")   # invented: job expansion assigns no AGV
         intent(d, m, 21, None, 2, TRAY, q_off=(118, 52), bend=-0.1, src_off=(30, 8))
         bay_events(d, m, 21, [(1, "TRANSITION_TO_RETRIEVE", BAYC)], dx=10)
 
@@ -1085,21 +1311,23 @@ def job_insert():
                ("Why not refill the bay here?", "The comment in the code: if T21 was the last empty tray, a refill "
                 "would fail and take the insert down with it. A separate job can fail on its own.", T.teal),
                ("Not decided yet", "Where T21 parks (DoTrayAssignments, with ResolveBlockingTrays), which AGV and "
-                "which route.", T.border)],
-        bw=300)
+                "which route. The playback shows one plausible outcome.", T.border)],
+        bw=300, play=dict(dest={2: 19}))
 
 
 # --------------------------------------------------------------------------------------
 @figure("44_job_ready_for_insert", "TYPE_READY_FOR_INSERT: PlanReadyForInsertJob", DOC1)
 def job_ready_for_insert():
-    def draw(d, m):
+    def draw(d, m, sc):
         bay_pill(d, m, 21, "B21 READY_TO_RETRIEVE (empty)")
-        m.tray(23, "T23", emphasis=True, chip_pos="bl")
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(17, "T17", payload=True, chip_pos="bl")
-        m.tray(20, "T20", payload=True, chip_pos="bl")
+        sc.tray("T23", 23, emphasis=True, chip_pos="bl")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T17", 17, payload=True, chip_pos="bl")
+        sc.tray("T20", 20, payload=True, chip_pos="bl")
+        sc.agv("AGV-1", 27, heading=90, label_side="above")   # invented: job expansion assigns no AGV
         intent(d, m, 23, 21, 1, TRAY, bend=0.3, dst_off=(40, 0), num_t=0.5)
-        cost_tag(d, m, 23, "nearest empty tray", TRAY, dy=-32)
+        with d.at(0, _PLAN_END):
+            cost_tag(d, m, 23, "nearest empty tray", TRAY, dy=-32)
         bay_events(d, m, 21, [(2, "TRANSITION_TO_INSERT", BAYC)], dx=10)
 
     return job_figure(
@@ -1140,18 +1368,19 @@ def job_ready_for_insert():
                ("Bug to know about", "PlanReparkTrayJob() is called with no tray here, and its 'already at "
                 "destination' check reads tray_opt->pose without testing tray_opt. That is undefined behaviour.",
                 T.red)],
-        bw=300)
+        bw=300, play={})
 
 
 # --------------------------------------------------------------------------------------
 @figure("45_job_ready_for_retrieve", "TYPE_READY_FOR_RETRIEVE: PlanReadyForRetrieveJob", DOC1)
 def job_ready_for_retrieve():
-    def draw(d, m):
-        m.tray(21, "T21", emphasis=True, chip_pos="tr")
+    def draw(d, m, sc):
+        sc.tray("T21", 21, emphasis=True, chip_pos="tr")
         bay_pill(d, m, 21, "B21 READY_TO_INSERT")
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(17, "T17", payload=True, chip_pos="bl")
-        m.tray(24, "T24", payload=True, chip_pos="bl")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T17", 17, payload=True, chip_pos="bl")
+        sc.tray("T24", 24, payload=True, chip_pos="bl")
+        sc.agv("AGV-1", 26, heading=90, label_side="above")   # invented: job expansion assigns no AGV
         intent(d, m, 21, None, 2, TRAY, q_off=(118, 52), bend=-0.1, src_off=(30, 8))
         bay_events(d, m, 21, [(1, "TRANSITION_TO_RETRIEVE", BAYC)], dx=10)
 
@@ -1184,19 +1413,23 @@ def job_ready_for_retrieve():
                 "repark.", T.pink),
                ("Usually not requested directly", "REBALANCE_GARAGE calls this method for each bay it wants in "
                 "retrieve mode.", T.border)],
-        bw=300)
+        bw=300, play=dict(dest={2: 23}))
 
 
 # --------------------------------------------------------------------------------------
 @figure("46_job_clean_garage", "TYPE_CLEAN_GARAGE: PlanCleanGarageJob", DOC1)
 def job_clean_garage():
-    def draw(d, m):
-        m.tray(24, "T24", chip_pos="bl")
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(20, "T20", payload=True, chip_pos="bl")
-        m.tray(25, "T9 on W25", chip_pos="bl")
-        m.agv(27, "A", heading=90, label_side="left")
-        m.agv(13, "B", heading=90, label_side="left")
+    def draw(d, m, sc):
+        sc.tray("T24", 24, chip_pos="bl")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T20", 20, payload=True, chip_pos="bl")
+        sc.tray("T9", 25, chip_pos="bl")
+        with d.at(0, _PLAN_END):
+            x, y = m.P(25)
+            label_pill(d, x + (STALL_L - 0.5) * m.s / 2 + 8, y, "on W25 (stash)", color=TRAY, size=10,
+                       anchor="start", bg=T.bg_deep, border=TRAY)
+        sc.agv("AGV-1", 27, heading=90, label_side="left")
+        sc.agv("AGV-2", 13, heading=90, label_side="left")
         agv_intent(d, m, 27, 24, 1, bend=-0.6, num_t=0.5)
         agv_intent(d, m, 13, 15, 2, bend=0.35, num_t=0.5)
         intent(d, m, 25, None, 3, TRAY, q_off=(-6, 64), src_off=(30, 6), bend=-0.3)
@@ -1209,15 +1442,15 @@ def job_clean_garage():
         req=[("job.type", "TYPE_CLEAN_GARAGE"), ("job_index", "0 (needed for hiding)"),
              ("call", "PlanCleanGarageJob(plan_ctx, 0)"), ("returns", "BoolStringPair")],
         region="qa", draw_map=draw, map_caption="working_state at the start of the job",
-        events=[("AgvMove", "A: W27 -> P24 (under T24)", 0, "solid"),
-                ("AgvMove", "B: W13 -> P15 (under T15)", 0, "solid"),
+        events=[("AgvMove", "AGV-1: W27 -> P24 (under T24)", 0, "solid"),
+                ("AgvMove", "AGV-2: W13 -> P15 (under T15)", 0, "solid"),
                 ("TrayMove", "T9: W25 -> ?", 0, "solid", "via PlanUnstashWaypointTraysJob")],
         edges=[(2, 3, "B", "bay"), (1, 3, "B", "bay")],
         steps=[
             ("working_state = ctx->initial_state;\nctx->events.Apply(working_state);", "Empty DAG.", "replay", "ok"),
             ("if(job_index == 0):\n  [ok, hide] = volley::HideAgvs(working_state, table_)",
              "First job, so AGVs are hidden. HideAgvs (motion_planner) returns the first assignment it finds, one hiding pose per "
-             "AGV (A -> P24, B -> P15 here, illustrative).", "hiding spots", "ok"),
+             "AGV (AGV-1 -> P24, AGV-2 -> P15 here, illustrative).", "hiding spots", "ok"),
             ("hiding failed -> return {false, ...}", "It succeeded.", "skipped", "skip"),
             ("for each (agv, dest) with agv.pose != dest:\n  AgvMove; rule A (AGV);\n"
              "  dest is a bay -> rule A for that bay too;\n  agv_move->Apply(working_state)",
@@ -1235,20 +1468,22 @@ def job_clean_garage():
                 T.green),
                ("Waypoint stash", "When ResolveBlockingTrays() finds no parking it may leave a blocker on a "
                 "waypoint (tier 2, 'Tray assignment'). CLEAN_GARAGE is what puts it back.", T.border)],
-        bw=300)
+        bw=300, play=dict(carrier="AGV-2", dest={3: 23},
+                          notes={3: "AGV-2 ends hidden again, now under T9."}))
 
 
 # --------------------------------------------------------------------------------------
 @figure("47_job_rebalance_garage", "TYPE_REBALANCE_GARAGE: PlanRebalanceGarageJob", DOC1)
 def job_rebalance():
-    def draw(d, m):
+    def draw(d, m, sc):
         bay_pill(d, m, 7, "B7 READY_TO_RETRIEVE (empty)")
-        m.tray(21, "T21", chip_pos="tr")
+        sc.tray("T21", 21, chip_pos="tr")
         bay_pill(d, m, 21, "B21 READY_TO_INSERT")
-        m.tray(5, "T5", emphasis=True, chip_pos="bl")
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(20, "T20", payload=True, chip_pos="bl")
-        m.tray(6, "T6", payload=True, chip_pos="bl")
+        sc.tray("T5", 5, emphasis=True, chip_pos="bl")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T20", 20, payload=True, chip_pos="bl")
+        sc.tray("T6", 6, payload=True, chip_pos="bl")
+        sc.agv("AGV-1", 11, heading=90, label_side="above")   # invented: job expansion assigns no AGV
         intent(d, m, 5, 7, 1, TRAY, bend=-0.25, dst_off=(40, 0), num_t=0.62)
         intent(d, m, 21, None, 4, TRAY, q_off=(118, 48), bend=-0.1, src_off=(30, 8))
         bay_events(d, m, 7, [(2, "TRANSITION_TO_INSERT", BAYC)], dx=10)
@@ -1288,50 +1523,53 @@ def job_rebalance():
                 "fails only if the initial replay fails; it may succeed with no events at all.", T.amber),
                ("No AGV hiding", "Unlike CLEAN_GARAGE, rebalancing assumes more work is coming, so AGVs stay "
                 "where they are.", T.border)],
-        bw=300)
+        bw=300, play=dict(dest={4: 23}))
 
 
 # --------------------------------------------------------------------------------------
 @figure("48_job_charge_agv", "TYPE_CHARGE_AGV: PlanAgvChargeJob", DOC1)
 def job_charge_agv():
-    def draw(d, m):
-        m.agv(21, "A (trapped)", heading=90, label_side="right")
+    def draw(d, m, sc):
+        sc.agv("AGV-1", 21, heading=90, label_side="right")
+        with d.at(0, _PLAN_END):
+            x, y = m.P(21)
+            label_pill(d, x, y + 0.55 * m.s + 16, "trapped", color=AGV, size=10, bg=T.bg_deep, border=AGV)
         bay_pill(d, m, 21, "B21 READY_TO_INSERT")
-        m.agv(16, "B", heading=90, label_side="left")
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(5, "T5", payload=True, chip_pos="bl")
+        sc.agv("AGV-2", 16, heading=90, label_side="left")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T5", 5, payload=True, chip_pos="bl")
         agv_intent(d, m, 21, 14, 2, bend=-0.2, src_off=(40, 0), num_t=0.5)
         cost_tag(d, m, 14, "C14 free · 31 s · best", AGV, dy=26)
         cost_tag(d, m, 10, "C10 free · 48 s", T.fg2, dx=-80, dy=0)
-        cost_tag(d, m, 16, "C16 has AGV B: skipped", T.red, dy=26)
+        cost_tag(d, m, 16, "C16 has AGV-2: skipped", T.red, dy=26)
         bay_events(d, m, 21, [(1, "TRANSITION_TO_RETRIEVE", BAYC), (3, "TRANSITION_TO_INSERT", BAYC)], dx=10)
 
     return job_figure(
         "48_job_charge_agv", heading="TYPE_CHARGE_AGV  ->  PlanAgvChargeJob()",
-        subtitle="Send AGV A to the cheapest free charger. A is trapped in bay B21 (insert mode), so the bay is "
+        subtitle="Send AGV-1 to the cheapest free charger. AGV-1 is trapped in bay B21 (insert mode), so the bay is "
                  "switched to retrieve mode to let it out and switched back afterwards.",
-        req=[("job.type", "TYPE_CHARGE_AGV"), ("job.agv_id", "A"), ("job_index", "0"),
+        req=[("job.type", "TYPE_CHARGE_AGV"), ("job.agv_id", "AGV-1"), ("job_index", "0"),
              ("call", "PlanAgvChargeJob(plan_ctx, job.agv_id, 0)"), ("returns", "BoolStringPair")],
         region="mid", draw_map=draw, map_caption="working_state at the start (costs illustrative)",
         events=[("BayTransition", "B21: TRANSITION_TO_RETRIEVE", 0, "solid"),
-                ("AgvMove", "A: B21 -> C14@inbound", 0, "solid", "via PlanAgvMoveJob"),
+                ("AgvMove", "AGV-1: B21 -> C14@inbound", 0, "solid", "via PlanAgvMoveJob"),
                 ("BayTransition", "B21: TRANSITION_TO_INSERT", 0, "solid", "via PlanBayTransitionJob")],
         edges=[(1, 2, "B", "bay"), (2, 3, "B", "bay"), (1, 3, "A", "bay", "A · B21")],
         steps=[
             ("working_state = ctx->initial_state;\nctx->events.Apply(working_state);", "Empty DAG.", "replay", "ok"),
-            ("AGV must exist and not be disabled", "A is enabled.", "passes", "ok"),
-            ("already on a TYPE_AGV_CHARGE node at its inbound\nheading -> return {true, \"\"}", "A is in a bay.",
+            ("AGV must exist and not be disabled", "AGV-1 is enabled.", "passes", "ok"),
+            ("already on a TYPE_AGV_CHARGE node at its inbound\nheading -> return {true, \"\"}", "AGV-1 is in a bay.",
              "no early exit", "skip"),
             ("on a bay node:\n  READY_TO_INSERT -> BayTransition(TO_RETRIEVE),\n"
              "    Apply to working_state, rule A (bay);\n  READY_TO_RETRIEVE -> fine; other -> fail",
-             "B21 is READY_TO_INSERT, so A is trapped until the bay switches.", "adds 1", "event"),
+             "B21 is READY_TO_INSERT, so AGV-1 is trapped until the bay switches.", "adds 1", "event"),
             ("for each TYPE_AGV_CHARGE node:\n  skip if an AGV is on it;\n  pose = {node, inbound heading};"
              " must be enabled;\n  cost = GetJustMovingCost(..., static filters)",
-             "C16 is skipped (AGV B). C14 and C10 are costed; C14 is cheaper. 'Free' only means no AGV on the "
+             "C16 is skipped (AGV-2). C14 and C10 are costed; C14 is cheaper. 'Free' only means no AGV on the "
              "node, not that its surroundings are clear.", "best = C14", "ok"),
             ("no charger -> return {false, \"Caution: No available ...\"}", "C14 was found.", "skipped", "skip"),
             ("PlanAgvMoveJob(ctx, agv, best, false, job_index)",
-             "Replays event 1 (bay now READY_TO_RETRIEVE), adds the move, rule A (A) and rule B (after 1).",
+             "Replays event 1 (bay now READY_TO_RETRIEVE), adds the move, rule A (AGV-1) and rule B (after 1).",
              "adds 2 · B", "event"),
             ("trapped -> PlanBayTransitionJob(ctx, bay,\n  TRANSITION_TO_INSERT, job_index)",
              "Puts B21 back into insert mode: rule A after 1 and rule B after 2.", "adds 3 · A, B", "event"),
@@ -1342,20 +1580,20 @@ def job_charge_agv():
                 "static filters so a path must exist. AGV assignment uses the same helper.", T.green),
                ("Not checked", "Whether the charger area is free of trays or other conflicts (a TODO in the "
                 "code).", T.border)],
-        bw=300)
+        bw=300, play={})
 
 
 # --------------------------------------------------------------------------------------
 @figure("49_job_bay_transition", "TYPE_TRANSITION_BAY_TO_*: PlanBayTransitionJob", DOC1)
 def job_bay_transition():
-    def draw(d, m):
+    def draw(d, m, sc):
         bay_pill(d, m, 21, "B21 READY_TO_INSERT")
-        m.tray(21, "T21", chip_pos="tr")
+        sc.tray("T21", 21, chip_pos="tr")
         bay_pill(d, m, 7, "B7 READY_TO_RETRIEVE")
         odp_area(d, m, 7, "BAY_ODP area (extent illustrative)")
-        m.agv(31, "C", heading=90, label_side="above")
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(5, "T5", payload=True, chip_pos="bl")
+        sc.agv("AGV-3", 31, heading=90, label_side="above")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T5", 5, payload=True, chip_pos="bl")
         bay_events(d, m, 21, [(1, "TRANSITION_TO_RETRIEVE", BAYC)], dx=10)
         x, y = m.P(7)
         d.text(x - 110, y + 96, "job 1 rejected: area occupied", size=10.5, family="mono", fill=T.red,
@@ -1380,7 +1618,7 @@ def job_bay_transition():
             ("bay must exist and not be disabled", "B21 and B7 are enabled.", "passes", "ok"),
             ("filters = GetStaticFilter(BAY_ODP, gg_, working_state,\n  table_, ...);\n"
              "!filters.IsEnabled(bay pose) -> fail",
-             "Job 0: nothing near B21. Job 1: AGV C stands in B7's ODP area, so job 1 fails here.",
+             "Job 0: nothing near B21. Job 1: AGV-3 stands in B7's ODP area, so job 1 fails here.",
              "job 1 fails", "fail"),
             ("TO_INSERT: bay must be READY_TO_RETRIEVE", "Job 1 never gets here.", "not reached", "skip"),
             ("TO_RETRIEVE: floor = GetBaySystemFloors(bay)[0]\n  (none -> fail); bay must be READY_TO_INSERT\n"
@@ -1397,22 +1635,24 @@ def job_bay_transition():
                 "send floor 0.", T.border),
                ("Static filter", "GetStaticFilter() marks graph vertices blocked by entities in working_state for "
                 "the given collision entity, here BAY_ODP.", T.border)],
-        bw=300)
+        bw=300, play=dict(notes={1: "Job 1 has no event, so nothing else happens: AGV-3 stays in B7's ODP area."}))
 
 
 # --------------------------------------------------------------------------------------
 @figure("50_job_charge_payload", "TYPE_CHARGE_PAYLOAD: PlanChargePayloadJob", DOC1)
 def job_charge_payload():
-    def draw(d, m):
+    def draw(d, m, sc):
         vecs_mark(d, m, 23, "V23 READY_TO_CHARGE (invented VECS)")
-        m.tray(20, "T20 (EV)", payload=True, emphasis=True, chip_pos="bl")
-        m.tray(15, "T15", chip_pos="bl")
-        m.tray(17, "T17", payload=True, chip_pos="bl")
-        m.tray(24, "T24", chip_pos="bl")
+        sc.tray("T20 (EV)", 20, payload=True, emphasis=True, chip_pos="bl")
+        sc.tray("T15", 15, chip_pos="bl")
+        sc.tray("T17", 17, payload=True, chip_pos="bl")
+        sc.tray("T24", 24, chip_pos="bl")
+        sc.agv("AGV-1", 26, heading=90, label_side="right")   # invented: job expansion assigns no AGV
         intent(d, m, 20, 23, 1, TRAY, bend=0.3, num_t=0.5, dst_off=(10, 6), src_off=(-10, -6))
         x, y = m.P(23)
-        num_badge(d, x - 40, y + 6, 2, VECS, r=10)
-        d.text(x - 26, y + 6, "-> CHARGING", size=10.5, family="mono", fill=VECS, halo=T.bg_deep, halo_w=3)
+        with _maybe_at(d, 2, until=True):
+            num_badge(d, x - 40, y + 6, 2, VECS, r=10)
+            d.text(x - 26, y + 6, "-> CHARGING", size=10.5, family="mono", fill=VECS, halo=T.bg_deep, halo_w=3)
         bay_pill(d, m, 21, "B21 READY_TO_INSERT")
 
     return job_figure(
@@ -1449,7 +1689,7 @@ def job_charge_payload():
                 "VECS. They are ignored here; DoTrayAssignments() finds blockers again later.", T.amber),
                ("Stop-charging events", "RETRIEVE and REPARK add the opposite transition (CHARGING -> "
                 "READY_TO_CHARGE) without rule A, so it is not chained to this one by entity.", T.border)],
-        bw=300)
+        bw=300, play=dict(notes={2: "The car on T20 is charging."}))
 
 
 # ======================================================================================

@@ -41,7 +41,7 @@ def badge(doc: Doc, x_right: float, y: float, key: str) -> BBox:
 
 
 MAP_NOTATION = ("Map labels: P17, W22, B21, C14 = node_id 17, 22, 21, 14 (P parking, W waypoint, B bay, "
-                "C AGV charger); T17 = tray_id 17; A, B = AGVs; X@90 = GaragePose {node_id: X, heading: 90}, "
+                "C AGV charger); T17 = tray_id 17; AGV-1 = agv_id 1; X@90 = GaragePose {node_id: X, heading: 90}, "
                 "heading in degrees [-179, 180], 90 = facing -x.")
 
 

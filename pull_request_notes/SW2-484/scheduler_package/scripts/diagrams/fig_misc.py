@@ -11,7 +11,7 @@ from theme import T, S
 @figure("03_garage_xy", "Schematic garage: sequential tray moves", "02-issue-and-proposal.html")
 def garage_xy():
     d = Doc("03_garage_xy", "Schematic garage: clearing a route with sequential tray moves",
-            "AGV 1 faces +x carrying tray T1 toward the goal; trays T2 and T3 sit on the route and are reparked "
+            "AGV-1 faces +x carrying tray T1 toward the goal; trays T2 and T3 sit on the route and are reparked "
             "into side stalls first.")
     L, Wm = 5.8, 2.4               # schematic cell size in metres
     m = Map(d, 0, 0, 27, (-0.4, 6 * L + 0.4), (-2.3, 2 * Wm + 1.2))
@@ -58,7 +58,7 @@ def garage_xy():
     m.route([cells["N1"], cells["N6"]], T.green, sw=4.5, offset=(0, 34), num=3, num_at=0)
     b = m.box
     n1x, n1y = m.P(cells["N1"])
-    label_pill(d, n1x, n1y - Wm * m.s / 2 - 22, "AGV 1 carrying T1, facing +x", color=T.green, bg=T.bg_deep,
+    label_pill(d, n1x, n1y - Wm * m.s / 2 - 22, "AGV-1 carrying T1, facing +x", color=T.green, bg=T.bg_deep,
                border=T.green, size=11)
     # axis glyph (top-right, empty area above the goal)
     ox, oy = b.x1 - 120, b.y0 + 70
@@ -89,7 +89,7 @@ def garage_xy():
          "Node IDs, distances and the side-stall choice are didactic. A real layout decides which stalls are "
          "reachable and whether a blocker can stay put.", title="Schematic only")
     frame(d, title="Schematic garage: clearing a route with sequential tray moves",
-          subtitle="AGV 1 faces +x and must bring tray T1 to the goal. Trays T2 and T3 lie on the route, so two "
+          subtitle="AGV-1 faces +x and must bring tray T1 to the goal. Trays T2 and T3 lie on the route, so two "
                    "prerequisite tray moves into side stalls are scheduled first.",
           badge_key="schematic",
           legend=[("route", T.amber, "prerequisite tray move"), ("route", T.green, "root tray move"),

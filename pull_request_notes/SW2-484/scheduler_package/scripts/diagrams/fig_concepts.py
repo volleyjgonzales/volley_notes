@@ -500,11 +500,11 @@ def partial_order_parallel():
             "and each node's parents, and execution starts every node whose parents are done.")
     A, B, BAY = T.green, T.sky, BAYC
     # action ids, labels, lane
-    acts = {"A1": ("A -> P17", 0), "A2": ("lift T17", 0), "A3": ("T17 -> B21", 0), "A4": ("lower", 0),
-            "B1": ("B -> P19", 1), "B2": ("lift T19", 1), "B3": ("T19 -> P24", 1), "B4": ("lower", 1),
+    acts = {"A1": ("AGV-1 -> P17", 0), "A2": ("AGV-1 lift T17", 0), "A3": ("T17 -> B21", 0), "A4": ("AGV-1 lower", 0),
+            "B1": ("AGV-2 -> P19", 1), "B2": ("AGV-2 lift T19", 1), "B3": ("T19 -> P24", 1), "B4": ("AGV-2 lower", 1),
             "Y1": ("TO_RETRIEVE", 2), "Y2": ("PROCESS_RETR.", 2)}
     lane_col = [A, B, BAY]
-    lane_name = ["AGV A", "AGV B", "bay B21"]
+    lane_name = ["AGV-1", "AGV-2", "bay B21"]
     edges = [("A1", "A2", "c"), ("A2", "A3", "c"), ("A3", "A4", "c"), ("B1", "B2", "c"), ("B2", "B3", "c"),
              ("B3", "B4", "c"), ("Y1", "Y2", "c"), ("Y1", "A3", "x"), ("A3", "B3", "o"), ("A4", "Y2", "x")]
     ecol = {"c": T.tint(T.fg2, 0.75, T.bg), "x": BAY, "o": T.red}
@@ -532,10 +532,10 @@ def partial_order_parallel():
         elif u == "Y1" and v == "Y2":
             connect(d, [(a.x1, a.cy), (b.x0, b.cy)], kind="flow", color=col, size=7, sw=1.2, dash="2 3")
         elif u == "Y1":
-            connect(d, [(a.x1, a.cy - 8), (b.cx - 24, a.cy - 8), (b.cx - 24, b.y1)], kind="flow", color=col,
+            connect(d, [(a.x1, a.cy - 8), (b.cx - 28, a.cy - 8), (b.cx - 28, b.y1)], kind="flow", color=col,
                     size=7, sw=1.5, dash="4 3")
         elif u == "A4":
-            connect(d, [(a.cx, a.y1), (a.cx, b.y0)], kind="flow", color=col, size=7, sw=1.5, dash="4 3")
+            connect(d, [(a.cx + 48, a.y1), (a.cx + 48, b.y0)], kind="flow", color=col, size=7, sw=1.5, dash="4 3")
         else:   # A3 -> B3 occupancy
             connect(d, [(a.cx + 24, a.y1), (a.cx + 24, b.y0)], kind="flow", color=col, size=7, sw=1.7)
             label_pill(d, a.cx + 30, (a.y1 + b.y0) / 2, "occupancy", color=col, size=9.5, anchor="start")
@@ -620,7 +620,7 @@ def partial_order_parallel():
                    "so that every edge points forward. Parallelism comes from the DAG itself: nodes with no path "
                    "between them may run at the same time, and the parents field carries that into the response.",
           badge_key="illustrative",
-          legend=[("box", A, "AGV A actions"), ("box", B, "AGV B actions"), ("box", BAY, "bay actions"),
+          legend=[("box", A, "AGV-1 actions"), ("box", B, "AGV-2 actions"), ("box", BAY, "bay actions"),
                   ("arrow", T.tint(T.fg2, 0.75, T.bg), "same-entity chain"), ("dasharrow", BAY, "bay dependency"),
                   ("arrow", T.red, "cross-AGV occupancy edge")],
           footnote="The scheduler builds Schedule.nodes this way in BuildScheduledActionsArray: it walks the action DAG "

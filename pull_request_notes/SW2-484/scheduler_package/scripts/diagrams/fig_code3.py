@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from components import (EVENT_COLOR, chip, code_panel, connect, event_box, flow, frame, label_pill, note,
                         num_badge)
-from facility import Map, NODES, STALL_L, STALL_W, C_BAY
+from facility import Map, NODES, STALL_L, STALL_W, C_BAY, Scene
 from registry import figure
 from svgkit import BBox, Doc, text_width, wrap
 from theme import S, T
@@ -243,11 +243,11 @@ def freeing_moves():
     S0 = d.step("Start: freeing_moves (a GarageOccupancyChecker) is empty. T21 sits in bay B21, T15 on P15, T17 on "
                 "P17, T20 on P20.")
     S1 = d.step("e0, the BayTransition TO_RETRIEVE, is processed: ApplyTransitionToFreeingMoves() records e0 as an "
-                "occupant of the bay pose B21.")
+                "occupant of the bay pose B21. The dashed arrow previews the next event, e1 (T21 -> P23).")
     S2 = d.step("e1 (TrayMove T21 -> P23) is processed: its source pose B21 gets e1 as a second occupant. T21 now "
                 "stands on P23 in working_state.")
     S3 = d.step("Every pose on e1's path (P23, W22, W41, ...) is recorded too, so later moves that cross that path "
-                "will wait for e1.")
+                "will wait for e1. The dashed arrow previews the blocker move e4 (T15 -> P19), emitted next.")
     S4 = d.step("While e2 (T17 -> B21) resolves its blockers, the blocker move e4 (T15 -> P19) is emitted and its "
                 "source pose P15 is recorded with e4.")
     S5 = d.step("Now e2's path is checked pose by pose. GetBlockers(P15) returns e4, because T15's old footprint "
@@ -255,26 +255,26 @@ def freeing_moves():
     S6 = d.step("At the destination B21, GetBlockers returns e1, which took T21 out of the bay: edge e1 -> e2.")
     S7 = d.step("B21 also returns e0, the bay transition registered there: edge e0 -> e2. All three edges are "
                 "AddDependency() calls on the event DAG.")
-    S8 = d.step("Finally e2 adds itself as an occupant of every pose it uses, so later moves through P17, P15, ..., "
-                "B21 will depend on e2.")
+    S8 = d.step("Finally e2 is applied (T17 now stands in B21 in working_state) and adds itself as an occupant of "
+                "every pose it uses, so later moves through P17, P15, ..., B21 will depend on e2.")
     s = 24
     m = Map(d, 0, 0, s, QA_X, QA_Y)
     m.base(labels=True, zones=False, axes=False)
-    m.tray(17, "T17", payload=True, emphasis=True, chip_pos="bl")
     m.tray(20, "T20", payload=True, chip_pos="bl")
-    # trays that move: solid before, dashed ghost after the event that vacates them
-    with d.at(S0, S1):
-        m.tray(21, "T21", chip_pos="tr")
-    with d.at(S2):
-        m.tray(23, "T21", chip_pos="tr")
-    with d.at(S0, S3):
-        m.tray(15, "T15", chip_pos="tr")
-    with d.at(S4):
-        m.tray(19, "T15", chip_pos="tr")
-    for nid, lab, k in ((15, "T15 left (e4)", S4), (21, "T21 left (e1)", S2)):
+    # trays that move in working_state: they glide to their new spot in the step that applies the move
+    # (dashed preview one step earlier) and leave a dashed ghost behind
+    sc = Scene(m)
+    sc.tray("T17", 17, payload=True, emphasis=True, chip_pos="tr")
+    sc.tray("T21", 21, chip_pos="tr")
+    sc.tray("T15", 15, chip_pos="tr")
+    sc.drive(S2, "T21", [21, 41, 22, 23])
+    sc.drive(S4, "T15", [15, 19])
+    sc.drive(S8, "T17", [17, 15, 13, 18, 22, 41, 21], preview=False)   # e2's route arrow (from S5) is the preview
+    sc.draw()
+    for nid, lab, k, e in ((15, "T15 left (e4)", S4, None), (21, "T21 left (e1)", S2, S7), (17, "T17 left (e2)", S8, None)):
         x, y = m.P(nid)
         w, h = (STALL_L - 0.5) * s, (STALL_W - 0.32) * s
-        with d.at(k):
+        with d.at(k, e):
             d.rect(x - w / 2, y - h / 2, w, h, rx=6, fill="none", stroke=TRAY, sw=1.3, dash="5 4", layer="main")
             d.text(x + w / 2 - 8, y - h / 2 + 11, lab, size=10.5, family="mono", fill=TRAY, anchor="end",
                    halo=T.bg_deep, halo_w=3)
@@ -357,29 +357,39 @@ def agv_matching():
             "DoAgvAssignments builds an AGV-by-TrayMove cost table for the current root events and runs "
             "BottleneckAssignment; infeasible pairs get no edge.")
     S0 = d.step("One outer iteration of DoAgvAssignments: the root TrayMoves are e4 (T15 -> P19) and e1 (T21 -> "
-                "P23); the candidate AGVs are A, B and C. The cost table is still empty.")
-    S1 = d.step("GetAgvToTrayAssignmentCost(A, e4): A drives from W26 to T15 on P15 and lifts it, about 41 s.")
-    S2 = d.step("A -> e1: A drives to T21 in bay B21, about 48 s.")
-    S3 = d.step("B -> e4: B at W18 is close to P15, about 19 s, the cheapest pair.")
-    S4 = d.step("B -> e1: B drives to B21, about 36 s.")
-    S5 = d.step("AGV C already carries T24, so the cost function returns nullopt for both moves and C gets no edge.")
-    S6 = d.step("BottleneckAssignment minimises the largest cost used. With only edges <= 19 s (B-e4) it can match one "
-                "move, not two.")
-    S7 = d.step("Raise the limit to 36 s: B-e4 and B-e1 both need B, so still only one move can be matched.")
-    S8 = d.step("At 41 s, A-e4 joins and {A-e4, B-e1} matches both moves; the threshold is 41 s. The cheaper total "
-                "{B-e4 19 s, A-e1 48 s} loses because its worst pair is 48 s.")
+                "P23); the candidate AGVs are AGV-1, AGV-2 and AGV-3. The cost table is still empty.")
+    S1 = d.step("GetAgvToTrayAssignmentCost(AGV-1, e4): AGV-1 drives from W26 to T15 on P15 and lifts it, about 41 s.")
+    S2 = d.step("AGV-1 -> e1: AGV-1 drives to T21 in bay B21, about 48 s.")
+    S3 = d.step("AGV-2 -> e4: AGV-2 at W18 is close to P15, about 19 s, the cheapest pair.")
+    S4 = d.step("AGV-2 -> e1: AGV-2 drives to B21, about 36 s.")
+    S5 = d.step("AGV-3 already carries T24, so the cost function returns nullopt for both moves and AGV-3 gets no edge.")
+    S6 = d.step("BottleneckAssignment minimises the largest cost used. With only edges <= 19 s (AGV-2/e4) it can match "
+                "one move, not two.")
+    S7 = d.step("Raise the limit to 36 s: AGV-2/e4 and AGV-2/e1 both need AGV-2, so still only one move can be matched.")
+    S8 = d.step("At 41 s, AGV-1/e4 joins and {AGV-1/e4, AGV-2/e1} matches both moves; the threshold is 41 s. The "
+                "cheaper total {AGV-2/e4 19 s, AGV-1/e1 48 s} loses because its worst pair is 48 s.")
     S9 = d.step("The matching goes to GetEventDag(), which orders matched AGVs whose paths would collide; then each "
-                "pair is expanded into AGV events.")
+                "pair is expanded into AGV events (the green legs show the drives to the trays).")
+    P1 = d.step("Playing the plan: AGV-1 drives from W26 to P15 and stops under T15, the tray of e4.")
+    P2 = d.step("AGV-2 drives from W18 past W22 and W41 into bay B21 and stops under T21, the tray of e1. The two "
+                "drives share no node, so GetEventDag() adds no order between them.")
     s = 22
     m = Map(d, 0, 0, s, QA_X, QA_Y)
     m.base(labels=True, zones=False, axes=False)
-    m.tray(15, "T15", chip_pos="bl")
-    m.tray(21, "T21", chip_pos="tr")
-    m.tray(17, "T17", payload=True, chip_pos="bl")
-    m.agv(26, "A", heading=90, label_side="above")
-    m.agv(18, "B", heading=90, label_side="left")
-    m.tray(24, "T24", chip_pos="bl")
-    m.agv(24, "C", heading=90, label_side="right")
+    # mobile entities: the matched AGVs drive to their trays in the playback steps
+    sc = Scene(m)
+    sc.tray("T15", 15, chip_pos="bl")
+    sc.tray("T21", 21, chip_pos="tr")
+    sc.tray("T17", 17, payload=True, chip_pos="bl")
+    sc.tray("T24", 24, chip_pos="bl")
+    sc.agv("AGV-1", 26, heading=90, label_side="above")
+    sc.agv("AGV-2", 18, heading=90, label_side="right")
+    sc.agv("AGV-3", 24, heading=90, label_side="right")
+    sc.lift(S0, "AGV-3")                                   # AGV-3 carries T24 throughout
+    # the green chosen legs (S8 on) are the previews of these drives
+    sc.drive(P1, "AGV-1", [26, 23, 19, 15], preview=False)
+    sc.drive(P2, "AGV-2", [18, 22, 41, 21], preview=False)
+    sc.draw()
     # travel legs being costed (A, B -> tray pose); kept for the chosen pairs at the end
     legs = {S1: [26, 23, 19, 15], S2: [26, 25, 22, 41, 21], S3: [18, 13, 15], S4: [18, 22, 41, 21]}
     for k, ids in legs.items():
@@ -388,20 +398,20 @@ def agv_matching():
         with d.only(k):
             m.route(ids, T.fg, sw=3, dash="6 4", offset=(0, 0))
         if k in (S1, S4):
-            with d.at(S8):
+            with d.at(S8, S9 if k == S1 else P1):
                 m.route(ids, AGV, sw=3, offset=(5 if k == S1 else 0, 0 if k == S1 else -5))
     mb = m.box
     # bipartite graph
     gx = mb.x1 + 60
-    agvs = [("A", "idle at W26"), ("B", "idle at W18"), ("C", "carrying T24")]
+    agvs = [("AGV-1", "idle at W26"), ("AGV-2", "idle at W18"), ("AGV-3", "carrying T24")]
     moves = [("e4", "T15 -> P19"), ("e1", "T21 -> P23")]
     ay = [26, 116, 206]
     my = [56, 166]
     AB, MB = [], []
     for (a, sub), y in zip(agvs, ay):
         bb = BBox(gx, y, gx + 130, y + 50)
-        d.rect(bb.x0, bb.y0, bb.w, bb.h, rx=25, fill=T.card, stroke=AGV if a != "C" else T.faint, sw=1.4)
-        d.text(bb.x0 + 16, y + 20, f"AGV {a}", size=12, family="mono", weight=700, fill=AGV if a != "C" else T.muted)
+        d.rect(bb.x0, bb.y0, bb.w, bb.h, rx=25, fill=T.card, stroke=AGV if a != "AGV-3" else T.faint, sw=1.4)
+        d.text(bb.x0 + 16, y + 20, a, size=12, family="mono", weight=700, fill=AGV if a != "AGV-3" else T.muted)
         d.text(bb.x0 + 16, y + 37, sub, size=10.5, fill=T.muted)
         AB.append(bb)
     mx = gx + 300
@@ -430,7 +440,7 @@ def agv_matching():
             with d.at(S8):
                 d.line(a.x1, a.cy, b.x0, b.cy, stroke=AGV, sw=3, layer="edges")
                 label_pill(d, lx, ly, c, color=AGV, size=11)
-    for k, (i, j) in ((S1, (0, 0)), (S2, (0, 1)), (S3, (1, 0)), (S4, (1, 1))):
+    for k, (i, j) in ((S1, (0, 0)), (S2, (0, 1)), (S3, (1, 0)), (S4, (1, 1)), (P1, (0, 0)), (P2, (1, 1))):
         with d.only(k):
             _hl(d, AB[i], T.fg, pad=4)
             _hl(d, MB[j], T.fg, pad=4)
@@ -439,23 +449,23 @@ def agv_matching():
     with d.only(S5):
         _hl(d, AB[2], T.red, pad=4)
     with d.at(S5):
-        for i, ln in enumerate(["no edges from C: it carries a different tray,",
+        for i, ln in enumerate(["no edges from AGV-3: it carries a different tray,",
                                 "so GetAgvToTrayAssignmentCost() returns nullopt"]):
             d.text(gx, gy + i * 16, ln, size=11, fill=T.muted)
     # matching status line
     sy = gy + 50
-    status = {S6: ("threshold <= 19 s", T.sky, "usable: B-e4  -> max matching 1 of 2"),
-              S7: ("threshold <= 36 s", T.sky, "usable: B-e4, B-e1 (both need B) -> 1 of 2"),
-              S8: ("threshold <= 41 s", AGV, "usable: + A-e4 -> {A-e4, B-e1} covers 2 of 2"),
-              S9: ("matching", AGV, "{A-e4, B-e1}, threshold 41 s -> GetEventDag()")}
+    status = {S6: ("threshold <= 19 s", T.sky, "usable: AGV-2/e4 -> max matching 1 of 2"),
+              S7: ("threshold <= 36 s", T.sky, "usable: AGV-2/e4, AGV-2/e1 (both AGV-2) -> 1 of 2"),
+              S8: ("threshold <= 41 s", AGV, "+ AGV-1/e4 -> {AGV-1/e4, AGV-2/e1}: 2 of 2"),
+              S9: ("matching", AGV, "{AGV-1/e4, AGV-2/e1}, threshold 41 s -> GetEventDag()")}
     for k, (lab, col, txt) in status.items():
-        with d.only(k):
+        with d.at(k, None if k == S9 else k):
             cb = chip(d, gx, sy, lab, col, size=11.5)
             d.text(cb.x1 + 10, sy, txt, size=11.5, family="mono", fill=T.fg2)
     with d.at(S8):
         nb = note(d, gx, sy + 26, 1080 - gx,
-                  "Bottleneck matching minimises the worst single cost. {A-e4 41 s, B-e1 36 s} wins with a worst "
-                  "case of 41 s, although {B-e4 19 s, A-e1 48 s} has the lower total. GetAgvOccupiedDuration() "
+                  "Bottleneck matching minimises the worst single cost. {AGV-1/e4 41 s, AGV-2/e1 36 s} wins with a "
+                  "worst case of 41 s, although {AGV-2/e4 19 s, AGV-1/e1 48 s} has the lower total. GetAgvOccupiedDuration() "
                   "still returns 0, so queued work is not yet modelled.", title="What gets optimised", accent=T.amber)
     cp = code_panel(d, 0, max(mb.y1, nb.y1) + 30, 1080, [
         "// DoAgvAssignments(), one outer iteration (simplified)",
@@ -486,29 +496,29 @@ def agv_matching():
 @figure("30_agv_event_expansion", "What one AGV assignment adds", DOC1)
 def agv_expansion():
     d = Doc("30_agv_event_expansion", "What one AGV assignment adds to the DAG",
-            "Assigning AGV A to TrayMove e4 adds AgvMove(to tray), lift, sets agv_id on the TrayMove, and adds lower, "
+            "Assigning AGV-1 to TrayMove e4 adds AgvMove(to tray), lift, sets agv_id on the TrayMove, and adds lower, "
             "with four kinds of dependency edges.")
     S0 = d.step("Before: TrayMove e4 (T15: P15 -> P19) is a root of event_dag_copy with no AGV yet. "
-                "BottleneckAssignment matched it to AGV A.")
-    S1 = d.step("MoveAgvToTrayPose() adds an AgvMove that drives A from W26 to the tray pose P15 (it is skipped "
+                "BottleneckAssignment matched it to AGV-1.")
+    S1 = d.step("MoveAgvToTrayPose() adds an AgvMove that drives AGV-1 from W26 to the tray pose P15 (it is skipped "
                 "when the AGV is already there).")
-    S2 = d.step("AppendAgvLiftEvent(raised) adds an AgvMove that lifts T15 onto A, after the drive.")
-    S3 = d.step("SetAgvId(A) fills in the TrayMove itself: e4 now carries T15 to P19 on AGV A, after the lift.")
-    S4 = d.step("AppendAgvLiftEvent(lowered) adds the lower at P19, so A is free again after e4.")
-    S5 = d.step("Incoming edge 1: A's previous event (last_agv_event[A]) must finish before A drives off: one chain "
+    S2 = d.step("AppendAgvLiftEvent(raised) adds an AgvMove that lifts T15 onto AGV-1, after the drive.")
+    S3 = d.step("SetAgvId(AGV-1) fills in the TrayMove itself: e4 now carries T15 to P19 on AGV-1, after the lift.")
+    S4 = d.step("AppendAgvLiftEvent(lowered) adds the lower at P19, so AGV-1 is free again after e4.")
+    S5 = d.step("Incoming edge 1: AGV-1's previous event (last_agv_event[AGV-1]) must finish before AGV-1 drives off: one chain "
                 "of events per AGV.")
-    S6 = d.step("Incoming edge 2: if a tray stands on A's navigation path, that tray's first move "
+    S6 = d.step("Incoming edge 2: if a tray stands on AGV-1's navigation path, that tray's first move "
                 "(ctx->first_tray_event) must clear it first.")
-    S7 = d.step("Incoming edge 3: AddNodeArrivalDeps() makes A's arrival at P15 wait until the previous AGV on that "
+    S7 = d.step("Incoming edge 3: AddNodeArrivalDeps() makes AGV-1's arrival at P15 wait until the previous AGV on that "
                 "node has left.")
-    S8 = d.step("Incoming edge 4: if agv_event_dag says another matched AGV (parent B) must go first, its "
-                "last_move_to_tray_event[B] precedes A's drive.")
+    S8 = d.step("Incoming edge 4: if agv_event_dag says another matched AGV (parent AGV-2) must go first, "
+                "its last_move_to_tray_event[AGV-2] precedes AGV-1's drive.")
     S9 = d.step("Finally the assignment's event_cost (travel + lift_up + carry + lift_down) is propagated to the "
-                "children and added to agv_occupied_durations[A].")
+                "children and added to agv_occupied_durations[AGV-1].")
     W = 1060
     d.text(0, 0, "before", size=12.5, family="mono", weight=700, fill=T.muted)
     pre = event_box(d, 0, 16, "TrayMove e4", "T15: P15 -> P19   agv = ?", size=11.5)
-    d.text(pre.x1 + 30, pre.cy, "a root of event_dag_copy, matched to AGV A by BottleneckAssignment", size=11.5,
+    d.text(pre.x1 + 30, pre.cy, "a root of event_dag_copy, matched to AGV-1 by BottleneckAssignment", size=11.5,
            fill=T.muted)
     with d.only(S0):
         _hl(d, pre, T.fg, pad=4)
@@ -516,8 +526,9 @@ def agv_expansion():
     d.text(0, y - 20, "after", size=12.5, family="mono", weight=700, fill=T.fg)
     bw = 210
     gx = 44
-    chain = [("AgvMove", "A: W26 -> P15", "MoveAgvToTrayPose()"), ("AgvMove", "A: lift", "AppendAgvLiftEvent(raised)"),
-             ("TrayMove e4", "T15 -> P19, agv = A", "SetAgvId(A)"), ("AgvMove", "A: lower", "AppendAgvLiftEvent(lowered)")]
+    chain = [("AgvMove", "AGV-1: W26 -> P15", "MoveAgvToTrayPose()"), ("AgvMove", "AGV-1 lift", "AppendAgvLiftEvent(raised)"),
+             ("TrayMove e4", "T15 -> P19, agv = AGV-1", "SetAgvId(AGV-1)"),
+             ("AgvMove", "AGV-1 lower", "AppendAgvLiftEvent(lowered)")]
     xs = [i * (bw + gx) for i in range(4)]
     B = []
     for i, ((k, t, sub), x) in enumerate(zip(chain, xs)):
@@ -532,10 +543,10 @@ def agv_expansion():
     # incoming edge kinds
     src_y = y + 170
     kinds = [
-        ("A's previous event", "last_agv_event[A]", AGV, 0, "chain per AGV"),
-        ("first move of a path tray", "ctx->first_tray_event[id]", TRAY, 0, "tray on A's nav path clears first"),
+        ("AGV-1's previous event", "last_agv_event[AGV-1]", AGV, 0, "chain per AGV"),
+        ("first move of a path tray", "ctx->first_tray_event[id]", TRAY, 0, "tray on AGV-1's nav path clears first"),
         ("prior occupant of P15", "AddNodeArrivalDeps()", T.sky, 0, "previous AGV must leave the node"),
-        ("parent AGV in agv_event_dag", "last_move_to_tray_event[B]", T.violet, 0, "collision order among matches"),
+        ("parent AGV in agv_event_dag", "last_move_to_tray_event[AGV-2]", T.violet, 0, "collision order among matches"),
     ]
     for i, (name, code, col, tgt, why) in enumerate(kinds):
         x = i * (bw + gx)
@@ -544,7 +555,8 @@ def agv_expansion():
         with d.at(k):
             d.rect(bb.x0, bb.y0, bb.w, bb.h, rx=8, fill=T.bg, stroke=col, sw=1.3, dash="4 3")
             d.text(x + 12, src_y + 17, name, size=11.5, weight=600, fill=col)
-            d.text(x + 12, src_y + 36, code, size=11, family="mono", fill=T.fg2)
+            csz = 11 if text_width(code, 11, "mono") <= bw - 22 else 10
+            d.text(x + 12, src_y + 36, code, size=csz, family="mono", fill=T.fg2)
             d.text(x + 12, src_y + 53, why, size=10.5, fill=T.muted)
             tx = B[0].x0 + 30 + i * 40
             connect(d, [(bb.cx, bb.y0), (bb.cx, src_y - 26 - i * 0), (tx, src_y - 26), (tx, B[0].y1)], kind="flow",
@@ -567,7 +579,7 @@ def agv_expansion():
             d.text(x + 10, cy + 29, lab, size=11, family="mono", fill=T.fg)
             x += w
         d.text(x + 10, cy + 29, "-> PropagateEventCostToChildren()", size=11.5, family="mono", fill=T.muted)
-        d.text(0, cy + 66, "GetJustMovingCost() and the cost model's lift times; agv_occupied_durations[A] += event_cost",
+        d.text(0, cy + 66, "GetJustMovingCost() and the cost model's lift times; agv_occupied_durations[AGV-1] += event_cost",
                size=11, fill=T.muted)
     frame(d, title="What one AGV assignment adds to the DAG",
           subtitle="Matching only picks pairs; the loop that follows turns each pair into real events and wires them "
@@ -587,29 +599,38 @@ def path_repair():
             "EnsureAgvMovePathsClear replays the DAG in topological order; if an AGV reposition is blocked only by "
             "another AGV's body, it gates the move on that AGV's next departure.")
     S0 = d.step("RunAgvPathRepairPass() replays the DAG in topological order with exact AGV occupancy. At index k it "
-                "reaches the AgvMove that sends A from W25 to W8.")
-    S1 = d.step("Check 1: is A's path feasible when only A itself is ignored? No: the path down past W13 is blocked, "
+                "reaches the AgvMove that sends AGV-1 from W25 to W8.")
+    S1 = d.step("Check 1: is AGV-1's path feasible when only AGV-1 itself is ignored? No: the path down past W13 is blocked, "
                 "so TryClearBlockedAgvMove() continues.")
     S2 = d.step("Check 2: ignoring every other AGV the path is clear, so the obstacle is an AGV, not a tray or a "
                 "disabled node.")
-    S3 = d.step("Check 3: try each other AGV X and ignore only {A, X}. With X = B the path clears: B, parked on W13, is "
-                "the blocker.")
-    S4 = d.step("Check 4: FindAgvDepartureFromNode(B, W13) looks after index k for the event in which B leaves W13: "
-                "B's AgvMove W13 -> P15.")
-    S5 = d.step("Check 5: AddDependency(departure, A's move), unless that would form a cycle. A now waits until B has "
-                "left W13.")
+    S3 = d.step("Check 3: try each other AGV X and ignore only {AGV-1, X}. With X = AGV-2 the path clears: AGV-2, "
+                "parked on W13, is the blocker.")
+    S4 = d.step("Check 4: FindAgvDepartureFromNode(AGV-2, W13) looks after index k for the event in which AGV-2 leaves "
+                "W13: AGV-2's AgvMove W13 -> P15 (dashed arrow).")
+    S5 = d.step("Check 5: AddDependency(departure, AGV-1's move), unless that would form a cycle. AGV-1 now waits until "
+                "AGV-2 has left W13.")
     S6 = d.step("The pass returns true (one edge added) and EnsureAgvMovePathsClear starts a fresh replay. It stops "
                 "when a full replay adds nothing, on an error, or after 256 passes.")
+    P1 = d.step("Playing the repaired order: AGV-2 departs first, driving from W13 into stall P15 under T15. W13 is "
+                "now free.")
+    P2 = d.step("Only then AGV-1 drives its reposition W25 -> W22 -> W18 -> W13 -> W8, through the node AGV-2 has left.")
     s = 24
     m = Map(d, 0, 0, s, (26.0, 46.4), (11.4, 25.2))
     m.base(labels=True, zones=False, axes=False)
-    m.tray(15, "T15", chip_pos="bl")
-    m.tray(19, "T19", chip_pos="bl")
-    m.tray(23, "T23", chip_pos="bl")
-    m.agv(25, "A", heading=90, label_side="above")
-    m.agv(13, "B (parked)", heading=90, label_side="left")
+    sc = Scene(m)
+    sc.tray("T15", 15, chip_pos="bl")
+    sc.tray("T19", 19, chip_pos="bl")
+    sc.tray("T23", 23, chip_pos="bl")
+    sc.agv("AGV-1", 25, heading=90, label_side="above")
+    sc.agv("AGV-2", 13, heading=90, label_side="left")
+    sc.drive(P1, "AGV-2", [13, 15], color=T.teal)               # its departure: dashed preview from S4
+    sc.drive(P2, "AGV-1", [25, 22, 18, 13, 8], preview=False)  # the intended-path arrow is the preview
+    sc.draw()
     x13, y13 = m.P(13)
-    with d.at(S1):
+    with d.at(S4, S5):     # Scene previews only the step before the drive; show B's departure from Check 4 on
+        sc._arrow([m.P(13), m.P(15)], T.teal, dash="7 5", sw=3, op=None)
+    with d.at(S1, P1):
         m.route([25, 22, 18, 13, 8], AGV, sw=3, offset=(10, 0), dash="7 5")
     with d.only(S1):
         d.circle(x13, y13, 26, fill="none", stroke=T.fg, sw=2, dash="4 3", layer="top")
@@ -619,33 +640,37 @@ def path_repair():
         d.circle(x13, y13, 26, fill=T.tint(T.bg_deep, 0.6, T.bg), stroke=T.faint, sw=2, dash="4 3", layer="top")
         label_pill(d, x13 + 30, y13 + 34, "ignoring all other AGVs: clear", color=T.muted, bg=T.bg_deep,
                    border=T.faint, anchor="start", size=11)
-    with d.at(S3):
+    with d.at(S3, S6):
         d.circle(x13, y13, 26, fill="none", stroke=T.red, sw=2, layer="top")
-        label_pill(d, x13 + 30, y13 + 34, "A cannot pass while B is here", color=T.red, bg=T.bg_deep, border=T.red,
+        label_pill(d, x13 + 30, y13 + 34, "AGV-1 cannot pass while AGV-2 is here", color=T.red, bg=T.bg_deep, border=T.red,
                    anchor="start", size=11)
     mb = m.box
     rx = mb.x1 + 40
     rw = 1060 - rx
     d.text(rx, 8, "topological replay finds", size=12.5, weight=600, fill=T.fg)
-    a = event_box(d, rx, 26, "AgvMove (idx k)", "A: W25 -> W8", w=rw)
+    a = event_box(d, rx, 26, "AgvMove (idx k)", "AGV-1: W25 -> W8", w=rw)
     with d.only(S0):
+        _hl(d, a, T.fg, pad=4)
+    with d.only(P2):
         _hl(d, a, T.fg, pad=4)
     bpos = BBox(rx, a.y1 + 96, rx + rw, a.y1 + 146)
     d.rect(bpos.x0, bpos.y0, bpos.w, bpos.h, rx=8, fill="none", stroke=T.border_soft, sw=1, dash="3 4",
            layer="under")
     with d.at(S4):
-        b = event_box(d, rx, a.y1 + 96, "AgvMove (later)", "B: W13 -> P15  (B departs)", w=rw)
+        b = event_box(d, rx, a.y1 + 96, "AgvMove (later)", "AGV-2: W13 -> P15  (AGV-2 departs)", w=rw)
     with d.only(S4):
+        _hl(d, b, T.fg, pad=4)
+    with d.only(P1):
         _hl(d, b, T.fg, pad=4)
     with d.at(S5):
         connect(d, [(b.x0 + 40, b.y0), (b.x0 + 40, a.y1)], kind="flow", color=T.red, size=9, sw=2)
-        label_pill(d, a.x0 + 48, (a.y1 + b.y0) / 2, "new edge: departure -> A's move", color=T.red, anchor="start",
+        label_pill(d, a.x0 + 48, (a.y1 + b.y0) / 2, "new edge: departure -> AGV-1's move", color=T.red, anchor="start",
                    size=11)
     steps = [
-        "path feasible ignoring only A?  no -> continue",
+        "path feasible ignoring only AGV-1?  no -> continue",
         "feasible ignoring every other AGV?  yes -> an AGV is the problem",
-        "for each other AGV X: feasible ignoring {A, X}?  -> X = B",
-        "FindAgvDepartureFromNode(B, W13) after idx k",
+        "for each other AGV X: feasible ignoring {AGV-1, X}?  -> X = AGV-2",
+        "FindAgvDepartureFromNode(AGV-2, W13) after idx k",
         "AddDependency(departure, move) unless it would form a cycle",
     ]
     yy = b.y1 + 34
@@ -678,6 +703,7 @@ def path_repair():
                    "topological order. This pass replays the real order, where AGV occupancy is exact, and adds one "
                    "gating edge at a time. Trays and disabled nodes are not fixed here.",
           badge_key="yaml+hyp",
-          legend=[("dasharrow", AGV, "A's intended path"), ("ring", T.red, "blocking AGV"),
+          legend=[("dasharrow", AGV, "AGV-1's intended path"), ("dasharrow", T.teal, "AGV-2's departure"),
+                  ("ring", T.red, "blocking AGV"),
                   ("arrow", T.red, "gating edge added")])
     return d

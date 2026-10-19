@@ -421,14 +421,14 @@ def event_dag_copy_queue():
     d.rect(X2, 0, W2, 262, rx=10, fill=T.tint(T.sky, 0.05, T.bg), stroke=T.sky, sw=1.3)
     d.text(X2 + 14, 18, "ctx->events: never shrinks, keeps every vertex index", size=12.5, weight=600, fill=T.sky)
     _mini_dag(d, X2 + 30, 76, gx=GX)
-    agv = {"b": ("AGV 1", 2), "e": ("AGV 2", 2), "c": ("AGV 1", 3), "f": ("AGV 3", 3)}
+    agv = {"b": ("AGV-1", 2), "e": ("AGV-2", 2), "c": ("AGV-1", 3), "f": ("AGV-3", 3)}
     for n, (who, k) in agv.items():
         c, r = POS[n]
         with d.at(k):
             d.text(X2 + 30 + c * GX + 25, 76 + r * 58 + 40, who, size=10.5, family="mono", weight=600, fill=T.green,
                    anchor="middle")
-    rows = [("b, e", "approach, lift, lower for b (AGV 1) and e (AGV 2), with edges", 2),
-            ("c, f", "approach, lift, lower for c (AGV 1) and f (AGV 3), with edges", 3),
+    rows = [("b, e", "approach, lift, lower for b (AGV-1) and e (AGV-2), with edges", 2),
+            ("c, f", "approach, lift, lower for c (AGV-1) and f (AGV-3), with edges", 3),
             ("then", "EnsureAgvMovePathsClear, Reduce(), AddDepsAfterAmiga", 4)]
     d.text(X2 + 14, 204, "added AGV events:", size=S.small, weight=600, fill=T.fg2)
     for i, (who, txt, k) in enumerate(rows):

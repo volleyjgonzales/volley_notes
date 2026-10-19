@@ -470,10 +470,10 @@ def first_tray_event_flow():
     # ---- right: using ----
     rx = 700
     d.text(rx, 0, "2  AGV assignment reads it (MoveAgvToTrayPose)", size=13, weight=600, fill=T.fg)
-    d.text(rx, 24, "AGV A's chain: moves T15 out, then fetches X via P15, later moves T15 again",
+    d.text(rx, 24, "AGV-1's chain: moves T15 out, then fetches X via P15, later moves T15 again",
            size=S.small, fill=T.muted)
-    nodes = [("m1", "A carries T15 out (m1)", T.amber), ("ap", "A approaches X via P15", T.green),
-             ("cx", "A carries X", T.amber), ("m3", "A carries T15 again (m3)", T.amber)]
+    nodes = [("m1", "AGV-1 carries T15 out (m1)", T.amber), ("ap", "AGV-1 approaches X via P15", T.green),
+             ("cx", "AGV-1 carries X", T.amber), ("m3", "AGV-1 carries T15 again (m3)", T.amber)]
     bx = {}
     yy = 52
     for k, txt, col in nodes:
@@ -483,7 +483,7 @@ def first_tray_event_flow():
         yy += 64
     for a, b in (("m1", "ap"), ("ap", "cx"), ("cx", "m3")):
         connect(d, [(bx[a].cx, bx[a].y1), (bx[b].cx, bx[b].y0)], kind="flow", color=T.fg2, size=7)
-    label_pill(d, bx["m1"].cx + 70, (bx["m1"].y1 + bx["ap"].y0) / 2, "A's own chain", color=T.muted)
+    label_pill(d, bx["m1"].cx + 70, (bx["m1"].y1 + bx["ap"].y0) / 2, "AGV-1's own chain", color=T.muted)
     # good edge first -> approach
     connect(d, [(bx["m1"].x1, bx["m1"].cy), (bx["m1"].x1 + 40, bx["m1"].cy), (bx["m1"].x1 + 40, bx["ap"].cy),
                 (bx["ap"].x1, bx["ap"].cy)], kind="flow", color=T.green, size=7, sw=1.8,
@@ -494,7 +494,7 @@ def first_tray_event_flow():
                 (bx["ap"].x0, bx["ap"].cy)], kind="flow", color=T.red, size=7, sw=1.8, dash="5 4",
             label="last move -> approach", label_at=(bx["m3"].x0 - 40, (bx["m3"].cy + bx["ap"].cy) / 2),
             label_anchor="end")
-    d.text(rx, yy + 8, "green: what the code adds (T15 has left P15 before A drives through it)",
+    d.text(rx, yy + 8, "green: what the code adds (T15 has left P15 before AGV-1 drives through it)",
            size=S.small, fill=T.green)
     d.text(rx, yy + 26, "red: with the LAST move, approach -> ... -> m3 -> approach is a cycle",
            size=S.small, fill=T.red)
@@ -696,8 +696,8 @@ def scheduled_job_data_map():
     m = Map(d, 0, 0, s, QA_X, QA_Y)
     m.base(labels=True, zones=False, axes=False)
     m.tray(17, "T17", payload=True, chip_pos="bl")
-    m.agv(13, "A", heading=90, label_side="below")
-    m.agv(26, "B", heading=90, label_side="above")
+    m.agv(13, "AGV-1", heading=90, label_side="below")
+    m.agv(26, "AGV-2", heading=90, label_side="above")
     JA, JB = T.amber, T.sky
     m.route([13, 15, 17], T.green, sw=3, offset=(0, -6))
     m.route([17, 15, 13, 18, 22, 41, 21], JA, sw=4, offset=(0, 6))
@@ -719,10 +719,10 @@ def scheduled_job_data_map():
     sx = mb.x1 + 50
     d.text(sx, 0, "PlanResponse.schedule.nodes  (ActionNode[] in topological order)", size=12.5, weight=600,
            fill=T.fg)
-    acts = [("AGV A: W13 -> P15", JA), ("AGV A: P15 -> P17", JA), ("AGV A: lift", JA), ("AGV B: W26 -> W25", JB),
-            ("AGV A: P17 -> P15, lifted", JA), ("AGV A: P15 -> W13, lifted", JA), ("AGV A: W13 -> W18, lifted", JA),
-            ("AGV A: W18 -> W22, lifted", JA), ("AGV A: W22 -> W41, lifted", JA), ("AGV A: W41 -> B21, lifted", JA),
-            ("AGV A: lower", JA), ("bay 21: PROCESS_RETRIEVE", T.violet)]
+    acts = [("AGV-1: W13 -> P15", JA), ("AGV-1: P15 -> P17", JA), ("AGV-1: lift", JA), ("AGV-2: W26 -> W25", JB),
+            ("AGV-1: P17 -> P15, lifted", JA), ("AGV-1: P15 -> W13, lifted", JA), ("AGV-1: W13 -> W18, lifted", JA),
+            ("AGV-1: W18 -> W22, lifted", JA), ("AGV-1: W22 -> W41, lifted", JA), ("AGV-1: W41 -> B21, lifted", JA),
+            ("AGV-1: lower", JA), ("bay 21: PROCESS_RETRIEVE", T.violet)]
     cy = 22
     cells = {}
     for i, (lab, col) in enumerate(acts):
@@ -765,15 +765,15 @@ def scheduled_job_data_map():
                 (cells[3].x1, cells[3].cy)], kind="dep", color=JB)
     note(d, 0, mb.y1 + 24, mb.w,
          "node_indices are not contiguous: actions of different jobs interleave in the topological order "
-         "(B's move is index 3, in the middle of A's actions). Dispatch uses node_indices to know which actions "
+         "(job B's move is index 3, in the middle of job A's actions). Dispatch uses node_indices to know which actions "
          "serve which job, and bay_arrival_node_guid to know when the car reaches the customer.",
          title="Reading node_indices", accent=T.amber)
     frame(d, title="ScheduledJobData on the Pecos map",
-          subtitle="Two planned jobs and one failed job. AGV A fetches T17 (with its car) and carries it to bay B21; "
-                   "AGV B moves out of the way. Badges on the map are positions in Schedule.nodes.",
+          subtitle="Two planned jobs and one failed job. AGV-1 fetches T17 (with its car) and carries it to bay B21; "
+                   "AGV-2 moves out of the way. Badges on the map are positions in Schedule.nodes.",
           badge_key="yaml+hyp",
           legend=[("box", JA, "job A (RETRIEVE) actions"), ("box", JB, "job B (MOVE_AGV)"),
-                  ("box", T.violet, "bay command"), ("route", T.green, "A unloaded"), ("route", JA, "A loaded")],
+                  ("box", T.violet, "bay command"), ("route", T.green, "AGV-1 unloaded"), ("route", JA, "AGV-1 loaded")],
           footnote="Geometry from the Pecos YAML; occupancy, guids and the exact action order are illustrative. "
                    "The shape of job A's actions matches the RetrieveJob test.")
     return d

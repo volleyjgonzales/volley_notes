@@ -1486,7 +1486,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
 <p>Invariant 4 in a picture (illustrative; real graphs and paths depend on the layout):</p>
 <figure id="pr-fig-03_garage_xy">
   <img src="figures/03_garage_xy.svg" alt="Garage setup">
-  <figcaption><strong>Top-down garage setup.</strong> AGV 1 faces +x and carries tray T1 toward the goal. Trays T2 and T3 sit on the route, so two prerequisite tray moves (T2 → S3, T3 → S4) must finish first; they are independent of each other. Coordinates are schematic, not a customer layout.</figcaption>
+  <figcaption><strong>Top-down garage setup.</strong> AGV-1 faces +x and carries tray T1 toward the goal. Trays T2 and T3 sit on the route, so two prerequisite tray moves (T2 → S3, T3 → S4) must finish first; they are independent of each other. Coordinates are schematic, not a customer layout.</figcaption>
 </figure>
 <h2 data-num id="pr-staged-plan">Staged plan</h2>
 <p>A move-only refactor is risky because the helpers in <a class="ref" href="#pr-what-the-two-algorithms-touch">section 3</a> are shared with job planning. Moving them blindly either breaks those callers or recreates the coupling through a back-pointer to <code>Scheduler</code>.</p>

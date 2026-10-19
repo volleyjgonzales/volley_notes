@@ -624,9 +624,31 @@
     const capEl = fig.querySelector('.anim-caption');
     const playBtn = fig.querySelector('[data-act="play"]');
     const dots = [...fig.querySelectorAll('.anim-dot')];
+    // movers: groups that glide along a route between steps (data-mv = per-step list of offsets)
+    const movers = [...svg.querySelectorAll('[data-mv]')].map((el) => [el, JSON.parse(el.getAttribute('data-mv'))]);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const place = (el, fr, anim) => {
+      const p = fr[fr.length - 1];
+      if (el.getAnimations) el.getAnimations().forEach((x) => x.cancel());
+      el.setAttribute('transform', `translate(${p[0]} ${p[1]})`);
+      if (!anim || reduce || fr.length < 2 || !el.animate) return;
+      const L = [0];
+      let t = 0;
+      for (let i = 1; i < fr.length; i++) {
+        t += Math.hypot(fr[i][0] - fr[i - 1][0], fr[i][1] - fr[i - 1][1]);
+        L.push(t);
+      }
+      if (t <= 0) return;
+      el.animate(fr.map((q, i) => ({ transform: `translate(${q[0]}px, ${q[1]}px)`, offset: L[i] / t })),
+        { duration: Math.min(1700, 400 + t * 2.2), easing: 'ease-in-out' });
+    };
     let k = 0;
+    let prevK = 0;
     let timer = null;
     const show = () => {
+      const anim = k === prevK + 1;
+      prevK = k;
+      for (const [el, fr] of movers) place(el, fr[Math.min(k, fr.length - 1)], anim);
       for (const [el, a, b] of els) el.classList.toggle('anim-on', a <= k && (b < 0 || k <= b));
       count.textContent = `Step ${k + 1} / ${n}`;
       capEl.textContent = caps[k];

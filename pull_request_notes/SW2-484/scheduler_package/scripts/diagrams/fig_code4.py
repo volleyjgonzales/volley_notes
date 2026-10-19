@@ -80,7 +80,7 @@ def motions_to_actions():
     W = 1060
     lane_x = 120
     px_s = (W - lane_x - 10) / 72.0
-    lanes = [("AGV A", AGV), ("Bay B21", BAYC)]
+    lanes = [("AGV-1", AGV), ("Bay B21", BAYC)]
     motions = {
         0: [(0, 6, "13->15"), (6, 12, "15->17"), (12, 16, "lift"), (16, 24, "17->15 L"), (24, 31, "15->13 L"),
             (31, 38, "13->18 L"), (38, 45, "18->22 L"), (45, 51, "22->41 L"), (51, 58, "41->21 L"), (58, 62, "lower")],
@@ -137,12 +137,12 @@ def motions_to_actions():
     d.text(0, ty, "3 · PlanResponse.schedule.nodes  (ActionNode[] in topological order)", size=12.5, weight=600,
            fill=T.fg)
     cols = [("idx", 50), ("type", 170), ("entity", 70), ("command", 440), ("parents", 70), ("duration", 80)]
-    rows = [("0", "TYPE_AGV_COMMAND", "agv 1", "src {node_id: 13, heading: 90} -> dst {node_id: 15, heading: 90}", "[]", "6.0 s"),
-            ("1", "TYPE_AGV_COMMAND", "agv 1", "node_id 15 -> node_id 17 (heading 90, lift false)", "[0]", "6.0 s"),
-            ("2", "TYPE_AGV_COMMAND", "agv 1", "lift: src.lift false -> dst.lift true", "[1]", "4.0 s"),
-            ("3 .. 8", "TYPE_AGV_COMMAND", "agv 1", "node_id 17 -> 15 -> 13 -> 18 -> 22 -> 41 -> 21, lift true", "[n-1]",
+    rows = [("0", "TYPE_AGV_COMMAND", "AGV-1", "src {node_id: 13, heading: 90} -> dst {node_id: 15, heading: 90}", "[]", "6.0 s"),
+            ("1", "TYPE_AGV_COMMAND", "AGV-1", "node_id 15 -> node_id 17 (heading 90, lift false)", "[0]", "6.0 s"),
+            ("2", "TYPE_AGV_COMMAND", "AGV-1", "lift: src.lift false -> dst.lift true", "[1]", "4.0 s"),
+            ("3 .. 8", "TYPE_AGV_COMMAND", "AGV-1", "node_id 17 -> 15 -> 13 -> 18 -> 22 -> 41 -> 21, lift true", "[n-1]",
              "..."),
-            ("9", "TYPE_AGV_COMMAND", "agv 1", "lower: lift true -> false", "[8]", "4.0 s"),
+            ("9", "TYPE_AGV_COMMAND", "AGV-1", "lower: lift true -> false", "[8]", "4.0 s"),
             ("10", "TYPE_BAY_COMMAND", "bay 21", "COMMAND_TYPE_PROCESS_RETRIEVE", "[9]", "9.0 s")]
     x = 0
     hy = ty + 18

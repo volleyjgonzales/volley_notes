@@ -197,7 +197,7 @@
     <tr>
       <td>Motion</td>
       <td>When, and along which poses, does each thing move?</td>
-      <td>AGV 2 waits at node 6 until 6 s, then drives 6 → 9 → 12</td>
+      <td>AGV-2 waits at node 6 until 6 s, then drives 6 → 9 → 12</td>
       <td><code>Motion</code>s in a <code>ContinuousState</code> from CHUGG</td>
       <td>a timeline per entity</td>
     </tr>
@@ -667,7 +667,7 @@ table_(gg_, logger),                                  // volley::CollisionTable,
 <p><code>DiscreteGarageState</code> is the most important type in the system. The Scheduler never plans over geometry directly; it plans over this structured snapshot of AGVs, trays, bays, payloads, VECS, VRCs and disabled nodes. The ROS message carries them as arrays; inside the class they are <code>std::map</code>s keyed by id (<code>agvs_</code>, <code>trays_</code>, <code>bays_</code>, <code>vexen_</code>, <code>vrcs_</code>; <code>payloads_</code> by GUID) plus a <code>std::set</code> of disabled node ids. Ordered maps are deliberate: the state's hash depends on iteration order. Every physical fact the planner cares about must be expressible in it.</p>
 <figure id="bg-fig-16_discrete_garage_state_bridge">
   <img src="figures/16_discrete_garage_state_bridge.svg" alt="DiscreteGarageState bridge">
-  <figcaption><code>DiscreteGarageState</code> ties the floor layout to the planner's data structures. The left side reuses the Pecos drawing: ① AGV 4 parked at charger <code>C10</code>, ② tray 15 at parking node <code>P3</code>, ③ the payload riding on tray 15, and ④ bay 7 in <code>READY_TO_RETRIEVE</code>. Each number points to the matching record on the right; the filled diamond marks containment inside the single snapshot. Values are illustrative.</figcaption>
+  <figcaption><code>DiscreteGarageState</code> ties the floor layout to the planner's data structures. The left side reuses the Pecos drawing: ① AGV-4 parked at charger <code>C10</code>, ② tray 15 at parking node <code>P3</code>, ③ the payload riding on tray 15, and ④ bay 7 in <code>READY_TO_RETRIEVE</code>. Each number points to the matching record on the right; the filled diamond marks containment inside the single snapshot. Values are illustrative.</figcaption>
 </figure>
 <p>How it is used in the scheduler:</p>
 <ul>
@@ -1758,7 +1758,7 @@ DiscreteVrcState next_discrete_state
 <p><code>node_indices</code> is filled by matching guids, not indices: each <code>ActionNode</code> carries <code>job_id = scheduled_jobs[event->GetJobIndex()].job.guid</code> (set in <code>BuildActionDagFromMotions</code>), and <code>BuildScheduledActionsArray</code> walks the final ordering and appends each node's position to the entry whose <code>job.guid</code> equals that <code>job_id</code>. The bay fields are found the same way: the final loop scans the nodes for a <code>TYPE_BAY_COMMAND</code> with <code>COMMAND_TYPE_PROCESS_RETRIEVE</code> and the job's guid.</p>
 <figure id="bg-fig-74_scheduled_job_data_map">
   <img src="figures/74_scheduled_job_data_map.svg" alt="ScheduledJobData on the Pecos map">
-  <figcaption>What the entries hold for a concrete request. AGV A retrieves the car on T17 to bay B21 (job A); AGV B moves out of the way (job B); an INSERT fails (job C). The badges on the map are positions in <code>Schedule.nodes</code>. Job A's <code>node_indices</code> skip 3 because B's move was ordered between A's actions; its <code>bay_arrival_node_guid</code> points at node 11, the <code>PROCESS_RETRIEVE</code>. Job C has no actions: only its <code>job</code> status fields say anything.</figcaption>
+  <figcaption>What the entries hold for a concrete request. AGV-1 retrieves the car on T17 to bay B21 (job A); AGV-2 moves out of the way (job B); an INSERT fails (job C). The badges on the map are positions in <code>Schedule.nodes</code>. Job A's <code>node_indices</code> skip 3 because job B's move was ordered between job A's actions; its <code>bay_arrival_node_guid</code> points at node 11, the <code>PROCESS_RETRIEVE</code>. Job C has no actions: only its <code>job</code> status fields say anything.</figcaption>
 </figure>
 <h2 data-num id="bg-package-anatomy-files-and-classes">Package anatomy: files and classes</h2>
 <table>
@@ -2818,7 +2818,7 @@ void UpdateLeafDependencies(const ScheduleEventSPtr&amp; childevent, size_t job_
 <p><code>first_tray_event</code> is a <code>std::unordered_map&lt;uint16_t, ScheduleEventSPtr></code>, keyed by tray id: for each tray that moves at all, <strong>the first move that takes it off the node it started on</strong>. It is the only hand-off between tray assignment and AGV assignment, and it answers one question for AGV assignment: “when is this tray gone from its starting node?”</p>
 <figure id="bg-fig-71_first_tray_event">
   <img src="figures/71_first_tray_event.svg" alt="first_tray_event: why the first move">
-  <figcaption>Left: tray assignment walks the tray moves in topological order and records each tray's first move (m1 for T15, m2 for T17); T15's second move m3 is chained after m1 through <code>last_tray_event</code> but does not change the map. Right: AGV A carries T15 out (m1), then drives through P15 to fetch X, and later carries T15 again (m3). Waiting for the first move is correct and harmless. Waiting for the last move would add m3 → approach, while A's own chain already has approach → … → m3: a cycle.</figcaption>
+  <figcaption>Left: tray assignment walks the tray moves in topological order and records each tray's first move (m1 for T15, m2 for T17); T15's second move m3 is chained after m1 through <code>last_tray_event</code> but does not change the map. Right: AGV-1 carries T15 out (m1), then drives through P15 to fetch X, and later carries T15 again (m3). Waiting for the first move is correct and harmless. Waiting for the last move would add m3 → approach, while AGV-1's own chain already has approach → … → m3: a cycle.</figcaption>
 </figure>
 <p><strong>Written</strong> by tray assignment, in two places with the same pattern (the main loop and <code>AssignDestForUntargetedMove</code>), for every tray move it processes, including the blocker moves it creates:</p>
 <pre><code class="language-cpp">// src/scheduler.cpp, DoTrayAssignments (and AssignDestForUntargetedMove)

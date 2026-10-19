@@ -97,9 +97,9 @@ def planning_pipeline():
 @figure("92_continuous_state", "What a ContinuousState holds", DOC1)
 def continuous_state():
     d = Doc("92_continuous_state", "A ContinuousState is a timeline per entity",
-            "The ContinuousStateToSchedule test drawn as swimlanes: AGV 1 drives 10->9->11 in six seconds; AGV 2 "
-            "waits at 6, then drives 6->9->12. Each bar is one Motion. The action DAG built from it orders AGV 2's "
-            "entry into node 9 after AGV 1 has left it.")
+            "The ContinuousStateToSchedule test drawn as swimlanes: AGV-1 drives 10->9->11 in six seconds; AGV-2 "
+            "waits at 6, then drives 6->9->12. Each bar is one Motion. The action DAG built from it orders AGV-2's "
+            "entry into node 9 after AGV-1 has left it.")
     X0, PX, LANE = 150, 52, 74
     T_MAX = 12
     # axis
@@ -128,13 +128,13 @@ def continuous_state():
                    anchor="middle")
             d.text((x0 + x1) / 2, y + 39, f"action {act}", size=10, family="mono", fill=T.muted, anchor="middle")
             bars[(k, lab)] = BBox(x0, y + 6, x1, y + 50)
-    # occupancy dependency: AGV1 leaves 9 (9 -> 11 ends at 6) before AGV2 enters 9 (6 -> 9 starts at 6)
+    # occupancy dependency: AGV-1 leaves 9 (9 -> 11 ends at 6) before AGV-2 enters 9 (6 -> 9 starts at 6)
     a, b = bars[(0, "9 -> 11")], bars[(1, "6 -> 9")]
     connect(d, [(a.x1 - 30, a.y1), (a.x1 - 30, (a.y1 + b.y0) / 2), (b.x0 + 30, (a.y1 + b.y0) / 2), (b.x0 + 30, b.y0)],
             kind="flow", color=T.amber, size=8)
     label_pill(d, X0 + 12.4 * PX + 120, LANE - 2, "occupancy edge in the action DAG:", color=T.amber, size=10.5,
                family="sans")
-    label_pill(d, X0 + 12.4 * PX + 120, LANE + 16, "AGV 2 enters 9 after AGV 1 left it", color=T.amber, size=10.5,
+    label_pill(d, X0 + 12.4 * PX + 120, LANE + 16, "AGV-2 enters 9 after AGV-1 left it", color=T.amber, size=10.5,
                family="sans")
     # legend-ish explanation of one Motion
     my = ay + 46
@@ -151,7 +151,7 @@ def continuous_state():
           subtitle="DiscreteGarageState is one snapshot. ContinuousState is every entity's Trajectory over continuous "
                    "time: back-to-back Motions, each a wait at a pose or a move along an edge.",
           badge_key="as-built",
-          legend=[("box", T.green, "AGV 1's motions"), ("box", T.sky, "AGV 2's motions"),
+          legend=[("box", T.green, "AGV-1's motions"), ("box", T.sky, "AGV-2's motions"),
                   ("dashbox", T.sky, "wait (no delta: dropped from the action DAG)")],
           footnote="Values from TEST(Scheduler, ContinuousStateToSchedule) in scheduler_tests.cpp. The test's comment "
                    "calls the fourth argument \"JobId\"; ResponseFromTrajectories reads it as the event vertex.")
@@ -242,11 +242,11 @@ def chugg_sequential():
     # right: safe-interval table rows
     X0, PX = W + 150, 30
     ty = 0
-    d.text(X0 - 60, ty + 10, "AGV 2's SafeIntervalTable while planning its 6 -> 9 -> 12 move", size=12.5, weight=600,
+    d.text(X0 - 60, ty + 10, "AGV-2's SafeIntervalTable while planning its 6 -> 9 -> 12 move", size=12.5, weight=600,
            fill=T.fg)
     d.text(X0 - 60, ty + 30, "(the Figure 92 example; key = footprint AGV + vertex)", size=11, fill=T.muted)
-    rows = [("vertex 9", [(0, 6, "AGV 1 passes: carved for good", "res")], "safe from 6 s on"),
-            ("vertex 11", [(6, 13, "AGV 1 parked: frozen while planning", "tmp")], "safe until 6 s"),
+    rows = [("vertex 9", [(0, 6, "AGV-1 passes: carved for good", "res")], "safe from 6 s on"),
+            ("vertex 11", [(6, 13, "AGV-1 parked: frozen while planning", "tmp")], "safe until 6 s"),
             ("vertex 12", [], "always safe (no entry)")]
     ry = ty + 66
     for name, blocks, verdict in rows:
@@ -262,7 +262,7 @@ def chugg_sequential():
     for t in (0, 3, 6, 9, 12):
         d.text(X0 + t * PX, ry - 10, f"{t} s", size=10, family="mono", fill=T.muted, anchor="middle")
     note(d, X0 - 60, ry + 14, 560,
-         "AGV 2 may enter 9 only after 6 s. Its goal is 12, and reaching 12 counts only because 12 stays safe "
+         "AGV-2 may enter 9 only after 6 s. Its goal is 12, and reaching 12 counts only because 12 stays safe "
          "forever afterwards. That rule plus the freeze is why an AGV that has not yet been planned to leave a "
          "node blocks it for every event planned before its departure (AddNodeArrivalDeps).",
          color=T.muted)
@@ -416,7 +416,7 @@ def prioritized_planning():
         d.circle(x, y, 15, fill=T.bg_deep, stroke=T.border, sw=1.5)
         d.text(x, y + 0.5, str(v), size=12, family="mono", weight=600, fill=T.fg, anchor="middle")
     # starts and goals
-    for (v, col, lab) in [(1, A1, "AGV 1"), (6, A2, "AGV 2")]:
+    for (v, col, lab) in [(1, A1, "AGV-1"), (6, A2, "AGV-2")]:
         x, y = xy[v]
         d.circle(x, y, 19, fill="none", stroke=col, sw=2.5)
         d.text(x, y - 30, lab, size=11, family="mono", weight=600, fill=col, anchor="middle")
@@ -424,8 +424,8 @@ def prioritized_planning():
         x, y = xy[v]
         d.circle(x, y, 19, fill="none", stroke=col, sw=1.5, dash="3 3")
     ev_y = my + 2 * G + 46
-    d.text(0, ev_y, "e1  AGV 1: 1 -> 4   (job 0)", size=12, family="mono", fill=A1)
-    d.text(0, ev_y + 20, "e2  AGV 2: 6 -> 5   (job 1)", size=12, family="mono", fill=A2)
+    d.text(0, ev_y, "e1  AGV-1: 1 -> 4   (job 0)", size=12, family="mono", fill=A1)
+    d.text(0, ev_y + 20, "e2  AGV-2: 6 -> 5   (job 1)", size=12, family="mono", fill=A2)
     d.text(0, ev_y + 44, "no edge between them; priority order: e1, e2", size=11.5, fill=T.muted)
     # paths on the map
     def path(vs, col, k):
@@ -467,20 +467,20 @@ def prioritized_planning():
         if label:
             d.text((x0 + x1) / 2, y + RH / 2, label, size=10.5, family="mono", weight=600, fill=T.bg, anchor="middle")
 
-    # AGV 1's plan (vertex occupancy: from the start of the edge into it to the end of the edge out of it)
+    # AGV-1's plan (vertex occupancy: from the start of the edge into it to the end of the edge out of it)
     a1 = [(1, 0, 2), (2, 0, 4), (3, 2, 6), (4, 4, TMAX)]
     with d.at(1):
         for v, t0, t1 in a1:
-            bar(v, t0, t1, A1, label="AGV 1" if v == 1 else None, open_end=(v == 4))
-    # reservations in AGV 2's safe-interval table
+            bar(v, t0, t1, A1, label="AGV-1" if v == 1 else None, open_end=(v == 4))
+    # reservations in AGV-2's safe-interval table
     with d.at(2):
         for v, t0, t1 in a1:
             y = ry[v]
             d.rect(cx0 + 80 + t0 * TS - 2, y + 3, (min(t1, TMAX) - t0) * TS + 4, RH - 6, rx=5, fill="none",
                    stroke=RES, sw=1.8, dash="4 3", layer="over")
-        d.text(cx0 + 80, cy0 + 56 + len(rows) * RH, "red outline = unsafe for AGV 2 (carved from AGV 1's motions; "
-               "vertex 4 stays unsafe: AGV 1 parks there)", size=11, fill=RES)
-    # AGV 2: the naive path that would collide, then SIPP's answer
+        d.text(cx0 + 80, cy0 + 56 + len(rows) * RH, "red outline = unsafe for AGV-2 (carved from AGV-1's motions; "
+               "vertex 4 stays unsafe: AGV-1 parks there)", size=11, fill=RES)
+    # AGV-2: the naive path that would collide, then SIPP's answer
     with d.only(3):
         bar(6, 0, 0.4, A2, alpha=0.4)
         bar(3, 0, 4, A2, alpha=0.15, dash="4 3", h_in=13, layer="over")
@@ -489,22 +489,22 @@ def prioritized_planning():
         d.line(xx - 7, yy + 7, xx + 7, yy - 7, stroke=RES, sw=3, layer="top")
         d.text(cx0 + 80 + TMAX * TS + 10, yy, "straight on: conflict", size=11, fill=RES)
     with d.at(4):
-        bar(6, 0, 8, A2, alpha=0.35, label="AGV 2 waits at 6")
+        bar(6, 0, 8, A2, alpha=0.35, label="AGV-2 waits at 6")
         bar(3, 6, 10, A2, label="6->3->5")
         bar(5, 8, TMAX, A2, open_end=True)
     with d.at(5):
         d.text(cx0 + 80, cy0 + 76 + len(rows) * RH, "Result: e1 kept its path; e2 absorbed the whole conflict. With e2 "
-               "first in the order, AGV 1 would have waited instead.", size=11, fill=T.fg)
+               "first in the order, AGV-1 would have waited instead.", size=11, fill=T.fg)
     d.step("Two events with no edge between them. The event DAG's topological order, with job priority, puts e1 "
            "(job 0) first. Both AGVs start at t = 0.")
-    d.step("Plan e1: AGV 1's safe-interval table holds nothing it must avoid, so SIPP returns the shortest path "
-           "1 -> 2 -> 3 -> 4. The bars show when AGV 1 occupies each vertex.")
-    d.step("Carve e1's motions into every other AGV's table: for AGV 2, vertex 3 is now unsafe from 2 s to 6 s, and "
-           "vertex 4 from 4 s on, for good, because AGV 1 stays there.")
+    d.step("Plan e1: AGV-1's safe-interval table holds nothing it must avoid, so SIPP returns the shortest path "
+           "1 -> 2 -> 3 -> 4. The bars show when AGV-1 occupies each vertex.")
+    d.step("Carve e1's motions into every other AGV's table: for AGV-2, vertex 3 is now unsafe from 2 s to 6 s, and "
+           "vertex 4 from 4 s on, for good, because AGV-1 stays there.")
     d.step("Plan e2 with SIPP. Driving straight from 6 to 3 would occupy vertex 3 from 0 s to 4 s, inside its unsafe "
            "interval, so that state is not in the search.")
     d.step("SIPP's answer: wait at 6 until vertex 3's next safe interval opens at 6 s, then 6 -> 3 -> 5. The wait is "
-           "part of AGV 2's trajectory in the ContinuousState.")
+           "part of AGV-2's trajectory in the ContinuousState.")
     d.step("Both trajectories are fixed. e1 is never revisited, so the event order decides who waits: that is "
            "prioritized planning, and why the scheduler's edges and job order steer CHUGG.")
     frame(d, title="Prioritized planning with safe intervals",
@@ -512,8 +512,8 @@ def prioritized_planning():
                    "the other AGVs' safe-interval tables; SIPP then searches over (vertex, safe interval) states, "
                    "so a later AGV waits rather than collide.",
           badge_key="illustrative",
-          legend=[("fill", A1, "AGV 1 (planned first)"), ("fill", A2, "AGV 2 (planned second)"),
-                  ("dashbox", RES, "unsafe interval for AGV 2")],
+          legend=[("fill", A1, "AGV-1 (planned first)"), ("fill", A2, "AGV-2 (planned second)"),
+                  ("dashbox", RES, "unsafe interval for AGV-2")],
           footnote="Simplified: every edge takes 2 s and a vertex counts as used from the start of the move into it "
                    "to the end of the move out of it. In the code the table is keyed by footprint and vertex "
                    "(the SolveSequential figure shows the real structure) and moves use the trapezoid timing of the cost model.")
@@ -544,8 +544,8 @@ def cbs_example():
         return BBox(x, y, x + 250, y + 30 + 18 * len(lines))
     root = ct_node(130, 30, "root: no constraints", ["each AGV planned alone", "cost 6 + 4 = 10",
                                                      "conflict: vertex 3, 2-4 s"], T.fg2, 0)
-    left = ct_node(0, 190, "AGV 2 avoids 3 in 2-6 s", ["AGV 2 waits at 6", "cost 6 + 10 = 16", "no conflict"], A2, 1)
-    right = ct_node(270, 190, "AGV 1 avoids 3 in 0-4 s", ["AGV 1 waits at 2", "cost 8 + 4 = 12", "no conflict"], A1, 2,
+    left = ct_node(0, 190, "AGV-2 avoids 3 in 2-6 s", ["AGV-2 waits at 6", "cost 6 + 10 = 16", "no conflict"], A2, 1)
+    right = ct_node(270, 190, "AGV-1 avoids 3 in 0-4 s", ["AGV-1 waits at 2", "cost 8 + 4 = 12", "no conflict"], A1, 2,
                     chosen_from=3)
     with d.at(1):
         connect(d, [(root.cx - 40, root.y1), (root.cx - 40, 160), (left.cx, 160), (left.cx, left.y0)], kind="flow",
@@ -588,18 +588,18 @@ def cbs_example():
         p1, p2 = plans[node]
         with d.only(k):
             for v, t0, t1 in p1:
-                bar(v, t0, t1, A1, label="AGV 1" if v == 1 else None)
+                bar(v, t0, t1, A1, label="AGV-1" if v == 1 else None)
             for v, t0, t1 in p2:
-                bar(v, t0, t1, A2, alpha=0.6, label="AGV 2" if v == 6 else None)
+                bar(v, t0, t1, A2, alpha=0.6, label="AGV-2" if v == 6 else None)
     with d.only(0):
         y = ry[3]
         d.rect(cx0 + 80 + 2 * TS, y + 2, 2 * TS, RH - 4, rx=5, fill="none", stroke=RES, sw=2.4)
         d.text(cx0 + 80 + TMAX * TS + 10, y + RH / 2, "conflict", size=11, weight=600, fill=RES)
     d.step("Root of the constraint tree: plan each AGV alone, ignoring the other. Total cost (sum of arrival "
            "times) 6 + 4 = 10, but both use vertex 3 between 2 s and 4 s: a conflict.")
-    d.step("Branch 1: forbid AGV 2 from vertex 3 while AGV 1 is there. Only AGV 2 is replanned (SIPP): it waits at "
+    d.step("Branch 1: forbid AGV-2 from vertex 3 while AGV-1 is there. Only AGV-2 is replanned (SIPP): it waits at "
            "6 and arrives at 10 s. Cost 16.")
-    d.step("Branch 2: forbid AGV 1 from vertex 3 while AGV 2 is there. AGV 1 waits at 2 and arrives at 8 s; AGV 2 "
+    d.step("Branch 2: forbid AGV-1 from vertex 3 while AGV-2 is there. AGV-1 waits at 2 and arrives at 8 s; AGV-2 "
            "goes straight. Cost 12.")
     d.step("CBS always expands the cheapest open node. Branch 2 has the lower cost and no conflict, so it is the "
            "solution; with sum-of-costs as the objective it is optimal.")
@@ -611,7 +611,7 @@ def cbs_example():
                    "agent with a single-agent search, checks for the first conflict and, if there is one, branches "
                    "into two children, one per agent that could give way.",
           badge_key="illustrative",
-          legend=[("fill", A1, "AGV 1"), ("fill", A2, "AGV 2"), ("box", RES, "conflict"),
+          legend=[("fill", A1, "AGV-1"), ("fill", A2, "AGV-2"), ("box", RES, "conflict"),
                   ("box", T.green, "chosen node")],
           footnote="Same map, timing and occupancy rule as the prioritized-planning figure. CHUGG has an unfinished CBS mode "
                    "(SolveCbs); the scheduler calls SolveSequential, which is prioritized planning.")

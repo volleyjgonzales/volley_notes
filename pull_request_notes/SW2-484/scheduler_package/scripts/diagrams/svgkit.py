@@ -217,6 +217,7 @@ class Doc:
         self.steps: list[str] = []
         self.poster: int | None = None
         self._range: tuple | None = None
+        self._movers: list = []
 
     # ---- animation ---------------------------------------------------------------------
     @contextmanager
@@ -237,6 +238,48 @@ class Doc:
         """Append a step with its caption; returns its index."""
         self.steps.append(caption)
         return len(self.steps) - 1
+
+    def mover(self, frames, draw, layer="top"):
+        """An element group that MOVES between animation steps instead of fading.
+
+        `draw(sub)` draws the content into a scratch Doc `sub` at its starting position (absolute
+        coordinates, any helper may be used; `with sub.at(a, b)` works inside for state variants).
+        `frames[k]` is the list of (dx, dy) offsets from that start the group passes through when
+        step k is entered; its last entry is where it rests during step k. A player animates
+        through the list when stepping forward by one, and jumps otherwise; without a player the
+        group rests at the poster step's offset."""
+        sub = Doc(self.name + "-mv", "")
+        sub.uses_map = True
+        draw(sub)
+        content = "".join("".join(sub.layers[k]) for k in self.LAYERS)
+        for key, chars in sub.glyphs.items():
+            self.glyphs.setdefault(key, set()).update(chars)
+        self.defs.extend(x for x in sub.defs if x not in self.defs)
+        frames = [[(round(x, 2), round(y, 2)) for x, y in f] for f in frames]
+        self._movers.append(frames)
+        mid = len(self._movers) - 1
+        # bounds and step-aware text records at each resting offset
+        k = 0
+        while k < len(frames):
+            j = k
+            while j + 1 < len(frames) and frames[j + 1][-1] == frames[k][-1]:
+                j += 1
+            dx, dy = frames[k][-1]
+            if sub.bounds:
+                self.grow(BBox(sub.bounds.x0 + dx, sub.bounds.y0 + dy, sub.bounds.x1 + dx, sub.bounds.y1 + dy))
+            for t in sub.texts:
+                st = (k, -1 if j == len(frames) - 1 else j)
+                if t.steps:
+                    a = max(st[0], t.steps[0])
+                    b = t.steps[1] if st[1] < 0 else (st[1] if t.steps[1] < 0 else min(st[1], t.steps[1]))
+                    if b >= 0 and b < a:
+                        continue
+                    st = (a, b)
+                self.texts.append(TextRec(BBox(t.bbox.x0 + dx, t.bbox.y0 + dy, t.bbox.x1 + dx, t.bbox.y1 + dy),
+                                          t.text, t.layer, t.allow_overlap, st))
+            k = j + 1
+        js = json.dumps(frames, separators=(",", ":"))
+        self.raw(f"<g data-mv='{js}' data-mvid=\"{mid}\" transform=\"translate(0 0)\">{content}</g>", layer)
 
     # ---- clipping ----------------------------------------------------------------------
     def clip_on(self, bb: BBox, rx: float = 10):
@@ -448,13 +491,19 @@ class Doc:
             n = len(self.steps)
             poster = n - 1 if self.poster is None else self.poster
 
-            def mark(el: str) -> str:
-                m = re.search(r' data-s="(-?\d+)" data-e="(-?\d+)"', el[:el.find(">")])
-                if not m:
-                    return el
+            def on_(m):
                 a, b = int(m.group(1)), int(m.group(2))
                 on = a <= poster and (b < 0 or poster <= b)
-                return el.replace(m.group(0), m.group(0) + (' class="anim-on"' if on else ""), 1) if on else el
+                return m.group(0) + (' class="anim-on"' if on else "")
+
+            def mark(el: str) -> str:
+                el = re.sub(r' data-s="(-?\d+)" data-e="(-?\d+)"', on_, el)
+                m = re.search(r"data-mv='([^']*)' data-mvid=\"\d+\" transform=\"translate\(0 0\)\"", el)
+                if m:
+                    fr = json.loads(m.group(1))
+                    dx, dy = fr[min(poster, len(fr) - 1)][-1]
+                    el = el.replace('transform="translate(0 0)"', f'transform="translate({fmt(dx)} {fmt(dy)})"', 1)
+                return el
             for k in self.LAYERS:
                 self.layers[k] = [mark(el) for el in self.layers[k]]
             anim_attr = f' data-steps="{n}" data-poster="{poster}"'
@@ -594,11 +643,17 @@ STEP_JS = r"""<script><![CDATA[
   var NS='http://www.w3.org/2000/svg', lab=document.createElementNS(NS,'text');
   lab.setAttribute('font-family',"'IBM Plex Sans','Segoe UI',sans-serif"); lab.setAttribute('font-size','13'); lab.setAttribute('fill','#CBD5E1');
   var vb=svg.viewBox.baseVal; lab.setAttribute('x',vb.x+16); lab.setAttribute('y',vb.y+vb.height-10); svg.appendChild(lab);
-  function show(){ for(var i=0;i<els.length;i++){ var a=+els[i].getAttribute('data-s'), b=+els[i].getAttribute('data-e');
+  var mvs=svg.querySelectorAll('[data-mv]');
+  function place(el,fr,anim){ var p=fr[fr.length-1]; if(el.getAnimations) el.getAnimations().forEach(function(x){x.cancel();});
+    el.setAttribute('transform','translate('+p[0]+' '+p[1]+')');
+    if(anim && fr.length>1 && el.animate){ var L=[0],t=0; for(var i=1;i<fr.length;i++){t+=Math.hypot(fr[i][0]-fr[i-1][0],fr[i][1]-fr[i-1][1]);L.push(t);}
+      if(t>0) el.animate(fr.map(function(q,i){return {transform:'translate('+q[0]+'px,'+q[1]+'px)',offset:L[i]/t};}),{duration:Math.min(1800,400+t*2.2),easing:'ease-in-out'}); } }
+  function show(anim){ for(var i=0;i<els.length;i++){ var a=+els[i].getAttribute('data-s'), b=+els[i].getAttribute('data-e');
       els[i].classList.toggle('anim-on', a<=k && (b<0||k<=b)); }
+    for(var j=0;j<mvs.length;j++){ var fr=JSON.parse(mvs[j].getAttribute('data-mv')); place(mvs[j], fr[Math.min(k,fr.length-1)], anim); }
     lab.textContent='Step '+(k+1)+' / '+n+' — '+caps[k]+'   (← → to step)'; }
-  document.addEventListener('keydown',function(e){ if(e.key==='ArrowRight'){k=Math.min(n-1,k+1);show();} else if(e.key==='ArrowLeft'){k=Math.max(0,k-1);show();} });
-  show();
+  document.addEventListener('keydown',function(e){ if(e.key==='ArrowRight'&&k<n-1){k++;show(true);} else if(e.key==='ArrowLeft'){k=Math.max(0,k-1);show(false);} });
+  show(false);
 })();
 ]]></script>
 """

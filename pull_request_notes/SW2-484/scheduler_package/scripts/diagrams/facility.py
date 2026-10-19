@@ -328,3 +328,175 @@ class Map:
             nx, ny = pts[num_at]
             num_badge(d, nx, ny, num, color, r=11)
         return pts
+
+
+# --------------------------------------------------------------------------------------
+# Scene: mobile entities that keep (and change) their position across animation steps
+# --------------------------------------------------------------------------------------
+class Scene:
+    """AGVs and trays on a Map that MOVE between animation steps.
+
+        sc = Scene(m)
+        sc.agv("AGV-1", 26)                       # start positions (node id or (x, y) in metres)
+        sc.tray("T15", 15); sc.tray("T17", 17, payload=True)
+        sc.drive(k1, "AGV-1", [26, 27, 24, ...])  # glides along the route when step k1 is entered
+        sc.lift(k2, "AGV-1")                      # picks up the tray under it (it rides along)
+        sc.drive(k2, "AGV-1", [15, 19])           # carry
+        sc.lower(k3, "AGV-1")
+        sc.draw()                                 # after every d.step() exists
+
+    drive() also draws a dashed preview of the route during the step before (when preview=True)
+    and a faint trail during the step itself, so a reader sees the arrow first and the AGV follow it.
+    """
+
+    def __init__(self, m: "Map"):
+        self.m, self.d = m, m.d
+        self.ents: dict = {}
+        self.order: list = []
+        self.acts: list = []
+
+    def _xy(self, at):
+        return self.m.P(at)
+
+    def agv(self, name, at, *, heading=90, color=T.green, label_side="below"):
+        self.ents[name] = dict(kind="agv", at=at, heading=heading, color=color, label_side=label_side)
+        self.order.append(name)
+
+    def tray(self, name, at, *, payload=False, color=T.amber, chip_pos="bl", emphasis=False):
+        self.ents[name] = dict(kind="tray", at=at, payload=payload, color=color, chip_pos=chip_pos,
+                               emphasis=emphasis)
+        self.order.append(name)
+
+    def drive(self, step, name, route, *, preview=True, color=None, offset=(0, 0), trail=True):
+        self.acts.append(("drive", step, name, list(route), preview, color, offset, trail))
+
+    def lift(self, step, name):
+        self.acts.append(("lift", step, name))
+
+    def lower(self, step, name):
+        self.acts.append(("lower", step, name))
+
+    def jump(self, step, name, at):
+        self.acts.append(("jump", step, name, at))
+
+    def payload(self, step, name, has):
+        """Payload appears (insert) or leaves (retrieve) at `step`."""
+        self.acts.append(("payload", step, name, has))
+
+    # ------------------------------------------------------------------
+    def draw(self):
+        d, m = self.d, self.m
+        n = len(d.steps)
+        pos = {e: self._xy(v["at"]) for e, v in self.ents.items()}
+        start = dict(pos)
+        lifted = {e: False for e in self.ents}
+        carrying: dict = {}
+        haspay = {e: v.get("payload", False) for e, v in self.ents.items()}
+        frames = {e: [] for e in self.ents}
+        lifted_by_step = {e: [] for e in self.ents}
+        pay_by_step = {e: [] for e in self.ents}
+        acts = sorted(self.acts, key=lambda a: a[1])
+        for k in range(n):
+            path = {e: None for e in self.ents}
+            for a in [a for a in acts if a[1] == k]:
+                kind, name = a[0], a[2]
+                if kind == "lift":
+                    lifted[name] = True
+                    under = [t for t, v in self.ents.items() if v["kind"] == "tray" and t not in carrying.values()
+                             and math.hypot(pos[t][0] - pos[name][0], pos[t][1] - pos[name][1]) < 3]
+                    if under:
+                        carrying[name] = min(under, key=lambda t: math.hypot(pos[t][0] - pos[name][0],
+                                                                             pos[t][1] - pos[name][1]))
+                elif kind == "lower":
+                    lifted[name] = False
+                    carrying.pop(name, None)
+                elif kind == "payload":
+                    haspay[name] = a[3]
+                elif kind == "jump":
+                    pos[name] = self._xy(a[3])
+                    t = carrying.get(name)
+                    if t:
+                        pos[t] = pos[name]
+                elif kind == "drive":
+                    rp = [self._xy(r) for r in a[3]]
+                    pts = rp if rp and rp[0] == pos[name] else [pos[name]] + rp
+                    path[name] = (path[name] or []) + pts
+                    pos[name] = pts[-1]
+                    t = carrying.get(name)
+                    if t:
+                        path[t] = (path[t] or []) + pts
+                        pos[t] = pts[-1]
+            for e in self.ents:
+                pts = path[e] or [pos[e]]
+                frames[e].append([(x - start[e][0], y - start[e][1]) for x, y in pts])
+                lifted_by_step[e].append(lifted.get(e, False))
+                pay_by_step[e].append(haspay[e])
+        # previews and trails
+        for a in acts:
+            if a[0] != "drive":
+                continue
+            _, k, name, route, preview, color, offset, trail = a
+            col = color or self.ents[name]["color"]
+            fr = frames[name][k]
+            pts = [(start[name][0] + x, start[name][1] + y) for x, y in fr]
+            pts = [(x + offset[0], y + offset[1]) for x, y in pts]
+            if len(pts) < 2:
+                continue
+            if preview and k >= 1:
+                with d.only(k - 1):
+                    self._arrow(pts, col, dash="7 5", sw=3, op=None)
+            if trail:
+                with d.only(k):
+                    self._arrow(pts, col, dash=None, sw=2.2, op=0.35)
+
+        def ranges(vals):
+            out, i = [], 0
+            while i < len(vals):
+                j = i
+                while j + 1 < len(vals) and vals[j + 1] == vals[i]:
+                    j += 1
+                out.append((i, -1 if j == len(vals) - 1 else j, vals[i]))
+                i = j + 1
+            return out
+        for kind in ("tray", "agv"):
+            for e in self.order:
+                v = self.ents[e]
+                if v["kind"] != kind:
+                    continue
+
+                def body(sub, e=e, v=v):
+                    sm = Map(sub, m.ox, m.oy, m.s, (m.xmin, m.xmax), (m.ymin, m.ymax))
+                    if v["kind"] == "agv":
+                        rs = ranges(lifted_by_step[e])
+                        for a_, b_, lf in rs:
+                            ctx = sub.at(a_, b_) if len(rs) > 1 else _null()
+                            with ctx:
+                                sm.agv(v["at"], e, heading=v["heading"], color=v["color"],
+                                       label_side=v["label_side"], lifted=lf)
+                    else:
+                        rs = ranges(pay_by_step[e])
+                        for a_, b_, pl in rs:
+                            ctx = sub.at(a_, b_) if len(rs) > 1 else _null()
+                            with ctx:
+                                sm.tray(v["at"], e, color=v["color"], payload=pl, emphasis=v["emphasis"],
+                                        chip_pos=v["chip_pos"])
+                d.mover(frames[e], body, layer="top")
+
+    def _arrow(self, pts, col, *, dash, sw, op):
+        d = self.d
+        (xa, ya), (xb, yb) = pts[-2], pts[-1]
+        L = math.hypot(xb - xa, yb - ya) or 1
+        hl = 12
+        end = (xb - (xb - xa) / L * hl * 0.8, yb - (yb - ya) / L * hl * 0.8)
+        body = pts[:-1] + [end]
+        d.path(pts_to_path(body, 8), stroke=T.bg_deep, sw=sw + 4, layer="over", opacity=0.8 if op is None else op)
+        d.path(pts_to_path(body, 8), stroke=col, sw=sw, dash=dash, layer="over", opacity=op)
+        d.arrowhead((xb, yb), (xa, ya), kind="filled", color=col, size=hl, layer="over")
+
+
+class _null:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
