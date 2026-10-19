@@ -1,5 +1,5 @@
 <!--
-  05 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  06 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
   Conventions (shared by all seven documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
@@ -14,7 +14,7 @@
   - Links to another tab: <a href="#doc-KEY">Tab name</a>. Keyword links (glossary.yaml) and code
     highlighting are added at build time.
 -->
-<h1>05 — Issue &amp; proposal: the scheduler core refactor</h1>
+<h1>06 — Issue &amp; proposal: the scheduler core refactor</h1>
 <p>This tab explains <em>what</em> the refactor changes and <em>why</em>, using the code in <code>sources/repomix-scheduler.xml</code> as evidence. It assumes the first four tabs: in particular the plan call and <code>ScheduleContext</code> (sections <a class="ref bare" href="#bg-one-plan-call-step-by-step">10</a> and <a class="ref bare" href="#bg-schedulecontext-the-per-call-workspace">13</a> of the <a href="#doc-background">Background</a> tab), and tray and AGV assignment (sections <a class="ref bare" href="#bg-tray-assignment-dotrayassignments">4</a> and <a class="ref bare" href="#bg-agv-assignment-doagvassignments">5</a> of the <a href="#doc-task-planning">Task planning</a> tab). Code snippets follow the conventions of the Background tab: every snippet says which class it lives in, what <code>this</code> is, and the type of each variable that is not obvious. Snippets marked <strong>proposed</strong> do not exist in the repository.</p>
 <p><strong>How this tab is organised.</strong> <a class="ref" href="#pr-the-pipeline-the-refactor-works-on">Section 2</a> places the ticket in that pipeline, sections <a class="ref" href="#pr-where-the-two-algorithms-sit-today">3</a>–<a class="ref" href="#pr-current-versus-target-responsibilities">5</a> describe the two algorithms and what moves where, <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> decides how the code is organised by stage (folders or packages), and sections <a class="ref" href="#pr-target-architecture">7</a>–<a class="ref" href="#pr-next-actions">14</a> design the tray module and the naming boundary, list the invariants, risks and decisions, and lay out the staged plan. Two sections are future work beyond this ticket: <a class="ref" href="#pr-swappable-motion-planners">section 15</a> puts motion planning behind the same kind of interface as the tray and AGV solvers, and <a class="ref" href="#nm-proposed-future-work-naming">section 16</a> is a catalogue of renames and small struct refactors across the whole stack, of which this refactor adopts only the rows for <code>scheduler</code> and <code>planner_core</code>.</p>
 <table>
@@ -1394,6 +1394,28 @@ ScheduledJobDataMsg ToMsg(const ScheduledJob&amp; job);     // empty optionals b
   </tbody>
 </table>
 
+<h3 data-num id="pr-base-schedule-reservation">The base-schedule reservation and the keep-out map</h3>
+<p>The Background tab explains why <code>Plan()</code> marks everything the running schedule uses as disabled, where the flags are read and what <code>disabledness_filters</code> is for (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 11</a> there). The recommended changes:</p>
+<p>All of them stay inside <code>scheduler</code>; the <code>common_ros</code> setters and flags are unchanged.</p>
+<ol>
+  <li><strong>Extract and name the loop (no behaviour change).</strong> A free function states the intent and returns a record of what it reserved:
+<pre><code class="language-cpp">// include/scheduler/core/base_schedule_reservation.hpp (proposed)
+struct BaseScheduleReservation {
+  std::set&lt;uint16_t> agvs, bays, vecs;   // assets with actions in base_schedule
+  std::set&lt;uint32_t> nodes;              // sources and destinations of its AGV commands
+  bool HoldsAgv(uint16_t agv_id) const { return agvs.count(agv_id) > 0; }
+};
+
+// Marks every reserved asset disabled in `state` (as today) and returns what it marked.
+BaseScheduleReservation ReserveBaseScheduleAssets(const interfaces::msg::Schedule&amp; base_schedule,
+                                                  volley::DiscreteGarageState&amp; state);
+</code></pre>
+  <code>Plan()</code> keeps the record in the context as <code>reserved_by_base_schedule</code>.</li>
+  <li><strong>Say why a job failed.</strong> Where a check finds <code>disabled</code>, consult the record first: “AGV-2 is reserved by the running schedule” instead of “Tried to move a disabled agv 2”. Only messages change; tests that match the old text need updating.</li>
+  <li><strong>Rename the keep-out map</strong> to <code>keep_out_filter_by_footprint</code> (<a class="ref" href="#nm-schedulecontext">section 16.4.2</a>), and build it through <code>BuildKeepOutFilters</code>, which returns a type with a checked lookup.</li>
+  <li><strong>Reserve VRCs.</strong> Add <code>TYPE_VRC_COMMAND</code> to the loop once task planning supports VRCs (<a class="ref" href="#ly-vrc-support-status">section 8</a>); until then it changes nothing.</li>
+  <li><strong>Later, time-bounded reservations (behaviour change).</strong> CHUGG already starts from a <code>ContinuousState</code> whose trajectories have end times, and it starts each AGV when its initial trajectory ends. Seeding those trajectories with the base actions (where each busy AGV goes, and until when) would let a busy AGV take new work after its last base action and free reserved nodes once they are vacated. This is the persistent-planning idea of the Action graph tab. Task planning would then have to start a busy AGV at its base-schedule end pose, and Dispatch would have to agree how a plan that continues a busy AGV's queue is joined. It is listed as a review decision (<a class="ref" href="#pr-decisions-to-resolve-in-review">section 12</a>).</li>
+</ol>
 <h3 data-num id="pr-renames-in-planner-core">Renames in <code>planner_core</code></h3>
 <table>
   <thead>
@@ -1649,7 +1671,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     </tr>
     <tr>
       <td>Base-schedule reservations</td>
-      <td>Keep the whole-plan reservation for parity, but build it in <code>ReserveBaseScheduleAssets</code> and keep the record, so job failures say "reserved by the running schedule" instead of "disabled". Time-bounded reservations (a busy AGV becomes free when its last base action ends) are a later behaviour change (<a class="ref" href="#bg-what-to-change">section 14.6</a>)</td>
+      <td>Keep the whole-plan reservation for parity, but build it in <code>ReserveBaseScheduleAssets</code> and keep the record, so job failures say "reserved by the running schedule" instead of "disabled". Time-bounded reservations (a busy AGV becomes free when its last base action ends) are a later behaviour change (<a class="ref" href="#pr-base-schedule-reservation">section 14.6</a>)</td>
       <td>How often pending jobs fail or wait because of a busy asset in recorded requests; Dispatch's rules for joining a new schedule onto the running one; whether VRC commands in the base schedule should reserve their VRC</td>
     </tr>
   </tbody>
@@ -2219,7 +2241,7 @@ public:
     <tr>
       <td>The <code>base_schedule</code> loop inline in <code>Plan()</code></td>
       <td><code>ReserveBaseScheduleAssets(...)</code> returning <code>BaseScheduleReservation {agvs, bays, vecs, nodes}</code></td>
-      <td>Names the intent (reserve for the running schedule) and keeps a record that error messages can use, while still calling the <code>common_ros</code> setters for parity (<a class="ref" href="#bg-what-to-change">section 14.6</a>)</td>
+      <td>Names the intent (reserve for the running schedule) and keeps a record that error messages can use, while still calling the <code>common_ros</code> setters for parity (<a class="ref" href="#pr-base-schedule-reservation">section 14.6</a>)</td>
     </tr>
     <tr>
       <td><code>last_entity_event</code>, type <code>GarageEntityEventMap</code></td>

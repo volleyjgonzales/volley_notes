@@ -137,19 +137,19 @@
 - term: SchedulerJob
   decl: "SchedulerJobMsg"
   code: [SchedulerJob, SchedulerJobMsg, pending_jobs, request_data.pending_jobs]
-  to: bg-ros-messages-and-services
+  to: bg-schedulerjob-what-to-do-and-what-happened
   def: A requested outcome such as TYPE_RETRIEVE; arrives in PlanRequest.pending_jobs.
 
 - term: PlanRequest / PlanResponse
   decl: "PlanRequestMsg"
-  code: [PlanRequest, PlanResponse, PlanRequestMsg, PlanResponseMsg, request_data, base_schedule]
-  to: bg-ros-messages-and-services
+  code: [PlanRequest, PlanResponse, PlanRequestMsg, PlanResponseMsg, request_data, base_schedule, base_state]
+  to: bg-planrequest-one-moment-in-a-running-schedule
   def: The Plan service's request and response messages.
 
 - term: ActionNode
   decl: "ActionNodeMsg"
   code: [ActionNode, ActionNodeMsg, "ActionNode[]", Schedule.nodes]
-  to: bg-ros-messages-and-services
+  to: bg-schedule-and-actionnode-commands-in-and-out
   def: One executable command with parent indices into Schedule.nodes; the only thing Dispatch executes.
 
 - term: node, heading, pose

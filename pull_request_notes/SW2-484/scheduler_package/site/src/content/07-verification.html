@@ -1,5 +1,5 @@
 <!--
-  06 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  07 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
   Conventions (shared by all seven documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
@@ -14,7 +14,7 @@
   - Links to another tab: <a href="#doc-KEY">Tab name</a>. Keyword links (glossary.yaml) and code
     highlighting are added at build time.
 -->
-<h1>06 — Verification: regression parity and benchmarks</h1>
+<h1>07 — Verification: regression parity and benchmarks</h1>
 <p>This tab says how to prove the refactor in the <a href="#doc-proposal">Issue &amp; proposal</a> tab changed nothing, and how to measure it. It starts with what the existing tests already cover (computed from <code>sources/repomix-scheduler.xml</code>), then defines the parity comparison and the benchmark method.</p>
 <h2 data-num id="vr-two-separate-goals">Two separate goals</h2>
 <p><strong>Behavioural equivalence</strong> asks whether the extracted default solver makes the same decisions and adds the same constraints as the old <code>Scheduler</code> method. <strong>Performance benchmarking</strong> asks whether run time or resource use changes for comparable inputs. A passing GoogleTest is neither: it shows the code still meets that test's assertions, not that output is identical or equally fast.</p>

@@ -27,7 +27,8 @@ export const DOCS: DocConfig[] = [
     summary: 'The scheduler as a whole: its five-stage pipeline, the garage model, the data of one plan call, and how to work with the code.',
     parts: [
       { title: 'Orientation', first: 'bg-what-problem-does-this-software-solve' },
-      { title: 'Data and objects', first: 'bg-the-garage-model-in-code' },
+      { title: 'The garage and the Plan messages', first: 'bg-the-garage-model-in-code' },
+      { title: 'Inside one Plan() call', first: 'bg-package-anatomy-files-and-classes' },
       { title: 'Working with the code', first: 'bg-packages-build-system-and-dependencies' },
     ],
   },

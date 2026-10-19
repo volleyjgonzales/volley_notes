@@ -1,5 +1,5 @@
 <!--
-  04 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  05 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
   Conventions (shared by all seven documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
@@ -14,7 +14,7 @@
   - Links to another tab: <a href="#doc-KEY">Tab name</a>. Keyword links (glossary.yaml) and code
     highlighting are added at build time.
 -->
-<h1>04 — Action graph: from timed motions to the schedule</h1>
+<h1>05 — Action graph: from timed motions to the schedule</h1>
 <p><em>Stage 5 of the pipeline: the scheduler turns CHUGG's timed motions into an action dependency graph (ADG), the order Dispatch executes. The tab builds the idea from first principles, then shows the action DAG the scheduler actually builds, and closes with a review of the whole pipeline before the proposal.</em></p>
 <p>A planner produces a <em>timed</em> plan: who moves where, and when. Robots never keep to those times exactly. An <strong>action dependency graph</strong> (ADG) keeps what matters for safety, the <em>order</em> in which robots use shared space, and drops the exact times. That lets a fleet execute a plan correctly while every robot runs early or late.</p>
 <p>This tab builds on the <code>ContinuousState</code> timeline from the Motion planning tab. Part I (sections <a class="ref" href="#ad-why-a-timed-plan-is-not-enough">1</a>–<a class="ref" href="#ad-beyond-the-basic-adg">5</a>) builds the idea from scratch: the graph theory it needs, the construction rule, how a dispatcher executes an ADG and why that is safe, and how timing works on it. Part II (sections <a class="ref" href="#ad-the-adg-in-our-software">6</a>–<a class="ref" href="#ad-references">8</a>) shows that the scheduler's response, <code>PlanResponse.schedule</code>, is an ADG: how <code>ResponseFromTrajectories</code> builds it, and where that code follows the textbook rule and where it differs; it ends with review questions and the references for the whole tab. Part III (sections <a class="ref" href="#bg-faq-design-questions">8</a>–<a class="ref" href="#bg-known-limitations-and-reading-checkpoint">9</a>) looks back over the whole pipeline: design notes, known limitations and a checkpoint before the proposal. The mathematics is light: sets, relations and one recurrence.</p>

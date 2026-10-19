@@ -1,5 +1,5 @@
 <!--
-  02 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  03 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
   Conventions (shared by all seven documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
@@ -14,9 +14,9 @@
   - Links to another tab: <a href="#doc-KEY">Tab name</a>. Keyword links (glossary.yaml) and code
     highlighting are added at build time.
 -->
-<h1>02 — Task planning: building the event DAG</h1>
+<h1>03 — Task planning: building the event DAG</h1>
 <p><em>Stages 1–3 of the pipeline: everything that builds the event DAG. Job expansion turns each job into events, tray assignment fills in the trays and parking spots that expansion left open and moves blocking trays out of the way, and AGV assignment chooses an AGV for every tray move and adds its approach, lift and lower. <code>Reduce()</code> and a sanity check then finish the event DAG, which is the input of motion planning.</em></p>
-<p>This tab builds on the event classes, the event DAG and <code>ScheduleContext</code> from the Background tab (sections <a class="ref bare" href="#bg-event-types-and-polymorphism">11</a>–<a class="ref bare" href="#bg-schedulecontext-the-per-call-workspace">13</a> there). It starts with one job followed through all three stages, then takes each stage in turn. The single-agent searches that all three stages call come just before tray assignment, and the bay, VECS and VRC rules close the tab.</p>
+<p>This tab builds on the request messages, the reservation of the running schedule, the event classes, the event DAG and <code>ScheduleContext</code> from the Background tab (sections <a class="ref bare" href="#bg-ros-messages-and-services">6</a> and <a class="ref bare" href="#bg-event-types-and-polymorphism">11</a>–<a class="ref bare" href="#bg-schedulecontext-the-per-call-workspace">13</a> there). It starts with one job followed through all three stages, then takes each stage in turn. The single-agent searches that all three stages call come next, before the stages themselves, and the bay, VECS and VRC rules close the tab.</p>
 <h2 data-num id="bg-the-whole-journey-of-one-job">The whole journey of one job</h2>
 <p>Stages 1–3 of the pipeline (<a class="ref" href="#bg-fig-01_pipeline">Figure 1</a>) build the event DAG. All three stages edit the same <code>ctx->events</code>, so an event created in one stage is completed or wrapped in another. Before the details of each stage, here is one retrieve followed through all three passes.</p>
 <figure id="bg-fig-26_retrieve_walkthrough">
@@ -24,6 +24,51 @@
   <figcaption>One <code>TYPE_RETRIEVE</code> job on Pecos, stage by stage. Step through it to watch the event DAG grow pass by pass; map numbers match event ids. Band 1: job expansion creates intent, including a move of the empty tray T21 out of the bay with no destination. Band 2: tray assignment gives T21 a destination and inserts a move for blocker T15, which sits on T17's critical path. Band 3: AGV assignment wraps every <code>TrayMove</code> in move → lift → carry → lower, and <code>AddDepsAfterAmiga</code> ties the bay transitions to the right lift and lower. The last six steps play the plan on the map: AGV-1 follows each dashed preview arrow in the next step, moving T15 to <code>P19</code>, T21 to <code>P23</code> and T17 into <code>B21</code>, while the band-3 row being executed is outlined. Destinations and AGV order are illustrative.</figcaption>
 </figure>
 <p>Read the bands as the order of the next sections: band 1 is job expansion (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 15</a>), band 2 tray assignment (<a class="ref" href="#bg-tray-assignment-dotrayassignments">section 16</a>), band 3 AGV assignment (<a class="ref" href="#bg-agv-assignment-doagvassignments">section 17</a>). After band 3, <code>Reduce()</code> and the sanity check (<a class="ref" href="#bg-reduce-and-sanitycheckevents">section 6</a>) finish the event DAG. What happens to the finished DAG next is the subject of the <a href="#doc-motion-planning">Motion planning</a> and <a href="#doc-action-graph">Action graph</a> tabs; the Action graph tab follows a retrieve of the same shape through those last steps (<a class="ref bare" href="#ad-fig-87_adg_in_scheduler">Figure 4</a>).</p>
+<h2 data-num id="bg-the-motion-planner-toolbox">The single-agent searches in <code>motion_planner</code></h2>
+<p>The <code>motion_planner</code> package holds more than CHUGG, the only <em>multi-agent</em> planner, which runs once, after task planning (the Motion planning tab). Job expansion and tray and AGV assignment call single-agent searches from the same package to cost and check moves while the event DAG is being built. They ignore everyone else's timing and only see static obstacles through filters. All of them run on <code>SingleSourceSearch</code>; the <em>environment</em> object supplies neighbors, costs, a heuristic and the stopping test. Costs are travel times from the cost model in the Motion planning tab (<a class="ref bare" href="#bg-the-cost-model">section 3.2</a>); until then, read “trapezoid time” as the time to cross an edge from rest to rest: accelerate, cruise, brake.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Tool</th>
+      <th>What it answers, and how</th>
+      <th>Used by</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>GetPosePath</code> + <code>ConvertPosePathToTrajectory</code></td>
+      <td>A pose path for one AGV over the static graph (Dijkstra with <code>GarageGraphEnvironment</code>), minimising the sum of per-edge trapezoids, as if stopping at every node; a comment notes this is used “only to discover topology”. Then <code>ConvertPosePathToTrajectory</code> times the chosen path properly, with one trapezoid per run of same-direction edges, loaded or not, but without wheel-turn time</td>
+      <td><code>GetPosePath</code>: <code>GetJustMovingCost</code> (AGV assignment costs), <code>IsMovePossible</code> (sanity check), <code>MoveAgvToTrayPose</code>, <code>TryClearBlockedAgvMove</code>, <code>InitRetrievalHeadings</code> (reachability). <code>ConvertPosePathToTrajectory</code>: <code>GetJustMovingCost</code> only</td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>BlockingTraySearchEnvironment</code></td>
+      <td>Cheapest path for a tray to a target, where each edge costs its unloaded trapezoid time and each tray whose footprint the path newly crosses adds 30 s and is collected in the state. Zero heuristic. Only edge flags of the filter are tested</td>
+      <td><code>DoTrayAssignments</code></td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>OpenSpaceSearchEnvironment</code></td>
+      <td>Cheapest-to-reach (same cost as above) parking or EV-charge node with no tray on it, searching outward from the tray. Skips illegal poses; checks the retrieval heading if asked; for an EV-charge payload requires an <code>EV_CHARGE</code> node and a heading of 0 to 90 (the VECS state itself is not checked); checks the payload's height; optionally accepts a waypoint as a temporary stash</td>
+      <td>Blocking-tray resolution, reparking, EV charging</td>
+    </tr>
+    <tr>
+      <td><code>SingleSourceSearch</code> + <code>EmptyTraySearchEnvironment</code></td>
+      <td>An empty tray that is cheapest to bring to a pose (same cost: time plus 30 s per tray crossed), searching outward from the pose (the inverse of the open-space search)</td>
+      <td><code>AssignTrayIdForEmptyMove</code></td>
+    </tr>
+    <tr>
+      <td><code>HideAgvs</code></td>
+      <td>A hiding spot under a tray for every AGV: depth-first, nearest spot first per AGV (nearest in edges: every edge costs 1 s, “TODO: Use graph edge costs”), backtracking when a later AGV has none. The header promises “the least amount of AGV moves”; the code returns the first assignment that works</td>
+      <td><code>PlanCleanGarageJob</code></td>
+    </tr>
+    <tr>
+      <td><code>GetStaticFilter</code>, <code>GetDisabledEntitiesFilters</code> → <code>GraphFilterProperties</code></td>
+      <td>Per footprint type, which vertices and edges are usable given parked trays (as <code>TRAY_LEGS</code> for a bare AGV), AGVs, bays not ready to retrieve (minus the ones the caller is willing to move), disabled nodes and entities (blocked at the node's largest footprint), and nodes too small for a payload</td>
+      <td>All of the above; <code>ctx->disabledness_filters</code>; CHUGG's static obstacles</td>
+    </tr>
+  </tbody>
+</table>
+<p>CHUGG itself, and the edge-duration and heuristic tables it is built with (<code>GetEdgeDurations</code>, <code>GetAllPairsMinCost</code>), are in the Motion planning tab (<a class="ref bare" href="#bg-chugg-the-motion-planner">section 2</a>).</p>
+<p>This split matters for the refactor: tray and AGV assignment choose destinations and agents with single-agent costs that ignore waiting, and only CHUGG discovers the waiting. An assignment that looks cheap can therefore produce a slow plan.</p>
 <h2 data-num id="bg-job-expansion-from-jobs-to-events">Job expansion: from jobs to events</h2>
 <p><strong>Job expansion</strong> is the first planning stage inside <code>Plan()</code>. It turns each line of the request ("retrieve this car", "move this tray") into a handful of <code>ScheduleEvent</code> objects in <code>plan_ctx->events</code>, connected by dependency edges. It decides <strong>what</strong> has to happen and <strong>in which order</strong>. It does not decide <strong>how</strong> (no paths, no timing) or <strong>by whom</strong> (no AGV is chosen, except in one case).</p>
 <p>A useful picture: each job method is a recipe. It writes a few cards (events) onto a shared board (the event DAG) and ties strings (edges) between cards that must happen one after another. Later stages fill in the blanks on the cards and add more cards and strings.</p>
@@ -67,73 +112,11 @@
   <li><strong>The step table</strong> is the method body as numbered steps, with what happens in this example and the result: <code>adds n</code> means event <em>n</em> is created, <code>skipped</code> means the branch does not apply, red means the job fails there.</li>
 </ol>
 <h3 data-num id="bg-what-a-job-is">What a job is</h3>
-<p>A job is one <code>interfaces/msg/SchedulerJob</code> message (C++ alias <code>SchedulerJobMsg</code>) in <code>request_data.pending_jobs</code>. Dispatch fills in only the fields that the job type needs:</p>
-<table>
-  <thead>
-    <tr>
-      <th>Field</th>
-      <th>Type</th>
-      <th>Read by</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>type</code>, <code>type_name</code></td>
-      <td><code>uint8</code> constant (<code>SchedulerJobMsg::TYPE_*</code>), string</td>
-      <td>the <code>switch</code> in <code>Plan()</code></td>
-    </tr>
-    <tr>
-      <td><code>guid</code></td>
-      <td><code>GuidMsg</code></td>
-      <td>the response: every action node carries its job's <code>guid</code></td>
-    </tr>
-    <tr>
-      <td><code>payload_id</code></td>
-      <td><code>GuidMsg</code> (a car)</td>
-      <td><code>TYPE_RETRIEVE</code>, <code>TYPE_CHARGE_PAYLOAD</code></td>
-    </tr>
-    <tr>
-      <td><code>tray_id</code></td>
-      <td><code>uint16_t</code></td>
-      <td><code>TYPE_REPARK_TRAY</code>, <code>TYPE_MOVE_TRAY</code></td>
-    </tr>
-    <tr>
-      <td><code>destination</code></td>
-      <td><code>GaragePoseMsg</code> (node id + heading)</td>
-      <td><code>TYPE_MOVE_AGV</code>, <code>TYPE_REPARK_TRAY</code>, <code>TYPE_MOVE_TRAY</code></td>
-    </tr>
-    <tr>
-      <td><code>allow_reciprocal</code></td>
-      <td><code>bool</code></td>
-      <td><code>TYPE_REPARK_TRAY</code>, <code>TYPE_MOVE_TRAY</code></td>
-    </tr>
-    <tr>
-      <td><code>agv_id</code></td>
-      <td><code>uint16_t</code></td>
-      <td><code>TYPE_MOVE_AGV</code>, <code>TYPE_CHARGE_AGV</code></td>
-    </tr>
-    <tr>
-      <td><code>bay_id</code></td>
-      <td><code>uint16_t</code></td>
-      <td><code>TYPE_INSERT</code>, <code>TYPE_READY_FOR_INSERT</code>, <code>TYPE_READY_FOR_RETRIEVE</code>, <code>TYPE_TRANSITION_BAY_TO_*</code></td>
-    </tr>
-    <tr>
-      <td>(none)</td>
-      <td></td>
-      <td><code>TYPE_CLEAN_GARAGE</code>, <code>TYPE_REBALANCE_GARAGE</code></td>
-    </tr>
-  </tbody>
-</table>
+<p>A job is one <code>interfaces/msg/SchedulerJob</code> message (C++ alias <code>SchedulerJobMsg</code>) in <code>request_data.pending_jobs</code>. Which side writes each field, and which arguments each job type reads, is laid out in the Background tab (<a class="ref" href="#bg-schedulerjob-what-to-do-and-what-happened">section 6.4</a>). Job expansion needs only <code>type</code>, which picks the job method, and the arguments of that type, which become the method's parameters. Each job figure below repeats the fields its method reads in its request card.</p>
 <p>On the way out, each job becomes a <code>ScheduledJobDataMsg</code>: the original job plus <code>node_indices</code>, the positions of its action nodes in the response schedule. A failed job is a <code>ScheduledJobDataMsg</code> built by <code>FailJob()</code>, with <code>job.state = STATE_ERROR</code>, <code>job.note = &lt;message></code> and <code>job.retain_job</code> set when Dispatch should keep it and retry.</p>
 <h3 data-num id="bg-the-loop-in-plan">The loop in <code>Plan()</code></h3>
 <h4 id="bg-what-the-code-does-in-order">What the code does, in order</h4>
-<p><code>Plan()</code> turns one <code>PlanRequestMsg</code> into one <code>PlanResponseMsg</code>. Job expansion is the loop in the middle of it. Around the loop, <code>Plan()</code> does this:</p>
-<ol>
-  <li><strong>Build the starting point.</strong> <code>ValidateBaseState()</code> turns <code>request_data.base_state</code> into a <code>DiscreteGarageState</code>. Entities used by actions that are already executing (<code>request_data.base_schedule</code>) are marked disabled. A fresh <code>ScheduleContext</code> is created: <code>plan_ctx</code>, with an empty event DAG and an empty <code>scheduled_jobs</code> list.</li>
-  <li><strong>Expand every pending job</strong> (this section). The job method writes its events <strong>directly into</strong> <code>plan_ctx->events</code> (it does not return them) and returns only success or failure. On success, <code>Plan()</code> appends the job to <code>plan_ctx->scheduled_jobs</code>; on failure, it reports the job in <code>result.scheduled_jobs</code>. Which arguments are read and which are changed is shown in <a class="ref" href="#bg-the-shape-of-every-job-method">15.3</a>.</li>
-  <li><strong>Plan all successful jobs together</strong>: tray assignment, AGV assignment, <code>Reduce()</code>, sanity check, motion planning (sections <a class="ref" href="#bg-tray-assignment-dotrayassignments">4</a>–<a class="ref" href="#bg-reduce-and-sanitycheckevents">6</a> of this tab, then the <a href="#doc-motion-planning">Motion planning</a> tab). From here on the jobs are no longer separate: one DAG holds all their events, and the later stages see and optimise all of them at once.</li>
-  <li><strong>Write the response.</strong> Every motion that changes something becomes an <code>ActionNode</code> labelled with its job's <code>guid</code> (waits are dropped, VRC commands are added; <a class="ref" href="#ad-how-the-action-dag-is-built">section 25</a>). Each successful job gets <code>state = STATE_EXECUTING</code> and <code>node_indices</code> (the positions of its actions), and is appended to <code>result.scheduled_jobs</code> after the failed ones.</li>
-</ol>
+<p>Job expansion is step 3 of the nine steps of one <code>Plan()</code> call (Background, <a class="ref" href="#bg-one-plan-call-step-by-step">section 10</a>). By the time it runs, <code>initial_state</code> exists, everything the running schedule uses is reserved, and <code>disabledness_filters</code> is built; after it, all successful jobs are planned together by tray assignment, AGV assignment, the sanity check and motion planning. Each job method writes its events <strong>directly into</strong> <code>plan_ctx->events</code> (it does not return them) and returns only success or failure.</p>
 <p>The loop itself is in <a class="ref" href="#bg-one-plan-call-step-by-step">section 10</a>. Two details of it matter here: each job method is called with <code>plan_ctx->scheduled_jobs.size()</code> as its <code>job_index</code>, and the job is pushed onto <code>scheduled_jobs</code> only if the method succeeds; a failed job is reported at once through <code>FailJob</code>.</p>
 <h4 id="bg-how-job_index-works">How <code>job_index</code> works</h4>
 <p><strong>One job almost always creates several events.</strong> A RETRIEVE creates up to five (stop charging, open the bay, move the tray already in the bay out, move the car's tray in, hand the car over); a REPARK_TRAY creates one (two if the tray must first stop charging); a REBALANCE_GARAGE creates a few per bay it switches. Every one of them belongs to the same job. Sections <a class="ref" href="#bg-type_repark_tray-and-type_move_tray--planreparktrayjob">14.7</a> to <a class="ref" href="#bg-type_rebalance_garage--planrebalancegaragejob">14.17</a> list what each job type creates.</p>
@@ -1249,51 +1232,6 @@ return std::make_pair(true, "");
     <li>The ODP check lives in <code>PlanBayTransitionJob</code>; INSERT uses <code>PlanOpenBayDoor</code>, which does not check it.</li>
   </ol>
 </details>
-<h2 data-num id="bg-the-motion-planner-toolbox">The single-agent searches in <code>motion_planner</code></h2>
-<p>The <code>motion_planner</code> package holds more than CHUGG, the only <em>multi-agent</em> planner, which runs once, after task planning (the Motion planning tab). Job expansion and tray and AGV assignment call single-agent searches from the same package to cost and check moves while the event DAG is being built. They ignore everyone else's timing and only see static obstacles through filters. All of them run on <code>SingleSourceSearch</code>; the <em>environment</em> object supplies neighbors, costs, a heuristic and the stopping test. Costs are travel times from the cost model in the Motion planning tab (<a class="ref bare" href="#bg-the-cost-model">section 3.2</a>); until then, read “trapezoid time” as the time to cross an edge from rest to rest: accelerate, cruise, brake.</p>
-<table>
-  <thead>
-    <tr>
-      <th>Tool</th>
-      <th>What it answers, and how</th>
-      <th>Used by</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>GetPosePath</code> + <code>ConvertPosePathToTrajectory</code></td>
-      <td>A pose path for one AGV over the static graph (Dijkstra with <code>GarageGraphEnvironment</code>), minimising the sum of per-edge trapezoids, as if stopping at every node; a comment notes this is used “only to discover topology”. Then <code>ConvertPosePathToTrajectory</code> times the chosen path properly, with one trapezoid per run of same-direction edges, loaded or not, but without wheel-turn time</td>
-      <td><code>GetPosePath</code>: <code>GetJustMovingCost</code> (AGV assignment costs), <code>IsMovePossible</code> (sanity check), <code>MoveAgvToTrayPose</code>, <code>TryClearBlockedAgvMove</code>, <code>InitRetrievalHeadings</code> (reachability). <code>ConvertPosePathToTrajectory</code>: <code>GetJustMovingCost</code> only</td>
-    </tr>
-    <tr>
-      <td><code>SingleSourceSearch</code> + <code>BlockingTraySearchEnvironment</code></td>
-      <td>Cheapest path for a tray to a target, where each edge costs its unloaded trapezoid time and each tray whose footprint the path newly crosses adds 30 s and is collected in the state. Zero heuristic. Only edge flags of the filter are tested</td>
-      <td><code>DoTrayAssignments</code></td>
-    </tr>
-    <tr>
-      <td><code>SingleSourceSearch</code> + <code>OpenSpaceSearchEnvironment</code></td>
-      <td>Cheapest-to-reach (same cost as above) parking or EV-charge node with no tray on it, searching outward from the tray. Skips illegal poses; checks the retrieval heading if asked; for an EV-charge payload requires an <code>EV_CHARGE</code> node and a heading of 0 to 90 (the VECS state itself is not checked); checks the payload's height; optionally accepts a waypoint as a temporary stash</td>
-      <td>Blocking-tray resolution, reparking, EV charging</td>
-    </tr>
-    <tr>
-      <td><code>SingleSourceSearch</code> + <code>EmptyTraySearchEnvironment</code></td>
-      <td>An empty tray that is cheapest to bring to a pose (same cost: time plus 30 s per tray crossed), searching outward from the pose (the inverse of the open-space search)</td>
-      <td><code>AssignTrayIdForEmptyMove</code></td>
-    </tr>
-    <tr>
-      <td><code>HideAgvs</code></td>
-      <td>A hiding spot under a tray for every AGV: depth-first, nearest spot first per AGV (nearest in edges: every edge costs 1 s, “TODO: Use graph edge costs”), backtracking when a later AGV has none. The header promises “the least amount of AGV moves”; the code returns the first assignment that works</td>
-      <td><code>PlanCleanGarageJob</code></td>
-    </tr>
-    <tr>
-      <td><code>GetStaticFilter</code>, <code>GetDisabledEntitiesFilters</code> → <code>GraphFilterProperties</code></td>
-      <td>Per footprint type, which vertices and edges are usable given parked trays (as <code>TRAY_LEGS</code> for a bare AGV), AGVs, bays not ready to retrieve (minus the ones the caller is willing to move), disabled nodes and entities (blocked at the node's largest footprint), and nodes too small for a payload</td>
-      <td>All of the above; <code>ctx->disabledness_filters</code>; CHUGG's static obstacles</td>
-    </tr>
-  </tbody>
-</table>
-<p>CHUGG itself, and the edge-duration and heuristic tables it is built with (<code>GetEdgeDurations</code>, <code>GetAllPairsMinCost</code>), are in the Motion planning tab (<a class="ref bare" href="#bg-chugg-the-motion-planner">section 2</a>).</p>
-<p>This split matters for the refactor: tray and AGV assignment choose destinations and agents with single-agent costs that ignore waiting, and only CHUGG discovers the waiting. An assignment that looks cheap can therefore produce a slow plan.</p>
 <h2 data-num id="bg-tray-assignment-dotrayassignments">Tray assignment: <code>DoTrayAssignments</code></h2>
 <h3 id="bg-the-problem-this-stage-solves">The problem this stage solves</h3>
 <p>Job expansion (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 14</a>) turns each job into events, but those events describe <em>intent</em>, not a finished plan. Two things are still missing when expansion ends.</p>
@@ -1329,7 +1267,7 @@ return std::make_pair(true, "");
 <p><strong>2. Destinations are often unreachable as the garage stands.</strong> The garage is dense: trays park nose-to-tail, and a tray can only travel through nodes that are free. Two terms are used throughout this section:</p>
 <ul>
   <li>The <strong>root tray</strong> is the tray of the <code>TrayMove</code> currently being processed: the tray a job actually asked to move (a car to retrieve, an empty tray for a bay).</li>
-  <li>A <strong>blocking tray</strong> is any other tray whose footprint collides with the root tray's path to its destination (collision is decided by the <code>CollisionTable</code>, <a class="ref" href="#bg-the-physical-garage-and-its-coordinate-system">section 3</a>, not just equal node ids). It must move out of the way first. No job asked for that move; this stage invents it.</li>
+  <li>A <strong>blocking tray</strong> is any other tray whose footprint collides with the root tray's path to its destination (collision is decided by the <code>CollisionTable</code>, <a class="ref" href="#bg-collisiontable-precomputed-conflict-sets">section 5.4</a>, not just equal node ids). It must move out of the way first. No job asked for that move; this stage invents it.</li>
 </ul>
 <p>When <code>DoTrayAssignments(ctx)</code> returns <code>{true, ""}</code>, three things hold:</p>
 <ul>
@@ -2243,6 +2181,7 @@ for(const auto&amp; [agv_id, root_event_opt] : ordered_matching) {
 <p>The comment explains the motivation: “The motion planner doesn't fail in the most graceful ways”, so a cheap discrete replay catches most problems with a readable message first. It is the last step of task planning: from here the event DAG is final, and motion planning hands it to CHUGG (<a class="ref" href="#bg-motion-planning-and-the-response">section 1</a>). CHUGG replays it once more in <code>InitializeEventOrder</code> and throws, rather than failing gracefully, if that replay breaks.</p>
 <p><strong>Where <code>Reduce()</code> runs matters.</strong> It runs at the end of AGV assignment and again in <code>Plan()</code>, and the code does not say why that placement is needed (<a class="ref" href="#pr-risks-that-must-not-be-silently-fixed">section 13</a>, risk 2); <a class="ref" href="#bg-inside-solvesequential">Section 21.1</a> gives a reading of CHUGG's code that would explain the motion-planning case. Risk 3 in the same list gives a likely reason for the tray-assignment case: two AGV-assignment helpers look only at direct edges, which <code>Reduce()</code> may replace with longer paths. A test shows the visible effect: after <code>DoAgvAssignments</code>, the direct edges <code>tray_move_1 → tray_move_2</code> that the test added are gone (<code>EXPECT_FALSE(ctx->events.HasDependency(...))</code>), because the AGV chains now imply them. <code>HasDependency</code> checks a direct edge only, so after <code>Reduce()</code> it is the wrong question for “must a finish before b?”.</p>
 <h2 data-num id="bg-bays-vecs-and-vrcs">Bays, VECS and VRCs</h2>
+<p>The bay, VECS and VRC rules cut across the stages above: job methods choose bays and stop chargers, tray assignment avoids closed bay doors, and the action graph adds VRC trips. This section collects them in one place.</p>
 <h3 id="bg-bays-and-rebalancing">Bays and rebalancing</h3>
 <figure id="bg-fig-33_bay_logic">
   <img src="figures/33_bay_logic.svg" alt="Bay logic">

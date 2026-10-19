@@ -1,5 +1,5 @@
 <!--
-  03 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  04 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
   Conventions (shared by all seven documents)
   - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
@@ -14,7 +14,7 @@
   - Links to another tab: <a href="#doc-KEY">Tab name</a>. Keyword links (glossary.yaml) and code
     highlighting are added at build time.
 -->
-<h1>03 — Motion planning: from the event DAG to timed motions</h1>
+<h1>04 — Motion planning: from the event DAG to timed motions</h1>
 <p><em>Stage 4 of the pipeline: CHUGG turns the finished event DAG into timed, collision-free motions for every AGV, bay and VECS (VRC commands are added later, in the action DAG). This is the multi-agent path finding (MAPF) step.</em></p>
 <p>This tab builds on the finished event DAG from the Task planning tab. It first places motion planning between the two DAGs of the pipeline and shows how the planner is packaged and called, then opens CHUGG and SIPP, then derives the timing model behind every duration, then <code>ContinuousState</code>, the timeline CHUGG returns and the Action graph tab starts from, then the code itself as UML class and sequence diagrams, and ends by comparing CHUGG's inputs with the standard multi-agent path finding problem, as groundwork for swappable motion planners.</p>
 <h2 data-num id="bg-motion-planning-and-the-response">Where motion planning sits: two DAGs around one planner</h2>
