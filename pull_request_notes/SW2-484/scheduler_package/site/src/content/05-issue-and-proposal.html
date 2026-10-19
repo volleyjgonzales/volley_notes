@@ -1,19 +1,22 @@
 <!--
-  02 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  05 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
-  Conventions
-  - <h2 data-num> / <h3 data-num>: numbered at build time (h3 numbers are "<h2>.<k>"). No number in the text.
-  - Every heading and figure has a stable id (prefix "pr-"). Link with <a href="#id">.
-  - <a class="ref" href="#id">section 7</a> / <a class="ref" href="#pr-fig-…">Figure 3</a>:
-    the build replaces the number with the current one, so references survive reordering.
-  - <figure id="pr-fig-NAME"><img src="figures/NAME.svg" alt="…"><figcaption>…</figcaption></figure>:
+  Conventions (shared by all six documents)
+  - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
+    No number in the text.
+  - Every heading and figure has a stable id. Ids keep the prefix of the document they were first
+    written in ("bg-", "ad-", "nm-", ...), so links survive moves between documents. New ids use "pr-".
+  - <a class="ref" href="#id">section 7</a> / <a class="ref" href="#…-fig-…">Figure 3</a>: the build
+    replaces the number with the current one; a reference into another document also names that tab.
+  - <figure id="…-fig-NAME"><img src="figures/NAME.svg" alt="…"><figcaption>…</figcaption></figure>:
     numbered at build time; NAME is the SVG from scripts/diagrams.
   - <span class="math">TeX</span>, <div class="math">TeX</div>: rendered to MathML at build time.
-  - Keyword links (glossary.yaml), "doc 02" links and code highlighting are added at build time.
+  - Links to another tab: <a href="#doc-KEY">Tab name</a>. Keyword links (glossary.yaml) and code
+    highlighting are added at build time.
 -->
-<h1>02 — Scheduler Core Refactor: problem statement and proposal</h1>
-<p>This document explains <em>what</em> the refactor changes and <em>why</em>, using the code in <code>sources/repomix-scheduler.xml</code> as evidence. It assumes you have read sections <a class="ref" href="#bg-schedulecontext-the-per-call-workspace">7</a>–<a class="ref" href="#bg-one-plan-call-step-by-step">10</a>, <a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">13</a> and <a class="ref" href="#bg-tray-assignment-dotrayassignments">16</a>–<a class="ref" href="#bg-agv-assignment-doagvassignments">17</a> of <a href="#doc-background">01 — Software background</a>. Code snippets follow the same conventions as doc 01: every snippet says which class it lives in, what <code>this</code> is, and the type of each variable that is not obvious. Snippets marked <strong>proposed</strong> do not exist in the repository.</p>
-<p><strong>How the document is organised.</strong> The scheduler is a five-stage pipeline: job expansion, tray assignment and AGV assignment build the event DAG (task planning); CHUGG turns it into timed motions (motion planning); and the action DAG turns those into the commands Dispatch executes. <a class="ref" href="#pr-the-pipeline-the-refactor-works-on">Section 2</a> places the ticket in that pipeline, sections <a class="ref" href="#pr-where-the-two-algorithms-sit-today">3</a>–<a class="ref" href="#pr-current-versus-target-responsibilities">5</a> describe the two algorithms and what moves where, <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> decides how the code is organised by stage (folders or packages), and the rest designs the tray module, the naming boundary and the staged plan.</p>
+<h1>05 — Issue &amp; proposal: the scheduler core refactor</h1>
+<p>This tab explains <em>what</em> the refactor changes and <em>why</em>, using the code in <code>sources/repomix-scheduler.xml</code> as evidence. It assumes the first four tabs: in particular the plan call and <code>ScheduleContext</code> (sections <a class="ref bare" href="#bg-one-plan-call-step-by-step">10</a> and <a class="ref bare" href="#bg-schedulecontext-the-per-call-workspace">13</a> of the <a href="#doc-background">Background</a> tab), and tray and AGV assignment (sections <a class="ref bare" href="#bg-tray-assignment-dotrayassignments">4</a> and <a class="ref bare" href="#bg-agv-assignment-doagvassignments">5</a> of the <a href="#doc-task-planning">Task planning</a> tab). Code snippets follow the conventions of the Background tab: every snippet says which class it lives in, what <code>this</code> is, and the type of each variable that is not obvious. Snippets marked <strong>proposed</strong> do not exist in the repository.</p>
+<p><strong>How this tab is organised.</strong> <a class="ref" href="#pr-the-pipeline-the-refactor-works-on">Section 2</a> places the ticket in that pipeline, sections <a class="ref" href="#pr-where-the-two-algorithms-sit-today">3</a>–<a class="ref" href="#pr-current-versus-target-responsibilities">5</a> describe the two algorithms and what moves where, <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a> decides how the code is organised by stage (folders or packages), and sections <a class="ref" href="#pr-target-architecture">7</a>–<a class="ref" href="#pr-next-actions">14</a> design the tray module and the naming boundary, list the invariants, risks and decisions, and lay out the staged plan. <a class="ref" href="#nm-proposed-future-work-naming">Section 15</a> is future work: a catalogue of renames and small struct refactors across the whole stack, of which this refactor adopts only the rows for <code>scheduler</code> and <code>planner_core</code>.</p>
 <table>
   <thead>
     <tr>
@@ -70,7 +73,7 @@
 <p><strong>Objective:</strong> move tray-move planning and AGV assignment out of large <code>Scheduler</code> methods and behind generic, swappable interfaces. Default implementations must reproduce current behaviour, and each solver needs at least <strong>10 real-customer-layout scenarios</strong> with recorded baseline performance. <strong>Out of scope:</strong> changes to CHUGG/SIPP motion planning, a new optimal solver, and adding to active schedules.</p>
 <p><strong>Definition of Done:</strong> two generic interfaces; two behaviour-equivalent default implementations; 10+ site-based benchmark scenarios per solver with saved baselines; every <code>Scheduler</code> assignment call site routed through the interfaces; old code paths removed. Source: Jira ticket text, October 2026. This describes the intended state, not the code today.</p>
 <h2 data-num id="pr-the-pipeline-the-refactor-works-on">The pipeline the refactor works on</h2>
-<p><code>Scheduler::Plan()</code> is a pipeline of five stages (doc 01, <a class="ref" href="#bg-fig-01_pipeline">Figure 1</a> there). The ticket's two algorithms are two of them. The other three matter for the refactor because the code layout should follow the stages, and because each stage boundary is a natural interface: every stage hands the next one a data structure, not a call into its internals.</p>
+<p>The ticket's two algorithms are stages 2 and 3 of the five-stage pipeline the previous tabs walked through (<a class="ref" href="#bg-fig-01_pipeline">Figure 1</a>). This section looks at the pipeline from the refactor's side. The other three stages matter for the refactor because the code layout should follow the stages, and because each stage boundary is a natural interface: every stage hands the next one a data structure, not a call into its internals.</p>
 <table>
   <thead>
     <tr>
@@ -123,6 +126,103 @@
   <li><strong>Stages 1–3 are where the coupling is.</strong> All three are <code>Scheduler</code> members that share private helpers and edit one context (<a class="ref" href="#pr-what-the-two-algorithms-touch">section 4</a>). This is the ticket's work, and the part that needs the solver interfaces.</li>
   <li><strong>Stages exchange data, not calls.</strong> 1–3 pass the event DAG (<code>planner_core</code>), 4 passes a <code>ContinuousState</code> (<code>motion_planner</code>), 5 produces ROS messages. Each stage can therefore be built and tested on its own once its inputs are those types, which is what makes the module options in <a class="ref" href="#pr-module-layout-folders-or-packages">section 7</a> possible.</li>
 </ul>
+<h3 data-num id="pr-where-the-code-will-live">Where the code will live</h3>
+<p>With the three stage folders of <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a>, the code of today's <code>scheduler</code> package divides as follows (line counts from the snapshot, function code only; the <a href="#doc-background">Background</a> tab, <a href="#bg-where-the-code-is">Where the code is</a>):</p>
+<figure id="pr-fig-96_code_by_stage">
+  <img src="figures/96_code_by_stage.svg" alt="Where the code is, by pipeline stage">
+  <figcaption><strong>Where the code is, by pipeline stage.</strong> Solid segments are in the <code>scheduler</code> package and move into the stage folders; pale segments are in library packages and do not move. Measured on the snapshots, without tests.</figcaption>
+</figure>
+<table>
+  <thead>
+    <tr>
+      <th>Destination</th>
+      <th>Lines today</th>
+      <th>Share of the package</th>
+      <th>Biggest pieces</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>task_planning/</code></td>
+      <td>about 3,590</td>
+      <td>78%</td>
+      <td>12 job methods and <code>PlanOpenBayDoor</code> (about 1,060), <code>DoTrayAssignments</code> (560), <code>DoAgvAssignments</code> (365), the blocking-tray helpers (about 270)</td>
+    </tr>
+    <tr>
+      <td><code>action_graph/</code></td>
+      <td>about 540</td>
+      <td>12%</td>
+      <td>VRC insertion (153), <code>ToActionNode</code> (105), the DAG-building helpers</td>
+    </tr>
+    <tr>
+      <td>orchestrator (<code>scheduler.hpp</code>)</td>
+      <td>about 380</td>
+      <td>8%</td>
+      <td><code>Plan</code> (291)</td>
+    </tr>
+    <tr>
+      <td><code>motion_planning/</code></td>
+      <td>63</td>
+      <td>1%</td>
+      <td><code>PlanMotions</code>; the CHUGG code it runs (about 3,870 lines) stays in <code>motion_planner</code></td>
+    </tr>
+  </tbody>
+</table>
+<p>So nearly all of the refactored code lives in <code>task_planning/</code>, and nearly all of this ticket's work happens there too. Two consequences for the layout: <code>motion_planning/</code> is a thin adapter and should stay one (the algorithm already has a package), and <code>task_planning/</code> is big enough that its subfolders are the real modules. The boundary inside it that matters most is between <strong>job expansion</strong> (garage rules: what each job type needs) and the <strong>assignment solvers</strong> (algorithms: which tray, which AGV), which is exactly where this ticket puts its interfaces.</p>
+<p><strong>It need not stay this lopsided, and some of it will not.</strong> Each stage grows for its own reasons. Task planning grows with every new job type and site feature. Motion planning grows inside <code>motion_planner</code>, where an unfinished second solver (CBS, <code>chugg_cbs.cpp</code>) and some unused helpers already sit, about 660 lines the scheduler never calls. The action graph is small because it implements only the basic construction; execution features from the ADG literature, such as absorbing delays or switching the order of two robots at run time (<a class="ref" href="#ad-beyond-the-basic-adg">section 5</a>), would make it grow, and that is the main reason to give it its own folder now.</p>
+<h3 data-num id="pr-is-task-planning-too-complex">Necessary and avoidable complexity in task planning</h3>
+<p>Task planning is expected to be the largest and most intricate stage. Its current size and shape, however, are not all necessary.</p>
+<p><strong>Why it is expected to be the largest.</strong> MAPF and the ADG are general algorithms with compact, well-studied formulations: their code knows about footprints, intervals and graphs, not about cars. Task planning is where the garage's own rules live: twelve job types, bay modes and readiness, VECS charging, VRC floors, parking headings, disabled nodes and size classes. Its hardest part, moving blocking trays out of the way, is a rearrangement problem of the sliding-puzzle kind, whose optimal version is NP-hard in general. In multi-robot warehouse systems the domain layer is typically the largest one, and this code follows that pattern.</p>
+<p><strong>What is not necessary.</strong> The evidence in the code points to several sources of size and coupling that the problem does not require:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Source</th>
+      <th>Evidence</th>
+      <th>Remedy</th>
+      <th>When</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Very long functions</td>
+      <td><code>DoTrayAssignments</code> 560 lines, <code>DoAgvAssignments</code> 365, <code>Plan</code> 291: a quarter of the package in three functions, with the main loops' logic inline</td>
+      <td>Pure helpers and solvers (sections <a class="ref" href="#pr-before-and-after-the-tray-call-tree">8.3</a>, <a class="ref" href="#pr-agv-assignment-same-layout-and-error-type-now-returned-result-later">8.7</a>)</td>
+      <td>This ticket (C1–F)</td>
+    </tr>
+    <tr>
+      <td>Duplicated code</td>
+      <td>Two copies of the move-emission code in the tray loop; the twelve job methods repeat a few patterns (the <a href="#doc-task-planning">Task planning</a> tab, <a href="#bg-job-methods-are-built-from-a-few-shared-pieces">Job methods are built from a few shared pieces</a>)</td>
+      <td>Merge the emission copies; build job methods from shared primitives</td>
+      <td>Emission: this ticket (C1). Job methods: after it</td>
+    </tr>
+    <tr>
+      <td>Everything is a member of <code>Scheduler</code> and edits one context</td>
+      <td>Helpers read <code>gg_</code>, <code>table_</code> and the bookkeeping maps directly (<a class="ref" href="#pr-what-the-two-algorithms-touch">section 4</a>)</td>
+      <td><code>GarageServices</code>, read-only inputs, one writer per stage</td>
+      <td>This ticket</td>
+    </tr>
+    <tr>
+      <td>Decisions split across stages</td>
+      <td>Job expansion leaves tray ids and destinations blank and tray assignment fills them, so both replay <code>working_state</code> and both handle blocking trays</td>
+      <td>Keep the split for parity; later, let expansion state a goal and the tray solver own the whole decision</td>
+      <td>After the ticket</td>
+    </tr>
+    <tr>
+      <td>Repair passes after greedy choices</td>
+      <td>AGV path repair after matching (the <a href="#doc-task-planning">Task planning</a> tab, <a href="#bg-repairing-paths-after-assignment">Repairing paths after assignment</a>), <code>AddDepsAfterAmiga</code>, <code>Reduce()</code> run twice with an unexplained <code>TODO</code></td>
+      <td>Turn each repair into an input constraint of the solver that caused it, once benchmarks can show the effect</td>
+      <td>After stage G</td>
+    </tr>
+    <tr>
+      <td>Greedy, one job at a time</td>
+      <td>Each job is expanded against the garage earlier jobs leave behind, with no search or backtracking, so every corner case needs its own rule</td>
+      <td>A search- or optimisation-based tray and AGV solver behind the same interfaces</td>
+      <td>Out of scope (a later ticket)</td>
+    </tr>
+  </tbody>
+</table>
+<p>This ticket changes structure, not size: right after it, <code>task_planning/</code> will still hold about 3,500 lines, now split into modules with tests. The reductions come afterwards and are what the solver interfaces make possible: each row above can be done inside one module, checked against the parity fixtures and the stage G benchmarks, without touching the other stages.</p>
 <h2 data-num id="pr-where-the-two-algorithms-sit-today">Where the two algorithms sit today</h2>
 <p>Both algorithms are <code>const</code> member functions of <code>Scheduler</code> that take the per-call context and edit it in place. They return <code>BoolStringPair</code> (<code>std::pair&lt;bool, std::string></code>: success flag plus a message). <a class="ref" href="#pr-proposed-layout-and-api-for-tray-assignment">Section 6</a> proposes replacing both habits: <code>stdx::Expected</code> instead of <code>BoolStringPair</code>, and a returned result instead of editing <code>ctx</code>.</p>
 <pre><code class="language-cpp">// include/scheduler/scheduler.hpp — inside class volley::Scheduler (public section)
@@ -312,7 +412,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
       <td rowspan="2">5 · action DAG</td>
       <td>Turn timed motions into action nodes and edges</td>
       <td>Five free functions in an anonymous namespace of <code>scheduler.cpp</code>; <code>InsertVrcActionsIntoDag</code> in <code>utils.cpp</code></td>
-      <td><code>action_graph/</code>, with inputs narrowed from the context pointer to the event DAG, job list and initial state, the services passed explicitly, and the per-job action indices returned instead of written into <code>ctx->scheduled_jobs</code>; names per doc 04</td>
+      <td><code>action_graph/</code>, with inputs narrowed from the context pointer to the event DAG, job list and initial state, the services passed explicitly, and the per-job action indices returned instead of written into <code>ctx->scheduled_jobs</code>; names per the naming catalogue (<a class="ref" href="#nm-proposed-future-work-naming">section 15</a>)</td>
     </tr>
     <tr>
       <td>Assemble the reply</td>
@@ -329,7 +429,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
   <figcaption><strong>Stage folders vs stage packages.</strong> Option 1 (top) keeps one <code>scheduler</code> package with one folder per stage and a shared <code>core/</code>. Option 2 (bottom) makes the stages packages: stage 4 already is one (<code>motion_planner</code>); <code>task_planning</code> needs a new <code>scheduler_core</code> package for <code>PlanContext</code> and <code>GarageServices</code>; <code>action_graph</code> needs nothing new once its inputs are narrowed. This is a proposal, not existing code.</figcaption>
 </figure>
 <h3 data-num id="pr-stage-names">Stage names</h3>
-<p>The folder names say what each stage produces, using the field's standard terms (doc 01, <a href="#bg-how-to-think-about-the-scheduler">How to think about the scheduler</a>):</p>
+<p>The folder names say what each stage produces, using the field's standard terms (the <a href="#doc-background">Background</a> tab, <a href="#bg-how-to-think-about-the-scheduler">How to think about the scheduler</a>):</p>
 <table>
   <thead>
     <tr>
@@ -352,11 +452,11 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
     <tr>
       <td>5</td>
       <td><code>action_graph</code></td>
-      <td>The output is a partial order, the action dependency graph (doc 05): actions of different AGVs run in parallel unless an edge orders them.</td>
+      <td>The output is a partial order, the action dependency graph (<a class="ref" href="#ad-where-parallelism-comes-from">section 4.5</a>): actions of different AGVs run in parallel unless an edge orders them.</td>
     </tr>
   </tbody>
 </table>
-<p>Inside <code>task_planning/</code> each step is a subfolder: <code>job_expansion/</code>, <code>tray_assignment/</code>, <code>agv_assignment/</code> and <code>validation/</code>. The two ticket modules keep the names used in the rest of this document. The <code>Plan()</code> orchestrator, <code>PlanContext</code>, the ROS boundary (<code>ros/</code>) and the shared <code>core/</code> stay at the top of the package because every stage uses them or none owns them.</p>
+<p>Inside <code>task_planning/</code> each step is a subfolder: <code>job_expansion/</code>, <code>tray_assignment/</code>, <code>agv_assignment/</code> and <code>validation/</code>. The two ticket modules keep the names used in the rest of this tab. The <code>Plan()</code> orchestrator, <code>PlanContext</code>, the ROS boundary (<code>ros/</code>) and the shared <code>core/</code> stay at the top of the package because every stage uses them or none owns them.</p>
 <h3 data-num id="pr-option-1-stage-folders-in-scheduler">Option 1: stage folders in <code>scheduler</code></h3>
 <p>One package, one folder per stage under <code>include/scheduler/</code>, <code>src/</code> and <code>test/</code> (full tree in <a class="ref" href="#pr-source-tree">section 8.2</a>). Each stage folder builds its own CMake library target, and the <code>scheduler</code> library links them. That gives most of the enforcement of separate packages at no packaging cost:</p>
 <ul>
@@ -371,7 +471,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
   <li><strong><code>task_planning</code> needs a lower package first.</strong> Its solvers take <code>PlanContext</code>, <code>GarageServices</code> and the internal types. Those cannot stay in <code>scheduler</code> (a package below <code>scheduler</code> cannot include it), so a new <code>scheduler_core</code> package must hold them. Today's dependencies leave room for it: <code>planner_core</code> depends only on <code>common</code>, <code>common_ros</code> and <code>interfaces</code>; <code>motion_planner</code> on those plus <code>cost_functions</code>; <code>scheduler</code> on all of them plus <code>task_planner</code> and <code>stdx</code>. A <code>scheduler_core</code> between <code>motion_planner</code> and <code>scheduler</code> creates no cycle.</li>
   <li><strong><code>action_graph</code> is ready almost as it is.</strong> Its code is already free functions; once their argument is narrowed from the context pointer to the event DAG, job list and initial state, and the collision table, motion graph, layout and cost model are passed as separate references, every type it uses comes from a lower package: <code>planner_core</code> (the DAGs), <code>motion_planner</code> (<code>ContinuousState</code>), <code>common_ros</code>, <code>cost_functions</code> and <code>interfaces</code>.</li>
 </ul>
-<p>The cost: every installed header becomes public API that other packages can include, so it falls under the stricter naming tier of doc 04 and changes need the owners of every user. Each package adds a <code>package.xml</code>, CMake export boilerplate, a <code>colcon</code> build step and a place in the release process.</p>
+<p>The cost: every installed header becomes public API that other packages can include, so it falls under the stricter naming tier of the naming catalogue (tier B, <a class="ref" href="#nm-how-to-read-this-list">section 15.1</a>) and changes need the owners of every user. Each package adds a <code>package.xml</code>, CMake export boilerplate, a <code>colcon</code> build step and a place in the release process.</p>
 <h3 data-num id="pr-comparison">Comparison</h3>
 <table>
   <thead>
@@ -437,7 +537,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
 <h3 data-num id="pr-recommendation-folders-now-packages-when-proven">Recommendation: folders now, packages when proven</h3>
 <p><strong>Adopt Option 1 now, and write the code as if it were Option 2.</strong> Each stage folder gets its own CMake target with the dependency rules above, so promoting a stage later is a move of three folders and a new <code>package.xml</code>, not a refactor. Then promote stages one at a time, only when they meet the checklist below:</p>
 <ol>
-  <li><strong><code>action_graph</code> first.</strong> It is already free functions, its inputs are lower-package types once narrowed, and it is the natural unit to test against doc 05's ADG rules. It can be promoted as soon as stage C0 has narrowed its inputs (stage J of the plan).</li>
+  <li><strong><code>action_graph</code> first.</strong> It is already free functions, its inputs are lower-package types once narrowed, and it is the natural unit to test against the ADG rules of the Action graph tab. It can be promoted as soon as stage C0 has narrowed its inputs (stage J of the plan).</li>
   <li><strong><code>task_planning</code> after the benchmarks.</strong> Its interfaces are what this ticket designs; they should stay internal until stage G's benchmarks and stage H's cleanup show they are stable. Promotion then needs <code>scheduler_core</code> as well.</li>
   <li><strong><code>motion_planning</code> never.</strong> The algorithm already lives in <code>motion_planner</code>; the adapter belongs to the orchestrator.</li>
 </ol>
@@ -472,7 +572,7 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
   <li><strong>Deciding</strong> happens in <code>tray_assignment::DefaultSolver::Solve</code>. It receives read-only references to the parts of <code>ctx</code> it needs and returns its decisions as a value, a <code>Result</code>. It never writes <code>ctx</code>.</li>
   <li><strong>Writing</strong> happens in one free function, <code>tray_assignment::ApplyTrayAssignment(PlanContext&amp;, const Result&amp;)</code>, which <code>Plan()</code> calls right after <code>Solve</code> succeeds.</li>
 </ul>
-<p>So yes: <code>ctx</code> is still changed. It has to be, because AGV assignment and motion planning read the blocker moves, filled-in fields and <code>first_tray_event</code> from it. What changes is <em>where</em>: one function, called once, after all the decisions are made, instead of writes spread through a 560-line loop and its helpers.</p>
+<p><code>ctx</code> is still changed. It has to be, because AGV assignment and motion planning read the blocker moves, filled-in fields and <code>first_tray_event</code> from it. What changes is <em>where</em>: one function, called once, after all the decisions are made, instead of writes spread through a 560-line loop and its helpers.</p>
 <figure id="pr-fig-58_tray_dataflow">
   <img src="figures/58_tray_dataflow.svg" alt="Tray assignment data flow, today vs proposed">
   <figcaption><strong>How tray assignment reads and writes <code>ScheduleContext</code>.</strong> Top: today <code>DoTrayAssignments</code> gets a shared, mutable pointer to the context and writes into it throughout the loop, so a failure halfway leaves it half-edited. Bottom: (1) <code>Plan</code> passes <code>Solve</code> two <code>const</code> references; (2) <code>Solve</code> keeps its working data in a private <code>Pass</code>, calls pure functions to decide, and returns a <code>Result</code>; (3) <code>ApplyTrayAssignment</code> writes the <code>Result</code> into the context. If <code>Solve</code> fails, step 3 never runs and the context is unchanged.</figcaption>
@@ -736,7 +836,7 @@ namespace volley::task_planning::tray_assignment {
     ├── scheduler_tests.cpp, ...                 # existing end-to-end tests stay at the top
     ├── task_planning/tray_assignment/           # empty_tray, blocking_trays, critical_path, default_solver, apply
     ├── task_planning/agv_assignment/
-    └── action_graph/                            # new: ADG rules from doc 05 on hand-built inputs
+    └── action_graph/                            # new: ADG rules (Action graph tab) on hand-built inputs
 </code></pre>
 <p>The <code>CMakeLists.txt</code> declares one library per stage. Today it builds one shared library with <code>volley_add_library(${PROJECT_NAME} SHARED src/scheduler.cpp src/utils.cpp)</code> and four <code>volley_add_gtest</code> targets; the excerpt below adds the stage targets. Whether <code>volley_add_library</code> accepts <code>STATIC</code> and <code>LINK_LIBRARIES</code> is not visible in this snapshot (it is defined in <code>volley_cmake</code>); plain <code>add_library</code> and <code>target_link_libraries</code> do the same job.</p>
 <pre><code class="language-cmake"># PROPOSED — CMakeLists.txt (excerpt; the rest of the file is unchanged)
@@ -787,7 +887,7 @@ endif()
   <li><strong>The linker enforces the direction between stages and the orchestrator.</strong> No stage target links <code>${PROJECT_NAME}</code>, so a stage that calls a <code>Scheduler</code> member fails to link, and a test that links only <code>scheduler_task_planning</code> proves the solver works without a <code>Scheduler</code>.</li>
   <li><strong>A CI include check covers the rest.</strong> The linker cannot see header-only includes, so a one-line grep checks: no file under a stage folder or <code>core/</code> includes <code>scheduler/scheduler.hpp</code> or <code>scheduler/ros/</code>; no stage folder includes another stage folder; under <code>task_planning/</code>, <code>agv_assignment/</code> does not include <code>tray_assignment/</code> (the hand-off, <code>first_event_by_tray</code>, is a plain map in its <code>Input</code>), while <code>job_expansion/</code> may include <code>tray_assignment/</code>'s public headers.</li>
 </ul>
-<p>Names: <strong><code>tray_assignment</code> rather than <code>tray_movement</code></strong>, because job expansion also plans tray movement (it creates the <code>TrayMove</code>s); this module only fills in what expansion left open (tray ids, destinations, blockers). It matches the stage name in doc 01 (<code>DoTrayAssignments</code>) and pairs with <code>agv_assignment</code>. The stage folder names are explained in <a class="ref" href="#pr-stage-names">section 6.1</a>. Namespaces follow the folders: <code>volley::task_planning::tray_assignment</code>, <code>volley::task_planning::agv_assignment</code>, <code>volley::motion_planning</code>, <code>volley::action_graph</code>, <code>volley::scheduler_core</code> for <code>core/</code>, and <code>volley::ros_convert</code> for <code>ros/</code>. <code>scheduler.cpp</code> declares <code>namespace tray_assignment = task_planning::tray_assignment;</code> (and the same for <code>agv_assignment</code>), so the snippets in this document use the short names. The shared folder is <code>core/</code>, not <code>common/</code>, because a <code>volley::common</code> namespace would break existing code. The <code>common</code> package already defines namespace <code>::common</code>, and <code>scheduler.cpp</code> calls <code>common::EnumInteger(...)</code> from inside <code>namespace volley</code>. Name lookup would find <code>volley::common</code> first and stop there, so those calls would no longer compile. For the same reason no namespace is called <code>volley::motion_planner</code>: the stage namespace is <code>motion_planning</code>, so it cannot hide the package's own names.</p>
+<p>Names: <strong><code>tray_assignment</code> rather than <code>tray_movement</code></strong>, because job expansion also plans tray movement (it creates the <code>TrayMove</code>s); this module only fills in what expansion left open (tray ids, destinations, blockers). It matches the stage name in the Task planning tab (<code>DoTrayAssignments</code>) and pairs with <code>agv_assignment</code>. The stage folder names are explained in <a class="ref" href="#pr-stage-names">section 6.1</a>. Namespaces follow the folders: <code>volley::task_planning::tray_assignment</code>, <code>volley::task_planning::agv_assignment</code>, <code>volley::motion_planning</code>, <code>volley::action_graph</code>, <code>volley::scheduler_core</code> for <code>core/</code>, and <code>volley::ros_convert</code> for <code>ros/</code>. <code>scheduler.cpp</code> declares <code>namespace tray_assignment = task_planning::tray_assignment;</code> (and the same for <code>agv_assignment</code>), so the snippets in this tab use the short names. The shared folder is <code>core/</code>, not <code>common/</code>, because a <code>volley::common</code> namespace would break existing code. The <code>common</code> package already defines namespace <code>::common</code>, and <code>scheduler.cpp</code> calls <code>common::EnumInteger(...)</code> from inside <code>namespace volley</code>. Name lookup would find <code>volley::common</code> first and stop there, so those calls would no longer compile. For the same reason no namespace is called <code>volley::motion_planner</code>: the stage namespace is <code>motion_planning</code>, so it cannot hide the package's own names.</p>
 <h3 data-num id="pr-before-and-after-the-tray-call-tree">Before and after: the tray call tree</h3>
 <p>Not everything moves into the new class. The two figures below show the same call tree before and after; the question that sorts every function is <strong>what does it write?</strong></p>
 <figure id="pr-fig-59_tray_tree_before">
@@ -849,7 +949,7 @@ endif()
       <li>only the main loop erases the tray from <code>blocking_tray_set</code> → stays in the caller;</li>
       <li>only <code>AssignDestForUntargetedMove</code> checks the result of <code>Apply</code>. The main loop <em>cannot</em> yet: on the fallback-1 path the advance move was already applied before it reaches this block and is applied a second time here (the <code>TODO(Gunther)</code> at <code>:2933</code> says so). Checking would make that path fail → a parameter for now; fix the double apply as its own reviewed change.</li>
     </ul>
-    <p>The root-move tails differ too: the main loop adds <code>freeing_moves</code> edges for the root move's destination and source and registers its source (<code>:3024</code>–<code>:3050</code>); <code>AssignDestForUntargetedMove</code> does neither (doc 01, <a class="ref" href="#bg-tray-assignment-dotrayassignments">section 16</a>). <code>CommitRootMove</code> keeps both behaviours behind a flag until someone decides whether the second is a bug.</p>
+    <p>The root-move tails differ too: the main loop adds <code>freeing_moves</code> edges for the root move's destination and source and registers its source (<code>:3024</code>–<code>:3050</code>); <code>AssignDestForUntargetedMove</code> does neither (<a class="ref" href="#bg-tray-assignment-dotrayassignments">section 16</a>). <code>CommitRootMove</code> keeps both behaviours behind a flag until someone decides whether the second is a bug.</p>
   </li>
 </ul>
 <p><strong>What stays mutable, and why that is fine.</strong> The loop needs a garage state that changes after every move, an occupancy record and a per-tray “last move” map. Those live in <code>Pass</code>, an object created inside <code>Solve</code> and destroyed when it returns. Nothing outside can see it. Seen from the caller, <code>Solve</code> is still a pure function: same <code>Input</code>, same <code>Result</code>. This is the usual pattern of “local mutation, pure interface”: rewriting the loop to thread an immutable state through every step would add copying and noise without making the code any safer.</p>
@@ -910,8 +1010,8 @@ endif()
 <p><strong>Why this is practical for tray assignment.</strong> The tray tree reads the DAG exactly once: <code>GetTopologicalOrdering()</code> at the start (plus <code>GetEventFromVertex</code> to walk it). After that it only <em>writes</em>: <code>AddEvent</code>, <code>AddDependency</code>, the two setters, and <code>first_tray_event</code>. Nothing in the loop reads back an edge it added. So the solver never needs to see its own edits in the DAG, and recording them instead of applying them changes nothing it computes. (The garage <em>state</em> the loop does read is <code>working_state</code>, which is private to the <code>Pass</code> anyway.)</p>
 <p><strong>Why not return a whole new DAG.</strong> <code>ScheduleEventDag</code> holds <code>std::shared_ptr&lt;ScheduleEvent></code>. Copying it copies pointers, so a “new DAG” would share event objects with the old one, and the setters would still edit the caller's events. A deep copy needs cloning and an old → new identity map for <code>first_event_by_tray</code> and every later stage. <code>planner_core</code> has no virtual <code>Clone()</code>: events are copy-constructible, but only through their concrete type, so cloning means a <code>dynamic_cast</code> (or a switch on <code>GetType()</code>) over the five subclasses. An <strong>edit log</strong> avoids both: it refers to existing events by the same <code>shared_ptr</code>, adds new events as new objects, and never touches the caller's.</p>
 <p>The <code>Result</code> type and its parts are defined in <a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">section 8.1</a>. An <strong>edit log</strong> means: <code>fills</code> for blanks on existing events, <code>edits</code> for new events and edges in the order today's code creates them, and the hand-off map.</p>
-<p><strong>Parity depends on the order.</strong> The DAG's vertex indices follow <code>AddEvent</code> order (Boost <code>vecS</code>). <code>ScheduleEventDag::GetTopologicalOrdering()</code> takes the lowest job index first, but breaks ties within a job by heap order, which depends on vertex order and on the order edges were added; <code>Reduce()</code> and every replay use that ordering (doc 01, <a class="ref" href="#bg-the-operations">section 12.5</a>). <code>edits</code> is therefore an ordered log, and <code>ApplyTrayAssignment</code> replays it front to back with the same <code>AddEvent</code> / <code>AddDependency</code> calls today's code makes, so the resulting DAG is the same graph built in the same order. <code>AddDependency</code> returns <code>false</code> only when an endpoint is missing or the edge already exists, and tray assignment only logs it, so replaying the same calls gives the same edge set.</p>
-<p><strong>The one subtle part: the loop needs filled values before they are applied.</strong> After <code>ChooseEmptyTray</code>, the main loop plans <em>that</em> tray's path, and later <code>Apply</code>s the move to <code>working_state</code>. Today it reads the id back from the mutated event. In the new design the <code>Pass</code> makes a resolved copy, <code>TrayMove resolved = *move; resolved.SetTrayId(choice.tray_id);</code>, applies the copy to its <code>working_state</code>, records a <code>TrayFill</code>, and never touches <code>*move</code>. Both assumptions hold in <code>planner_core</code> (<code>sources/repomix-planner-core.xml</code>): <code>ScheduleEvent</code>'s copy constructor is public and defaulted, so <code>TrayMove resolved = *move;</code> compiles (copy <em>assignment</em> is private, so <code>resolved = *move;</code> does not), and <code>Apply</code> is a <code>const</code> member, so it can only change the state it is given. One behaviour to keep in mind: <code>TrayMove::Apply</code> with a blank tray id does nothing, and with a blank destination it removes the tray from the state (doc 01, <a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>). The resolved copy always has both fields set, so the <code>Pass</code> never hits those branches.</p>
+<p><strong>Parity depends on the order.</strong> The DAG's vertex indices follow <code>AddEvent</code> order (Boost <code>vecS</code>). <code>ScheduleEventDag::GetTopologicalOrdering()</code> takes the lowest job index first, but breaks ties within a job by heap order, which depends on vertex order and on the order edges were added; <code>Reduce()</code> and every replay use that ordering (<a class="ref" href="#bg-the-operations">section 12.5</a>). <code>edits</code> is therefore an ordered log, and <code>ApplyTrayAssignment</code> replays it front to back with the same <code>AddEvent</code> / <code>AddDependency</code> calls today's code makes, so the resulting DAG is the same graph built in the same order. <code>AddDependency</code> returns <code>false</code> only when an endpoint is missing or the edge already exists, and tray assignment only logs it, so replaying the same calls gives the same edge set.</p>
+<p><strong>The one subtle part: the loop needs filled values before they are applied.</strong> After <code>ChooseEmptyTray</code>, the main loop plans <em>that</em> tray's path, and later <code>Apply</code>s the move to <code>working_state</code>. Today it reads the id back from the mutated event. In the new design the <code>Pass</code> makes a resolved copy, <code>TrayMove resolved = *move; resolved.SetTrayId(choice.tray_id);</code>, applies the copy to its <code>working_state</code>, records a <code>TrayFill</code>, and never touches <code>*move</code>. Both assumptions hold in <code>planner_core</code> (<code>sources/repomix-planner-core.xml</code>): <code>ScheduleEvent</code>'s copy constructor is public and defaulted, so <code>TrayMove resolved = *move;</code> compiles (copy <em>assignment</em> is private, so <code>resolved = *move;</code> does not), and <code>Apply</code> is a <code>const</code> member, so it can only change the state it is given. One behaviour to keep in mind: <code>TrayMove::Apply</code> with a blank tray id does nothing, and with a blank destination it removes the tray from the state (<a class="ref" href="#bg-event-types-and-polymorphism">section 11</a>). The resolved copy always has both fields set, so the <code>Pass</code> never hits those branches.</p>
 <p><strong>Applying it.</strong> One function owns every write to the context:</p>
 <pre><code class="language-cpp">// PROPOSED — src/task_planning/tray_assignment/apply.cpp ; declared in include/scheduler/task_planning/tray_assignment/apply.hpp
 stdx::Result ApplyTrayAssignment(PlanContext&amp; ctx, const Result&amp; result) {
@@ -1034,10 +1134,10 @@ class Solver {
 }  // namespace volley::task_planning::agv_assignment
 </code></pre>
 <h2 data-num id="pr-naming-and-the-ros-boundary">Naming and the ROS boundary</h2>
-<p>The refactor rewrites most of the code it touches, so it is the cheapest moment to fix names. Doc 04 lists the recommendations for the whole stack. This section takes the subset that can be done now, under one constraint: <strong>renames stay inside <code>scheduler</code> and <code>planner_core</code></strong>. <code>common_ros</code> and the ROS interfaces are used by too many other packages, so their renames come later.</p>
+<p>The refactor rewrites most of the code it touches, so it is the cheapest moment to fix names. The naming catalogue (<a class="ref" href="#nm-proposed-future-work-naming">section 15</a>) lists the recommendations for the whole stack. This section takes the subset that can be done now, under one constraint: <strong>renames stay inside <code>scheduler</code> and <code>planner_core</code></strong>. <code>common_ros</code> and the ROS interfaces are used by too many other packages, so their renames come later.</p>
 <p>Two mechanisms let the scheduler use the good names before <code>common_ros</code> changes:</p>
 <ul>
-  <li><strong>One translation header</strong> (<code>core/vocabulary.hpp</code>) gives <code>common_ros</code> types and enum values their doc 04 names, as aliases. An alias is the same type, so nothing is converted at run time, and <code>common_ros</code> does not change.</li>
+  <li><strong>One translation header</strong> (<code>core/vocabulary.hpp</code>) gives <code>common_ros</code> types and enum values their names from the naming catalogue, as aliases. An alias is the same type, so nothing is converted at run time, and <code>common_ros</code> does not change.</li>
   <li><strong>Internal types at the ROS edge</strong> (<code>core/types.hpp</code> and <code>ros/convert.hpp</code>). Where the scheduler builds a ROS message for its own bookkeeping, or keys a map with one, it uses a plain C++ struct instead. It converts to and from the message only where it talks to ROS or to <code>common_ros</code>.</li>
 </ul>
 <p>When <code>common_ros</code> or the interfaces later adopt a name, the matching line in the translation header or the matching conversion is deleted, and scheduler code does not change.</p>
@@ -1080,14 +1180,14 @@ class Solver {
 </figure>
 <p>Three rules keep the boundary in place. Each one can be checked in CI with the same kind of one-line grep as the dependency rules in <a class="ref" href="#pr-source-tree">section 6.2</a>:</p>
 <ol>
-  <li><strong>Only <code>core/vocabulary.hpp</code> spells a <code>common_ros</code> name that doc 04 renames.</strong> The check: <code>rg -nw 'GarageGraph|PoseGraph|CollisionEntityId|CollisionEntityId_t|VertexCollisionIdMap|GarageNodeFromVertex|GetFromGarageRep|LOCOMOTE|STRAFE' include src --glob '!include/scheduler/core/vocabulary.hpp'</code> must print nothing. Start it as a report of remaining uses, and make it fail the build once the count reaches zero.</li>
+  <li><strong>Only <code>core/vocabulary.hpp</code> spells a <code>common_ros</code> name that the naming catalogue renames.</strong> The check: <code>rg -nw 'GarageGraph|PoseGraph|CollisionEntityId|CollisionEntityId_t|VertexCollisionIdMap|GarageNodeFromVertex|GetFromGarageRep|LOCOMOTE|STRAFE' include src --glob '!include/scheduler/core/vocabulary.hpp'</code> must print nothing. Start it as a report of remaining uses, and make it fail the build once the count reaches zero.</li>
   <li><strong>Only <code>ros/</code> and <code>scheduler_ros.cpp</code> convert messages.</strong> No file under <code>tray_assignment/</code>, <code>agv_assignment/</code> or <code>core/</code> includes <code>ros/convert.hpp</code>.</li>
   <li><strong>The solver modules include no <code>rclcpp</code> header.</strong> The logger reaches them through <code>GarageServices</code>, as already proposed.</li>
 </ol>
 
 <h3 data-num id="pr-the-translation-header">The translation header</h3>
 <pre><code class="language-cpp">// PROPOSED — include/scheduler/core/vocabulary.hpp
-// The one scheduler header that spells common_ros names doc 04 would change. Scheduler code uses the names
+// The one scheduler header that spells common_ros names the naming catalogue would change. Scheduler code uses the names
 // declared here. When common_ros adopts a name, delete its line here; no other scheduler file changes.
 #pragma once
 #include "common_ros/collision_geometry.hpp"
@@ -1098,10 +1198,10 @@ namespace volley::scheduler_core {
 
 // ---- types: aliases, so no conversion and no run-time cost
 using Pose                = GaragePoseMsg;                        // the word is right; only the suffix goes
-using MotionGraph         = ::volley::GarageGraph;                // doc 04: GarageGraph -> MotionGraph
-using PoseLattice         = ::volley::PoseGraph;                  // doc 04: PoseGraph -> PoseLattice
+using MotionGraph         = ::volley::GarageGraph;                // catalogue: GarageGraph -> MotionGraph
+using PoseLattice         = ::volley::PoseGraph;                  // catalogue: PoseGraph -> PoseLattice
 using Vertex              = MotionGraph::Vertex;
-using FootprintType       = ::volley::CollisionEntityId;          // doc 04: CollisionEntityId -> FootprintType
+using FootprintType       = ::volley::CollisionEntityId;          // catalogue: CollisionEntityId -> FootprintType
 using FootprintId         = ::volley::CollisionEntityId_t;
 using FootprintIdByVertex = ::volley::VertexCollisionIdMap;
 using Segment             = ::volley::CollisionTable::Edge;       // two poses, as a collision-table key
@@ -1119,7 +1219,7 @@ inline constexpr TransitionType RIDE_VRC               = TransitionType::VRC_TRA
 inline std::optional&lt;GarageNodeMsg> GetNodeFromVertex(const MotionGraph&amp; graph, Vertex v) {
   return graph.GarageNodeFromVertex(v);
 }
-// Transition::length is metres for translations and VRC rides, radians for rotations (doc 04).
+// Transition::length is metres for translations and VRC rides, radians for rotations (naming catalogue).
 inline double DistanceM(const Transition&amp; t) { return t.type == TransitionType::ROTATION ? 0.0 : t.length; }
 inline double AngleRad(const Transition&amp; t)  { return t.type == TransitionType::ROTATION ? t.length : 0.0; }
 
@@ -1211,7 +1311,7 @@ ScheduledJobDataMsg ToMsg(const ScheduledJob&amp; job);     // empty optionals b
 <p><strong>Limits.</strong> This is a boundary for the scheduler's <em>own</em> data, not a full separation from ROS. The state engine (<code>DiscreteGarageState</code>), the graph API and the event classes still take messages, because they live in <code>common_ros</code> and <code>planner_core</code> and other packages share them. Separating those is a <code>common_ros</code> project. When it happens, the boundary files are where the work goes, and scheduler code stays as it is.</p>
 
 <h3 data-num id="pr-renames-in-scheduler">Renames in <code>scheduler</code></h3>
-<p>The doc 04 rows for the scheduler package. Each rename is its own commit with no logic change, and doc 03's parity tests confirm it.</p>
+<p>The rows of the naming catalogue (<a class="ref" href="#nm-proposed-future-work-naming">section 15</a>) for the scheduler package. Each rename is its own commit with no logic change, and the parity tests of the <a href="#doc-verification">Verification</a> tab confirm it.</p>
 <table>
   <thead>
     <tr>
@@ -1362,10 +1462,10 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
 <p>One trap: if any dependent package builds with <code>-Werror</code>, a deprecation warning fails its build. Either add <code>-Wno-error=deprecated-declarations</code> to those packages during the migration, or update them in the same change. Remove the aliases once <code>colcon list --packages-above planner_core</code> shows no package that still uses an old name.</p>
 
 <h3 data-num id="pr-what-waits-for-common-ros-and-the-interfaces">What waits for <code>common_ros</code> and the interfaces</h3>
-<p>Everything else in doc 04, done later in those packages. The scheduler is already insulated from each change:</p>
+<p>Everything else in the naming catalogue, done later in those packages. The scheduler is already insulated from each change:</p>
 <ul>
   <li><strong><code>common_ros</code> class and member names</strong> (<code>GarageGraph</code>, <code>PoseGraph</code>, <code>CollisionEntityId</code>, <code>gg_</code> inside <code>CollisionTable</code>, <code>ppmap_</code>, the <code>Layout</code> map names): delete the matching line in <code>core/vocabulary.hpp</code>.</li>
-  <li><strong>The <code>Transition</code> struct split</strong> (<code>distance_m</code>, <code>angle_rad</code>) and <strong>bundled edge properties</strong> instead of <code>boost::property&lt;edge_index_t, …></code> (doc 01, <a href="#bg-reading-the-boost-adjacency-list-type">reading the type</a>): delete <code>DistanceM</code> and <code>AngleRad</code>; their callers switch to the fields.</li>
+  <li><strong>The <code>Transition</code> struct split</strong> (<code>distance_m</code>, <code>angle_rad</code>) and <strong>bundled edge properties</strong> instead of <code>boost::property&lt;edge_index_t, …></code> (the <a href="#doc-background">Background</a> tab, <a href="#bg-reading-the-boost-adjacency-list-type">reading the type</a>): delete <code>DistanceM</code> and <code>AngleRad</code>; their callers switch to the fields.</li>
   <li><strong>Message renames</strong> (<code>GarageEntityId</code> → <code>AssetId</code>, the id widths, <code>from</code>/<code>to</code> on state changes, the command fields): only <code>ros/convert.*</code> and <code>scheduler_ros.cpp</code> change.</li>
 </ul>
 
@@ -1377,10 +1477,10 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
   <li>Blocking-tray moves are created in recursive prerequisite order, and a tray already being moved is not chosen to move again in the same resolution.</li>
   <li>AGV matches respect disabled AGVs, AGVs trapped in a bay that is not <code>STATE_READY_TO_RETRIEVE</code>, reachability, collisions, lift state and AGVs already busy.</li>
   <li>Arrival ordering never puts two AGVs on one node: <code>AddNodeArrivalDeps</code> and <code>EnsureAgvMovePathsClear</code> keep doing their jobs.</li>
-  <li><code>Scheduler::Plan</code> output is unchanged, apart from log text. The DAG side is deterministic for a given build order (job index first, then heap order); remaining variation comes from <code>unordered_map</code> iteration elsewhere, for example the order of <code>result.scheduled_jobs</code> (doc 01, <a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">section 13</a>).</li>
+  <li><code>Scheduler::Plan</code> output is unchanged, apart from log text. The DAG side is deterministic for a given build order (job index first, then heap order); remaining variation comes from <code>unordered_map</code> iteration elsewhere, for example the order of <code>result.scheduled_jobs</code> (<a class="ref" href="#bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">section 13</a>).</li>
   <li><code>Reduce()</code> and path-repair placement stay where they are during extraction.</li>
   <li><code>tray_assignment::Solver::Solve</code> changes nothing reachable from its <code>Input</code>; <code>ApplyTrayAssignment</code> is the only place tray assignment writes <code>ctx</code>. A test snapshots every event's fields before <code>Solve</code> and compares after.</li>
-  <li><code>ApplyTrayAssignment</code> replays <code>Result::edits</code> in recorded order, so vertex indices, edge sets <strong>and the order of each vertex's out-edges</strong> match what <code>DoTrayAssignments</code> builds today. The last one matters: <code>ScheduleEventDag::GetTopologicalOrdering()</code> breaks ties inside a job by heap order, which follows push order, which follows out-edge order (doc 01, <a class="ref" href="#bg-the-operations">section 12.5</a>).</li>
+  <li><code>ApplyTrayAssignment</code> replays <code>Result::edits</code> in recorded order, so vertex indices, edge sets <strong>and the order of each vertex's out-edges</strong> match what <code>DoTrayAssignments</code> builds today. The last one matters: <code>ScheduleEventDag::GetTopologicalOrdering()</code> breaks ties inside a job by heap order, which follows push order, which follows out-edge order (<a class="ref" href="#bg-the-operations">section 12.5</a>).</li>
   <li>Every event is in the DAG once. <code>AddEvent</code> refuses a pointer that is already present, so a solver must never record <code>AddEvent</code> for an event of the input DAG.</li>
 </ol>
 <p>Invariant 4 in a picture (illustrative; real graphs and paths depend on the layout):</p>
@@ -1530,7 +1630,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     <tr>
       <td>Naming scope</td>
       <td>Rename in <code>scheduler</code> and <code>planner_core</code> only; translate <code>common_ros</code> names in <code>core/vocabulary.hpp</code>; replace messages used for internal bookkeeping with internal types at the edge (<a class="ref" href="#pr-naming-and-the-ros-boundary">section 7</a>)</td>
-      <td>Doc 04's names accepted for these rows; the list of packages above <code>planner_core</code></td>
+      <td>The naming catalogue's (<a class="ref" href="#nm-proposed-future-work-naming">section 15</a>) names accepted for these rows; the list of packages above <code>planner_core</code></td>
     </tr>
     <tr>
       <td>Shared folder and namespace</td>
@@ -1562,4 +1662,1296 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
   <li>In the ROS container, build and run <code>colcon test --packages-select planner_core scheduler scheduler_advanced_tests</code>, then <code>colcon test-result --verbose</code> to capture the baseline.</li>
   <li>Confirm the branch matches this snapshot; keep edits in small reviewable commits.</li>
   <li>Map symbol use from the repository root: <code>rg -n 'ResolveBlockingTrays|DoTrayAssignments|DoAgvAssignments|first_tray_event|BottleneckAssignment'</code>. Compare with <a class="ref" href="#pr-fig-34_coupling_matrix">Figure 1</a>, and rebuild <a class="ref" href="#pr-fig-34_coupling_matrix">Figure 1</a> (<code>python3 scripts/diagrams/build.py 34</code>) after replacing <code>sources/repomix-scheduler.xml</code> with a newer snapshot.</li>
+</ol>
+<h2 data-num id="nm-proposed-future-work-naming">Proposed future work: the naming catalogue and small struct refactors</h2>
+<p>This section is future work beyond this ticket: a catalogue of names to keep open while refactoring. It covers the whole stack the scheduler touches: the ROS messages in <code>interfaces</code>, the garage model in <code>common_ros</code>, the events and DAG in <code>planner_core</code>, and the <code>scheduler</code> package itself. Each row gives the current name, the proposed one, where it lives, how expensive the change is, and why. The rules in <a class="ref" href="#nm-naming-rules">section 2</a> produce the proposals, so a name not listed here can be decided the same way.</p>
+<blockquote><p><strong>Scope.</strong> This refactor adopts only the rows for <code>scheduler</code> and <code>planner_core</code> (<a class="ref" href="#pr-naming-and-the-ros-boundary">section 9</a>). Rows for <code>common_ros</code> and the ROS interfaces wait: the scheduler reaches them through one translation header and its own internal types, so its code can use the good names now and drop the translation when <code>common_ros</code> catches up.</p></blockquote>
+<p>These are recommendations, not decisions. The few that need a team decision are collected in <a class="ref" href="#nm-decisions-for-review">section 9</a>. Everything is taken from the six source snapshots (<code>sources/repomix-*.xml</code>: <code>scheduler</code>, <code>planner_core</code>, <code>common_ros</code>, <code>interfaces</code>, <code>motion_planner</code>, <code>cost_functions</code>); where the snapshots do not show something, the row says so.</p>
+
+<h3 data-num id="nm-how-to-read-this-list">How to read the catalogue</h3>
+<p>Every recommendation carries a <strong>tier</strong>: how far the change reaches, and so how much it costs.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Tier</th>
+      <th>Scope</th>
+      <th>Cost of the rename</th>
+      <th>When to do it</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="tier tier-a">A</span></td>
+      <td>Private members, locals, and types used only inside <code>scheduler</code></td>
+      <td>One package, one pull request, no other team affected</td>
+      <td>In the same change that moves or rewrites the code (the staged plan, <a class="ref" href="#pr-staged-plan">section 11</a>)</td>
+    </tr>
+    <tr>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Public C++ API in <code>common_ros</code> and <code>planner_core</code></td>
+      <td>Every package that includes the header. Keep the old name as a deprecated alias for one release</td>
+      <td>Batch per header, after the refactor lands</td>
+    </tr>
+    <tr>
+      <td><span class="tier tier-c">C</span></td>
+      <td>ROS messages and services in <code>interfaces</code></td>
+      <td>Every node, tool, test fixture and stored event that uses the message. Renaming a field keeps the serialized byte layout, but breaks every source file that names the field, and anything that reads messages by field name (YAML fixtures, bag and database tools). Changing a type, or adding or reordering fields, also breaks the byte layout, so stored events need migrating</td>
+      <td>Once, as one versioned interface change, never piecemeal</td>
+    </tr>
+    <tr>
+      <td><span class="tier tier-k">keep</span></td>
+      <td>Names that are already right, or not worth the churn</td>
+      <td>None</td>
+      <td>Document the meaning instead</td>
+    </tr>
+  </tbody>
+</table>
+<p>The scheduler's own state is filled from messages (<code>DiscreteGarageState</code> stores <code>DiscreteAgvStateMsg</code> values directly), so a tier C rename also shows up in C++. Where a message name is wrong but the change is not worth it yet, the row says <em>keep</em> and the C++ side uses the right word in its own variables.</p>
+<p>The proposals agree with the vocabulary the Background tab already teaches: node, heading, pose, vertex, asset type and footprint type (the <a href="#doc-background">Background</a> tab, <a href="#bg-node-heading-pose-vertex-the-words-for-places">the words for places</a> and <a href="#bg-asset-types-and-the-other-kinds-of-type">asset types</a>).</p>
+
+<h3 data-num id="nm-naming-rules">Naming rules</h3>
+<p>Ten rules. Most come from the Google C++ Style Guide (which the codebase already follows for casing), ROS REP 103 (units) and the robotics and graph literature (vocabulary).</p>
+
+<h4 data-num id="nm-rule-spell-words-out">Spell words out</h4>
+<p>Write <code>motion_graph_</code>, not <code>gg_</code>; <code>pose_vs_pose_</code>, not <code>ppmap_</code>; <code>job_index_</code>, not <code>job_idx_</code>. The Google style guide's test is whether a reader outside the project would understand the name, and two-letter members fail it: <code>gg_</code> appears 82 times in <code>scheduler.cpp</code> and every one needs the class definition to decode.</p>
+<p>Abbreviations that stay, because they are the standard names of things: <strong>AGV</strong>, <strong>VRC</strong> (vertical reciprocating conveyor, the industry term), <strong>VECS</strong>, <strong>DAG</strong>, <strong>GUID</strong>, <strong>id</strong>, <strong>ROS</strong>, and <code>ctx</code> for a context parameter. The <code>Msg</code>, <code>Srv</code> and <code>SPtr</code> suffixes also stay; they are used consistently.</p>
+
+<h4 data-num id="nm-rule-one-concept-one-word">One concept, one word</h4>
+<p>Today several concepts have three to five names each, and several names mean three or four things. <a class="ref" href="#nm-fig-82_naming_today">Figure 1</a> shows the worst cases. The table below fixes one word per concept. The rest of this section applies it.</p>
+<figure id="nm-fig-82_naming_today">
+  <img src="figures/82_naming_today.svg" alt="One concept, many names: the worst cases today">
+  <figcaption><strong>One concept, many names.</strong> Each card is one concept, with the spellings it has today across messages and C++ (left) and the proposed single word (right). From the six source snapshots.</figcaption>
+</figure>
+<table>
+  <thead>
+    <tr>
+      <th>Concept</th>
+      <th>Use</th>
+      <th>Instead of</th>
+      <th>Reference</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A place in the layout</td>
+      <td><strong>node</strong></td>
+      <td>"fixed vertex" (comment in <code>GarageNode.msg</code>), "waypoint" as a generic word (it is also a node type)</td>
+      <td>Graph theory; Open-RMF uses <em>waypoint</em> for the same thing, but here waypoint is already a node type</td>
+    </tr>
+    <tr>
+      <td>A discrete facing, integer degrees</td>
+      <td><strong>heading</strong></td>
+      <td>"orientation" (<code>DisallowedEdgeOrientation</code>), "yaw" for degrees</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>A continuous facing, radians</td>
+      <td><strong>yaw</strong></td>
+      <td>"heading" for radians</td>
+      <td>ROS REP 103: angles in radians</td>
+    </tr>
+    <tr>
+      <td>(node, heading)</td>
+      <td><strong>pose</strong> (<code>GaragePose</code>)</td>
+      <td>"garage rep" (<code>GetFromGarageRep</code>)</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>A pose's number in the motion graph</td>
+      <td><strong>vertex</strong></td>
+      <td>"pose index" when the motion graph is meant</td>
+      <td>Boost Graph Library</td>
+    </tr>
+    <tr>
+      <td>An allowed AGV move from one pose to another</td>
+      <td><strong>transition</strong></td>
+      <td>"edge" in prose, "move", "Edge" (<code>CollisionTable</code>)</td>
+      <td>State-transition graph; state-lattice planning</td>
+    </tr>
+    <tr>
+      <td>A transition's two endpoints, as a collision-table key</td>
+      <td><strong>segment</strong></td>
+      <td><code>CollisionTable::Edge</code></td>
+      <td>"Path segment"</td>
+    </tr>
+    <tr>
+      <td>An undirected connection between two nodes in the layout YAML</td>
+      <td><strong>edge</strong> (layout edge)</td>
+      <td>—</td>
+      <td>Only place "edge" stays as a data name; in Boost code, <code>Edge</code> is the library's descriptor</td>
+    </tr>
+    <tr>
+      <td>"u must finish before v" in a DAG</td>
+      <td><strong>dependency</strong></td>
+      <td>"edge" in prose about the event DAG</td>
+      <td>Already the method name (<code>AddDependency</code>)</td>
+    </tr>
+    <tr>
+      <td>A physical thing the scheduler plans for</td>
+      <td><strong>asset</strong>, and <strong>asset type</strong></td>
+      <td>"entity" (<code>GarageEntityId</code>, <code>entity_type</code>, <code>last_entity_event</code>)</td>
+      <td>Fleet and facility management; "entity" is generic</td>
+    </tr>
+    <tr>
+      <td>The rectangle class a footprint is sized by (COMPACT, …, XL, TRAY)</td>
+      <td><strong>size class</strong></td>
+      <td>"parking window", "resource window", "resource size", "max_resource_size"</td>
+      <td>Vehicle size classes</td>
+    </tr>
+    <tr>
+      <td>Which footprint shape a collision query uses</td>
+      <td><strong>footprint type</strong></td>
+      <td><code>CollisionEntityId</code>, "collision id"</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>The extra clearance added around a footprint</td>
+      <td><strong>footprint margin</strong></td>
+      <td>"buffer", "parking window buffer"</td>
+      <td>Safety margin / clearance</td>
+    </tr>
+    <tr>
+      <td>What a client asks for</td>
+      <td><strong>job</strong></td>
+      <td>"task" (<code>ScheduleEvent::ToString</code> prints <code>Task ID</code>)</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>The planner's unit in the event DAG</td>
+      <td><strong>event</strong></td>
+      <td>"node" when talking about the event DAG</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>The dispatched unit in the response</td>
+      <td><strong>action</strong> (the message stays <code>ActionNode</code>)</td>
+      <td>"node" alone (<code>Schedule.nodes</code>, <code>node_indices</code>)</td>
+      <td>Avoids ROS 2 "actions" by keeping the type name</td>
+    </tr>
+    <tr>
+      <td>The garage before the plan</td>
+      <td><strong>initial state</strong></td>
+      <td><code>base_state</code> (wire), "initial state" (C++)</td>
+      <td>AI planning: initial state and goal</td>
+    </tr>
+    <tr>
+      <td>Vertical conveyor</td>
+      <td><strong>VRC</strong></td>
+      <td>"lift" for the conveyor (<code>TYPE_LIFT</code>, <code>IsLiftNode</code>); "lift" stays for the AGV's lifting deck</td>
+      <td>ASME B20.1 "vertical reciprocating conveyor"</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-rule-endpoints">Endpoint pairs: one pair per kind</h4>
+<p>Today endpoints are spelled <code>src</code>/<code>dst</code>, <code>src</code>/<code>dest</code>, <code>_curr</code>/<code>_next</code>, <code>current_</code>/<code>next_</code>, <code>from_</code>/<code>to_</code> and <code>fixed</code>/<code>queried</code>. Use one pair for each kind of thing:</p>
+<ul>
+  <li><strong>Graph edges: <code>source</code>, <code>target</code>.</strong> Boost's own words (<code>boost::source(e, g)</code>, <code>boost::target(e, g)</code>).</li>
+  <li><strong>Motions and commands: <code>start</code>, <code>goal</code>.</strong> Motion-planning vocabulary, and <code>AgvGoal.msg</code> already uses <em>goal</em>.</li>
+  <li><strong>State changes: <code>from</code>, <code>to</code>.</strong> <code>VrcTransition</code> already has <code>from_vrc_node_id_</code> and <code>to_vrc_node_id_</code>.</li>
+  <li><strong>A job's target: <code>destination</code>.</strong> As in <code>SchedulerJob.destination</code>; not <code>dest</code>.</li>
+</ul>
+
+<h4 data-num id="nm-rule-units">Units in the name when they are not obvious</h4>
+<p>Put the unit last in the name: <code>_m</code>, <code>_rad</code>, <code>_deg</code>, <code>_s</code>, <code>_kg</code>. <code>Payload.msg</code> and <code>ParkingWindow.msg</code> already do (<code>length_m</code>, <code>width_m</code>). A name needs a unit when the type alone does not say it: <code>ActionNode.duration</code> (seconds), <code>Transition.length</code> (metres <em>or</em> radians), <code>GarageFloor.z</code> (metres). <code>GaragePose.heading</code> and <code>GeometricPose.yaw</code> stay as they are: they are the defined words for degrees and radians, so the word carries the unit.</p>
+
+<h4 data-num id="nm-rule-ids-and-indices">Ids, indices and their types</h4>
+<ul>
+  <li><strong><code>id</code> is the object's own identity; <code>&lt;asset>_id</code> refers to another object.</strong> So <code>SchedulerJob.guid</code> becomes <code>id</code>, and <code>ActionNode.job_id</code> stays as it is.</li>
+  <li><strong>Generated ids are <code>Guid</code>.</strong> Command ids are "unique GUID strings" today (<code>AgvCommand.id</code>, <code>BayCommand.command_id</code>); make them <code>Guid</code> like every other generated id.</li>
+  <li><strong><code>_index</code> is a position in an array; <code>_id</code> is never an index.</strong> <code>Edge.msg</code> fields hold node <em>ids</em> but are commented "node index".</li>
+  <li><strong>One integer type per id, everywhere.</strong> Today the same id has different widths in different messages; see <a class="ref" href="#nm-fig-82_naming_today">Figure 1</a> and <a class="ref" href="#nm-ids-and-integer-widths">section 6.1</a>.</li>
+</ul>
+
+<h4 data-num id="nm-rule-maps">Maps are named <code>&lt;value>_by_&lt;key></code></h4>
+<p><code>Layout::node_ids_by_type_</code> already follows this. Apply it to the rest: <code>pose_to_vertex_</code> becomes <code>vertex_by_pose_</code>, <code>node_id_to_index_</code> becomes <code>index_by_node_id_</code>, <code>last_entity_event</code> becomes <code>last_event_by_asset</code>. The name then says what you get back and what you look it up with, in that order. A map keyed by the object's own id can keep the plural (<code>trays_</code>, <code>vrcs_</code>).</p>
+
+<h4 data-num id="nm-rule-booleans">Booleans</h4>
+<p>In messages, a boolean field is an adjective or participle without a prefix: <code>disabled</code>, <code>charging</code>, <code>lift_raised</code>. <code>DiscreteGarageState.is_faulted</code> is the one field with an <code>is_</code> prefix. In C++, functions that return a boolean start with <code>Is</code>, <code>Has</code> or <code>Can</code> (<code>HasVertex</code>, <code>IsMovePossible</code> already do).</p>
+
+<h4 data-num id="nm-rule-state-status">State versus status</h4>
+<p><strong>state</strong> is an asset's state-machine value (an AGV's, a bay's, a VECS's, a VRC's). <strong>status</strong> is how far a job or an action has progressed. Today <code>ActionNode</code> uses <code>STATUS_*</code> but <code>SchedulerJob</code> uses <code>STATE_*</code> for the same kind of thing (unplanned, executing, success, error).</p>
+
+<h4 data-num id="nm-rule-same-object-same-name">The same object has the same name at every layer</h4>
+<p>The collision table is <code>table_</code> in <code>Scheduler</code>, <code>collision_table_</code> in <code>GarageOccupancyChecker</code>, and <code>collisions</code> in the proposed <code>GarageServices</code>. Pick one name and use it for the member, the struct field, the parameter and the local: <code>collision_table</code>, <code>motion_graph</code>, <code>cost_model</code>, <code>layout</code>.</p>
+
+<h4 data-num id="nm-rule-plan-word">"Plan" means the <code>Plan()</code> call, and nothing else</h4>
+<p>The word is on <code>Plan()</code>, <code>PlanRequest</code>, <code>PlanResponse</code> and <code>PlanMotions</code>, and also on eleven job-expansion methods (<code>PlanRetrieveJob</code>, …) that do not plan anything: they expand a job into events. The Task planning tab calls that step <em>job expansion</em>. Name the methods after it (<code>ExpandRetrieveJob</code>).</p>
+
+<h3 data-num id="nm-the-headline-renames">The headline renames</h3>
+<p>If you only do a few, do these. They are the names that appear most often in the code being refactored, or that cause the most confusion. Each is detailed in a later section.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>gg_</code> (class <code>GarageGraph</code>)</td>
+      <td><code>motion_graph_</code> (class <code>MotionGraph</code>); if the class keeps its name, <code>garage_graph_</code></td>
+      <td><span class="tier tier-a">A</span> member, <span class="tier tier-b">B</span> class</td>
+      <td>82 uses in <code>scheduler.cpp</code>; "garage graph" does not tell it apart from the layout's own node graph</td>
+    </tr>
+    <tr>
+      <td><code>table_</code></td>
+      <td><code>collision_table_</code></td>
+      <td><span class="tier tier-a">A</span></td>
+      <td>Matches <code>GarageOccupancyChecker::collision_table_</code></td>
+    </tr>
+    <tr>
+      <td><code>pg_</code></td>
+      <td>remove the member: a local in the constructor</td>
+      <td><span class="tier tier-a">A</span></td>
+      <td>Used once, to build <code>gg_</code>; <code>GarageGraph</code> keeps no pointer to it</td>
+    </tr>
+    <tr>
+      <td><code>ScheduleContext</code>, <code>ScheduleContextSPtr</code></td>
+      <td><code>PlanContext</code>, <code>PlanContextSPtr</code></td>
+      <td><span class="tier tier-a">A</span></td>
+      <td>It is the context of one <code>Plan()</code> call, and the variable is already <code>plan_ctx</code></td>
+    </tr>
+    <tr>
+      <td><code>BayTransition</code>, <code>VecsTransition</code>, <code>VrcTransition</code></td>
+      <td><code>BayStateChange</code>, <code>VecsStateChange</code>, <code>VrcStateChange</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>"Transition" is also the motion-graph edge type; these events wrap <code>BayStateChanged</code>-style messages</td>
+    </tr>
+    <tr>
+      <td><code>Plan&lt;Type&gt;Job</code></td>
+      <td><code>Expand&lt;Type&gt;Job</code></td>
+      <td><span class="tier tier-a">A</span></td>
+      <td>Rule in <a class="ref" href="#nm-rule-plan-word">section 2.10</a></td>
+    </tr>
+    <tr>
+      <td><code>CollisionEntityId</code>, <code>CollisionEntityId_t</code></td>
+      <td><code>FootprintType</code>, <code>FootprintId</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>It selects a footprint shape; "entity" collides with <code>GarageEntityId</code>, which means something else</td>
+    </tr>
+    <tr>
+      <td><code>GarageEntityId</code></td>
+      <td><code>AssetId</code></td>
+      <td><span class="tier tier-c">C</span></td>
+      <td>Matches "asset type"; frees "entity"</td>
+    </tr>
+    <tr>
+      <td><code>Transition.length</code> (m or rad)</td>
+      <td><code>distance_m</code> and <code>angle_rad</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>One field, two units</td>
+    </tr>
+    <tr>
+      <td>"parking window", "resource window", "resource size"</td>
+      <td>"size class" everywhere</td>
+      <td><span class="tier tier-b">B</span> C++, <span class="tier tier-c">C</span> messages</td>
+      <td>Five words for one concept</td>
+    </tr>
+    <tr>
+      <td><code>BoolStringPair</code></td>
+      <td><code>stdx::Result</code></td>
+      <td><span class="tier tier-a">A</span> then <span class="tier tier-b">B</span></td>
+      <td>Already proposed (<a class="ref" href="#pr-errors-stdxexpected-instead-of-boolstringpair">section 6.4</a>)</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>On <code>gg_</code> specifically:</strong> <code>garage_graph_</code> is a correct mechanical fix, but it keeps a vague class name. The garage has three graphs (the layout's node graph, the pose-expanded motion graph, and the event DAG), and "garage graph" could be any of them. Its vertices are poses and its edges are the transitions an AGV can make, which is what <em>motion graph</em> says. Rename the member once, after the class decision (<a class="ref" href="#nm-decisions-for-review">section 9</a>), so it does not change twice.</p>
+
+<h3 data-num id="nm-scheduler-package">The <code>scheduler</code> package</h3>
+<p>All tier A: these names are private to the package, so rename them in the same change that moves the code.</p>
+
+<h4 data-num id="nm-scheduler-members">Scheduler members</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Where</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>gg_</code></td>
+      <td><code>motion_graph_</code> (or <code>garage_graph_</code>)</td>
+      <td><code>scheduler.hpp</code></td>
+      <td>Spell words out; see <a class="ref" href="#nm-the-headline-renames">section 3</a></td>
+    </tr>
+    <tr>
+      <td><code>pg_</code></td>
+      <td>constructor local <code>pose_graph</code></td>
+      <td><code>scheduler.hpp</code>, <code>scheduler.cpp:1324</code></td>
+      <td>Only read by <code>gg_(pg_)</code>. Build the motion graph with a helper that takes the layout, and drop the member</td>
+    </tr>
+    <tr>
+      <td><code>table_</code></td>
+      <td><code>collision_table_</code></td>
+      <td><code>scheduler.hpp</code></td>
+      <td>Same object, same name</td>
+    </tr>
+    <tr>
+      <td><code>costaudit_</code></td>
+      <td><code>cost_audit_</code></td>
+      <td><code>scheduler.hpp</code></td>
+      <td>The parameter it mirrors is already <code>SchedulerParams::cost_audit</code></td>
+    </tr>
+    <tr>
+      <td><code>printdags_</code>, <code>PrintDags()</code></td>
+      <td><code>print_dags_</code>, <code>TogglePrintDags()</code></td>
+      <td><code>scheduler.hpp</code></td>
+      <td>Word break; the method toggles, it does not print</td>
+    </tr>
+    <tr>
+      <td><code>layout_</code>, <code>cost_model_</code>, <code>logger_</code>, <code>bay_readiness_ratio_</code></td>
+      <td>keep</td>
+      <td><code>scheduler.hpp</code></td>
+      <td>Already clear</td>
+    </tr>
+    <tr>
+      <td><code>GetGarageGraph()</code>, <code>GetCollisionTable()</code></td>
+      <td><code>GetMotionGraph()</code>, keep</td>
+      <td><code>scheduler.hpp</code></td>
+      <td>Follows the class name</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-schedulecontext">ScheduleContext</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ScheduleContext</code>, <code>ScheduleContextSPtr</code></td>
+      <td><code>PlanContext</code>, <code>PlanContextSPtr</code></td>
+      <td>One per <code>Plan()</code> call; the variable is already <code>plan_ctx</code></td>
+    </tr>
+    <tr>
+      <td><code>request_id_str</code></td>
+      <td>remove; format <code>request_id</code> where it is logged</td>
+      <td>A cached copy of another member</td>
+    </tr>
+    <tr>
+      <td><code>events</code></td>
+      <td><code>event_dag</code></td>
+      <td>It is the DAG, not a list of events. Short enough to keep if the team prefers</td>
+    </tr>
+    <tr>
+      <td><code>disabledness_filters</code>, type <code>CollistionFilterMap</code></td>
+      <td><code>graph_filter_by_footprint</code>, type <code>GraphFilterByFootprint</code></td>
+      <td>"Disabledness" is not a word, "Collistion" is a typo, and the key is a footprint type</td>
+    </tr>
+    <tr>
+      <td><code>last_entity_event</code>, type <code>GarageEntityEventMap</code></td>
+      <td><code>last_event_by_asset</code>, type <code>AssetEventMap</code></td>
+      <td>Map rule; asset, not entity</td>
+    </tr>
+    <tr>
+      <td><code>first_tray_event</code></td>
+      <td><code>first_event_by_tray</code></td>
+      <td>Map rule; reads the same way as its sibling</td>
+    </tr>
+    <tr>
+      <td><code>PushBackScheduledJob</code></td>
+      <td><code>AddScheduledJob</code></td>
+      <td>Says what, not how</td>
+    </tr>
+    <tr>
+      <td><code>UpdateLastEntityEvent(entity, event)</code></td>
+      <td><code>AppendToAssetChain(asset, event)</code></td>
+      <td>It adds a dependency on the asset's previous event, then records the new one: the asset's events form a chain</td>
+    </tr>
+    <tr>
+      <td><code>UpdateLeafDependencies(event, job_index)</code></td>
+      <td><code>AddAfterJobLeaves(event, job_index)</code></td>
+      <td>The new event depends on the current leaves of the same job</td>
+    </tr>
+    <tr>
+      <td><code>initial_state</code>, <code>scheduled_jobs</code>, <code>request_id</code>, <code>start_time</code></td>
+      <td>keep</td>
+      <td><code>initial_state</code> is the standard term; the message should move to it (<a class="ref" href="#nm-jobs-plans-and-schedules">section 6.4</a>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-pipeline-stage-names">Pipeline stages: folders and namespaces</h4>
+<p>The refactor organises the <code>scheduler</code> package by pipeline stage (<a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a>): one folder, one CMake target and one namespace per stage, and possibly one package per stage later. These are names people will say every day, and they may become package names. All of them are tier A while they stay folders.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
+      <th>Folder · namespace</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1–3 · jobs → finished event DAG</td>
+      <td><code>task_planning/</code> · <code>volley::task_planning</code></td>
+      <td>The stages decompose jobs into events, allocate trays and AGVs, and add blocker moves: decomposition plus allocation is what "task planning" means. Close to the existing <code>task_planner</code> package (which holds <code>BottleneckAssignment</code>, used by stage 3); if reviewers find that confusing, <code>event_planning</code> names the output instead</td>
+    </tr>
+    <tr>
+      <td>1 · job expansion</td>
+      <td><code>task_planning/job_expansion/</code></td>
+      <td>"Expand" is the stage's verb (<code>Expand&lt;Type>Job</code>); "plan" is reserved for <code>Plan()</code> (<a class="ref" href="#nm-rule-plan-word">section 2.10</a>)</td>
+    </tr>
+    <tr>
+      <td>2 · tray assignment</td>
+      <td><code>task_planning/tray_assignment/</code> · <code>volley::task_planning::tray_assignment</code></td>
+      <td>Job expansion also moves trays; this step only fills in what expansion left open (<a class="ref" href="#pr-source-tree">section 8.2</a>)</td>
+    </tr>
+    <tr>
+      <td>3 · AGV assignment</td>
+      <td><code>task_planning/agv_assignment/</code> · <code>volley::task_planning::agv_assignment</code></td>
+      <td>Pairs with <code>tray_assignment</code>; matching is one step inside it</td>
+    </tr>
+    <tr>
+      <td>3 · validation</td>
+      <td><code>task_planning/validation/</code></td>
+      <td>Matches <code>ValidateEvents</code></td>
+    </tr>
+    <tr>
+      <td>4 · timed motions</td>
+      <td><code>motion_planning/</code> · <code>volley::motion_planning</code></td>
+      <td>CHUGG plans timed trajectories for all agents together. Matches the package that does the work (<code>motion_planner</code>) and <code>PlanMotions</code>. The namespace must not be <code>motion_planner</code>, so it cannot hide the package's names</td>
+    </tr>
+    <tr>
+      <td>5 · action DAG</td>
+      <td><code>action_graph/</code> · <code>volley::action_graph</code></td>
+      <td>The output is a partial order: actions of different AGVs run in parallel unless an edge orders them (Action graph tab). Spelled out rather than the acronym</td>
+    </tr>
+    <tr>
+      <td>shared</td>
+      <td><code>core/</code> · <code>volley::scheduler_core</code></td>
+      <td>A <code>volley::common</code> namespace would hide <code>::common</code> and break today's <code>common::EnumInteger</code> calls (<a class="ref" href="#pr-source-tree">section 8.2</a>)</td>
+    </tr>
+  </tbody>
+</table>
+<p>The stage functions follow. The refactor already moves tray and AGV assignment behind <code>tray_assignment::Solve</code> and <code>agv_assignment::SolveInPlace</code>. The remaining functions along <code>Plan()</code> read better as verb phrases, and the action-DAG helpers can drop words their folder now says.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><code>PlanRetrieveJob</code>, <code>PlanInsertJob</code>, … (12 methods)</td>
+      <td><code>ExpandRetrieveJob</code>, <code>ExpandInsertJob</code>, …</td>
+      <td>Job expansion; rule in <a class="ref" href="#nm-rule-plan-word">section 2.10</a></td>
+    </tr>
+    <tr>
+      <td>2–3</td>
+      <td><code>DoTrayAssignments</code>, <code>DoAgvAssignments</code></td>
+      <td><code>AssignTrays</code>, <code>AssignAgvs</code> (or the proposed solvers)</td>
+      <td>"Do" adds nothing</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><code>SanityCheckEvents</code></td>
+      <td><code>ValidateEvents</code></td>
+      <td>Standard verb</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><code>AddDepsAfterAmiga</code> (and the <code>Amiga*</code> test names)</td>
+      <td>a name that says what the step does</td>
+      <td>A project nickname; a new reader cannot guess it. What it does is in the call trace in the Background tab</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><code>Scheduler::PlanMotions</code></td>
+      <td><code>motion_planning::PlanMotions</code></td>
+      <td>Keep the name: it does plan motions. It becomes a free function</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>ResponseFromTrajectories</code></td>
+      <td><code>BuildPlanResponse</code></td>
+      <td>Verb first; stays in <code>Scheduler</code> and calls the <code>action_graph</code> functions</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>CollectAndCollapseTrajectoryMotions</code></td>
+      <td><code>action_graph::CollectMotions</code></td>
+      <td>The collapsing of floor-traversal runs is documented in the comment; the name keeps the verb</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>BuildActionDagFromMotions</code></td>
+      <td><code>action_graph::BuildActionDag</code></td>
+      <td>The argument type says "from motions"</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>TransferEventDagDepsToActionDag</code></td>
+      <td><code>action_graph::CopyEventDependencies</code></td>
+      <td>"Dependency" spelled out (sections <a class="ref" href="#nm-rule-spell-words-out">2.1</a>, <a class="ref" href="#nm-rule-one-concept-one-word">2.2</a>); "copy" says the event DAG is unchanged; the namespace says which DAG receives them</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>InsertVrcActionsIntoDag</code></td>
+      <td><code>action_graph::InsertVrcActions</code></td>
+      <td>The namespace says which DAG</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>BuildScheduledActionsArray</code>, <code>ToActionNode</code></td>
+      <td><code>action_graph::FlattenActionDag</code>, keep <code>ToActionNode</code></td>
+      <td>It flattens the DAG, in topological order, into the indexed message list Dispatch reads, with parent indices; "array" names the container, not the job</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code>DagBase&lt;ActionNodeMsg></code>, <code>final_actions_dag</code></td>
+      <td><code>using ActionDag = DagBase&lt;ActionNodeMsg>;</code>, <code>action_dag</code></td>
+      <td>Pairs with <code>EventDag</code>; "final" says nothing once the variable lives in one function</td>
+    </tr>
+    <tr>
+      <td>—</td>
+      <td><code>Plan</code></td>
+      <td>keep</td>
+      <td>It is the plan call</td>
+    </tr>
+  </tbody>
+</table>
+<h4 data-num id="nm-motion-planner-names">Names seen in <code>motion_planner</code></h4>
+<p>Not part of this refactor: <code>motion_planner</code> is outside the scheduler and <code>planner_core</code>, so these are tier B rows for its owners, listed because the scheduler code reads them.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Motion::action_id</code>, <code>GetActionId()</code></td>
+      <td><code>event_index</code>, <code>GetEventIndex()</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>It holds the event DAG vertex index the motion came from, not an action: actions only exist after stage 5. Static motions use <code>999999</code> as "no event"; an <code>std::optional</code> or named constant would say so</td>
+    </tr>
+    <tr>
+      <td><code>kMagicPredecessorCost</code></td>
+      <td><code>kPerPredecessorPenalty</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Say what the 3 s is: a penalty per predecessor state in SIPP (the <a href="#doc-motion-planning">Motion planning</a> tab, <a href="#bg-sipp-the-single-agv-search">SIPP</a>)</td>
+    </tr>
+    <tr>
+      <td><code>GetEdgeDurations</code>, <code>GetEdgeMarginalDurations</code></td>
+      <td><code>GetEdgeTrapezoidDurations</code>, <code>GetEdgeCruiseDurations</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Two kinds of duration per edge; the name should say which model each uses</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 data-num id="nm-planner-core">planner_core: events and the DAG</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>BayTransition</code>, <code>VecsTransition</code>, <code>VrcTransition</code></td>
+      <td><code>BayStateChange</code>, <code>VecsStateChange</code>, <code>VrcStateChange</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Frees "transition" for the motion graph; matches the <code>*StateChanged</code> messages they apply</td>
+    </tr>
+    <tr>
+      <td><code>ScheduleEventType::{AGV_MOVE, BAY_TRANSITION, TRAY_MOVE, VECS_TRANSITION, VRC_TRANSITION}</code></td>
+      <td><code>{AGV_MOVE, TRAY_MOVE, BAY_STATE_CHANGE, VECS_STATE_CHANGE, VRC_STATE_CHANGE}</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Follows the classes. <code>VRC_TRANSITION</code> is also a <code>TransitionType</code> value with a different meaning</td>
+    </tr>
+    <tr>
+      <td><code>ScheduleEvent::job_idx_</code></td>
+      <td><code>job_index_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Matches <code>GetJobIndex()</code> and the constructor parameter</td>
+    </tr>
+    <tr>
+      <td><code>ToString()</code> prints <code>"Task ID: "</code></td>
+      <td><code>"job_index="</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>It is a job index, not a task id; logs are searched for this</td>
+    </tr>
+    <tr>
+      <td><code>TrayMove::dest_</code>, <code>SetDest</code>, <code>GetDest</code></td>
+      <td><code>destination_</code>, <code>SetDestination</code>, <code>GetDestination</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Same word as <code>SchedulerJob.destination</code></td>
+    </tr>
+    <tr>
+      <td><code>BayTransition::src_state_</code>, <code>SetSourceState</code></td>
+      <td><code>from_state_</code>, <code>SetFromState</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>State-change endpoint rule</td>
+    </tr>
+    <tr>
+      <td><code>AgvMove::discrete_change_</code></td>
+      <td><code>change_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Everything in planner_core is discrete; the type (<code>variant&lt;AgvLiftChangedMsg, AgvPoseChangedMsg></code>) says the rest</td>
+    </tr>
+    <tr>
+      <td><code>ScheduleEventDag</code></td>
+      <td><code>EventDag</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Shorter; "schedule" is the response's DAG of actions, a different graph</td>
+    </tr>
+    <tr>
+      <td><code>DagBase&lt;T></code>, <code>AddEvent</code>, <code>AddDependency</code>, <code>GetEventFromVertex</code>, <code>ScheduleEvent</code>, <code>AgvMove</code>, <code>TrayMove</code></td>
+      <td>keep</td>
+      <td><span class="tier tier-k">keep</span></td>
+      <td>Already clear and consistent</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 data-num id="nm-common-ros">common_ros: the garage model</h3>
+
+<h4 data-num id="nm-garagegraph">GarageGraph and Transition</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>GarageGraph</code></td>
+      <td><code>MotionGraph</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Vertices are poses, edges are AGV transitions. Decision in <a class="ref" href="#nm-decisions-for-review">section 9</a></td>
+    </tr>
+    <tr>
+      <td><code>BoostPoseGraph</code>, <code>base_graph_</code></td>
+      <td><code>BoostMotionGraph</code>, <code>boost_graph_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>"Base" already means something else (<code>base_state</code>, <code>base_schedule</code>); this is the Boost object</td>
+    </tr>
+    <tr>
+      <td>Edge properties <code>boost::property&lt;boost::edge_index_t, std::size_t, Transition></code></td>
+      <td>a bundled struct <code>TransitionEdge {std::size_t index; Transition transition;}</code>, with <code>EdgeVectorPropertyMap&lt;T></code> built over <code>get(&amp;TransitionEdge::index, g)</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>The current Boost style; one mechanism instead of two. Changes the public <code>EdgeVectorPropertyMap</code> type and <code>base_graph_[e]</code>, so every caller is affected (the <a href="#doc-background">Background</a> tab, <a href="#bg-reading-the-boost-adjacency-list-type">reading the type</a>)</td>
+    </tr>
+    <tr>
+      <td><code>pose_to_vertex_</code></td>
+      <td><code>vertex_by_pose_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Map rule</td>
+    </tr>
+    <tr>
+      <td><code>edge_index_to_vertices_</code></td>
+      <td><code>endpoints_by_edge_index_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Map rule</td>
+    </tr>
+    <tr>
+      <td><code>node_retrieval_heading_</code></td>
+      <td><code>retrieval_heading_by_node_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Map rule</td>
+    </tr>
+    <tr>
+      <td><code>GetFromGarageRep(pose)</code></td>
+      <td>remove; call <code>GetVertexFromPose(pose).value()</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>A second name for the same lookup, with an unexplained word ("rep")</td>
+    </tr>
+    <tr>
+      <td><code>GarageNodeFromVertex</code></td>
+      <td><code>GetNodeFromVertex</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Same <code>Get…From…</code> pattern as its siblings</td>
+    </tr>
+    <tr>
+      <td><code>LocomoteOrStrafe</code></td>
+      <td><code>ClassifyTranslation</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Says what it does; follows the enum rename below</td>
+    </tr>
+    <tr>
+      <td><code>TransitionType::{LOCOMOTE, STRAFE, ROTATION, VRC_TRANSITION}</code></td>
+      <td><code>{TRANSLATE_LONGITUDINAL, TRANSLATE_LATERAL, ROTATE, RIDE_VRC}</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>"Strafe" is game slang and "locomote" is vague. Longitudinal (along the heading) and lateral (across it) are the vehicle-dynamics terms. <code>AgvCommand.msg</code> already calls both "translate". <code>RIDE_VRC</code> ends the clash with the event type</td>
+    </tr>
+    <tr>
+      <td><code>Transition::length</code></td>
+      <td><code>distance_m</code>, <code>angle_rad</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Struct refactor in <a class="ref" href="#nm-transition-units">section 7.1</a></td>
+    </tr>
+    <tr>
+      <td><code>Vertex</code>, <code>Edge</code>, <code>HasVertex</code>, <code>GetOutEdges</code></td>
+      <td>keep</td>
+      <td><span class="tier tier-k">keep</span></td>
+      <td>Boost's vocabulary; the Background tab teaches it</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-posegraph-and-layout">PoseGraph and Layout</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>PoseGraph</code></td>
+      <td><code>PoseLattice</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>In robotics, "pose graph" means the SLAM graph of robot poses and measurements, so the name misleads. This class lists the poses, each with up to eight neighbour slots, which is a lattice (as in state-lattice planning)</td>
+    </tr>
+    <tr>
+      <td><code>pose_indices_</code></td>
+      <td><code>index_by_pose_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Map rule</td>
+    </tr>
+    <tr>
+      <td><code>pose_neighbors_</code> (flat <code>vector&lt;int></code>, 8 per pose, −1 = none)</td>
+      <td><code>neighbors_</code>, a <code>vector&lt;NeighborSlots></code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Struct refactor in <a class="ref" href="#nm-neighbor-slots">section 7.4</a></td>
+    </tr>
+    <tr>
+      <td><code>overlapping_sized_poses_</code></td>
+      <td><code>overlaps_by_pose_and_size_class_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Says what the two outer indices are</td>
+    </tr>
+    <tr>
+      <td>typedef <code>graph</code>, member <code>graph_</code></td>
+      <td><code>NodeGraph</code>, <code>node_graph_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Type names are UpperCamelCase; says which graph</td>
+    </tr>
+    <tr>
+      <td><code>node_id_to_index_</code>, <code>floor_id_to_index_</code></td>
+      <td><code>index_by_node_id_</code>, <code>index_by_floor_id_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Map rule</td>
+    </tr>
+    <tr>
+      <td><code>resource_windows_</code>, <code>resource_name_to_index_</code>, <code>GetResourceWindow(resource_size_index)</code></td>
+      <td><code>size_classes_</code>, <code>size_class_index_by_name_</code>, <code>GetSizeClass(size_class_index)</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>One word for the concept</td>
+    </tr>
+    <tr>
+      <td><code>kResourceSizeIndexAgv</code>, <code>kResourceSizeIndexTray</code></td>
+      <td><code>kSizeClassAgv</code>, <code>kSizeClassTray</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Same</td>
+    </tr>
+    <tr>
+      <td><code>parking_window_buffer_</code>, <code>GetBufferedResourceWindow</code></td>
+      <td><code>footprint_margin_</code>, <code>GetSizeClassWithMargin</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>"Margin" is the usual word for added clearance</td>
+    </tr>
+    <tr>
+      <td><code>bay_insert_floors_</code>, <code>bay_system_floors_</code></td>
+      <td><code>insert_floor_by_bay_</code>, <code>system_floors_by_bay_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Map rule</td>
+    </tr>
+    <tr>
+      <td><code>IsLiftNode</code> (VRC stops)</td>
+      <td><code>IsVrcNode</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>VRC is the conveyor; "lift" is the AGV's deck</td>
+    </tr>
+    <tr>
+      <td><code>Layout</code>, <code>nodes_</code>, <code>floors_</code>, <code>node_ids_by_type_</code>, <code>vrcs_</code>, <code>Vrc</code></td>
+      <td>keep</td>
+      <td><span class="tier tier-k">keep</span></td>
+      <td>Already clear; <code>node_ids_by_type_</code> is the model for the map rule</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-collisiontable">CollisionTable and footprints</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>CollisionEntityId</code> (enum), <code>CollisionEntityId_t</code> (<code>uint8_t</code>)</td>
+      <td><code>FootprintType</code>, <code>FootprintId</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>The value picks a footprint shape: <code>PAYLOAD + k</code> is the payload footprint of size class <em>k</em>, so the integer is an id, not just a type. The <code>_t</code> suffix is reserved by POSIX</td>
+    </tr>
+    <tr>
+      <td><code>VertexCollisionIdMap</code></td>
+      <td><code>FootprintIdByVertex</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Map rule</td>
+    </tr>
+    <tr>
+      <td><code>CollisionTable::Edge</code> (<code>std::array&lt;Pose, 2></code>), <code>PoseOrEdge</code>, <code>EdgeSet</code></td>
+      <td><code>Segment</code> (a struct), <code>PoseOrSegment</code>, <code>SegmentSet</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>"Edge" means three things; struct refactor in <a class="ref" href="#nm-segment-struct">section 7.3</a></td>
+    </tr>
+    <tr>
+      <td><code>ppmap_</code>, <code>pemap_</code>, <code>epmap_</code>, <code>eemap_</code>, types <code>PosePoseMap</code>, …</td>
+      <td><code>pose_vs_pose_</code>, <code>pose_vs_segment_</code>, <code>segment_vs_pose_</code>, <code>segment_vs_segment_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Spell words out</td>
+    </tr>
+    <tr>
+      <td><code>ResMap</code></td>
+      <td><code>ConflictMap</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>"Res" could be resource, result or resolution; the map holds conflicts</td>
+    </tr>
+    <tr>
+      <td><code>gg_</code> (in <code>CollisionTable</code> and <code>GarageOccupancyChecker</code>)</td>
+      <td><code>motion_graph_</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>Same object, same name</td>
+    </tr>
+    <tr>
+      <td><code>BAY_ODP</code></td>
+      <td>spell out (meaning not in the snapshots)</td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>An unexplained acronym in a public enum</td>
+    </tr>
+    <tr>
+      <td><code>CollisionTable</code>, <code>Query</code>, <code>collision_table_</code>, <code>occupancy_state_</code></td>
+      <td>keep</td>
+      <td><span class="tier tier-k">keep</span></td>
+      <td>Clear</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-discretegaragestate-and-asset-ids">DiscreteGarageState and asset ids</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Current</th>
+      <th>Proposed</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>vexen_</code> (and <code>DiscreteGarageState.vexen</code>)</td>
+      <td><code>vecs_</code> (and <code>vecs</code>)</td>
+      <td><span class="tier tier-b">B</span> / <span class="tier tier-c">C</span></td>
+      <td>A joke plural nobody searches for. <code>vecs</code> reads as the plural, like "series"</td>
+    </tr>
+    <tr>
+      <td><code>AgvId()</code>, <code>TrayId()</code>, <code>BayId()</code>, <code>VecsId()</code>, <code>VrcId()</code>, <code>SystemId()</code></td>
+      <td><code>AgvAssetId()</code>, …, or <code>AssetId::Agv(id)</code></td>
+      <td><span class="tier tier-b">B</span></td>
+      <td>They build a <code>GarageEntityIdMsg</code>, not a number; <code>TrayId(5)</code> reads like a <code>uint16_t</code></td>
+    </tr>
+    <tr>
+      <td><code>DiscreteGarageState</code>, <code>agvs_</code>, <code>trays_</code>, <code>bays_</code>, <code>payloads_</code>, <code>disabled_nodes_</code></td>
+      <td>keep</td>
+      <td><span class="tier tier-k">keep</span></td>
+      <td>Clear; pairs with <code>ContinuousState</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 data-num id="nm-ros-interfaces">ROS interfaces</h3>
+<p>All tier C. Do these as one versioned interface change, after the C++ refactor. Field renames alone keep the serialized layout. Type changes (the id widths in <a class="ref" href="#nm-ids-and-integer-widths">section 6.1</a>) and restructuring (<a class="ref" href="#nm-struct-refactors">section 7</a>) change it, so stored events (<code>DiscreteGarageEvent.buffer</code> holds serialized messages) need a migration or a reader for the old version.</p>
+
+<h4 data-num id="nm-ids-and-integer-widths">Ids and integer widths</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Id</th>
+      <th>Today</th>
+      <th>Proposed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>AGV, bay, VECS, VRC id</td>
+      <td><code>uint16</code> in the state and event messages; <code>uint32</code> in <code>ActionNode</code> (<code>agv_id</code>, <code>bay_id</code>, <code>vecs_id</code>, <code>vrc_id</code>); <code>uint32_t</code> in <code>Vrc</code></td>
+      <td><code>uint16</code> everywhere</td>
+    </tr>
+    <tr>
+      <td>Floor id</td>
+      <td><code>uint8</code> (<code>GarageFloor.id</code>, <code>GarageNode.floor</code>, <code>BayCommand.floor</code>); <code>uint16</code> (<code>DiscreteVrcState.current_floor</code>, <code>VrcCommand.requested_floor</code>); <code>uint32</code> (<code>GarageTray.floor</code>, <code>GaragePayload.floor</code>)</td>
+      <td><code>uint8</code> everywhere, and the field names end in <code>floor_id</code></td>
+    </tr>
+    <tr>
+      <td>Command id</td>
+      <td><code>string</code> "unique GUID string" (<code>AgvCommand.id</code>, <code>BayCommand.command_id</code>, <code>VecsCommand.command_id</code>, <code>VrcCommand.command_id</code>)</td>
+      <td><code>Guid id</code></td>
+    </tr>
+    <tr>
+      <td>Node id, tray id</td>
+      <td><code>uint32</code>, <code>uint16</code></td>
+      <td>keep</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-garage-model-messages">Garage model messages</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Message.field</th>
+      <th>Proposed</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>GarageEntityId</code> (<code>string&lt;=1 entity_type</code>, <code>uint16 id</code>)</td>
+      <td><code>AssetId</code> (<code>uint8 asset_type</code> with <code>TYPE_AGV = 97</code> ('a'), …, <code>uint16 id</code>)</td>
+      <td>"Asset type"; a one-character string becomes an enumerated byte. Keeping the character codes as values keeps log names like <code>a8</code> unchanged</td>
+    </tr>
+    <tr>
+      <td><code>GarageNode.floor</code></td>
+      <td><code>floor_id</code></td>
+      <td>It is an id (rule in <a class="ref" href="#nm-rule-ids-and-indices">section 2.5</a>)</td>
+    </tr>
+    <tr>
+      <td><code>GarageNode.max_resource_size</code> (string) and <code>max_resource_size_index</code></td>
+      <td><code>max_size_class_index</code> only</td>
+      <td>Two fields hold the same fact; the name is derivable from the layout</td>
+    </tr>
+    <tr>
+      <td><code>GarageNode.bay_prioritization</code></td>
+      <td><code>bay_insert_preference</code></td>
+      <td>The comment defines it: high positive means "prefer ready for insert"</td>
+    </tr>
+    <tr>
+      <td><code>GarageNode.TYPE_LIFT</code>, <code>TYPE_BLIFT</code></td>
+      <td><code>TYPE_VRC</code>, and a name for BLift that the layout owners agree</td>
+      <td>VRC is the conveyor. The YAML strings ("Lift", "BLift") can stay as input spellings</td>
+    </tr>
+    <tr>
+      <td><code>SizedPose.resource_size_index</code></td>
+      <td><code>size_class_index</code></td>
+      <td>One word for the concept</td>
+    </tr>
+    <tr>
+      <td><code>ParkingWindow</code>; <code>GarageLayout.resource_windows</code>, <code>buffer</code></td>
+      <td><code>SizeClass</code>; <code>size_classes</code>, <code>footprint_margin</code></td>
+      <td>Same</td>
+    </tr>
+    <tr>
+      <td><code>Edge.src</code>, <code>Edge.dst</code> ("node index")</td>
+      <td><code>node_id_a</code>, <code>node_id_b</code></td>
+      <td>Layout edges are undirected (<code>GarageLayout.msg</code> says so), and the values are ids</td>
+    </tr>
+    <tr>
+      <td><code>DisallowedEdgeOrientation</code> (<code>src</code>, <code>dst</code>, <code>heading</code>)</td>
+      <td>a <code>disallowed_headings</code> list on <code>Edge</code></td>
+      <td>Struct refactor in <a class="ref" href="#nm-lane-headings">section 7.6</a>; "orientation" means heading</td>
+    </tr>
+    <tr>
+      <td><code>GarageFloor.z</code></td>
+      <td><code>z_m</code></td>
+      <td>Unit rule</td>
+    </tr>
+    <tr>
+      <td><code>GaragePose</code>, <code>GeometricPose</code>, <code>heading</code>, <code>yaw</code>, <code>Guid</code>, <code>GarageNode.headings</code>, <code>faces_reciprocal</code></td>
+      <td>keep</td>
+      <td>Correct and everywhere. Fix the comment on <code>GarageNode.headings</code> instead: it lists base headings in [0, 179], and each also allows its reciprocal</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-state-and-event-messages">State and event messages</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Message.field</th>
+      <th>Proposed</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>DiscreteGarageState.is_faulted</code>, <code>vexen</code></td>
+      <td><code>faulted</code>, <code>vecs</code></td>
+      <td>Boolean rule; plural</td>
+    </tr>
+    <tr>
+      <td><code>DiscreteAgvState.lift</code>, <code>AgvGoal.lift</code>, <code>AgvLiftChanged.raised</code></td>
+      <td><code>lift_raised</code> in all three</td>
+      <td>Three spellings of one fact; <code>lift</code> alone reads like a noun</td>
+    </tr>
+    <tr>
+      <td><code>AgvPoseChanged</code>, <code>TrayPoseSetManually</code> (<code>node_id_curr</code>, <code>heading_curr</code>, <code>node_id_next</code>, <code>heading_next</code>)</td>
+      <td><code>GaragePose from</code>, <code>GaragePose to</code></td>
+      <td>Struct refactor in <a class="ref" href="#nm-nested-poses">section 7.2</a></td>
+    </tr>
+    <tr>
+      <td><code>AgvStateChanged</code>, <code>BayStateChanged</code>, <code>VecsStateChanged</code> (<code>state_curr</code>, <code>state_next</code>)</td>
+      <td><code>from_state</code>, <code>to_state</code></td>
+      <td>State-change rule</td>
+    </tr>
+    <tr>
+      <td><code>VrcStateChanged</code> (<code>current_discrete_state</code>, <code>next_discrete_state</code>)</td>
+      <td><code>from_state</code>, <code>to_state</code></td>
+      <td>Same pair as its siblings</td>
+    </tr>
+    <tr>
+      <td><code>DiscreteVrcState.current_floor</code>, <code>requested_floor</code></td>
+      <td><code>current_floor_id</code>, <code>requested_floor_id</code> (<code>uint8</code>)</td>
+      <td>Id rule and width</td>
+    </tr>
+    <tr>
+      <td><code>*DisablednessChanged</code>, <code>SetResourceDisabledness.srv</code></td>
+      <td><code>*DisabledChanged</code>, <code>SetAssetDisabled.srv</code></td>
+      <td>"Disabledness" is not a word; "resource" here means asset</td>
+    </tr>
+    <tr>
+      <td><code>DiscretePayloadState.reciprocal_to_tray</code>, <code>charging</code>; <code>*ExistenceChanged</code></td>
+      <td>keep</td>
+      <td>Clear; "reciprocal" is the defined house word for heading + 180</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-jobs-plans-and-schedules">Jobs, plans and schedules</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Message.field</th>
+      <th>Proposed</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>PlanRequest.base_state</code></td>
+      <td><code>initial_state</code></td>
+      <td>The C++ side already says <code>initial_state</code>; "base" also means the committed schedule</td>
+    </tr>
+    <tr>
+      <td><code>SchedulerJob.guid</code>, <code>ActionNode.guid</code></td>
+      <td><code>id</code></td>
+      <td>Id rule; the type already says GUID</td>
+    </tr>
+    <tr>
+      <td><code>SchedulerJob.state</code>, <code>STATE_*</code></td>
+      <td><code>status</code>, <code>STATUS_*</code></td>
+      <td>State-versus-status rule, matching <code>ActionNode.status</code></td>
+    </tr>
+    <tr>
+      <td><code>SchedulerJob.type_name</code>, <code>state_name</code></td>
+      <td>remove; tools format the constants</td>
+      <td>Copies of other fields that can disagree with them</td>
+    </tr>
+    <tr>
+      <td><code>ScheduledJobData.node_indices</code></td>
+      <td><code>action_indices</code></td>
+      <td>They index <code>Schedule.nodes</code>, which are actions, not garage nodes</td>
+    </tr>
+    <tr>
+      <td><code>ScheduledJobData.bay_arrival_node_guid</code></td>
+      <td><code>bay_arrival_action_id</code></td>
+      <td>Id rule; action, not node</td>
+    </tr>
+    <tr>
+      <td><code>ActionNode.parents</code></td>
+      <td><code>parent_indices</code></td>
+      <td>They are indices into <code>Schedule.nodes</code></td>
+    </tr>
+    <tr>
+      <td><code>ActionNode.duration</code></td>
+      <td><code>duration_s</code></td>
+      <td>Unit rule</td>
+    </tr>
+    <tr>
+      <td><code>ActionNode.outside_split</code></td>
+      <td><code>after_split</code> (or a name the dispatcher team prefers)</td>
+      <td>"Outside" does not say which side</td>
+    </tr>
+    <tr>
+      <td><code>ActionNode</code>, <code>Schedule.nodes</code>, <code>PlanRequest.base_schedule</code>, <code>pending_jobs</code>, <code>seconds_to_bay_arrival</code>, <code>allow_reciprocal</code>, <code>retain_job</code></td>
+      <td>keep</td>
+      <td><code>Action</code> alone would collide with ROS 2 actions; the others are clear (<code>seconds_to_bay_arrival</code> already carries its unit)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 data-num id="nm-command-messages">Command messages</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Message.field</th>
+      <th>Proposed</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>AgvCommand.src</code>, <code>dst</code> (both <code>AgvGoal</code>)</td>
+      <td><code>start</code>, <code>goal</code></td>
+      <td>Motion rule; the type is already called a goal</td>
+    </tr>
+    <tr>
+      <td><code>BayCommand</code>, <code>VecsCommand</code>, <code>VrcCommand</code>: <code>command_type</code> with <code>COMMAND_TYPE_*</code>, <code>command_id</code></td>
+      <td><code>type</code> with <code>TYPE_*</code>, <code>id</code></td>
+      <td>Inside a command, "command" is redundant; matches <code>ActionNode.type</code> and <code>TYPE_*</code></td>
+    </tr>
+    <tr>
+      <td><code>VrcCommand.requested_floor</code>, <code>BayCommand.floor</code></td>
+      <td><code>floor_id</code></td>
+      <td>Id rule</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 data-num id="nm-struct-refactors">Small struct refactors</h3>
+<p>Each of these changes a field's shape, not just its name. They are small enough to do one at a time.</p>
+
+<h4 data-num id="nm-transition-units">Transition: one unit per field</h4>
+<pre><code class="language-cpp">// today: common_ros/garage_graph.hpp
+struct Transition {
+  double length = 0.0;  // [m] for strafes and locomotes, [rad] for rotations
+  TransitionType type = TransitionType::LOCOMOTE;
+};
+
+// proposed
+struct Transition {
+  TransitionType type = TransitionType::TRANSLATE_LONGITUDINAL;
+  double distance_m = 0.0;  // translations: floor distance; RIDE_VRC: floor-to-floor height
+  double angle_rad = 0.0;   // ROTATE only
+};
+</code></pre>
+<p>Any code that turns a transition into a duration or a cost has to know that <code>length</code> means radians when the type is <code>ROTATION</code>. With two fields, a mix-up between metres and radians becomes a wrong field name, which code review can see.</p>
+
+<h4 data-num id="nm-nested-poses">Pose-change messages nest the pose</h4>
+<pre><code class="language-text"># today: AgvPoseChanged.msg (TrayPoseSetManually.msg is the same with tray_id)
+uint16 agv_id
+uint32 node_id_curr
+int16 heading_curr # in degrees, [-179:180]
+uint32 node_id_next
+int16 heading_next # in degrees, [-179:180]
+
+# proposed
+uint16 agv_id
+GaragePose from
+GaragePose to
+</code></pre>
+<p>The flat fields repeat the pose definition and its range comment twice per message. The nested form is the same four numbers (the serialized layout does not change), and code can pass <code>msg.to</code> to anything that takes a <code>GaragePoseMsg</code>.</p>
+
+<h4 data-num id="nm-segment-struct">CollisionTable::Edge becomes a named struct</h4>
+<pre><code class="language-cpp">// today: common_ros/collision_geometry.hpp
+using Edge = std::array&lt;Pose, 2u>;          // edge[0] is the start, edge[1] the end, by convention
+
+// proposed
+struct Segment {                            // the two poses of one transition, as a table key
+  Pose source;
+  Pose target;
+  bool operator==(const Segment&amp;) const = default;
+};
+</code></pre>
+<p>Named fields replace <code>[0]</code> and <code>[1]</code>, and the name stops colliding with <code>GarageGraph::Edge</code> (a Boost descriptor) and the layout's <code>Edge.msg</code>. It needs a <code>std::hash</code> specialization, like the one <code>common_ros</code> defines for <code>std::array&lt;GaragePoseMsg, 2></code> today.</p>
+
+<h4 data-num id="nm-neighbor-slots">PoseGraph neighbour slots</h4>
+<pre><code class="language-cpp">// today: common_ros/pose_graph.hpp
+std::vector&lt;int> pose_neighbors_;   // 8 entries per pose, indexed by PoseNeighbor; -1 (kInvalidIndex) = none
+
+// proposed
+using NeighborSlots = std::array&lt;std::optional&lt;uint32_t>, 8>;   // indexed by PoseNeighbor
+std::vector&lt;NeighborSlots> neighbors_;                            // indexed by pose index
+</code></pre>
+<p>Today, finding pose <em>i</em>'s left neighbour means computing <code>i * 8 + LEFT</code> and comparing the result to −1. With the proposed type it is <code>neighbors_[i][LEFT]</code>, and an empty slot is an empty <code>optional</code>.</p>
+
+<h4 data-num id="nm-asset-id">AssetId with an enumerated type</h4>
+<pre><code class="language-text"># today: GarageEntityId.msg
+string&lt;=1 entity_type # 'a' AGV, 'b' bay, 't' tray, 'v' VECS (and 'r' VRC, 's' system, set in common_ros)
+uint16 id
+
+# proposed: AssetId.msg
+uint8 TYPE_AGV = 97     # 'a'
+uint8 TYPE_BAY = 98     # 'b'
+uint8 TYPE_SYSTEM = 115 # 's'
+uint8 TYPE_TRAY = 116   # 't'
+uint8 TYPE_VECS = 118   # 'v'
+uint8 TYPE_VRC = 114    # 'r'
+uint8 asset_type
+uint16 id
+</code></pre>
+<p>The comment in today's message lists four of the six letters; the other two exist only in <code>common_ros</code>. Constants put all six in the definition, and hashing or comparing a byte is cheaper than a string. Payloads are named by a <code>Guid</code> and have no letter; that stays as it is.</p>
+
+<h4 data-num id="nm-lane-headings">Disallowed headings live on the edge</h4>
+<pre><code class="language-text"># today: GarageLayout.msg
+Edge[] edges                                              # Edge: src, dst
+DisallowedEdgeOrientation[] disallowed_edge_orientations  # src, dst, heading
+
+# proposed
+Edge[] edges   # Edge: node_id_a, node_id_b, int16[] disallowed_headings (0:179, reciprocal implied)
+</code></pre>
+<p><code>Layout</code> already joins the two lists into one map keyed by the node pair (<code>disallowed_edge_orientations_</code>). Storing the headings on the edge removes the join, and with it the chance of a disallowed heading that names an edge that does not exist.</p>
+
+<h3 data-num id="nm-keep-as-is">Keep as they are</h3>
+<p>Renames have a cost, so these stay. Most are already right, and the rest are too widespread to be worth changing.</p>
+<ul>
+  <li><strong><code>GaragePose</code> and <code>heading</code>, <code>GeometricPose</code> and <code>yaw</code>.</strong> They pair correctly (degrees, radians), and they are in every message.</li>
+  <li><strong><code>Vertex</code>, <code>Edge</code> (in Boost code), <code>DagBase</code>.</strong> Boost's vocabulary, and the Background tab teaches it.</li>
+  <li><strong><code>Layout</code>, <code>DiscreteGarageState</code>, <code>ScheduleEvent</code>, <code>AgvMove</code>, <code>TrayMove</code>, <code>CollisionTable</code>.</strong> Clear and consistent.</li>
+  <li><strong><code>ActionNode</code>.</strong> <code>Action</code> would collide with ROS 2 actions. Say "action" in field names instead.</li>
+  <li><strong>"Reciprocal".</strong> A house word, but defined once (heading + 180) and used consistently: <code>faces_reciprocal</code>, <code>allow_reciprocal</code>, <code>IsAngleOrReciprocal</code>.</li>
+  <li><strong>The <code>Msg</code>, <code>Srv</code> and <code>SPtr</code> suffixes, and UPPER_CASE enum values.</strong> The codebase is consistent here. Switching to the Google style's <code>kValue</code> would touch every enum and gain nothing.</li>
+</ul>
+
+<h3 data-num id="nm-decisions-for-review">Decisions for review</h3>
+<ol>
+  <li><strong><code>GarageGraph</code> → <code>MotionGraph</code>, and <code>PoseGraph</code> → <code>PoseLattice</code>?</strong> Inside the scheduler this is settled by the translation header (<a class="ref" href="#pr-the-translation-header">section 9.2</a>), and members are <code>motion_graph_</code>. The <code>common_ros</code> class rename itself is still open; when it happens, the alias line is deleted and no scheduler code changes.</li>
+  <li><strong><code>TransitionType</code> values.</strong> <code>TRANSLATE_LONGITUDINAL</code> and <code>TRANSLATE_LATERAL</code>, or shorter <code>DRIVE</code> and <code>CRAB</code>? Pick whatever the AGV team says out loud.</li>
+  <li><strong>"Size class" for parking windows, resource windows and resource sizes.</strong> Confirm with the layout owners, who write these in YAML.</li>
+  <li><strong>The interface version.</strong> Which tier C items go into it, and how stored <code>DiscreteGarageEvent</code> buffers are migrated or read.</li>
+  <li><strong>Stage folder names.</strong> Tracked with the folder layout in <a class="ref" href="#pr-decisions-to-resolve-in-review">section 12</a>.</li>
+  <li><strong>What <code>BAY_ODP</code> and <code>TYPE_BLIFT</code> should be called.</strong> Their meaning is not in the snapshots.</li>
+</ol>
+
+<h3 data-num id="nm-rollout">Rollout</h3>
+<ol>
+  <li><strong>Tier A with the refactor</strong>, as in <a class="ref" href="#pr-renames-in-scheduler">section 9.4</a>. When the staged plan (<a class="ref" href="#pr-staged-plan">section 11</a>) moves a function, rename what it touches in the same change, as a separate commit with no logic change. The parity tests of the <a href="#doc-verification">Verification</a> tab then show the rename changed nothing.</li>
+  <li><strong>Tier B after the refactor, one header at a time.</strong> Add the new name. Keep the old one as a deprecated alias (<code>using GarageGraph [[deprecated("use MotionGraph")]] = MotionGraph;</code>), or as a forwarding method for functions, for one release. Then remove it.</li>
+  <li><strong>Tier C once.</strong> Collect the accepted rows into one interface change with a version bump. Update every consumer in the same release, and migrate or version-read stored events.</li>
+  <li><strong>Keep it from drifting back.</strong> Add a <code>clang-tidy</code> <code>readability-identifier-naming</code> configuration for the casing rules. Add the vocabulary table in <a class="ref" href="#nm-rule-one-concept-one-word">section 2.2</a> to the contributor guide, so review has a reference to point at.</li>
 </ol>

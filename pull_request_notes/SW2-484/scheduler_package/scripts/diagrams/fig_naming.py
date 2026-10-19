@@ -13,14 +13,14 @@ DOC4 = "04-naming.html"
 CARDS = [
     ("The motion-graph object", T.green, [
         ("gg_", "Scheduler, CollisionTable, GarageOccupancyChecker"),
-        ("graph", "GarageServices (doc 02)"),
+        ("graph", "GarageServices (proposal)"),
         ("base_graph_", "the Boost object inside it"),
         ("GarageGraph", "the class"),
     ], "motion_graph (MotionGraph)"),
     ("The collision-table object", T.amber, [
         ("table_", "Scheduler"),
         ("collision_table_", "GarageOccupancyChecker"),
-        ("collisions", "GarageServices (doc 02)"),
+        ("collisions", "GarageServices (proposal)"),
     ], "collision_table"),
     ("A footprint size class", T.sky, [
         ("ParkingWindow", "message"),
@@ -109,5 +109,5 @@ def naming_today():
                    "name proposed in this document. Widths are field types in the messages.",
           badge_key="as-built",
           footnote="Spellings from sources/repomix-interfaces.xml, repomix-common-ros.xml, repomix-planner-core.xml "
-                   "and repomix-scheduler.xml; GarageServices from doc 02's proposal.")
+                   "and repomix-scheduler.xml; GarageServices from the refactor proposal.")
     return d

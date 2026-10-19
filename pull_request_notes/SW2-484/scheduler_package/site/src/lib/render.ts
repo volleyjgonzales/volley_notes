@@ -120,6 +120,7 @@ function parse(config: DocConfig, targets: Map<string, Target>): Parsed {
   const headings: Heading[] = [];
   let n2 = 0;
   let n3 = 0;
+  let n4 = 0;
   let figs = 0;
   const seen = new Set<string>();
   visit(tree, 'element', (node) => {
@@ -138,9 +139,13 @@ function parse(config: DocConfig, targets: Map<string, Target>): Parsed {
       let num: string | undefined;
       if (node.tagName === 'h2') {
         n3 = 0;
+        n4 = 0;
         if (numbered) num = String(++n2);
-      } else if (node.tagName === 'h3' && numbered) {
-        num = `${n2}.${++n3}`;
+      } else if (node.tagName === 'h3') {
+        n4 = 0;
+        if (numbered) num = `${n2}.${++n3}`;
+      } else if (node.tagName === 'h4' && numbered) {
+        num = `${n2}.${n3}.${++n4}`;
       }
       delete node.properties.dataNum;
       const t = toString(node).trim();
@@ -186,12 +191,37 @@ function resolveRefs(p: Parsed, targets: Map<string, Target>) {
       const old = toString(node);
       const lead = /^([A-Za-z]+\s+)?/.exec(old)?.[1] ?? '';
       if (!t.num) throw new BuildError(`${p.config.file}: ref ${href} points at an unnumbered heading`);
-      node.children = [text(lead + t.num)];
+      // a reference into another document names that tab: "section 3.2 in Task planning"
+      // class "bare" suppresses the tab name, for ranges and lists whose sentence names the tab once
+      const other = t.doc !== p.config.num && !cls(node).includes('bare') ? docByNum(t.doc) : undefined;
+      node.children = other ? [text(lead + t.num), text(` in ${other.tab}`)] : [text(lead + t.num)];
+      if (other) node.properties.dataXdoc = other.num;
       node.properties.className = t.kind === 'figure' ? ['xref', 'figref'] : ['xref'];
       if (t.title) node.properties.title = t.title;
     } else {
       node.properties.className = [...cls(node), 'xref'];
     }
+  });
+}
+
+/** "sections 4 in Task planning–5 in Task planning" -> "sections 4–5 in Task planning": in a run of
+ *  references into the same other tab joined by "–", ",", "and", "or" or "to", only the last names the tab. */
+function mergeXdocRuns(p: Parsed) {
+  visit(p.tree, 'element', (node) => {
+    const kids = node.children;
+    for (let i = 0; i + 2 < kids.length; i++) {
+      const a = kids[i];
+      const sep = kids[i + 1];
+      const b = kids[i + 2];
+      if (!isEl(a, 'a') || !isEl(b, 'a') || sep.type !== 'text') continue;
+      const da = a.properties.dataXdoc;
+      if (!da || da !== b.properties.dataXdoc) continue;
+      if (!/^\s*(–|-|,|, and|and|or|to)\s*$/.test((sep as Text).value)) continue;
+      if (a.children.length === 2) a.children.pop();
+    }
+  });
+  visit(p.tree, 'element', (node) => {
+    if (node.properties?.dataXdoc) delete node.properties.dataXdoc;
   });
 }
 
@@ -286,10 +316,10 @@ function replaceInText(
 }
 
 function linkDocMentions(p: Parsed) {
-  replaceInText(p.tree, /\b[Dd]oc (0[1-5])\b/g, (m) => {
-    const d = docByNum(m[1]);
-    if (!d || d.num === p.config.num) return null;
-    return [h('a.xref.docref', { href: `#doc-${d.key}` }, m[0])];
+  // Documents are named by their tab ("the Task planning tab"), never by number: numbers change
+  // when tabs are reordered. Fail the build on a leftover "doc 02".
+  replaceInText(p.tree, /\b[Dd]oc (0[1-9])\b/g, (m) => {
+    throw new BuildError(`${p.config.file}: "${m[0]}" in text; name the tab instead`);
   });
 }
 
@@ -658,6 +688,7 @@ export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: Resolve
   const out: RenderedDoc[] = [];
   for (const p of parsed) {
     resolveRefs(p, targets);
+    mergeXdocRuns(p);
     repoLinks(p);
     renderMath(p);
     frameFigures(p);

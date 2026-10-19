@@ -1,25 +1,28 @@
 <!--
-  03 — source of truth for this document. Edit this file; the site build (site/) renders it.
+  06 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
-  Conventions
-  - <h2 data-num> / <h3 data-num>: numbered at build time (h3 numbers are "<h2>.<k>"). No number in the text.
-  - Every heading and figure has a stable id (prefix "vr-"). Link with <a href="#id">.
-  - <a class="ref" href="#id">section 7</a> / <a class="ref" href="#vr-fig-…">Figure 3</a>:
-    the build replaces the number with the current one, so references survive reordering.
-  - <figure id="vr-fig-NAME"><img src="figures/NAME.svg" alt="…"><figcaption>…</figcaption></figure>:
+  Conventions (shared by all six documents)
+  - <h2 data-num> / <h3 data-num> / <h4 data-num>: numbered at build time ("<h2>.<k>", "<h2>.<k>.<j>").
+    No number in the text.
+  - Every heading and figure has a stable id. Ids keep the prefix of the document they were first
+    written in ("bg-", "ad-", "nm-", ...), so links survive moves between documents. New ids use "vr-".
+  - <a class="ref" href="#id">section 7</a> / <a class="ref" href="#…-fig-…">Figure 3</a>: the build
+    replaces the number with the current one; a reference into another document also names that tab.
+  - <figure id="…-fig-NAME"><img src="figures/NAME.svg" alt="…"><figcaption>…</figcaption></figure>:
     numbered at build time; NAME is the SVG from scripts/diagrams.
   - <span class="math">TeX</span>, <div class="math">TeX</div>: rendered to MathML at build time.
-  - Keyword links (glossary.yaml), "doc 02" links and code highlighting are added at build time.
+  - Links to another tab: <a href="#doc-KEY">Tab name</a>. Keyword links (glossary.yaml) and code
+    highlighting are added at build time.
 -->
-<h1>03 — Regression and benchmark plan</h1>
-<p>This document says how to prove the refactor in <a href="#doc-proposal">02</a> changed nothing, and how to measure it. It starts with what the existing tests already cover (computed from <code>sources/repomix-scheduler.xml</code>), then defines the parity comparison and the benchmark method.</p>
+<h1>06 — Verification: regression parity and benchmarks</h1>
+<p>This tab says how to prove the refactor in the <a href="#doc-proposal">Issue &amp; proposal</a> tab changed nothing, and how to measure it. It starts with what the existing tests already cover (computed from <code>sources/repomix-scheduler.xml</code>), then defines the parity comparison and the benchmark method.</p>
 <h2 data-num id="vr-two-separate-goals">Two separate goals</h2>
 <p><strong>Behavioural equivalence</strong> asks whether the extracted default solver makes the same decisions and adds the same constraints as the old <code>Scheduler</code> method. <strong>Performance benchmarking</strong> asks whether run time or resource use changes for comparable inputs. A passing GoogleTest is neither: it shows the code still meets that test's assertions, not that output is identical or equally fast.</p>
 <h2 data-num id="vr-what-the-existing-tests-cover">What the existing tests cover</h2>
 <p>The package has <strong>72 active <code>TEST</code> cases</strong> in four files (a 73rd, <code>DoubleRetrieveDodgeAgv</code>, sits inside a <code>/* … */</code> block). <a class="ref" href="#vr-fig-35_test_entry_points">Figure 1</a> places each one under the earliest pipeline stage it calls directly.</p>
 <figure id="vr-fig-35_test_entry_points">
   <img src="figures/35_test_entry_points.svg" alt="Where the existing tests enter the scheduler">
-  <figcaption><strong>Test entry points.</strong> Columns follow the <code>Plan()</code> pipeline from doc 01, <a class="ref" href="#bg-one-plan-call-step-by-step">section 10</a>. A card's colour stripe shows its file; "+n" means the test also calls n later stages directly.</figcaption>
+  <figcaption><strong>Test entry points.</strong> Columns follow the <code>Plan()</code> pipeline from <a class="ref" href="#bg-one-plan-call-step-by-step">section 10</a>. A card's colour stripe shows its file; "+n" means the test also calls n later stages directly.</figcaption>
 </figure>
 <table>
   <thead>
@@ -240,10 +243,10 @@ EXPECT_FALSE(ctx->events.HasDependency(tray_move_1, tray_move_2));  // direct ed
   <li>Success flag and a stable error class (compare raw message strings separately).</li>
   <li>For each <code>TrayMove</code>: tray id, destination node and heading, assigned AGV id, job index.</li>
   <li>Event identity as (type, job index, entity id, destination, occurrence number among identical events).</li>
-  <li>The edge set after <code>Reduce()</code> (the transitive reduction is unique for a DAG), plus reachability between every pair of events.</li>
+  <li>The edge set after <code>Reduce()</code> (the transitive reduction is unique for a DAG, <a class="ref" href="#ad-transitive-reduction">section 2.4</a>), plus reachability between every pair of events.</li>
   <li><code>first_tray_event</code> mapped to canonical event identities.</li>
   <li>The final <code>DiscreteGarageState</code> after applying all events to <code>initial_state</code>.</li>
-  <li>For end-to-end tests: the <code>ScheduledJobDataMsg</code> list and the action-node schedule.</li>
+  <li>For end-to-end tests: the <code>ScheduledJobDataMsg</code> list and the action DAG, with actions matched by content (entity, command, poses) and compared as reduced edge sets (<a class="ref" href="#ad-what-this-means-for-the-refactor">section 6.7</a>).</li>
 </ul>
 <p>Let <span class="math">e_k\in\{0,1\}</span> be 1 only when every rule above passes for scenario <span class="math">k</span>. The pass proportion <span class="math">p\in[0,1]</span> is:</p>
 <div class="math">p=\frac{1}{K}\sum_{k=1}^{K}e_k.</div>
@@ -269,15 +272,15 @@ EXPECT_EQ(ref.edges, cand.edges);                   // after Reduce() on a copy
 EXPECT_EQ(ref.first_tray_event, cand.first_tray_event);
 EXPECT_EQ(ref.final_state, cand.final_state);
 </code></pre>
-<p>Note the comment on cloning: because the DAG holds <code>shared_ptr</code>s (doc 02, <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">section 6.5</a>), the two contexts must be built independently from the same inputs. <code>Solve</code> itself changes nothing, but <code>ApplyTrayAssignment</code> and the old <code>DoTrayAssignments</code> both set fields on the event objects. A second, cheaper check needs no clone: call <code>Solve</code> twice on the same <code>Input</code> and assert the two <code>Result</code>s are equal and the input events are unchanged (doc 02, invariant 9).</p>
+<p>Note the comment on cloning: because the DAG holds <code>shared_ptr</code>s (<a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">section 6.5</a>), the two contexts must be built independently from the same inputs. <code>Solve</code> itself changes nothing, but <code>ApplyTrayAssignment</code> and the old <code>DoTrayAssignments</code> both set fields on the event objects. A second, cheaper check needs no clone: call <code>Solve</code> twice on the same <code>Input</code> and assert the two <code>Result</code>s are equal and the input events are unchanged (invariant 9, <a class="ref" href="#pr-key-invariants-to-maintain">section 10</a>).</p>
 <h2 data-num id="vr-benchmark-method">Benchmark method</h2>
 <p>Time the solver call alone, after fixture construction, and separately time <code>Scheduler::Plan</code> end to end. Keep layout loading, YAML parsing, ROS component start-up and <code>debug/printdags</code> output out of solver timings. Use the same optimized build flags, hardware, ROS distribution, dependency versions and thread count for every run.</p>
 <p>Let <span class="math">t_{k,r}\in\mathbb R_{\ge0}</span> [ms] be the duration of scenario <span class="math">k</span> on repetition <span class="math">r\in\{1,\ldots,R\}</span>, where <span class="math">R\in\mathbb N</span> is the repetition count. For each scenario record the median <span class="math">\widetilde t_k\in\mathbb R_{\ge0}</span> [ms], the 95th percentile <span class="math">t_{k,0.95}</span> [ms] when there are enough repetitions, and the baseline median <span class="math">\widetilde t_k^{(0)}</span> [ms] from the original code. The runtime ratio <span class="math">q_k\in\mathbb R_{\ge0}</span> is:</p>
 <div class="math">q_k=\frac{\widetilde t_k}{\widetilde t_k^{(0)}}.</div>
 <p><span class="math">q_k</span> is defined only when <span class="math">\widetilde t_k^{(0)}>0</span> [ms]; a value above 1 means the candidate is slower. Agree on a threshold with the team after measuring run-to-run variance, not before. Save raw timings as CSV or JSON:</p>
-<pre><code class="language-text">solver,scenario_id,site_fixture,layout_hash,code_sha,build_type,host,iteration,elapsed_ms,success,event_count,edge_count,semantic_hash
+<pre><code class="language-text">solver,scenario_id,site_fixture,layout_hash,code_sha,build_type,host,iteration,elapsed_ms,success,event_count,edge_count,work_s,span_s,width,semantic_hash
 </code></pre>
-<p><code>semantic_hash</code> is a hash of the canonical description from <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, never of pointer values or hash-map iteration order.</p>
+<p><code>semantic_hash</code> is a hash of the canonical description from <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, never of pointer values or hash-map iteration order. <code>work_s</code>, <code>span_s</code> and <code>width</code> describe the parallelism of the action DAG in the response (<a class="ref" href="#ad-where-parallelism-comes-from">section 4.5</a>); they show whether a solver change made the plan more or less parallel even when the timing is unchanged.</p>
 <h2 data-num id="vr-build-and-run-commands">Build and run commands</h2>
 <p>Inside the configured ROS 2 container and workspace:</p>
 <pre><code class="language-bash">colcon build --packages-up-to scheduler scheduler_advanced_tests --event-handlers console_direct+
@@ -299,4 +302,4 @@ colcon test-result --verbose
   <li class="task-list-item"><input type="checkbox" disabled> Unit tests, advanced scenarios and applicable system tests pass.</li>
 </ul>
 <h2 data-num id="vr-evidence-limits">Evidence limits</h2>
-<p>Six snapshots were used: the <code>scheduler</code> package (<code>sources/repomix-scheduler.xml</code>), the sources of <code>planner_core</code> (<code>sources/repomix-planner-core.xml</code>: the event classes and the event DAG, without <code>test/event_dag_tests.cpp</code> and <code>test/schedule_events_tests.cpp</code>) the sources of <code>common_ros</code> (<code>sources/repomix-common-ros.xml</code>, without tests), the message definitions of <code>interfaces</code> (<code>sources/repomix-interfaces.xml</code>), the sources of <code>motion_planner</code> (<code>sources/repomix-motion-planner.xml</code>: CHUGG, SIPP, the searches and filters, without tests) and of <code>cost_functions</code> (<code>sources/repomix-cost-functions.xml</code>: the trapezoid model, <code>MotionCostModel</code> and motion runs, without tests). <code>common</code>, <code>task_planner</code> and <code>scheduler_advanced_tests</code> are referenced but not included, so statements about them come from call sites and need checking. Customer-site geometry and AGV dimensions are not in the snapshots; the 2D figures use illustrative coordinates. No timing in this document is a measured value.</p>
+<p>Six snapshots were used: the <code>scheduler</code> package (<code>sources/repomix-scheduler.xml</code>), the sources of <code>planner_core</code> (<code>sources/repomix-planner-core.xml</code>: the event classes and the event DAG, without <code>test/event_dag_tests.cpp</code> and <code>test/schedule_events_tests.cpp</code>) the sources of <code>common_ros</code> (<code>sources/repomix-common-ros.xml</code>, without tests), the message definitions of <code>interfaces</code> (<code>sources/repomix-interfaces.xml</code>), the sources of <code>motion_planner</code> (<code>sources/repomix-motion-planner.xml</code>: CHUGG, SIPP, the searches and filters, without tests) and of <code>cost_functions</code> (<code>sources/repomix-cost-functions.xml</code>: the trapezoid model, <code>MotionCostModel</code> and motion runs, without tests). <code>common</code>, <code>task_planner</code> and <code>scheduler_advanced_tests</code> are referenced but not included, so statements about them come from call sites and need checking. Customer-site geometry and AGV dimensions are not in the snapshots; the 2D figures use illustrative coordinates. No timing in this tab is a measured value.</p>

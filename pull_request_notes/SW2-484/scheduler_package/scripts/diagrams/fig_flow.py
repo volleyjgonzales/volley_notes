@@ -278,3 +278,78 @@ def dependencies():
           legend=[("arrow", T.fg2, "dependency (DAG edge)"), ("dasharrow", T.faint, "implied by a path; pruned"),
                   ("box", AGV, "AgvMove"), ("box", TRAY, "TrayMove"), ("box", BAY, "BayTransition")])
     return d
+
+
+# --------------------------------------------------------------------------------------
+# 96 — where the code is: lines per pipeline stage, in the scheduler and in library packages
+# --------------------------------------------------------------------------------------
+
+CODE_BY_STAGE = [
+    # (row label, sub label, [(segment label, lines, color, in_scheduler)])
+    ("Task planning", "stages 1-3", [("job expansion", 1430, "tp", 1.0), ("tray assignment", 1039, "tp", 0.72),
+                                     ("AGV assignment", 1004, "tp", 0.5), ("validation", 113, "tp", 0.34),
+                                     ("searches, filters (motion_planner)", 1420, "tp", None)]),
+    ("Motion planning", "stage 4", [("PlanMotions", 63, "mp", 1.0),
+                                    ("CHUGG sequential, SIPP, timeline (motion_planner)", 3870, "mp", None),
+                                    ("not called: CBS solver, coalescing, debug printers", 660, "mp", -1)]),
+    ("Action graph", "stage 5", [("motions -> action DAG", 544, "ag", 1.0)]),
+    ("Orchestrator", "Plan(), errors", [("Plan()", 381, "orc", 1.0)]),
+    ("Shared", "all stages", [("planner_core", 1454, "core", None), ("cost_functions", 501, "core", None)]),
+]
+
+
+@figure("96_code_by_stage", "Where the code is, by pipeline stage", "01-software-background.html")
+def code_by_stage():
+    d = Doc("96_code_by_stage", "Where the code is, by pipeline stage",
+            "Lines of C++ per stage. Inside the scheduler package almost everything is task planning; the motion "
+            "planner's size is in the motion_planner package, most of which the scheduler uses; the action graph is small.")
+    col = {"tp": T.violet, "mp": T.sky, "ag": T.green, "orc": T.amber, "core": T.teal}
+    LW, X0, K, H, GAP = 250, 270, 0.215, 36, 34
+    y = 20
+    d.text(X0, y - 4, "solid: scheduler package    pale, dashed outline: library package", size=S.small, fill=T.muted)
+    y += 22
+    for label, sub, segs in CODE_BY_STAGE:
+        d.text(0, y + H / 2 - 7, label, size=13.5, weight=600, fill=T.fg)
+        d.text(0, y + H / 2 + 10, sub, size=S.small, fill=T.muted)
+        x = X0
+        below = []
+        for name, n, c, a in segs:
+            w = max(n * K, 3)
+            base = col[c]
+            if a == -1:
+                d.rect(x, y, w, H, rx=4, fill="none", stroke=T.faint, sw=1.2, dash="2 3")
+                tcol = T.muted
+            elif a is None:
+                d.rect(x, y, w, H, rx=4, fill=T.tint(base, 0.16, T.bg), stroke=base, sw=1.2, dash="5 3")
+                tcol = T.fg
+            else:
+                d.rect(x, y, w, H, rx=4, fill=T.tint(base, 0.25 + 0.6 * a, T.bg))
+                tcol = T.bg if a >= 0.5 else T.fg
+            txt = name if len(segs) == 1 else f"{name}  {n:,}"
+            if text_width(txt, S.small, "sans", 600) + 16 < w:
+                d.text(x + 8, y + H / 2, txt, size=S.small, weight=600 if a != -1 else 400, fill=tcol)
+            else:
+                below.append((x + w / 2, txt))
+            x += w + 2
+        total = sum(s[1] for s in segs if s[3] != -1)
+        d.text(x + 8, y + H / 2, f"{total:,}", size=13, weight=700, family="mono", fill=T.fg2)
+        for i, (cx, txt) in enumerate(below):
+            d.line(cx, y + H, cx, y + H + 8, stroke=T.faint, sw=1)
+            d.text(cx, y + H + 16, txt, size=S.small, fill=T.fg2, anchor="start" if cx < X0 + 600 else "end")
+        y += H + GAP + (14 if below else 0)
+    frame(d, title="Where the code is, by pipeline stage",
+          subtitle="Lines of C++ (headers and sources, without tests). In the scheduler package, task planning is "
+                   "about 3,590 of 4,570 lines (78%), the motion-planning adapter 63, the action graph about 540. "
+                   "Counting the library code the scheduler actually calls, task planning is about 5,000 lines and motion "
+                   "planning about 3,900; about 660 lines of motion_planner are never called. The action graph stays small.",
+          badge_key="as-built",
+          legend=[("box", T.violet, "task planning"), ("box", T.sky, "motion planning"), ("box", T.green, "action graph"),
+                  ("box", T.amber, "orchestrator"), ("box", T.teal, "shared libraries"),
+                  ("dashbox", T.fg2, "in a library package"), ("dashbox", T.faint, "in motion_planner, never called")],
+          footnote="Scheduler: function definitions in scheduler.cpp and utils.cpp, grouped by the stage that calls "
+                   "them (4,574 of 4,721 lines; the rest is includes and namespaces). Libraries: every .hpp and .cpp "
+                   "in the motion_planner, planner_core and cost_functions snapshots; 'never called' = no call path from the "
+                   "scheduler's code (found by tracing calls from its sources). Not counted: task_planner "
+                   "(BottleneckAssignment, not in the snapshots), common_ros (the garage model, about 9,800 lines, used "
+                   "by every stage) and tests (6,546 lines in scheduler, mostly end-to-end).")
+    return d

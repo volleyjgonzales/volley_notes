@@ -1,4 +1,4 @@
-"""Motion planning figures for doc 01 (Part IV, motion planning): where CHUGG sits between the two DAGs, and what a
+"""Motion planning figures (Motion planning tab): where CHUGG sits between the two DAGs, and what a
 ContinuousState holds (the ContinuousStateToSchedule test, drawn as a timeline)."""
 from __future__ import annotations
 
@@ -75,9 +75,9 @@ def planning_pipeline():
     label_pill(d, (e.cx + adg.cx) / 2, yb, "event edges copied in (TransferEventDagDepsToActionDag)", color=T.violet,
                size=10.5)
     note(d, 0, yb + 34, 4 * W + 3 * GAP,
-         "Why it can look like ADG -> MAPF: the event DAG is also a DAG of discrete changes with "
-         "\"must happen before\" edges, and a few of its edges are spatial (AddNodeArrivalDeps, path repair). "
-         "But it is a task-level precedence graph made before any timing. The ADG in the textbook sense is "
+         "The event DAG is not an ADG. It is also a DAG of discrete changes with "
+         "\"must happen before\" edges, and a few of its edges are spatial (AddNodeArrivalDeps, path repair), "
+         "but it is a task-level precedence graph made before any timing. The ADG in the standard sense is "
          "step 3, built from CHUGG's output, and it inherits the event edges.", color=T.muted)
     frame(d, title="Two DAGs around one motion planner",
           subtitle="Order of the pipeline is MAPF -> ADG -> executor, as in the literature. What is different is "

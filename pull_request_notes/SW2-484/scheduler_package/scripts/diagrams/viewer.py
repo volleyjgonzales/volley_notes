@@ -73,7 +73,7 @@ const FIGS = __FIGS__;
 const nav=document.getElementById('nav'), stage=document.getElementById('stage');
 let cur=-1, svg=null, vb0=null, vb=null;
 const groups={};
-const DOCS={'01-software-background.html':'01 · Software background','02-issue-and-proposal.html':'02 · Issue and proposal','03-verification-plan.html':'03 · Verification plan'};
+const DOCS={'01-background.html':'01 · Background','02-task-planning.html':'02 · Task planning','03-motion-planning.html':'03 · Motion planning','04-action-graph.html':'04 · Action graph','05-issue-and-proposal.html':'05 · Issue & proposal','06-verification.html':'06 · Verification'};
 FIGS.forEach((f,i)=>{(groups[f.doc]=groups[f.doc]||[]).push(i)});
 for(const [doc,idx] of Object.entries(groups)){
   const h=document.createElement('h2'); h.textContent=DOCS[doc]||doc; nav.appendChild(h);
@@ -123,18 +123,23 @@ const start=FIGS.findIndex(f=>'#'+f.name===location.hash); show(start>=0?start:0
 </html>
 """
 
-# Reading order = figure numbering in the documents (site/src/content/*.html).
+# Reading order = figure numbering in the documents (site/src/content/*.html), in tab order.
+CONTENT = ("01-background.html", "02-task-planning.html", "03-motion-planning.html", "04-action-graph.html",
+           "05-issue-and-proposal.html", "06-verification.html")
+FIRST_DOC: dict = {}   # figure name -> the document it first appears in
 def _doc_order():
     """Figure order and per-document numbers, read from the <img> order in the HTML sources."""
     root = Path(__file__).resolve().parents[2] / "site" / "src" / "content"
     order = []
-    for name in ("01-software-background.html", "02-issue-and-proposal.html", "03-verification-plan.html"):
+    for name in CONTENT:
         seen = []
         source = re.sub(r"<!--.*?-->", "", (root / name).read_text(encoding="utf-8"), flags=re.S)
         for n in re.findall(r'<img src="figures/([^"]+)\.svg"', source):
             if n not in seen:
                 seen.append(n)
         order += [(n, f"Fig {i}") for i, n in enumerate(seen, 1)]
+        for n in seen:
+            FIRST_DOC.setdefault(n, name)
     return order
 
 
@@ -143,13 +148,15 @@ ORDER = _doc_order()
 
 def build(out: Path, figures):
     items = []
-    rank = {n: i for i, (n, _) in enumerate(ORDER)}
-    label = dict(ORDER)
+    rank, label = {}, {}
+    for i, (n, lab) in enumerate(ORDER):
+        rank.setdefault(n, i)
+        label.setdefault(n, lab)
     for f in sorted(figures, key=lambda f: rank.get(f.name, 99)):
         svg = (out / f"{f.name}.svg").read_text(encoding="utf-8")
         svg = re.sub(r"<\?xml[^>]*\?>\s*", "", svg)
         svg = re.sub(r"<script>.*?</script>", "", svg, flags=re.S)   # viewer supplies its own pan/zoom
         title = f"{label[f.name]} · {f.title}" if f.name in label else f.title
-        items.append({"name": f.name, "title": title, "doc": f.doc, "svg": svg})
+        items.append({"name": f.name, "title": title, "doc": FIRST_DOC.get(f.name, ""), "svg": svg})
     html = TEMPLATE.replace("__FIGS__", json.dumps(items).replace("</", "<\\/"))
     (out / "viewer.html").write_text(html, encoding="utf-8")

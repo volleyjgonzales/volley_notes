@@ -242,7 +242,7 @@
 
 - term: Building the response
   code: [ResponseFromTrajectories, BuildActionDagFromMotions, BuildScheduledActionsArray]
-  to: bg-from-trajectories-to-the-response
+  to: ad-how-the-action-dag-is-built
   def: Converts CHUGG's trajectories into ActionNodes and fills ScheduledJobData.
 
 - term: VECS and VRC
@@ -254,7 +254,7 @@
   code: [BoolStringPair]
   to: pr-errors-stdxexpected-instead-of-boolstringpair
   decl: BoolStringPair
-  def: The (bool, message) return convention of most planning methods; doc 02 proposes stdx::Expected instead.
+  def: The (bool, message) return convention of most planning methods; the refactor proposal uses stdx::Expected instead.
 
 - term: stdx::Expected
   code: ["stdx::Expected", "stdx::Expected<Result>", "stdx::Result"]

@@ -170,7 +170,7 @@ PART1 = [
          "volley::DiscreteGarageState& working_state, const volley::CollisionEntityId_t& collision_id, ...) const",
          loc=f"{S}:4131", call=f"{S}:3886, :3905"),
     dict(depth=2, kind="sched", sig="std::optional<volley::ContinuousState> Scheduler::PlanMotions("
-         "ScheduleContextSPtr ctx) const", loc=f"{S}:4005", call=f"{S}:631", note="motion planning (Part IV)"),
+         "ScheduleContextSPtr ctx) const", loc=f"{S}:4005", call=f"{S}:631", note="motion planning (Motion planning tab)"),
     dict(depth=3, kind="ext", sig="GetEdgeDurations(gg_, cost_model_); GetAllPairsMinCost(gg_, edge_durations, ...)",
          loc="motion_planner", call=f"{S}:4017, :4020"),
     dict(depth=3, kind="ext", sig="volley::Chugg motion_planner(gg_, table_, ctx->events, ...); "
@@ -178,7 +178,7 @@ PART1 = [
          note="CHUGG: timed trajectories for every entity"),
     dict(depth=2, kind="sched", sig="std::pair<std::optional<std::vector<ActionNodeMsg>>, std::string> "
          "Scheduler::ResponseFromTrajectories(ScheduleContextSPtr ctx, const volley::ContinuousState& final_state) "
-         "const", loc=f"{S}:4069", call=f"{S}:656", note="motion planning (Part IV)"),
+         "const", loc=f"{S}:4069", call=f"{S}:656", note="the action DAG (Action graph tab)"),
     dict(depth=3, kind="free", sig="std::optional<std::string> CollectAndCollapseTrajectoryMotions(const "
          "volley::ContinuousState& final_state, const volley::Layout& layout, std::set<volley::Motion, "
          "MotionScheduleOrder>& all_motions)", loc=f"{S}:151", call=f"{S}:4072"),

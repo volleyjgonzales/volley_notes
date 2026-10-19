@@ -195,7 +195,7 @@ def tray_tree_before():
           badge_key="as-built",
           legend=[("box", WRITE, "writes ScheduleContext"), ("box", ARG, "writes an argument / local"),
                   ("box", PURE, "writes nothing"), ("dep", WRITE, "«writes»")],
-          footnote="Signatures abridged. Line numbers and full parameter lists: doc 01, Tray assignment and AGV assignment.")
+          footnote="Signatures abridged. Line numbers and full parameter lists: Task planning tab, Tray assignment and AGV assignment.")
     return d
 
 
@@ -347,7 +347,7 @@ def tray_tree_after():
                   ("box", PURE, "pure functions"), ("box", WRITE, "writes PlanContext"),
                   ("real", SOLVE, "realizes"), ("dep", T.fg2, "dependency")],
           footnote="// was ... names the Scheduler member or inline block (previous figure) that each item replaces. "
-                   "'services' is a const GarageServices&. Names follow doc 02, Naming and the ROS boundary (MotionGraph and Pose are aliases in core/vocabulary.hpp).")
+                   "'services' is a const GarageServices&. Names follow Issue & proposal, Naming and the ROS boundary (MotionGraph and Pose are aliases in core/vocabulary.hpp).")
     return d
 
 
@@ -406,7 +406,7 @@ def naming_boundary():
     e2 = lane_for(y2, [b_sr, b_cv, b_vo], "boundary · new files in scheduler", BND)
     # ---- band 3: inside ----
     y3 = e2 + 70
-    b_sc = _box(d, 24, y3 + 46, 804, "scheduler", "renamed now (doc 04 rows for scheduler)",
+    b_sc = _box(d, 24, y3 + 46, 804, "scheduler", "renamed now (catalogue rows for scheduler)",
                 ["PlanContext   // was ScheduleContext", "motion_graph_, collision_table_",
                  "Expand<Type>Job, last_event_by_asset", "ScheduledJob, AssetId  // core/types.hpp"], INS)
     b_ta = _box(d, 852, y3 + 46, 384, "tray_ / agv_assignment", "new modules, written with the new names",
@@ -435,7 +435,7 @@ def naming_boundary():
           badge_key="proposed",
           legend=[("box", OUT, "unchanged packages"), ("box", BND, "boundary (new)"), ("box", INS, "new names"),
                   ("arrow", T.fg2, "data or names flow")],
-          footnote="Proposed in doc 02, Naming and the ROS boundary; the full list of names is doc 04. File paths are under "
+          footnote="Proposed in Issue & proposal, Naming and the ROS boundary; the full list of names is the naming catalogue. File paths are under "
                    "scheduler/include/scheduler/ (headers) and scheduler/src/ (sources).")
     return d
 
@@ -530,6 +530,6 @@ def module_layout():
           legend=[("box", ORC, "orchestrator"), ("box", TP, "task planning (stages 1-3)"),
                   ("box", MP, "motion planning (stage 4)"), ("box", AG, "action graph (stage 5)"),
                   ("box", CORE, "shared core"), ("arrow", T.fg2, "calls"), ("dep", T.fg2, "depends on")],
-          footnote="Proposed in doc 02 (module layout section). Folder paths are under scheduler/include/scheduler/, "
+          footnote="Proposed in Issue & proposal (module layout section). Folder paths are under scheduler/include/scheduler/, "
                    "scheduler/src/ and scheduler/test/.")
     return d

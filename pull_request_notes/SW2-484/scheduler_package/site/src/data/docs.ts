@@ -9,7 +9,7 @@ export interface Part {
 
 export interface DocConfig {
   key: string;
-  num: '01' | '02' | '03' | '04' | '05';
+  num: '01' | '02' | '03' | '04' | '05' | '06';
   file: string;
   prefix: string;
   tab: string;
@@ -21,49 +21,60 @@ export const DOCS: DocConfig[] = [
   {
     key: 'background',
     num: '01',
-    file: 'src/content/01-software-background.html',
+    file: 'src/content/01-background.html',
     prefix: 'bg',
     tab: 'Background',
-    summary: 'How the existing scheduler works: the garage model, the event DAG, CHUGG and the action DAG.',
+    summary: 'The scheduler as a whole: its five-stage pipeline, the garage model, the data of one plan call, and how to work with the code.',
     parts: [
       { title: 'Orientation', first: 'bg-what-problem-does-this-software-solve' },
       { title: 'Data and objects', first: 'bg-the-garage-model-in-code' },
-      { title: 'Building the event DAG', first: 'bg-the-whole-journey-of-one-job' },
-      { title: 'Motion planning and execution', first: 'bg-motion-planning-and-the-response' },
       { title: 'Working with the code', first: 'bg-packages-build-system-and-dependencies' },
     ],
   },
   {
-    key: 'proposal',
+    key: 'task-planning',
     num: '02',
-    file: 'src/content/02-issue-and-proposal.html',
+    file: 'src/content/02-task-planning.html',
+    prefix: 'tp',
+    tab: 'Task planning',
+    summary: 'Stages 1-3: job expansion, tray assignment and AGV assignment build the event DAG.',
+  },
+  {
+    key: 'motion-planning',
+    num: '03',
+    file: 'src/content/03-motion-planning.html',
+    prefix: 'mp',
+    tab: 'Motion planning',
+    summary: 'Stage 4: CHUGG and SIPP turn the event DAG into timed, collision-free motions.',
+  },
+  {
+    key: 'action-graph',
+    num: '04',
+    file: 'src/content/04-action-graph.html',
+    prefix: 'ag',
+    tab: 'Action graph',
+    summary: 'Stage 5: action dependency graphs from first principles, the action DAG the scheduler sends, and a review of the pipeline.',
+    parts: [
+      { title: 'Action dependency graphs from scratch', first: 'ad-why-a-timed-plan-is-not-enough' },
+      { title: 'The action DAG in the scheduler', first: 'ad-the-adg-in-our-software' },
+      { title: 'Looking back over the pipeline', first: 'bg-faq-design-questions' },
+    ],
+  },
+  {
+    key: 'proposal',
+    num: '05',
+    file: 'src/content/05-issue-and-proposal.html',
     prefix: 'pr',
     tab: 'Issue & proposal',
-    summary: 'What the refactor changes and why: solver interfaces, layout, staged plan.',
+    summary: 'The refactor: where the code is, what changes, module layout, solver interfaces, staged plan, and proposed naming work.',
   },
   {
     key: 'verification',
-    num: '03',
-    file: 'src/content/03-verification-plan.html',
+    num: '06',
+    file: 'src/content/06-verification.html',
     prefix: 'vr',
     tab: 'Verification',
     summary: 'Regression parity and benchmarks for the extracted solvers.',
-  },
-  {
-    key: 'naming',
-    num: '04',
-    file: 'src/content/04-naming.html',
-    prefix: 'nm',
-    tab: 'Naming',
-    summary: 'Renames and small struct refactors across messages, common_ros, planner_core and the scheduler.',
-  },
-  {
-    key: 'adg',
-    num: '05',
-    file: 'src/content/05-adg-primer.html',
-    prefix: 'ad',
-    tab: 'ADG primer',
-    summary: 'Action dependency graphs from scratch: orders, construction, safe execution, timing, and the schedule the scheduler sends.',
   },
 ];
 
