@@ -110,6 +110,7 @@ class Play:
                     ts.append(1)
                 frames[e].append(pts)
                 times[e].append(ts)
+        self.durs = durs
         for kind in ("tray", "agv"):
             for e in self.order:
                 v = self.ents[e]
@@ -155,10 +156,20 @@ def ring(d: Doc, b: BBox, color=HL, pad=4, sw=2.2, dash=None):
            layer="over")
 
 
-def check(d: Doc, b: BBox):
+def check(d: Doc, b: BBox, delay=0):
+    """Done mark. Drawn inside `with d.at(k)` of the step that performs the action; `delay` [ms] holds it back
+    until that step's animation has finished, so the mark closes the step instead of opening the next one."""
     x, y = b.x1 - 4, b.y0 + 4
-    d.circle(x, y, 9, fill=AGV_C, layer="top")
-    d.path(f"M{x - 4} {y} L{x - 1} {y + 3.5} L{x + 4.5} {y - 3.5}", stroke=T.bg, sw=2, layer="top")
+    body = (f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="9" fill="{AGV_C}"/>'
+            f'<path d="M{fmt(x - 4)} {fmt(y)} L{fmt(x - 1)} {fmt(y + 3.5)} L{fmt(x + 4.5)} {fmt(y - 3.5)}" '
+            f'fill="none" stroke="{T.bg}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>')
+    d.raw(f'<g style="transition-delay:{int(delay)}ms">{body}</g>', "top", BBox(x - 10, y - 10, x + 10, y + 10))
+
+
+def done_delay(p, k, still=450):
+    """Delay for a done mark in step k: the step's movement time, or a short pause for a step without movement."""
+    dur = p.durs[k] if k < len(p.durs) else 0
+    return (dur + 150) if dur else still
 
 
 def arrow(d: Doc, pts, color=T.fg2, *, sw=1.6, dash=None, size=9, layer="edges"):
@@ -216,96 +227,171 @@ def scenario_entities(p: Play, *, agv2=True, job_b=True):
 
 
 # --------------------------------------------------------------------------------------------------------------
-# d01  the scenario (static)
+# d01  the scenario (static), with a legend of the map symbols
 # --------------------------------------------------------------------------------------------------------------
+def map_legend(d: Doc, x0, y0, width):
+    """One row of map symbols with their meaning, drawn with the same primitives as the map."""
+    s = 13
+    lm = Map(d, 0, 0, s, (0, 100), (0, 10))      # a scratch map: only its entity drawing is used
+    items = []
+
+    def agv(cx, cy):
+        lm.agv((lm_x(cx), lm_y(cy)), None, color=AGV_C)
+
+    def lm_x(px):
+        return (px - lm.ox) / lm.s + lm.xmin
+
+    def lm_y(py):
+        return lm.ymax - (py - lm.oy) / lm.s
+
+    def tray(cx, cy, payload):
+        lm.tray((lm_x(cx), lm_y(cy)), None, payload=payload, color=TRAY_C)
+
+    def stall(cx, cy):
+        w, h = 58, 26
+        d.rect(cx - w / 2, cy - h / 2, w, h, rx=4, fill=T.tint(T.sky, 0.10, T.bg_deep), stroke=T.tint(T.sky, 0.55, T.bg_deep),
+               sw=1.2)
+        d.text(cx - w / 2 + 5, cy - h / 2 + 9, "P", size=10, family="mono", weight=600, fill=T.sky)
+
+    def waypoint(cx, cy):
+        d.line(cx - 22, cy, cx + 22, cy, stroke="#55657F", sw=1.5)
+        d.circle(cx, cy, 4.5, fill=T.fg2, stroke=T.bg_deep, sw=1.5)
+
+    def bay(cx, cy):
+        w, h = 58, 32
+        d.rect(cx - w / 2, cy - h / 2, w, h, rx=6, fill=T.tint(T.teal, 0.12, T.bg_deep), stroke=T.teal, sw=1.5)
+        d.line(cx + w / 2, cy - h / 2 + 5, cx + w / 2, cy + h / 2 - 5, stroke=T.teal, sw=4, cap="round")
+        d.text(cx - w / 2 + 5, cy - h / 2 + 10, "B", size=10, family="mono", weight=700, fill=T.teal)
+
+    def charger(cx, cy):
+        r = 10
+        d.circle(cx, cy, r, fill=T.tint(T.violet, 0.25, T.bg_deep), stroke=T.violet, sw=1.5)
+        bolt = [(cx + 1.2, cy - 6.2), (cx - 3.8, cy + 1), (cx - 0.2, cy + 1), (cx - 1.4, cy + 6.2), (cx + 3.8, cy - 1.2),
+                (cx + 0.2, cy - 1.2)]
+        d.polygon(bolt, fill=T.violet, join="round")
+
+    entries = [(agv, "AGV"), (lambda x, y: tray(x, y, False), "empty tray"),
+               (lambda x, y: tray(x, y, True), "tray + vehicle"), (stall, "parking stall"),
+               (waypoint, "waypoint, edge"), (bay, "customer bay"), (charger, "AGV charger")]
+    cols = 4
+    cw = width / cols
+    for i, (fn, label) in enumerate(entries):
+        r, c = divmod(i, cols)
+        cx = x0 + c * cw + 38
+        cy = y0 + r * 46 + 20
+        fn(cx, cy)
+        d.text(cx + 46, cy + 1, label, size=12.5, fill=T.fg2)
+
+
 def d01_scenario():
     d = Doc("d01_scenario", "The running example", "Pecos QA section with the scenario used throughout the deck.")
-    m = base_map(d, 30)
+    m = base_map(d, 27)
     p = Play(m)
     scenario_entities(p)
     p.draw()
-    callouts = [(1, (23.1, 24.0)), (2, (46.0, 18.4)), (3, (33.6, 17.1)), (4, (34.6, 24.6)), (5, (45.9, 24.6))]
-    for nmb, xy in callouts:
-        x, y = m.P(xy)
-        num_badge(d, x, y, nmb, HL, r=12)
-    # thin leader lines
-    for (a, b) in (((23.1, 24.0), (23.1, 23.2)), ((46.0, 18.4), (45.3, 17.6)), ((33.6, 17.1), (34.4, 17.1)),
-                   ((34.6, 24.6), (35.9, 24.2)), ((45.9, 24.6), (45.0, 24.3))):
-        (x0, y0), (x1, y1) = m.P(a), m.P(b)
-        d.line(x0, y0, x1, y1, stroke=HL, sw=1.5, layer="over")
+    mb = m.box
+    map_legend(d, mb.x0, mb.y1 + 22, mb.w)
     save(d)
 
 
 # --------------------------------------------------------------------------------------------------------------
-# d02  one job, its actions and their execution (simplified world: no other trays)
+# d02  one job, expanded into four and then six actions, then executed (simplified world: no other trays)
 # --------------------------------------------------------------------------------------------------------------
 def d02_actions():
     d = Doc("d02_actions", "From a job to an ordered graph of actions",
-            "Simplified: one retrieve job, no other trays. The action graph is the output; the steps execute it.")
-    S0 = d.step("Input: one job, retrieve the vehicle on tray T17 at bay B21. Output: the action graph below, two "
-                "lanes, one per machine. The next steps execute it.")
-    S1 = d.step("Bay B21 switches to retrieve mode. It has no predecessor, so it can start at once, in parallel "
-                "with AGV-1's first drive.")
-    S2 = d.step("AGV-1 drives from waypoint W26 to stall P17 and stops under tray T17.")
-    S3 = d.step("AGV-1 lifts tray T17 with the vehicle on it.")
-    S4 = d.step("AGV-1 carries tray T17 to bay B21. This action waits for two predecessors: the lift, and the bay "
-                "switching to retrieve mode.")
-    S5 = d.step("AGV-1 lowers tray T17 in bay B21.")
-    S6 = d.step("Bay B21 hands the vehicle over to the customer, after the lower. Every action ran when its "
-                "predecessors were complete; no clock was needed.")
+            "Simplified: one retrieve job, no other trays. The job becomes four AGV actions, then six actions with "
+            "the bay's; the remaining steps execute them.")
+    S0 = d.step("Input: one job. Retrieve the vehicle on tray T17 at bay B21. The job states the goal, not the "
+                "moves.")
+    S1 = d.step("The job becomes four AGV actions, in a chain: drive to tray T17, lift it, carry it to bay B21, "
+                "lower it.")
+    S2 = d.step("Two bay actions complete the plan: switch to retrieve mode before the carry, hand the vehicle over "
+                "after the lower. Six actions, ordered by arrows: this is the output.")
+    S3 = d.step("Execution. Bay B21 switches to retrieve mode. It has no predecessor, so it starts at once.")
+    S4 = d.step("AGV-1 drives from waypoint W26 to stall P17 and stops under tray T17.")
+    S5 = d.step("AGV-1 lifts tray T17 with the vehicle on it.")
+    S6 = d.step("AGV-1 carries tray T17 to bay B21. This action waited for two predecessors: the lift, and the bay's "
+                "retrieve mode.")
+    S7 = d.step("AGV-1 lowers tray T17 in bay B21.")
+    S8 = d.step("Bay B21 hands the vehicle over to the customer. Every action ran when its predecessors were "
+                "complete; no clock was needed.")
     m = base_map(d, 26)
     p = Play(m)
     p.tray("T17", 17, payload=True, emphasis=True, chip_pos="tr")
     p.agv("AGV-1", 26, label_side="below")
-    p.script(S2, "AGV-1", [("drive", [23, 19, 15, 17])])
-    p.script(S4, "AGV-1", [("lift",), ("carry", [15, 13, 18, 22, 41, 21]), ("lower",)])
+    p.script(S4, "AGV-1", [("drive", [23, 19, 15, 17])])
+    p.script(S6, "AGV-1", [("lift",), ("carry", [15, 13, 18, 22, 41, 21]), ("lower",)])
     p.draw()
-    with d.at(S0, S0):
+    with d.at(S0, S2):
         bay_pill(d, m, "B21 ready to insert")
-    with d.at(S1, S5):
+    with d.at(S3, S7):
         bay_pill(d, m, "B21 retrieve mode")
-    with d.at(S6):
+    with d.at(S8):
         bay_pill(d, m, "B21 vehicle handed over")
-    with d.only(S1):
-        map_route(d, m, [26, 23, 19, 15, 17], AGV_C, dash="7 5")
+    with d.only(S0):
+        node_ring(d, m, 17, HL)
+        node_ring(d, m, 21, HL, h=(STALL_W + 1.1) * m.s)
     with d.only(S3):
+        map_route(d, m, [26, 23, 19, 15, 17], AGV_C, dash="7 5")
+    with d.only(S5):
         map_route(d, m, [17, 15, 13, 18, 22, 41, 21], TRAY_C, dash="7 5", offset=(0, 7))
-    # action graph
+    # graph area
     mb = m.box
     y0 = mb.y1 + 46
     lane_x = 80
     W = mb.x1
     bw, gap = (W - lane_x - 3 * 18) / 4, 18
     lanes = {"AGV-1": (y0, AGV_C), "Bay B21": (y0 + 98, C_BAY)}
-    for name, (ly, col) in lanes.items():
-        d.text(0, ly + 25, name, size=12.5, family="mono", weight=600, fill=col)
+    with d.only(S0):
+        d.text(0, y0 - 22, "Input: one job", size=12.5, weight=600, fill=T.fg)
+        jb = box(d, lane_x, y0 + 30, W - lane_x - 40, "job · retrieve", "the vehicle on tray T17, handed over at bay B21",
+                 h=56, stroke=HL)
+        ring(d, jb)
+    with d.at(S1):
+        for name, (ly, col) in lanes.items():
+            if name == "Bay B21":
+                continue
+            d.text(0, ly + 25, name, size=12.5, family="mono", weight=600, fill=col)
+            d.line(lane_x - 10, ly + 25, W, ly + 25, stroke=T.border_soft, sw=1, dash="3 5", layer="bg")
+    with d.at(S2):
+        ly, col = lanes["Bay B21"]
+        d.text(0, ly + 25, "Bay B21", size=12.5, family="mono", weight=600, fill=col)
         d.line(lane_x - 10, ly + 25, W, ly + 25, stroke=T.border_soft, sw=1, dash="3 5", layer="bg")
-    d.text(0, y0 - 22, "Output: action graph", size=12.5, weight=600, fill=T.fg)
-    d.text(text_width("Output: action graph", 12.5, "sans", 600) + 12, y0 - 22,
-           "boxes = actions · arrows = must complete before", size=11.5, fill=T.muted)
+    with d.only(S1):
+        d.text(0, y0 - 22, "Four actions", size=12.5, weight=600, fill=T.fg)
+    with d.at(S2):
+        d.text(0, y0 - 22, "Output: action graph", size=12.5, weight=600, fill=T.fg)
+        d.text(text_width("Output: action graph", 12.5, "sans", 600) + 12, y0 - 22,
+               "boxes = actions · arrows = must complete before", size=11.5, fill=T.muted)
     xs = [lane_x + i * (bw + gap) for i in range(4)]
-    a_drive = box(d, xs[0], y0, bw, "AGV-1", "drive to stall P17")
-    a_lift = box(d, xs[1], y0, bw, "AGV-1", "lift tray T17")
-    a_carry = box(d, xs[2], y0, bw, "AGV-1", "carry to bay B21")
-    a_lower = box(d, xs[3], y0, bw, "AGV-1", "lower tray T17")
+    with d.at(S1):
+        a_drive = box(d, xs[0], y0, bw, "AGV-1", "drive to stall P17")
+        a_lift = box(d, xs[1], y0, bw, "AGV-1", "lift tray T17")
+        a_carry = box(d, xs[2], y0, bw, "AGV-1", "carry to bay B21")
+        a_lower = box(d, xs[3], y0, bw, "AGV-1", "lower tray T17")
+        for a, b in ((a_drive, a_lift), (a_lift, a_carry), (a_carry, a_lower)):
+            arrow(d, [(a.x1, a.cy), (b.x0, b.cy)])
+    with d.only(S1):
+        for b in (a_drive, a_lift, a_carry, a_lower):
+            ring(d, b)
     by = lanes["Bay B21"][0]
-    b_mode = box(d, xs[0], by, bw, "bay B21", "retrieve mode")
-    b_hand = box(d, xs[3], by, bw, "bay B21", "hand over vehicle")
-    for a, b in ((a_drive, a_lift), (a_lift, a_carry), (a_carry, a_lower)):
-        arrow(d, [(a.x1, a.cy), (b.x0, b.cy)])
-    arrow(d, [(b_mode.x1, b_mode.cy), (a_carry.x0 - 26, b_mode.cy), (a_carry.x0 - 26, a_carry.y1 - 12),
-              (a_carry.x0, a_carry.y1 - 12)], HL)
-    arrow(d, [(a_lower.cx, a_lower.y1), (b_hand.cx, b_hand.y0)], HL)
-    d.text(a_carry.x0 - 34, (b_mode.cy + a_carry.y1) / 2 + 4, "bay ready first", size=10.5, fill=HL, anchor="end")
-    d.text(a_lower.cx + 8, (a_lower.y1 + b_hand.y0) / 2, "tray in place first", size=10.5, fill=HL)
-    order = [(S1, [b_mode]), (S2, [a_drive]), (S3, [a_lift]), (S4, [a_carry]), (S5, [a_lower]), (S6, [b_hand])]
-    for k, bs in order:
+    with d.at(S2):
+        b_mode = box(d, xs[0], by, bw, "bay B21", "retrieve mode")
+        b_hand = box(d, xs[3], by, bw, "bay B21", "hand over vehicle")
+        arrow(d, [(b_mode.x1, b_mode.cy), (a_carry.x0 - 26, b_mode.cy), (a_carry.x0 - 26, a_carry.y1 - 12),
+                  (a_carry.x0, a_carry.y1 - 12)], HL)
+        arrow(d, [(a_lower.cx, a_lower.y1), (b_hand.cx, b_hand.y0)], HL)
+        d.text(a_carry.x0 - 34, (b_mode.cy + a_carry.y1) / 2 + 4, "bay ready first", size=10.5, fill=HL, anchor="end")
+        d.text(a_lower.cx + 8, (a_lower.y1 + b_hand.y0) / 2, "tray in place first", size=10.5, fill=HL)
+    with d.only(S2):
+        for b in (b_mode, b_hand):
+            ring(d, b)
+    order = [(S3, b_mode), (S4, a_drive), (S5, a_lift), (S6, a_carry), (S7, a_lower), (S8, b_hand)]
+    for k, b in order:
         with d.only(k):
-            for b in bs:
-                ring(d, b, T.fg, sw=2.4)
-        with d.at(k + 1):
-            for b in bs:
-                check(d, b)
+            ring(d, b, T.fg, sw=2.4)
+        with d.at(k):
+            check(d, b, done_delay(p, k))
     save(d)
 
 
@@ -314,7 +400,8 @@ def d02_actions():
 # --------------------------------------------------------------------------------------------------------------
 def d03_event_dag():
     d = Doc("d03_event_dag", "Two jobs become one event DAG",
-            "Job expansion, tray assignment and AGV assignment build the event DAG; the last steps execute it.")
+            "Two jobs; job expansion, tray assignment and AGV assignment build the event DAG; the last steps "
+            "execute it.")
     S0 = d.step("The scheduler receives two jobs. Job A: retrieve the vehicle on tray T17 at bay B21. Job B: clean "
                 "the garage by moving tray T27 off waypoint W27.")
     S1 = d.step("Job expansion: each job becomes events with must-happen-before edges. Some details are still "
@@ -356,17 +443,23 @@ def d03_event_dag():
     with d.at(S1, S3):
         map_route(d, m, [17, 15, 13, 18, 22, 41, 21], TRAY_C, offset=(0, 8))
         map_route(d, m, [27, 24], TRAY_C, offset=(12, 0))
-    # ---- event DAG
     mb = m.box
     W = mb.x1
     y0 = mb.y1 + 50
+    bw, gap = (W - 3 * 26) / 4, 26
+    xs = [i * (bw + gap) for i in range(4)]
+    y2 = y0 + 50 + 44
+    # step 0: the two jobs, nothing else
+    with d.only(S0):
+        d.text(0, y0 - 24, "Input: two jobs", size=12.5, weight=600, fill=T.fg)
+        ja = box(d, 0, y0, W, "job A · retrieve", "the vehicle on tray T17, handed over at bay B21", stroke=HL)
+        jb = box(d, 0, y2, W, "job B · clean the garage", "tray T27 off waypoint W27, into a stall", stroke=HL)
+        ring(d, ja)
+        ring(d, jb)
     with d.at(S1):
         d.text(0, y0 - 24, "Event DAG", size=12.5, weight=600, fill=T.fg)
         d.text(text_width("Event DAG", 12.5, "sans", 600) + 12, y0 - 24,
                "boxes = events · arrows = must happen before", size=11.5, fill=T.muted)
-    bw, gap = (W - 3 * 26) / 4, 26
-    xs = [i * (bw + gap) for i in range(4)]
-    y2 = y0 + 50 + 44
     with d.at(S1):
         e0 = box(d, xs[0], y0, bw, "job A", "bay B21 to retrieve mode")
     with d.only(S1):
@@ -401,51 +494,82 @@ def d03_event_dag():
         with d.only(k):
             for b in bs:
                 ring(d, b, T.fg, sw=2.4)
-        with d.at(k + 1):
+        with d.at(k):
             for b in bs:
-                check(d, b)
+                check(d, b, done_delay(p, k))
     save(d)
 
 
 # --------------------------------------------------------------------------------------------------------------
-# d04  tray assignment
+# d04  tray assignment: which empty tray goes into an empty bay
 # --------------------------------------------------------------------------------------------------------------
 def d04_trays():
-    d = Doc("d04_trays", "Tray assignment", "Which trays move, where to, and in which order.")
-    S0 = d.step("Tray T17 must reach bay B21, but it is enclosed: tray T15 occupies stall P15, tray T20 occupies "
-                "stall P20, and charger C16 is a dead end. Bay B21 still holds the empty tray T21.")
-    S1 = d.step("Tray assignment chooses a route for tray T17 (via stall P15) and finds what stands on it: tray "
-                "T15, and tray T21 in the bay.")
-    S2 = d.step("It picks a free stall for each: tray T15 to stall P19, tray T21 to stall P23, and orders both moves "
-                "before tray T17's move.")
+    d = Doc("d04_trays", "Tray assignment", "An empty bay needs an empty tray: which one?")
+    S0 = d.step("Bay B21 is empty and a customer is about to park. The job asks for 'any empty tray into bay B21': "
+                "the tray is left blank for tray assignment to choose.")
+    S1 = d.step("The candidates are the three empty trays: tray T15, tray T20 and tray T24. The search starts at the "
+                "bay and works outward.")
+    S2 = d.step("Each candidate's cost: travel time to the bay, plus 30 s for every tray crossed on the way. Tray "
+                "T20 must pass tray T19, which holds a vehicle (illustrative values).")
+    S3 = d.step("Tray assignment fills the blank with the cheapest candidate: tray T15. No other tray has to move "
+                "first.")
+    S4 = d.step("Execution: AGV-1 drives under tray T15, carries it into bay B21 and lowers it. The bay can switch "
+                "to insert mode.")
     m = base_map(d, 26)
     p = Play(m)
-    scenario_entities(p, agv2=False, job_b=False)
+    p.tray("T15", 15, chip_pos="bl", emphasis=False)
+    p.tray("T17", 17, payload=True, chip_pos="tr")
+    p.tray("T19", 19, payload=True, chip_pos="bl")
+    p.tray("T20", 20, chip_pos="tr")
+    p.tray("T23", 23, payload=True, chip_pos="bl")
+    p.tray("T24", 24, chip_pos="tr")
+    p.agv("AGV-1", 26, label_side="below")
+    p.script(S4, "AGV-1", [("drive", [25, 22, 18, 13, 15]), ("lift",), ("carry", [13, 18, 22, 41, 21]), ("lower",)])
     p.draw()
+    with d.at(S0, S3):
+        bay_pill(d, m, "B21 empty: needs an empty tray")
+    with d.at(S4):
+        bay_pill(d, m, "B21 holds tray T15: ready for insert")
     with d.only(S0):
-        for nid in (15, 20):
-            node_ring(d, m, nid, T.red)
-        node_ring(d, m, 21, T.red, h=(STALL_W + 1.1) * m.s)
-        x, y = m.P(16)
-        d.circle(x, y, 13, fill="none", stroke=T.red, sw=2.2, layer="top")
-    with d.at(S1):
-        map_route(d, m, [17, 15, 13, 18, 22, 41, 21], TRAY_C, offset=(0, 8))
-    with d.only(S1):
-        node_ring(d, m, 15, T.red)
-        node_ring(d, m, 21, T.red, h=(STALL_W + 1.1) * m.s)
-    with d.at(S2):
-        map_route(d, m, [15, 19], HL, dash=None, offset=(-12, 0))
-        map_route(d, m, [21, 41, 22, 23], HL, dash=None, offset=(0, -8))
+        node_ring(d, m, 21, HL, h=(STALL_W + 1.1) * m.s)
+    with d.at(S1, S2):
+        for nid in (15, 20, 24):
+            node_ring(d, m, nid, HL)
+    routes = {"T15": ([21, 41, 22, 18, 13, 15], (0, 0), "26 s"),
+              "T24": ([21, 41, 22, 25, 26, 27, 24], (0, -7), "33 s"),
+              "T20": ([21, 41, 22, 18, 19, 20], (0, 7), "29 s + 30 s")}
+    with d.at(S2, S2):
+        for t, (ids, off, cost) in routes.items():
+            map_route(d, m, list(reversed(ids)), T.muted if t != "T15" else HL, sw=2.4, dash="6 4", offset=off)
+        node_ring(d, m, 19, T.red)
+        x, y = m.P(19)
+        chip(d, x, y, "+30 s", T.red, anchor="middle", size=11, fill=T.bg_deep, layer="top")
+    with d.only(S3):
+        map_route(d, m, [15, 13, 18, 22, 41, 21], HL, sw=3, dash=None)
+        node_ring(d, m, 15, HL)
+    # the event being filled
     mb = m.box
     y0 = mb.y1 + 40
-    bw = 200
+    bw = 300
+    d.text(0, y0 - 16, "The event tray assignment completes", size=12.5, weight=600, fill=T.fg)
+    with d.at(S0, S2):
+        e = box(d, 0, y0, bw, "job · ready for insert", "tray ?  to  bay B21", stroke=HL)
+    with d.at(S3):
+        e = box(d, 0, y0, bw, "job · ready for insert", "tray T15  to  bay B21", stroke=HL)
+    with d.only(S3):
+        ring(d, e)
+    with d.at(S4):
+        check(d, e, done_delay(p, S4))
+    cx = bw + 40
+    rows = [("tray T15", "26 s", "nothing in the way"), ("tray T24", "33 s", "longer route, along the aisle"),
+            ("tray T20", "59 s", "29 s, plus 30 s for crossing tray T19")]
     with d.at(S2):
-        a = box(d, 0, y0, bw, "added", "tray T15 to stall P19", stroke=HL)
-        b = box(d, 0, y0 + 64, bw, "filled", "tray T21 to stall P23", stroke=HL)
-        c = box(d, 300, y0 + 32, bw, "job A", "tray T17 to bay B21")
-        arrow(d, [(a.x1, a.cy), (260, a.cy), (260, c.cy - 8), (c.x0, c.cy - 8)], HL)
-        arrow(d, [(b.x1, b.cy), (260, b.cy), (260, c.cy + 8), (c.x0, c.cy + 8)], HL)
-        d.text(c.x1 + 16, c.cy, "both moves must finish first", size=11.5, fill=T.muted)
+        d.text(cx, y0 - 16, "Cost of each candidate", size=12.5, weight=600, fill=T.fg)
+        for i, (t, c, why) in enumerate(rows):
+            yy = y0 + 14 + 20 * i
+            d.text(cx, yy, t, size=12, family="mono", weight=600, fill=HL if i == 0 else T.fg2)
+            d.text(cx + 80, yy, c, size=12, family="mono", fill=HL if i == 0 else T.fg2)
+            d.text(cx + 130, yy, why, size=11.5, fill=T.muted)
     save(d)
 
 

@@ -564,9 +564,10 @@ volley::GarageOccupancyChecker&lt;std::shared_ptr&lt;volley::ScheduleEvent>> fre
   <img src="figures/09_sequence_tray.svg" alt="Solver call sequence">
   <figcaption><strong>Proposed tray solver interaction.</strong> <code>Scheduler</code> calls <code>Solve</code>. The solver reads the topological event order once, then records (does not apply) tray fills, blocker moves, edges and <code>first_event_by_tray</code> in a <code>Result</code>, and returns <code>stdx::Expected&lt;Result></code>. <code>Scheduler</code> replays the result into <code>ctx->events</code> with <code>ApplyTrayAssignment</code>, which ends with the cycle check, and AGV assignment continues.</figcaption>
 </figure>
-<h2 data-num id="pr-proposed-layout-and-api-for-tray-assignment">Proposed layout and API for tray assignment</h2>
-<p>This section first introduces the new types and shows how they work with <code>ScheduleContext</code> (<a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">6.1</a>), then where the files go (<a class="ref" href="#pr-source-tree">6.2</a>), then which of today's functions turn into what (<a class="ref" href="#pr-before-and-after-the-tray-call-tree">6.3</a>). After that come errors (<a class="ref" href="#pr-errors-stdxexpected-instead-of-boolstringpair">6.4</a>), the reasoning behind returning a result (<a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">6.5</a>), the remaining signatures and the <code>Plan()</code> call site (<a class="ref" href="#pr-free-function-signatures-and-the-plan-call-site">6.6</a>), and how much of this applies to AGV assignment (<a class="ref" href="#pr-agv-assignment-same-layout-and-error-type-now-returned-result-later">6.7</a>). Everything here is <strong>proposed</strong>. Code in this section already uses the names from <a class="ref" href="#pr-naming-and-the-ros-boundary">section 7</a> (<code>PlanContext</code>, <code>event_dag</code>, <code>motion_graph</code>, <code>first_event_by_tray</code>, <code>Pose</code>, …); prose about today's code keeps today's names (<code>ScheduleContext</code>, <code>ctx->events</code>, <code>gg_</code>).</p>
-<h3 data-num id="pr-the-new-pieces-and-how-they-fit-together">The new pieces and how they fit together</h3>
+<h2 data-num id="pr-proposed-layout-and-api">Proposed layout and API for the assignment stages</h2>
+<p>The two stages the ticket moves behind interfaces get the same treatment, in two subsections with the same outline: tray assignment (<a class="ref" href="#pr-proposed-layout-and-api-for-tray-assignment">section 8.1</a>) and AGV assignment (<a class="ref" href="#pr-agv-assignment-same-layout-and-error-type-now-returned-result-later">section 8.2</a>). Each one introduces the new types and how they work with the plan context, then where the files go, which of today's functions turn into what, errors, how the result reaches the context, the remaining signatures and the <code>Plan()</code> call site, and finally the names and why they were chosen. The difference between the two is one decision, explained in each subsection: tray assignment <strong>returns</strong> its decisions and one function applies them; AGV assignment <strong>edits the event DAG in place</strong> for its first version, and says so in its signature. Everything here is <strong>proposed</strong>. Code in this section already uses the names from <a class="ref" href="#pr-naming-and-the-ros-boundary">section 9</a> (<code>PlanContext</code>, <code>event_dag</code>, <code>motion_graph</code>, <code>first_event_by_tray</code>, <code>Pose</code>, …); prose about today's code keeps today's names (<code>ScheduleContext</code>, <code>ctx->events</code>, <code>gg_</code>).</p>
+<h3 data-num id="pr-proposed-layout-and-api-for-tray-assignment">Tray assignment</h3>
+<h4 data-num id="pr-the-new-pieces-and-how-they-fit-together">The new pieces and how they fit together</h4>
 <p>Today <code>DoTrayAssignments(ctx)</code> does two jobs at once: it <strong>decides</strong> (which tray, which destination, which blockers move where) and it <strong>writes</strong> those decisions into <code>ctx</code> as it goes. The proposal separates the two:</p>
 <ul>
   <li><strong>Deciding</strong> happens in <code>tray_assignment::DefaultSolver::Solve</code>. It receives read-only references to the parts of <code>ctx</code> it needs and returns its decisions as a value, a <code>Result</code>. It never writes <code>ctx</code>.</li>
@@ -759,7 +760,7 @@ stdx::Expected&lt;Result> DefaultSolver::Solve(const Input&amp; input) const {
       if(auto r = pass.RecordStateChange(event); !r) return stdx::Unexpected(r.error());
       continue;
     }
-    // Work on a resolved COPY of the TrayMove; *event itself is never modified (6.5).
+    // Work on a resolved COPY of the TrayMove; *event itself is never modified (see 'Why return a result').
     // Blank tray id   -> ChooseEmptyTray(services_, pass.State(), dest), then pass.Fill(...)
     // Blank dest      -> ChooseParkingSpot(...), pass.Fill(...), pass.EmitMoveChain(...), pass.CommitRootMove(...)
     // Both set        -> CheckDestinationUsable, FindCriticalPath, blocker loop with ResolveBlockingTrays,
@@ -770,12 +771,12 @@ stdx::Expected&lt;Result> DefaultSolver::Solve(const Input&amp; input) const {
 </code></pre>
 <pre><code class="language-cpp">// PROPOSED — include/scheduler/task_planning/tray_assignment/apply.hpp
 namespace volley::task_planning::tray_assignment {
-// The only function in the module that takes a mutable context. Implementation in 6.5.
+// The only function in the module that takes a mutable context. Implementation under 'Why return a result'.
 [[nodiscard]] stdx::Result ApplyTrayAssignment(PlanContext&amp; ctx, const Result&amp; result);
 }  // namespace volley::task_planning::tray_assignment
 </code></pre>
 <p><code>EmitOptions</code> and <code>CommitOptions</code> carry the small differences between today's two copies of the emission code (<a class="ref" href="#pr-before-and-after-the-tray-call-tree">6.3</a>) so that parity holds; they can disappear once those differences are settled.</p>
-<h3 data-num id="pr-source-tree">Source tree</h3>
+<h4 data-num id="pr-source-tree">Source tree</h4>
 <p>This is Option 1 of <a class="ref" href="#pr-module-layout-folders-or-packages">section 6</a>: the package root stays <code>scheduler/</code> with <strong>one</strong> <code>CMakeLists.txt</code>, and <code>include/scheduler/</code>, <code>src/</code> and <code>test/</code> get one folder per pipeline stage. Folders marked <em>later</em> are created empty in stage C0 and filled after the ticket's work (<a class="ref" href="#pr-staged-plan">section 10</a>); everything else is part of this refactor.</p>
 <pre><code class="language-text">scheduler/                                       # ROS package root (name unchanged)
 ├── CMakeLists.txt                               # the only CMakeLists.txt; one library target per stage
@@ -888,7 +889,7 @@ endif()
   <li><strong>A CI include check covers the rest.</strong> The linker cannot see header-only includes, so a one-line grep checks: no file under a stage folder or <code>core/</code> includes <code>scheduler/scheduler.hpp</code> or <code>scheduler/ros/</code>; no stage folder includes another stage folder; under <code>task_planning/</code>, <code>agv_assignment/</code> does not include <code>tray_assignment/</code> (the hand-off, <code>first_event_by_tray</code>, is a plain map in its <code>Input</code>), while <code>job_expansion/</code> may include <code>tray_assignment/</code>'s public headers.</li>
 </ul>
 <p>Names: <strong><code>tray_assignment</code> rather than <code>tray_movement</code></strong>, because job expansion also plans tray movement (it creates the <code>TrayMove</code>s); this module only fills in what expansion left open (tray ids, destinations, blockers). It matches the stage name in the Task planning tab (<code>DoTrayAssignments</code>) and pairs with <code>agv_assignment</code>. The stage folder names are explained in <a class="ref" href="#pr-stage-names">section 6.1</a>. Namespaces follow the folders: <code>volley::task_planning::tray_assignment</code>, <code>volley::task_planning::agv_assignment</code>, <code>volley::motion_planning</code>, <code>volley::action_graph</code>, <code>volley::scheduler_core</code> for <code>core/</code>, and <code>volley::ros_convert</code> for <code>ros/</code>. <code>scheduler.cpp</code> declares <code>namespace tray_assignment = task_planning::tray_assignment;</code> (and the same for <code>agv_assignment</code>), so the snippets in this tab use the short names. The shared folder is <code>core/</code>, not <code>common/</code>, because a <code>volley::common</code> namespace would break existing code. The <code>common</code> package already defines namespace <code>::common</code>, and <code>scheduler.cpp</code> calls <code>common::EnumInteger(...)</code> from inside <code>namespace volley</code>. Name lookup would find <code>volley::common</code> first and stop there, so those calls would no longer compile. For the same reason no namespace is called <code>volley::motion_planner</code>: the stage namespace is <code>motion_planning</code>, so it cannot hide the package's own names.</p>
-<h3 data-num id="pr-before-and-after-the-tray-call-tree">Before and after: the tray call tree</h3>
+<h4 data-num id="pr-before-and-after-the-tray-call-tree">Before and after: the tray call tree</h4>
 <p>Not everything moves into the new class. The two figures below show the same call tree before and after; the question that sorts every function is <strong>what does it write?</strong></p>
 <figure id="pr-fig-59_tray_tree_before">
   <img src="figures/59_tray_tree_before.svg" alt="Tray call tree today">
@@ -953,7 +954,7 @@ endif()
   </li>
 </ul>
 <p><strong>What stays mutable, and why that is fine.</strong> The loop needs a garage state that changes after every move, an occupancy record and a per-tray “last move” map. Those live in <code>Pass</code>, an object created inside <code>Solve</code> and destroyed when it returns. Nothing outside can see it. Seen from the caller, <code>Solve</code> is still a pure function: same <code>Input</code>, same <code>Result</code>. This is the usual pattern of “local mutation, pure interface”: rewriting the loop to thread an immutable state through every step would add copying and noise without making the code any safer.</p>
-<h3 data-num id="pr-errors-stdxexpected-instead-of-boolstringpair">Errors: <code>stdx::Expected</code> instead of <code>BoolStringPair</code></h3>
+<h4 data-num id="pr-errors-stdxexpected-instead-of-boolstringpair">Errors: <code>stdx::Expected</code> instead of <code>BoolStringPair</code></h4>
 <p><code>BoolStringPair</code> (<code>std::pair&lt;bool, std::string></code>) and <code>stdx::Expected</code> say the same thing (“it worked, or here is why not”), but <code>Expected</code> says it in the type: a caller cannot read a value without checking, and there is no meaningless message on success or meaningless value on failure. The project already has <code>volley::stdx</code> (<code>src/core/stdx/include/stdx/expected.hpp</code>), aliases over <code>tl::expected</code>, and <strong>the scheduler package already uses it</strong>: <code>package.xml</code> depends on <code>stdx</code>, <code>EnsureAgvMovePathsClear</code> returns <code>stdx::Result</code>, <code>RunAgvPathRepairPass</code> returns <code>stdx::Expected&lt;bool></code>, and <code>utils.cpp</code>'s <code>InsertVrcActionsIntoDag</code> returns <code>stdx::Result</code>. So this is finishing a migration that has started, not adding a dependency:</p>
 <ul>
   <li><code>stdx::Expected&lt;T, E = std::string></code>: a <code>T</code> or an error <code>E</code>.</li>
@@ -1005,7 +1006,7 @@ endif()
   <li><strong>Keep <code>E = std::string</code> for the parity pass.</strong> Error text reaches clients through <code>FailJob(job, message)</code> and may be matched by tests. A typed error (<code>struct Error { Code code; std::string message; }</code>, which <code>Expected&lt;T, E></code> already allows) is a good follow-up once the benchmarks exist.</li>
 </ol>
 <p>Two practical notes. <code>std::format</code> has no formatter for <code>GaragePoseMsg</code>; either pass <code>std::to_string(pose)</code> as above (identical text to today) or add a <code>std::formatter&lt;GaragePoseMsg></code> in <code>core/</code>. And <code>tl::expected</code> has <code>and_then</code> / <code>transform</code>, which keeps call sites flat (see the <code>Plan()</code> snippet in <a class="ref" href="#pr-free-function-signatures-and-the-plan-call-site">6.6</a>).</p>
-<h3 data-num id="pr-why-return-a-result-and-how-it-is-applied">Why return a result, and how it is applied</h3>
+<h4 data-num id="pr-why-return-a-result-and-how-it-is-applied">Why return a result, and how it is applied</h4>
 <p>Today <code>DoTrayAssignments(ctx)</code> edits three things it does not own: the DAG (<code>ctx->events</code>), the hand-off map (<code>ctx->first_tray_event</code>) and the <code>TrayMove</code> objects inside the DAG (<code>SetTrayId</code>, <code>SetDest</code>). The proposal: <code>Solve</code> takes a read-only <code>Input</code> and <strong>returns a description of the edits</strong>; <code>Plan()</code> writes them into the context with one call to <code>ApplyTrayAssignment</code>.</p>
 <p><strong>Why this is practical for tray assignment.</strong> The tray tree reads the DAG exactly once: <code>GetTopologicalOrdering()</code> at the start (plus <code>GetEventFromVertex</code> to walk it). After that it only <em>writes</em>: <code>AddEvent</code>, <code>AddDependency</code>, the two setters, and <code>first_tray_event</code>. Nothing in the loop reads back an edge it added. So the solver never needs to see its own edits in the DAG, and recording them instead of applying them changes nothing it computes. (The garage <em>state</em> the loop does read is <code>working_state</code>, which is private to the <code>Pass</code> anyway.)</p>
 <p><strong>Why not return a whole new DAG.</strong> <code>ScheduleEventDag</code> holds <code>std::shared_ptr&lt;ScheduleEvent></code>. Copying it copies pointers, so a “new DAG” would share event objects with the old one, and the setters would still edit the caller's events. A deep copy needs cloning and an old → new identity map for <code>first_event_by_tray</code> and every later stage. <code>planner_core</code> has no virtual <code>Clone()</code>: events are copy-constructible, but only through their concrete type, so cloning means a <code>dynamic_cast</code> (or a switch on <code>GetType()</code>) over the five subclasses. An <strong>edit log</strong> avoids both: it refers to existing events by the same <code>shared_ptr</code>, adds new events as new objects, and never touches the caller's.</p>
@@ -1052,7 +1053,7 @@ stdx::Result ApplyTrayAssignment(PlanContext&amp; ctx, const Result&amp; result)
   <li><strong>A <code>FakeSolver</code> is trivial:</strong> it returns a canned <code>Result</code>.</li>
 </ul>
 <p><strong>Limits to be honest about.</strong> <code>const ScheduleEventDag&amp;</code> stops structural edits, but <code>GetEventFromVertex</code> still hands out <code>std::shared_ptr&lt;ScheduleEvent></code> to non-const events, so the compiler does not stop a solver from calling a setter. The rule is enforced by review and by one test: snapshot every event's fields before <code>Solve</code>, compare after. Changing <code>planner_core</code> to hand out <code>shared_ptr&lt;const ScheduleEvent></code> would make it a compile error, but that is outside this refactor.</p>
-<h3 data-num id="pr-free-function-signatures-and-the-plan-call-site">Free-function signatures and the <code>Plan()</code> call site</h3>
+<h4 data-num id="pr-free-function-signatures-and-the-plan-call-site">Free-function signatures and the <code>Plan()</code> call site</h4>
 <p>The types in <a class="ref" href="#pr-the-new-pieces-and-how-they-fit-together">6.1</a> cover the solver itself. These are the public pure functions that both <code>DefaultSolver</code> and job planning call:</p>
 <pre><code class="language-cpp">// PROPOSED — include/scheduler/task_planning/tray_assignment/empty_tray.hpp and blocking_trays.hpp
 namespace volley::task_planning::tray_assignment {
@@ -1111,28 +1112,220 @@ if(!assigned) {
 }
 </code></pre>
 <p><strong>Lifetime rule.</strong> <code>GarageServices</code> and <code>DefaultSolver</code> hold references into the <code>Scheduler</code>. Declare <code>services_</code> after <code>motion_graph_</code>, <code>collision_table_</code>, <code>cost_model_</code> and <code>layout_</code> (today <code>gg_</code> and <code>table_</code>), and <code>tray_solver_</code> after <code>services_</code>, so they are destroyed first. A test that builds a solver directly must keep the graph, table, cost model and layout alive for the solver's lifetime.</p>
-<h3 data-num id="pr-agv-assignment-same-layout-and-error-type-now-returned-result-later">AGV assignment: same layout and error type now, returned result later</h3>
-<p>The <code>agv_assignment</code> folder, <code>stdx::Expected</code> and pure helpers apply directly: the cost estimates (<code>GetJustMovingCost</code>, shared with <code>PlanAgvChargeJob</code>; <code>GetAgvToTrayAssignmentCost</code>; <code>GetAgvOccupiedDuration</code>), feasibility checks and matching inputs are queries over const services and a state, and <code>BottleneckAssignment</code> is already external.</p>
-<p>Returning a result is harder there, for reasons visible in the code:</p>
-<ul>
-  <li>The AGV tree <strong>reads the DAG it is building.</strong> It consumes <code>event_dag_copy</code> root by root (<code>event_dag_copy.Remove(root_event)</code>), and <code>EnsureAgvMovePathsClear</code> repeatedly inspects edges added earlier in the same stage (up to 256 repair passes), followed by <code>Reduce()</code>.</li>
-  <li>It <strong>reads back fields it set</strong>: <code>SetAgvId</code> on a <code>TrayMove</code>, then <code>GetAgvId()</code> on candidate moves while building later dependencies.</li>
-</ul>
-<p>An edit log could still work, if the solver keeps a private <em>structural</em> copy of the DAG (the default copy constructor copies <code>dag_</code> and <code>ptr_to_vertex_</code>, so the copy shares the events), applies every edit to that copy as it goes, and logs it, including a <code>Reduce</code> step. The log must name events by pointer, never by vertex: <code>Remove</code> on the work-queue copy renumbers its vertices. The field reads are the real obstacle: they would need either cloned events with an identity map (and <code>planner_core</code> has no <code>Clone()</code>, see <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">6.5</a>), or a side table (<code>agv_of[event]</code>) replacing every <code>GetAgvId()</code> read, which touches parity-sensitive code. <strong>Recommendation:</strong> for stage F, use the same layout and <code>stdx</code> types, and give the AGV solver an <code>Input</code> plus an explicitly mutable <code>ScheduleEventDag&amp;</code> (named as such in the signature). Convert it to a returned result after the benchmarks exist and can prove nothing changed.</p>
-<pre><code class="language-cpp">// PROPOSED — sketch only; include/scheduler/task_planning/agv_assignment/solver.hpp
+<h4 data-num id="pr-tray-names">Names in the tray module, and why</h4>
+<p>Each name follows the naming rules of the catalogue (<a class="ref" href="#nm-naming-rules">section 15.2</a>): spell words out, one concept per word, maps named <code>&lt;value&gt;_by_&lt;key&gt;</code>, no boolean-sounding names for things that are not booleans. Where reviewers may prefer another name, the table gives the alternatives that were considered and why they were not chosen. None of these names is fixed until review.</p>
+<table class="keycol">
+  <thead><tr><th>Name</th><th>What it names</th><th>Alternatives considered</th><th>Why this one</th></tr></thead>
+  <tbody>
+    <tr><td><code>tray_assignment</code> (folder, namespace)</td><td>Stage 2 of task planning</td><td><code>tray_movement</code>, <code>tray_planning</code></td><td>Job expansion also plans tray movement (it creates the <code>TrayMove</code>s); this stage only assigns what expansion left open. Matches today's <code>DoTrayAssignments</code> and pairs with <code>agv_assignment</code></td></tr>
+    <tr><td><code>Solver</code>, <code>DefaultSolver</code>, <code>Solve</code></td><td>The interface, today's algorithm behind it, and its one method</td><td><code>TrayAssigner</code>; <code>LegacySolver</code>, <code>GreedySolver</code>, <code>CurrentSolver</code></td><td>"Solver" is the ticket's word ("tray solver interface"). <code>Default</code> says what <code>Plan()</code> uses when nothing else is configured, without judging it: <code>Legacy</code> would imply it is to be removed, and <code>Greedy</code> describes the algorithm, which may change while the name should not</td></tr>
+    <tr><td><code>Input</code>, <code>Result</code></td><td>What <code>Solve</code> reads, and what it returns</td><td><code>TrayAssignmentInput</code>, <code>TrayAssignmentResult</code></td><td>The namespace already says "tray assignment": <code>tray_assignment::Input</code> reads well, <code>tray_assignment::TrayAssignmentInput</code> stutters. The same short names are used in <code>agv_assignment</code></td></tr>
+    <tr><td><code>TrayFill</code></td><td>One blank filled on an <strong>existing</strong> <code>TrayMove</code>: a tray id, a destination, or both</td><td><code>TrayAssigned</code>, <code>TrayAssignment</code>, <code>TrayMoveFill</code>, <code>BlankFill</code></td><td>Job expansion leaves blanks on some tray moves ("any empty tray", "destination still open"); this record says how one was filled, and the <code>Result</code> keeps them in <code>fills</code>. <code>TrayAssigned</code> is a past participle, which reads as a boolean or an event ("tray was assigned"), and suggests that only the tray is set, while a fill often sets only the destination. <code>TrayAssignment</code> repeats the namespace, and the whole <code>Result</code> is the assignment, not one entry. <code>TrayMoveFill</code> is more exact (the record fills a <em>move</em>, not a tray) and is the best alternative if reviewers prefer precision over length. <code>BlankFill</code> loses the word "tray" that tells a reader which event type it applies to</td></tr>
+    <tr><td><code>fills</code>, <code>edits</code></td><td>The two lists in <code>Result</code></td><td><code>assignments</code>, <code>changes</code>, <code>operations</code></td><td>Plural nouns for collections; <code>fills</code> matches the element type, <code>edits</code> matches <code>DagEdit</code>. "Changes" would also cover the fills, which are not structural</td></tr>
+    <tr><td><code>DagEdit</code>, <code>AddEvent</code>, <code>AddDependency</code></td><td>One structural change to the event DAG, recorded instead of applied</td><td><code>DagOp</code>, <code>NewEvent</code>, <code>NewEdge</code></td><td>Named after the <code>ScheduleEventDag</code> methods they replay, one for one, so <code>ApplyTrayAssignment</code> reads as "call the method named by the record"</td></tr>
+    <tr><td><code>first_event_by_tray</code></td><td>For each tray, the first move in this plan that takes it off its starting node (the hand-off to AGV assignment)</td><td>today <code>first_tray_event</code></td><td>Map naming rule: <code>&lt;value&gt;_by_&lt;key&gt;</code>. Today's name can be read as "the event of the first tray"</td></tr>
+    <tr><td><code>destination</code> (field of <code>TrayFill</code>, <code>TrayChoice</code>)</td><td>Where the tray goes</td><td>today <code>dest</code></td><td>Spell words out; <code>TrayMove::SetDest</code> keeps its name until <code>planner_core</code> is renamed (stage I)</td></tr>
+    <tr><td><code>ApplyTrayAssignment</code></td><td>The only function that writes a <code>Result</code> into the plan context</td><td><code>tray_assignment::Apply</code>, <code>Commit</code>, <code>WriteBack</code></td><td>"Apply" is the verb the event classes already use for "change a state with this" (<code>ScheduleEvent::Apply</code>). The longer name keeps the call in <code>Plan()</code> readable next to the AGV call, and searchable, at the cost of a small stutter in its qualified form</td></tr>
+    <tr><td><code>DefaultSolver::Pass</code></td><td>The private working data of one <code>Solve</code> call</td><td><code>State</code>, <code>Context</code>, <code>Workspace</code></td><td>One object per pass over the DAG. "State" already means the garage state, and "Context" already means <code>PlanContext</code>; reusing either would give one word two meanings</td></tr>
+    <tr><td><code>TrayChoice</code>, <code>ParkingPlan</code>, <code>BlockingResolution</code>, <code>PlannedTrayMove</code>, <code>ResolveRequest</code></td><td>Return and argument types of the pure functions</td><td>today: <code>std::pair</code> and nested <code>std::pair</code>s, positional arguments</td><td>Named fields instead of <code>.first</code> / <code>.second</code>. Each name says what the function decided: a tray, a parking spot, how blockers are resolved, a move with its path, a request with named parameters</td></tr>
+    <tr><td><code>scheduler_core::GarageServices</code></td><td>The read-only graph, collision table, cost model and layout every search needs</td><td><code>GarageModel</code>, <code>Services</code>, <code>Context</code></td><td>"Model" would suggest the garage <em>state</em>. They are services the solver calls, and "garage" says which domain; the <code>scheduler_core</code> namespace says they are shared by every stage</td></tr>
+  </tbody>
+</table>
+<h3 data-num id="pr-agv-assignment-same-layout-and-error-type-now-returned-result-later">AGV assignment</h3>
+<p>AGV assignment follows the same outline as tray assignment. It gets the same folder layout, the same <code>stdx</code> error types, the same <code>GarageServices</code> and the same split into a solver, a private pass and pure functions. One thing differs on purpose: its first version <strong>edits the event DAG in place</strong>, and the signature says so (<a class="ref" href="#pr-agv-why-in-place">section 8.2.5</a> explains why). A returned result, like tray assignment's, follows once the benchmarks can prove that nothing changed.</p>
+
+<h4 data-num id="pr-agv-new-pieces">The new pieces and how they fit together</h4>
+<p>Today <code>DoAgvAssignments(ctx)</code> decides which AGV performs each tray move, adds the AGV's own events (approach, lift, lower), repairs paths, reduces the DAG and moves bay dependencies, all on the shared context. The proposal keeps the deciding in a <code>DefaultSolver</code> and its private <code>Pass</code>, moves every computation that only reads into pure functions, and lets <code>SolveInPlace</code> write the DAG it is given. It does not write anything else in the context.</p>
+<p>The pieces, all in namespace <code>volley::task_planning::agv_assignment</code> (folder <code>task_planning/agv_assignment/</code>) unless marked otherwise:</p>
+<table>
+  <thead><tr><th>Piece</th><th>What it is</th><th>Declared in</th><th>Lives for</th><th>Reads</th><th>Writes</th></tr></thead>
+  <tbody>
+    <tr><td><code>scheduler_core::GarageServices</code></td><td>The same services object as tray assignment</td><td><code>include/scheduler/core/garage_services.hpp</code></td><td>As long as the <code>Scheduler</code></td><td>—</td><td>nothing</td></tr>
+    <tr><td><code>Input</code></td><td>Struct of two <code>const</code> references</td><td><code>include/scheduler/task_planning/agv_assignment/solver.hpp</code></td><td>One <code>SolveInPlace</code> call</td><td><code>initial_state</code>, <code>first_event_by_tray</code> (the hand-off from tray assignment)</td><td>nothing</td></tr>
+    <tr><td><code>Solver</code></td><td>Interface with one method, <code>SolveInPlace(const Input&amp;, EventDag&amp;) const</code></td><td><code>solver.hpp</code></td><td>Owned by <code>Scheduler</code> (<code>agv_solver_</code>)</td><td>—</td><td>—</td></tr>
+    <tr><td><code>DefaultSolver</code></td><td>Today's algorithm behind the interface; holds only <code>const GarageServices&amp;</code></td><td><code>default_solver.hpp</code>, <code>src/task_planning/agv_assignment/default_solver.cpp</code></td><td>Owned by <code>Scheduler</code></td><td><code>Input</code>, services</td><td>the <code>EventDag&amp;</code> argument</td></tr>
+    <tr><td><code>DefaultSolver::Pass</code></td><td><strong>Private nested class</strong>: the loop's working data (garage state, work-queue copy of the DAG, last event per AGV, node occupants, busy and ready times)</td><td>declared in <code>default_solver.hpp</code>, defined in <code>src/task_planning/agv_assignment/pass.hpp</code></td><td>One <code>SolveInPlace</code> call</td><td><code>Input</code>, services</td><td>its own members and the <code>EventDag&amp;</code> it was given</td></tr>
+    <tr><td>Pure functions</td><td><code>EstimateTravelTime</code>, <code>EstimateTimeToLift</code>, <code>EstimateAssignmentCost</code>, <code>AgvBusyDuration</code>, <code>OrderMatchedAgvs</code></td><td><code>task_planning/travel_cost.hpp</code>, <code>agv_assignment/cost.hpp</code>, <code>agv_assignment/matching.hpp</code></td><td>—</td><td>their arguments</td><td>nothing</td></tr>
+    <tr><td>Path repair</td><td><code>RepairAgvPaths</code> and its helpers, today <code>EnsureAgvMovePathsClear</code></td><td><code>src/task_planning/agv_assignment/path_repair.hpp</code> (private)</td><td>—</td><td>services, the DAG</td><td>the <code>EventDag&amp;</code> (gating edges)</td></tr>
+    <tr><td><code>volley::BottleneckAssignment</code></td><td>The matching itself, from <code>task_planner</code></td><td>unchanged</td><td>—</td><td>the cost table</td><td>nothing</td></tr>
+  </tbody>
+</table>
+<p>There is no <code>ApplyAgvAssignment</code>: in the first version the solver's writes go straight into the <code>EventDag&amp;</code> it receives. What changes compared with today is that the writes are confined to that one argument, which <code>Plan()</code> names at the call, instead of reaching through a shared <code>ScheduleContextSPtr</code>.</p>
+<p>What happens in <code>Plan()</code>, step by step:</p>
+<ol>
+  <li><strong>Build the input.</strong> <code>Input{plan_ctx.initial_state, plan_ctx.first_event_by_tray}</code>: two <code>const</code> references, filled by tray assignment's apply step just before.</li>
+  <li><strong>Solve in place.</strong> <code>DefaultSolver::SolveInPlace</code> creates a <code>Pass</code>, which copies <code>initial_state</code> and the DAG's structure (the work queue). Round by round it drains roots that are not tray moves, asks the pure functions for an assignment cost per (AGV, tray move) pair, matches with <code>BottleneckAssignment</code>, orders the matched AGVs with <code>OrderMatchedAgvs</code>, and tells the <code>Pass</code> to emit each AGV's approach, lift and lower and to set the AGV on the tray move. Then, as today and in the same order: path repair, <code>Reduce()</code>, and the bay and VECS dependency move (today <code>AddDepsAfterAmiga</code>).</li>
+  <li><strong>Continue.</strong> <code>Plan()</code> runs <code>Reduce()</code> again and validation, as today.</li>
+</ol>
+<pre><code class="language-cpp">// PROPOSED — include/scheduler/task_planning/agv_assignment/solver.hpp
 namespace volley::task_planning::agv_assignment {
-struct Input {
-  const DiscreteGarageState&amp; initial_state;                                 // plan_ctx->initial_state
-  const std::unordered_map&lt;uint16_t, ScheduleEventSPtr>&amp; first_event_by_tray;  // from tray_assignment::Result
+
+using FirstEventByTray = std::unordered_map&lt;uint16_t, ScheduleEventSPtr&gt;;   // same type as tray_assignment's
+
+struct Input {                                     // what SolveInPlace may read and must not change
+  const DiscreteGarageState&amp; initial_state;        // plan_ctx.initial_state
+  const FirstEventByTray&amp; first_event_by_tray;     // plan_ctx.first_event_by_tray, set by ApplyTrayAssignment
 };
+
 class Solver {
  public:
   virtual ~Solver() = default;
-  // event_dag is edited in place in the first pass (see 6.7); the name says so.
+  // Assigns an AGV to every TrayMove of event_dag and adds the AGVs' events and edges to it.
+  // event_dag is edited in place in the first version; the name says so.
   [[nodiscard]] virtual stdx::Result SolveInPlace(const Input&amp; input, EventDag&amp; event_dag) const = 0;
 };
+
 }  // namespace volley::task_planning::agv_assignment
 </code></pre>
+<pre><code class="language-cpp">// PROPOSED — src/task_planning/agv_assignment/pass.hpp (private header)
+class DefaultSolver::Pass {
+ public:
+  Pass(const scheduler_core::GarageServices&amp; services, const Input&amp; input, EventDag&amp; event_dag);
+  stdx::Result DrainNonTrayRoots();                                    // bay, VECS and earlier AGV events
+  std::vector&lt;ScheduleEventSPtr&gt; TrayMoveRoots() const;               // what the matcher sees this round
+  stdx::Result EmitApproach(uint16_t agv_id, const ScheduleEventSPtr&amp; tray_move);   // was MoveAgvToTrayPose
+  stdx::Result EmitLift(uint16_t agv_id, size_t job_index);           // was AppendAgvLiftEvent(raised = true)
+  stdx::Result EmitLower(uint16_t agv_id, size_t job_index);          // was AppendAgvLiftEvent(raised = false)
+  stdx::Result CommitTrayMove(uint16_t agv_id, const ScheduleEventSPtr&amp; tray_move);  // SetAgvId, edges, apply
+  const DiscreteGarageState&amp; State() const { return working_state_; }
+ private:
+  stdx::Result OrderArrivalAfterOccupant(uint32_t node_id, uint16_t agv_id,
+                                         const ScheduleEventSPtr&amp; event);   // was AddNodeArrivalDeps
+  void PropagateReadyTime(const ScheduleEventSPtr&amp; event, Duration cost);   // was PropagateEventCostToChildren
+  const scheduler_core::GarageServices&amp; services_;
+  EventDag&amp; event_dag_;                                                 // the caller's DAG: written here
+  EventDag work_queue_;                                                 // structural copy, consumed root by root
+  DiscreteGarageState working_state_;
+  std::unordered_map&lt;uint16_t, ScheduleEventSPtr&gt; last_event_by_agv_;
+  std::unordered_map&lt;uint16_t, ScheduleEventSPtr&gt; last_approach_by_agv_;
+  std::unordered_map&lt;uint32_t, uint16_t&gt; agv_by_node_;                // was current_node_occupant
+  std::unordered_map&lt;uint16_t, Duration&gt; busy_duration_by_agv_;       // was agv_occupied_durations
+  std::unordered_map&lt;ScheduleEventSPtr, Duration&gt; ready_time_by_event_;  // was event_occupied_durations
+};
+</code></pre>
+
+<h4 data-num id="pr-agv-source-tree">Source tree</h4>
+<p>The tree is the one of <a class="ref" href="#pr-source-tree">section 8.1.2</a>; the AGV folder holds:</p>
+<pre><code class="language-text">include/scheduler/task_planning/
+├── travel_cost.hpp                   # EstimateTravelTime (was GetJustMovingCost); also used by job expansion
+└── agv_assignment/
+    ├── solver.hpp                    # Solver, Input, FirstEventByTray
+    ├── default_solver.hpp            # DefaultSolver (declares the private nested Pass)
+    ├── cost.hpp                      # EstimateTimeToLift, EstimateAssignmentCost, AgvBusyDuration
+    └── matching.hpp                  # OrderMatchedAgvs (was GetEventDag, AgvMatchingEventDeps, DagToVec)
+src/task_planning/
+├── travel_cost.cpp
+└── agv_assignment/
+    ├── default_solver.cpp            # SolveInPlace(): the round loop
+    ├── pass.hpp, pass.cpp            # PRIVATE: DefaultSolver::Pass
+    ├── cost.cpp, matching.cpp
+    ├── path_repair.hpp               # PRIVATE: RepairAgvPaths, RepairPass, TryGateBlockedMove, FindDeparture
+    ├── path_repair.cpp
+    └── transition_deps.cpp           # MoveTransitionDependencies (was AddDepsAfterAmiga)
+test/task_planning/agv_assignment/    # cost_test, matching_test, path_repair_test, default_solver_test
+</code></pre>
+<p>The boundaries are the same as for tray assignment: the folder is part of the <code>scheduler_task_planning</code> target, it never includes <code>tray_assignment/</code> (the hand-off is the plain map in <code>Input</code>), and its tests link only that target.</p>
+
+<h4 data-num id="pr-agv-call-tree">Before and after: the AGV call tree</h4>
+<p>The same question sorts every function: <strong>what does it write?</strong></p>
+<table>
+  <thead><tr><th>Today (all <code>Scheduler</code> members)</th><th>Writes today</th><th>Proposed</th><th>Group</th></tr></thead>
+  <tbody>
+    <tr><td><code>DoAgvAssignments</code></td><td><code>ctx->events</code>, fields of tray moves</td><td><code>DefaultSolver::SolveInPlace</code></td><td>Solver class</td></tr>
+    <tr><td><code>MoveAgvToTrayPose</code>, <code>AppendAgvLiftEvent</code>, <code>AddNodeArrivalDeps</code>, <code>PropagateEventCostToChildren</code></td><td><code>ctx->events</code> and five local maps by reference</td><td><code>Pass::EmitApproach</code>, <code>EmitLift</code>, <code>EmitLower</code>, <code>OrderArrivalAfterOccupant</code>, <code>PropagateReadyTime</code></td><td>Private, mutable, one per call</td></tr>
+    <tr><td><code>GetJustMovingCost</code>, <code>GetAgvCurrentPoseToTrayMoveCost</code>, <code>GetAgvToTrayAssignmentCost</code>, <code>GetAgvOccupiedDuration</code></td><td>nothing</td><td><code>EstimateTravelTime</code>, <code>EstimateTimeToLift</code>, <code>EstimateAssignmentCost</code>, <code>AgvBusyDuration</code></td><td>Pure</td></tr>
+    <tr><td><code>GetEventDag</code>, <code>AgvMatchingEventDeps</code>, <code>DagToVec</code></td><td>nothing</td><td><code>OrderMatchedAgvs</code></td><td>Pure</td></tr>
+    <tr><td><code>EnsureAgvMovePathsClear</code>, <code>RunAgvPathRepairPass</code>, <code>TryClearBlockedAgvMove</code>, <code>FindAgvDepartureFromNode</code></td><td><code>ctx->events</code> (gating edges)</td><td><code>RepairAgvPaths</code> and private helpers, taking the <code>EventDag&amp;</code></td><td>Writes the DAG it is given</td></tr>
+    <tr><td><code>AddDepsAfterAmiga</code></td><td><code>ctx->events</code></td><td><code>MoveTransitionDependencies</code>, taking the <code>EventDag&amp;</code></td><td>Writes the DAG it is given</td></tr>
+  </tbody>
+</table>
+<p>Two of today's facts carry over unchanged, because parity depends on them: <code>GetAgvOccupiedDuration</code> returns zero (<code>TODO(isabel)</code>), and <code>Reduce()</code> runs at the end of the stage and again in <code>Plan()</code> (<a class="ref" href="#pr-risks-that-must-not-be-silently-fixed">section 13</a>). <code>GetJustMovingCost</code> is also called by <code>PlanAgvChargeJob</code>; as a pure function in <code>task_planning/travel_cost.hpp</code> it stays reachable from job expansion without a back-reference.</p>
+
+<h4 data-num id="pr-agv-errors">Errors</h4>
+<p>The rules of <a class="ref" href="#pr-errors-stdxexpected-instead-of-boolstringpair">section 8.1.4</a> apply unchanged. Concretely:</p>
+<table>
+  <thead><tr><th>Today</th><th>Proposed</th></tr></thead>
+  <tbody>
+    <tr><td><code>BoolStringPair DoAgvAssignments(ctx)</code></td><td><code>stdx::Result SolveInPlace(input, event_dag)</code></td></tr>
+    <tr><td><code>BoolStringPair</code> from <code>MoveAgvToTrayPose</code>, <code>AppendAgvLiftEvent</code>, <code>AddNodeArrivalDeps</code></td><td><code>stdx::Result</code> from the <code>Pass</code> methods</td></tr>
+    <tr><td><code>throw std::runtime_error("... Failed to topologically sort the DAG")</code> inside <code>DoAgvAssignments</code></td><td><code>return stdx::Unexpected(...)</code>: today an exception escapes <code>Plan()</code> from this one place</td></tr>
+    <tr><td><code>std::optional&lt;Duration&gt;</code> from the cost functions ("no path")</td><td>unchanged: a searched-and-not-found answer the caller handles itself (rule 2)</td></tr>
+    <tr><td><code>stdx::Result EnsureAgvMovePathsClear</code>, <code>stdx::Expected&lt;bool&gt; RunAgvPathRepairPass</code></td><td>unchanged types, new names</td></tr>
+  </tbody>
+</table>
+<p>The error texts stay identical for the parity pass, as for tray assignment.</p>
+
+<h4 data-num id="pr-agv-why-in-place">Why edit in place first, and how a result can follow</h4>
+<p>Returning a result is harder for AGV assignment, for reasons visible in the code:</p>
+<ul>
+  <li>The AGV loop <strong>reads the DAG it is building.</strong> It consumes <code>event_dag_copy</code> root by root (<code>event_dag_copy.Remove(root_event)</code>), and <code>EnsureAgvMovePathsClear</code> repeatedly inspects edges added earlier in the same stage (up to 256 repair passes), followed by <code>Reduce()</code>.</li>
+  <li>It <strong>reads back fields it set</strong>: <code>SetAgvId</code> on a <code>TrayMove</code>, then <code>GetAgvId()</code> on candidate moves while building later dependencies.</li>
+</ul>
+<p>An edit log could still work, if the solver keeps a private <em>structural</em> copy of the DAG (the default copy constructor copies <code>dag_</code> and <code>ptr_to_vertex_</code>, so the copy shares the events), applies every edit to that copy as it goes, and logs it, including a <code>Reduce</code> step. The log must name events by pointer, never by vertex: <code>Remove</code> on the work-queue copy renumbers its vertices. The field reads are the real obstacle: they would need either cloned events with an identity map (and <code>planner_core</code> has no <code>Clone()</code>, see <a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">section 8.1.5</a>), or a side table (<code>agv_by_event</code>) replacing every <code>GetAgvId()</code> read, which touches parity-sensitive code.</p>
+<p><strong>Recommendation:</strong> for stage F, the same layout and <code>stdx</code> types, an <code>Input</code> plus an explicitly mutable <code>EventDag&amp;</code> named as such in the signature. Convert it to a returned result after the benchmarks exist and can prove nothing changed. The returned form would mirror tray assignment: a <code>Result</code> with <code>fills</code> (an <code>AgvFill</code> per tray move: the AGV id set on an existing <code>TrayMove</code>), ordered <code>edits</code> (the approach, lift and lower events, their edges, the repair edges and a <code>Reduce</code> marker), and an <code>ApplyAgvAssignment</code> that replays them.</p>
+<p><strong>What in place still guarantees.</strong> Only the <code>EventDag&amp;</code> argument is written: <code>initial_state</code> and <code>first_event_by_tray</code> are <code>const</code>, and nothing reaches the rest of the plan context. A failure halfway leaves that DAG half-edited, as today; <code>Plan()</code> discards the whole response in that case, so the contract to Dispatch does not change.</p>
+
+<h4 data-num id="pr-agv-signatures">Free-function signatures and the <code>Plan()</code> call site</h4>
+<pre><code class="language-cpp">// PROPOSED — include/scheduler/task_planning/travel_cost.hpp and agv_assignment/cost.hpp, matching.hpp
+namespace volley::task_planning {
+// Travel time between two poses, without blocking moves; nullopt if there is no path (was GetJustMovingCost).
+[[nodiscard]] std::optional&lt;Duration&gt; EstimateTravelTime(const scheduler_core::GarageServices&amp; services,
+    const Pose&amp; start, const Pose&amp; end, AssetId agv, bool agv_loaded,
+    std::optional&lt;GraphFilterProperties&gt; filters = std::nullopt);
+}  // namespace volley::task_planning
+
+namespace volley::task_planning::agv_assignment {
+// Travel to the tray plus the lift, if the AGV does not hold it yet (was GetAgvCurrentPoseToTrayMoveCost).
+[[nodiscard]] std::optional&lt;Duration&gt; EstimateTimeToLift(const scheduler_core::GarageServices&amp; services,
+    const DiscreteGarageState&amp; state, uint16_t agv_id, const TrayMove&amp; move);
+// Busy time plus time to lift; nullopt if infeasible (was GetAgvToTrayAssignmentCost).
+[[nodiscard]] std::optional&lt;Duration&gt; EstimateAssignmentCost(const scheduler_core::GarageServices&amp; services,
+    const DiscreteGarageState&amp; state, uint16_t agv_id, const TrayMove&amp; move, Duration agv_busy);
+// Time the AGV is already committed for (was GetAgvOccupiedDuration; returns zero today, kept for parity).
+[[nodiscard]] Duration AgvBusyDuration(uint16_t agv_id);
+// The order in which matched AGVs are expanded, so that one does not drive into another's path
+// (was GetEventDag + AgvMatchingEventDeps + DagToVec).
+[[nodiscard]] std::vector&lt;AgvMatch&gt; OrderMatchedAgvs(const scheduler_core::GarageServices&amp; services,
+    const DiscreteGarageState&amp; state, const std::unordered_map&lt;uint16_t, ScheduleEventSPtr&gt;&amp; match_by_agv);
+}  // namespace volley::task_planning::agv_assignment
+</code></pre>
+<pre><code class="language-cpp">// PROPOSED — src/scheduler.cpp, Scheduler::Plan, right after tray assignment
+// agv_solver_ : std::unique_ptr&lt;agv_assignment::Solver&gt;, new member declared after services_
+if(auto assigned = agv_solver_-&gt;SolveInPlace({plan_ctx-&gt;initial_state, plan_ctx-&gt;first_event_by_tray},
+                                              plan_ctx-&gt;event_dag);
+   !assigned) {
+  result.success = true;                                    // unchanged failure contract, as for trays
+  result.message = "Failed AGV assignments: " + assigned.error();
+  for(const auto&amp; job : request_data.pending_jobs) {
+    result.scheduled_jobs.push_back(FailJob(job, assigned.error()));
+  }
+  return result;
+}
+</code></pre>
+<p>The lifetime rule is the one of tray assignment: <code>agv_solver_</code> is declared after <code>services_</code>, so it is destroyed first.</p>
+
+<h4 data-num id="pr-agv-names">Names in the AGV module, and why</h4>
+<p>The module uses the tray module's names wherever the concept is the same (<code>Solver</code>, <code>DefaultSolver</code>, <code>Input</code>, <code>Pass</code>, <code>GarageServices</code>, <code>first_event_by_tray</code>), so a reader who knows one module can read the other. The names that are new:</p>
+<table class="keycol">
+  <thead><tr><th>Name</th><th>What it names</th><th>Alternatives considered</th><th>Why this one</th></tr></thead>
+  <tbody>
+    <tr><td><code>agv_assignment</code> (folder, namespace)</td><td>Stage 3 of task planning</td><td><code>agv_matching</code>, <code>amiga</code></td><td>Matching is one step of the stage, which also adds the AGVs' events and repairs paths. "AMIGA" (the code's nickname, "Arguably More Intelligent aGv Assignment") cannot be guessed by a new reader</td></tr>
+    <tr><td><code>SolveInPlace</code></td><td>The interface method</td><td><code>Solve</code>, <code>Assign</code>, <code>Apply</code></td><td>The one method that writes its argument should say so where it is called. Keeping <code>Solve</code> would make the two interfaces look alike while behaving differently; <code>InPlace</code> is the usual suffix for "modifies its input". When the returned result arrives, the method becomes <code>Solve</code> and the difference disappears</td></tr>
+    <tr><td><code>FirstEventByTray</code></td><td>The hand-off map type</td><td>repeating the full <code>std::unordered_map</code> type</td><td>One alias, named after the field it types, so both modules name the hand-off the same way without including each other</td></tr>
+    <tr><td><code>EmitApproach</code>, <code>EmitLift</code>, <code>EmitLower</code></td><td>Add the AGV's own events for one tray move</td><td><code>MoveAgvToTrayPose</code>, <code>AppendAgvLiftEvent(raised)</code></td><td>"Emit" is the verb the tray module uses for "add events and edges to the plan". Two functions instead of a <code>bool raised</code> argument: a call site reads <code>EmitLower(...)</code> instead of <code>AppendAgvLiftEvent(..., false, ...)</code></td></tr>
+    <tr><td><code>CommitTrayMove</code></td><td>Set the AGV on the tray move, add its edges, apply it to the working state</td><td>inline in today's loop</td><td>Mirrors <code>CommitRootMove</code> in the tray module</td></tr>
+    <tr><td><code>OrderArrivalAfterOccupant</code></td><td>The edge "the previous occupant leaves before this AGV arrives"</td><td><code>AddNodeArrivalDeps</code></td><td>Says which order the edge enforces. "Deps" is an abbreviation (rule: spell words out)</td></tr>
+    <tr><td><code>PropagateReadyTime</code>, <code>ready_time_by_event_</code></td><td>Earliest time a later event can start</td><td><code>PropagateEventCostToChildren</code>, <code>event_occupied_durations</code></td><td>The value is a time, not a cost and not a duration of occupation; map naming rule</td></tr>
+    <tr><td><code>busy_duration_by_agv_</code>, <code>AgvBusyDuration</code></td><td>How long an AGV is already committed</td><td><code>agv_occupied_durations</code>, <code>GetAgvOccupiedDuration</code></td><td>"Occupied" already means "a node is occupied" in the collision code; "busy" avoids the clash</td></tr>
+    <tr><td><code>agv_by_node_</code></td><td>Which AGV stands on each node during the pass</td><td><code>current_node_occupant</code></td><td>Map naming rule; the value is an AGV id</td></tr>
+    <tr><td><code>EstimateTravelTime</code>, <code>EstimateTimeToLift</code>, <code>EstimateAssignmentCost</code></td><td>The three cost functions</td><td><code>GetJustMovingCost</code>, <code>GetAgvCurrentPoseToTrayMoveCost</code>, <code>GetAgvToTrayAssignmentCost</code></td><td>"Estimate" says they are predictions, not measurements; each name says what is estimated. "Just moving" means "travel only, no blocking moves", which the comment explains and the name does not</td></tr>
+    <tr><td><code>OrderMatchedAgvs</code></td><td>The order in which matched AGVs are expanded</td><td><code>GetEventDag</code>, <code>DagToVec</code></td><td>Today's names describe the data structure (a DAG of AGV ids), not the purpose, and <code>GetEventDag</code> is easily confused with the event DAG</td></tr>
+    <tr><td><code>RepairAgvPaths</code></td><td>The post-assignment repair</td><td><code>EnsureAgvMovePathsClear</code></td><td>Shorter and says it changes something; the current name reads like a check</td></tr>
+    <tr><td><code>MoveTransitionDependencies</code></td><td>Moves a bay or VECS transition's edges from tray moves to the AGV's lift and lower</td><td><code>AddDepsAfterAmiga</code></td><td>Says what the step does (the naming catalogue asks for this, <a class="ref" href="#nm-pipeline-stage-names">section 15.4.3</a>); "after AMIGA" says only when it runs</td></tr>
+    <tr><td><code>AgvFill</code> (later)</td><td>The AGV id set on an existing <code>TrayMove</code>, in the future returned result</td><td><code>AgvAssigned</code>, <code>AgvAssignment</code></td><td>Same reasons as <code>TrayFill</code>: not a boolean-sounding participle, and not the stage's own name</td></tr>
+  </tbody>
+</table>
+
 <h2 data-num id="pr-naming-and-the-ros-boundary">Naming and the ROS boundary</h2>
 <p>The refactor rewrites most of the code it touches, so it is the cheapest moment to fix names. The naming catalogue (<a class="ref" href="#nm-proposed-future-work-naming">section 15</a>) lists the recommendations for the whole stack. This section takes the subset that can be done now, under one constraint: <strong>renames stay inside <code>scheduler</code> and <code>planner_core</code></strong>. <code>common_ros</code> and the ROS interfaces are used by too many other packages, so their renames come later.</p>
 <p>Two mechanisms let the scheduler use the good names before <code>common_ros</code> changes:</p>

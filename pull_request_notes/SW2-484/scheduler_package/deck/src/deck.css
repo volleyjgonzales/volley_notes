@@ -222,3 +222,17 @@ ol.callouts[start="4"] { counter-reset: c 3; }
 ul.tight li { margin-bottom: 12px; }
 .key { display: inline-block; width: 14px; height: 14px; border-radius: 3px; background: var(--c); vertical-align: -2px; margin-right: 4px; }
 .key.dashed { background: none; border: 2px dashed var(--muted); width: 12px; height: 12px; }
+
+/* position in the five-stage pipeline, top right of the stage slides */
+.stagebar { position: absolute; top: 36px; right: 48px; display: flex; gap: 6px; font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+.stagebar span { padding: 5px 9px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); background: var(--card); white-space: nowrap; }
+.stagebar span.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* staged plan: one card per phase */
+.phases { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.phases .card { display: flex; flex-direction: column; gap: 6px; }
+.phases .ph-n { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--accent); }
+.phases h3 { font-size: 21px; margin: 0; }
+.phases p { font-size: 17px; color: var(--fg-2); flex: 1; }
+.phases .pill { align-self: flex-start; }
+.phases p code { font-size: 14px; overflow-wrap: anywhere; }

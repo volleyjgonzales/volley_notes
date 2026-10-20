@@ -88,19 +88,8 @@
 <section>
   <div class="kicker">The running example</div>
   <h2>One section of a real garage, as a graph</h2>
-  <div class="fig h380" data-fig="d01_scenario"></div>
-  <div class="cols" style="gap:10px 34px;margin-top:10px">
-    <ol class="callouts">
-      <li><strong>Bay B21</strong>, where the customer collects the vehicle. It still holds the empty tray T21, which must leave before another tray can enter.</li>
-      <li><strong>Tray T17</strong> at stall P17 carries the requested vehicle.</li>
-      <li><strong>Tray T15</strong> (stall P15) and tray T20 (stall P20) enclose tray T17; one of them must move first.</li>
-    </ol>
-    <ol class="callouts" start="4">
-      <li><strong>AGV-1</strong> (waypoint W26) and AGV-2 (stall P24) are the only machines that move trays.</li>
-      <li><strong>Tray T27</strong> is stranded on waypoint W27, in the aisle; a cleaning job moves it to a stall.</li>
-      <li class="plain">Grey lines are the graph's edges. AGVs move only along them, from node to node; each node holds at most one tray.</li>
-    </ol>
-  </div>
+  <div class="fig h420" data-fig="d01_scenario"></div>
+  <p class="small" style="margin-top:12px">The example used on the following slides: a customer has asked for the vehicle on <strong>tray T17</strong> (stall P17) at <strong>bay B21</strong>. Bay B21 still holds the empty tray T21, and trays T15 and T20 enclose tray T17. Tray T27 is stranded in the aisle on waypoint W27. AGV-1 and AGV-2 are free. AGVs drive only along the edges, and each node holds at most one tray.</p>
   <aside class="notes">
     The geometry is the Pecos site layout (QA section) with hypothetical occupancy. This scenario is used on every
     following slide up to AGV assignment. The point to retain: a single request generates additional moves, and which
@@ -202,6 +191,7 @@
 </section>
 
 <section>
+  <div class="stagebar" aria-label="Position in the pipeline"><span class="on">1 Job expansion</span><span class="on">2 Tray assignment</span><span class="on">3 AGV assignment</span><span>4 Motion planning</span><span>5 Action graph</span></div>
   <div class="kicker">Task planning · stages 1-3</div>
   <h2>Two jobs become one event DAG</h2>
   <div class="figside">
@@ -223,25 +213,29 @@
 </section>
 
 <section>
+  <div class="stagebar" aria-label="Position in the pipeline"><span>1 Job expansion</span><span class="on">2 Tray assignment</span><span>3 AGV assignment</span><span>4 Motion planning</span><span>5 Action graph</span></div>
   <div class="kicker">Task planning · stage 2</div>
-  <h2>Tray assignment: which trays move, and where to</h2>
+  <h2>Tray assignment: which empty tray goes into the bay?</h2>
   <div class="figside">
     <div class="fig" data-fig="d04_trays" data-play></div>
     <div class="side">
       <ul class="small tight">
-        <li>A request can require <strong>moves no one asked for</strong>: here tray T15 and the empty tray T21.</li>
-        <li>The route and the free stalls are <strong>choices</strong>. Another policy could move fewer trays or shorten the moves.</li>
-        <li>Today this logic is one 560-line method, <code>DoTrayAssignments</code>. The first interface of the ticket replaces it.</li>
+        <li>The job asks for <strong>an</strong> empty tray, not a particular one. Choosing it is tray assignment's decision, and it has consequences: some choices make other trays move first.</li>
+        <li>Today's rule: search outward from the bay; cost = travel time + <strong>30 s per tray in the way</strong>; take the cheapest.</li>
+        <li>Other rules are possible, for example keeping the stalls nearest the bay for vehicles. Today the rule is buried in the 560-line <code>DoTrayAssignments</code>; behind an interface, rules can be compared on the benchmark set.</li>
       </ul>
     </div>
   </div>
   <aside class="notes">
-    Tray assignment completes the tray moves left open by job expansion and adds moves for trays on the chosen route,
-    with edges that order them before the move they unblock.
+    Costs are illustrative. The real search ignores trays and AGVs as obstacles but charges 30 s for each tray it
+    crosses, so a buried empty tray can still be chosen; the main loop then plans the moves that clear its way.
+    The same stage also gives destinations to trays that must leave (the empty tray in a bay before a retrieve) and
+    adds moves for trays that block a route.
   </aside>
 </section>
 
 <section>
+  <div class="stagebar" aria-label="Position in the pipeline"><span>1 Job expansion</span><span>2 Tray assignment</span><span class="on">3 AGV assignment</span><span>4 Motion planning</span><span>5 Action graph</span></div>
   <div class="kicker">Task planning · stage 3</div>
   <h2>AGV assignment: which AGV moves each tray</h2>
   <div class="figside">
@@ -262,6 +256,7 @@
 </section>
 
 <section>
+  <div class="stagebar" aria-label="Position in the pipeline"><span>1 Job expansion</span><span>2 Tray assignment</span><span>3 AGV assignment</span><span class="on">4 Motion planning</span><span>5 Action graph</span></div>
   <div class="kicker">Motion planning · stage 4</div>
   <h2>CHUGG turns the event DAG into timed, collision-free paths</h2>
   <div class="cols c3" style="margin-bottom:14px">
@@ -280,19 +275,34 @@
 </section>
 
 <section>
+  <div class="stagebar" aria-label="Position in the pipeline"><span>1 Job expansion</span><span>2 Tray assignment</span><span>3 AGV assignment</span><span>4 Motion planning</span><span class="on">5 Action graph</span></div>
   <div class="kicker">Action graph · stage 5</div>
   <h2>The action graph: the plan that Dispatch executes</h2>
   <div class="cols w40" style="align-items:start">
     <div class="stack small">
-      <p>The last stage converts the timed paths into an <strong>action graph</strong>: one node per action (drive, lift, lower, bay transition) and an edge wherever one action must complete before another may start. It is what the scheduler returns to Dispatch.</p>
-      <p><strong>Why not return the times?</strong> Execution times vary. If AGV-1 is slower than planned, a timetable lets AGV-2 enter a cell AGV-1 still occupies. The action graph keeps only the orderings that matter, so a delay makes dependent actions wait instead of collide.</p>
-      <p class="muted">The figure: the plan (top), executed by the clock with AGV-1 delayed (middle, conflict in cell B), and executed by dependencies (bottom, AGV-2 waits).</p>
+      <p><strong>Solution: an action graph.</strong> One box per action, one arrow per "must complete before". Each AGV's actions follow its route; between AGVs, an arrow appears wherever both use the same cell.</p>
+      <svg class="dg" viewBox="0 0 560 200" style="margin:2px 0 6px">
+        <defs><marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker>
+          <marker id="ahga" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#38bdf8"/></marker></defs>
+        <text x="0" y="48" class="mono" style="font-size:16px;font-weight:600">AGV-1</text>
+        <text x="0" y="158" class="mono" style="font-size:16px;font-weight:600">AGV-2</text>
+        <rect class="box" x="80" y="20" width="130" height="46" rx="8"/><text x="145" y="49" text-anchor="middle" class="mono" style="font-size:16px">A → B</text>
+        <rect class="box" x="250" y="20" width="130" height="46" rx="8"/><text x="315" y="49" text-anchor="middle" class="mono" style="font-size:16px">B → C</text>
+        <rect class="box" x="250" y="130" width="130" height="46" rx="8"/><text x="315" y="159" text-anchor="middle" class="mono" style="font-size:16px">D → B</text>
+        <rect class="box" x="420" y="130" width="130" height="46" rx="8"/><text x="485" y="159" text-anchor="middle" class="mono" style="font-size:16px">B → E</text>
+        <path d="M210 43H242" class="arrow" marker-end="url(#ahg)"/>
+        <path d="M380 153H412" class="arrow" marker-end="url(#ahg)"/>
+        <path d="M315 66V122" class="arrow" style="stroke:var(--accent);stroke-width:2.4" marker-end="url(#ahga)"/>
+        <text x="325" y="100" class="sub" style="fill:var(--accent);font-size:14px">AGV-1 has left cell B</text>
+      </svg>
+      <p><strong>Problem it solves.</strong> Execution times vary. With a timetable (right, middle), a late AGV-1 is still in cell B when AGV-2 drives in. With the action graph (right, bottom), AGV-2 waits for the arrow instead of colliding.</p>
     </div>
     <div class="fig h500" data-fig="84_adg_delay" data-crop="header"></div>
   </div>
   <aside class="notes">
-    This structure is known as an action dependency graph. It is built from the timed paths by keeping, for each
-    location, the order in which AGVs pass through it, and each AGV's own sequence of actions.
+    The scheduler returns this graph to Dispatch, which releases each action as soon as its predecessors have
+    completed. It is built from the timed paths by keeping, for each cell, the order in which AGVs pass through it,
+    and each AGV's own sequence of actions. The example is the five-cell map of the figure.
   </aside>
 </section>
 
@@ -496,7 +506,7 @@ ApplyTrayAssignment(plan_ctx, result);</code></pre>
       <div class="card"><h3>No side effects in Solve</h3><p>The solver receives a const view and returns its decisions. Two solvers can be run on the same input and compared.</p></div>
       <div class="card"><h3>Inspectable results</h3><p>Assignments and edits are plain data: tests assert on them directly, and logs record exactly what a solver changed.</p></div>
       <div class="card"><h3>Ordered replay preserves parity</h3><p><code>ApplyTrayAssignment</code> applies the edits in the order the current code makes them, so the resulting event DAG is identical.</p></div>
-      <p class="tiny">AGV assignment adopts the same layout and error type, but its first version modifies the event DAG in place (<code>SolveInPlace</code>), since its loop is more difficult to express as an edit log.</p>
+      <p class="tiny"><code>TrayFill</code>: one blank (tray or destination) filled on an existing tray move. The study site explains each name and the alternatives considered.</p>
     </div>
   </div>
   <aside class="notes">
@@ -509,6 +519,39 @@ ApplyTrayAssignment(plan_ctx, result);</code></pre>
   <div class="kicker">Tray assignment interface · data flow</div>
   <h2>Current and proposed data flow</h2>
   <div class="fig h580" data-fig="58_tray_dataflow" data-crop="header"></div>
+</section>
+
+<section>
+  <div class="kicker">AGV assignment interface</div>
+  <h2>AGV assignment: the same layout, edits in place, and named so</h2>
+  <div class="cols w40" style="align-items:center">
+<pre data-lang="cpp"><code>namespace volley::task_planning::agv_assignment {
+struct Input {          // read-only part
+  const DiscreteGarageState&amp; initial_state;
+  const FirstEventByTray&amp; first_event_by_tray;
+};                      // ^ handed over by tray assignment
+class Solver {
+ public:
+  virtual ~Solver() = default;
+  // edits event_dag; the name says so
+  [[nodiscard]] virtual stdx::Result
+  SolveInPlace(const Input&amp; input,
+               EventDag&amp; event_dag) const = 0;
+};
+}  // namespace
+// Plan(), right after ApplyTrayAssignment
+agv_solver_-&gt;SolveInPlace(input, plan_ctx.event_dag);</code></pre>
+    <div class="stack">
+      <div class="card"><h3>Why in place, for now</h3><p>The AGV loop reads the graph it is building: it removes matched moves from a work copy, reads back the AGV it set on earlier moves, and repairs paths over edges it added itself.</p></div>
+      <div class="card"><h3>What it shares with tray assignment</h3><p>Folder, build target, <code>stdx</code> errors, <code>GarageServices</code>, and pure cost functions (travel time, assignment cost) that can be tested alone.</p></div>
+      <div class="card"><h3>A returned result later</h3><p>Once the benchmarks can prove parity: an <code>AgvFill</code> per tray move and an ordered edit log, the same shape as tray assignment.</p></div>
+    </div>
+  </div>
+  <aside class="notes">
+    The mutable argument is explicit in the signature, so a reader sees which stage edits the plan. Everything that
+    can be pure already is: the cost estimates and the feasibility checks. The study site lists every name and the
+    reasons for it.
+  </aside>
 </section>
 
 <section>
@@ -581,34 +624,19 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
 
 <section>
   <div class="kicker">Staged plan</div>
-  <h2>Thirteen stages, each with an exit criterion</h2>
-  <div class="tl" style="grid-template-columns:repeat(13,1fr)">
-    <div class="stg" style="--c:var(--accent)"><b>A</b><span>baseline: build, 72 tests, DAG snapshots</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>B</b><span>dependency map, helper owners</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>B2</b><span>vocabulary, scheduler renames</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>C0</b><span>stage folders, CMake targets, CI check</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>C1</b><span>pure helpers, stdx errors</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>C2</b><span>tray module: Solver, DefaultSolver, Apply</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>D</b><span>Plan calls Solve; legacy path retained for comparison</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>E</b><span>remove legacy tray code, port tests</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>F</b><span>AGV module, same layout</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>G</b><span>benchmarks: ≥10 real sites per solver</span></div>
-    <div class="stg" style="--c:var(--accent)"><b>H</b><span>final cleanup, vocabulary check fails build</span></div>
-    <div class="stg opt" style="--c:var(--slate)"><b>I</b><span>planner_core renames, with aliases</span></div>
-    <div class="stg opt" style="--c:var(--slate)"><b>J</b><span>optional: first stage package</span></div>
+  <h2>Five phases, each ending with unchanged behaviour</h2>
+  <div class="phases">
+    <div class="card edge-accent"><div class="ph-n">1 · Baseline</div><h3>Record today</h3><p>Build, 72 tests and DAG snapshots on fixed inputs; map the dependencies.</p><span class="pill">SW2-484</span></div>
+    <div class="card edge-accent"><div class="ph-n">2 · Prepare</div><h3>Make room</h3><p>Names, stage folders, pure helpers and one error type. Nothing moves yet.</p><span class="pill">SW2-484</span></div>
+    <div class="card edge-accent"><div class="ph-n">3 · Tray interface</div><h3>Tray assignment as a solver</h3><p>Solver, default solver and apply function replace <code>DoTrayAssignments</code>.</p><span class="pill">SW2-484</span></div>
+    <div class="card edge-accent"><div class="ph-n">4 · AGV interface</div><h3>AGV assignment as a solver</h3><p>The same layout replaces <code>DoAgvAssignments</code>.</p><span class="pill">new ticket</span></div>
+    <div class="card edge-accent"><div class="ph-n">5 · Measure</div><h3>Benchmarks and cleanup</h3><p>≥10 real-site scenarios per solver; naming check in CI.</p><span class="pill">SW2-487</span></div>
   </div>
-  <div class="tlg" style="grid-template-columns:repeat(13,1fr)">
-    <div style="grid-column:1/span 8" class="tk">SW2-484 · tray solver interface (B2, C0 and C1 as initial PRs)</div>
-    <div style="grid-column:9" class="tk">new ticket</div>
-    <div style="grid-column:10" class="tk">SW2-487</div>
-    <div style="grid-column:11" class="tk">cleanup</div>
-    <div style="grid-column:12/span 2" class="tk muted-tk">follow-up</div>
-  </div>
-  <p class="small" style="margin-top:10px"><span class="key" style="--c:var(--accent)"></span> Definition of Done &nbsp;&nbsp; <span class="key" style="--c:var(--slate)"></span> after the Definition of Done</p>
-  <p class="callout green" style="margin-top:12px">Exit criterion for most stages: all tests and DAG snapshots identical, and response messages byte-identical on the baseline fixtures.</p>
+  <p class="small muted" style="margin-top:14px">Afterwards: <code>planner_core</code> renames and a first stage package. The study site breaks the phases into thirteen reviewable steps.</p>
+  <p class="callout green" style="margin-top:14px">Exit criterion for every phase: all tests and DAG snapshots identical, and response messages byte-identical on the baseline fixtures.</p>
   <aside class="notes">
-    Stage D retains DoTrayAssignments temporarily so that both implementations can be run and their DAGs compared
-    before removal in stage E.
+    Phase 3 keeps DoTrayAssignments for a while so that both implementations can be run and their DAGs compared
+    before the old code is removed. Phases 1 to 5 are the Definition of Done of the Jira initiative.
   </aside>
 </section>
 
@@ -639,18 +667,6 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   </aside>
 </section>
 
-<section>
-  <div class="kicker">Risks</div>
-  <h2>Current behaviours to be preserved during extraction</h2>
-  <p class="small muted" style="margin-bottom:14px">Changing these behaviours during extraction would break parity. Each should be addressed in a separate ticket with a dedicated test.</p>
-  <div class="cols">
-    <div class="card edge-amber"><h3>AGV occupancy duration is zero</h3><p><code>GetAgvOccupiedDuration</code> is not implemented, and the AGV matching costs depend on it.</p></div>
-    <div class="card edge-amber"><h3>Placement of DAG reduction</h3><p>Reduction runs at two specific points; moving it earlier alters AGV matching, probably because some code inspects only direct edges.</p></div>
-    <div class="card edge-amber"><h3>Semantics of unset fields</h3><p>A tray move without a destination removes the tray from the working state. Subsequent jobs depend on this.</p></div>
-    <div class="card edge-amber"><h3>Vertex indices as identifiers</h3><p>Removing an event shifts subsequent indices, and CHUGG maps motions back by index. Events must not be removed, and indices must not be cached.</p></div>
-  </div>
-</section>
-
 <section class="center-v">
   <div class="kicker">Review</div>
   <h2>Decisions requested</h2>
@@ -674,19 +690,6 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
 
 <section>
   <div class="kicker">Future · the event graph</div>
-  <h2>Not every edge is a genuine constraint</h2>
-  <div class="fig h420" data-fig="125_event_dag_edge_kinds" data-crop="header" data-play></div>
-  <aside class="notes">
-    The event DAG passes every edge to the motion planner as a hard precedence constraint. Only the causal edges
-    (green) hold in every valid plan. Path-dependent edges (blue) depend on earlier route choices, resource-order
-    edges (amber) fix one of two valid orders, and conservative edges (red) result from a cautious rule. Treating all
-    of them as hard constraints reduces parallelism. This figure uses its own example; its colours mark the four
-    kinds of edge.
-  </aside>
-</section>
-
-<section>
-  <div class="kicker">Future · the event graph</div>
   <h2>A staged path to improved plans</h2>
   <div class="stack" style="max-width:1120px">
     <div class="card"><h3><span class="mono c-accent">1</span> Record the kind of each edge</h3><p>Causal, path-dependent, resource-order or conservative, together with the rule that created it. Behaviour is unchanged, and the change fits the new interfaces.</p></div>
@@ -698,18 +701,6 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
     Questions to resolve before step 3: the primary objective (retrieve waiting time, throughput or a weighted
     combination), the permitted duration of a planning call, and whether bay and patron action durations can be
     bounded.
-  </aside>
-</section>
-
-<section>
-  <div class="kicker">Future · Dispatch</div>
-  <h2>Planning concurrently with execution</h2>
-  <div class="fig h460" data-fig="118_plan_request_timeline" data-crop="header" data-play></div>
-  <aside class="notes">
-    At present Dispatch calls the planner only when no job is active, so a new job waits for the entire current
-    schedule to complete. Overlapping planning requires the scheduler to preserve the executing actions and plan
-    around them, using time-bounded reservations instead of reserving entire routes. Related Dispatch items: there is
-    no timeout for a lost plan response, and a CLEAN_GARAGE job blocks the jobs queued behind it.
   </aside>
 </section>
 
