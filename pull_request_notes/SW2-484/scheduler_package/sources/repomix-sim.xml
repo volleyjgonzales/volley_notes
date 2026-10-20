@@ -1,0 +1,2932 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: test/**, 3d/**, python/**
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+include/
+  sim/
+    bay_sim.hpp
+    collision_detector.hpp
+    collision_utils.hpp
+    oriented_bounding_box.hpp
+    patrons.hpp
+    scenario_runner.hpp
+    sim_clients.hpp
+    sim_clock_ros.hpp
+    sim_msgs.hpp
+    simulator.hpp
+    tray.hpp
+scripts/
+  confirm_insert.bash
+  trigger_patron_arrival.bash
+src/
+  bay_sim_component.cpp
+  bay_sim.cpp
+  collision_detector.cpp
+  collision_utils.cpp
+  oriented_bounding_box.cpp
+  patrons.cpp
+  scenario_runner.cpp
+  sim_clients.cpp
+  sim_clock_component.cpp
+  sim_clock_ros.cpp
+  simulator_component.cpp
+  simulator.cpp
+  tray.cpp
+CMakeLists.txt
+package.xml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="include/sim/bay_sim.hpp">
+#pragma once
+
+#include <bay/doors_interface_base.hpp>
+#include <bay/garage_door_ros.hpp>
+#include <bay/sim/garage_door_sim.hpp>
+#include <common_ros/node.hpp>
+#include <common_ros/print_utils.hpp>
+#include <rclcpp/logger.hpp>
+
+#include "sim/sim_msgs.hpp"
+
+namespace volley::sim {
+
+struct Tray;
+
+using BayDoors = std::unordered_map<bay::doors::Door, bay::open_close::DoorState>;
+
+// The simulated Bay. Publishes the bay's simulated sensor streams (load cells, IO-link break beams,
+// vehicle prox, radar, ODP observer) and simulates the door hardware, so the real bay state machine node
+// can boot and run. Driven by Tick(), which advances the sensors/doors and, in auto-confirm mode,
+// confirms the patron insert on the bay's behalf.
+class BaySim {
+public:
+  BaySim(
+      unsigned int bay_id, const bay::sim::BayDoorTimes& door_times, bool auto_confirm_insert, NodeSPtr node);
+
+  BaySim(BaySim const&) = delete;
+  BaySim& operator=(BaySim const&) = delete;
+
+  //! Main tick function used to update the simulated bay. `tray_opt` is the tray, if any, that is currently
+  //! in the bay.
+  void Tick(const std::optional<Tray>& tray_opt, const rclcpp::Time& now);
+
+  // Set a payload as inserting to this bay. Only allowed when there isn't already a payload being inserted
+  // and the bay is in the ready to insert state.
+  bool SetInsertingPayload(const std::optional<PayloadMsg>& payload);
+
+  BayDoors GetDoors() const;
+  const BayStateMsg& GetState() const { return state_; };
+  BayReportMsg GetReport() const { return report_; };
+
+  uint8_t GetPatronLight() const { return patron_light_state_; }
+  void SetPatronLight(uint8_t new_state) { patron_light_state_ = new_state; }
+
+private:
+  void ResetInsertingPayload() { inserting_payload_.reset(); }
+  void SetState(const BayStateMsg& state) { state_ = state; }
+  unsigned int GetId() const { return bay_id_; }
+  const rclcpp::Logger& GetLogger() const { return logger_; }
+  const std::optional<PayloadMsg>& GetInsertingPayload() const { return inserting_payload_; }
+
+  unsigned int bay_id_;
+
+  // Whether the sim confirms the patron insert automatically, rather than waiting for an external confirm.
+  bool auto_confirm_insert_;
+
+  // Store the light state. Used to render the state of the light in the visualizer and control patron
+  // assignment.
+  uint8_t patron_light_state_ = 0;
+
+  // A patron currently in the insertion process in the bay
+  std::optional<PayloadMsg> inserting_payload_ = std::nullopt;
+
+  // The true state of the bay
+  BayStateMsg state_;
+
+  rclcpp::Logger logger_;
+
+  // Whether there is a pending payload awaiting insertion in the bay. This will be true when the bay state
+  // machine is awaiting the vehicle to be verified but before it appears on the tray in the garage snapshot.
+  bool pending_insert_payload_ = false;
+
+  // Whether there is a payload in the bay awaiting exit from the bay during a retrieval. This will be true
+  // when the bay state machine is awaiting the patron to retrieve the payload but before the vehicle exits
+  // (and the load cells report 0).
+  bool awaiting_payload_removal_ = false;
+
+  // Whether we've already auto-confirmed the current retrieve from the sim side. Prevents the blocking
+  // confirm_retrieve call from re-firing every tick while the bay finishes opening the patron door.
+  bool retrieve_confirm_sent_ = false;
+
+  // When we need to model the tire trip sensor, use this counter to send a few messages where the sensor is
+  // broken.
+  std::optional<unsigned int> tire_trip_counter_;
+
+  // The last received bay report
+  BayReportMsg report_;
+
+  // The last received vehicle pose message
+  VehicleBayPoseMsg vehicle_pose_;
+
+  // The last updated true door state
+  std::unordered_map<bay::doors::InterfaceBase::DoorId, bay::open_close::DoorState> true_door_state_;
+
+  // Simulated door hardware
+  std::vector<std::unique_ptr<bay::GarageDoorRos>> bay_doors_;
+
+  // Subscribers
+  rclcpp::Subscription<BayReportMsg>::SharedPtr report_sub_;
+  rclcpp::Subscription<VehicleBayPoseMsg>::SharedPtr vehicle_pose_sub_;
+
+  // Publishers
+  rclcpp::Publisher<LoadCellsMsg>::SharedPtr load_cells_pub_;
+  rclcpp::Publisher<IoLinkSensorsMsg>::SharedPtr io_link_sensors_pub_;
+  rclcpp::Publisher<VehicleProxSensorMsg>::SharedPtr vehicle_prox_sensor_pub_;
+  rclcpp::Publisher<RadarMsg>::SharedPtr radar_pub_;
+  rclcpp::Publisher<OdpObserverMsg>::SharedPtr observer_pub_;
+
+  // Services
+  rclcpp::Service<PatronLightControlSrv>::SharedPtr light_control_srv_;
+  rclcpp::Service<TriggerSrv>::SharedPtr reset_hardware_srv_;
+
+  // Clients
+  rclcpp::Client<SetPayloadInfoSrv>::SharedPtr confirm_insert_cli_;
+  rclcpp::Client<TriggerSrv>::SharedPtr confirm_retrieve_cli_;
+  rclcpp::CallbackGroup::SharedPtr client_cb_group_;
+};
+
+}  // namespace volley::sim
+</file>
+
+<file path="include/sim/collision_detector.hpp">
+#pragma once
+
+#include <iostream>
+#include <map>
+#include <optional>
+#include <vector>
+
+#include "sim/collision_utils.hpp"
+#include "sim/sim_msgs.hpp"
+
+namespace volley::sim {
+
+// An enum that distinguished between collision body types.
+enum class BodyType : uint8_t {
+  UNKNOWN = CollisionBodyMsg::TYPE_UNKNOWN,
+  AGV = CollisionBodyMsg::TYPE_AGV,
+  TRAY = CollisionBodyMsg::TYPE_TRAY,
+  BAY = CollisionBodyMsg::TYPE_BAY,
+  PAYLOAD = CollisionBodyMsg::TYPE_PAYLOAD,
+  CHARGER = CollisionBodyMsg::TYPE_CHARGER,
+  OBSTRUCTION = CollisionBodyMsg::TYPE_OBSTRUCTION,
+  // TODO(any): TYPE_EV_CHARGE_RIG when dimentions are known
+};
+
+// An identifer that uniquely identifies a collision body.
+// This identifier lets us back out the original object, be it
+// an AGV, tray, etc.
+// The combination of id and type must be unique.
+struct BodyIdentifier {
+  unsigned int id = 0;  // Agv id, bay id, tray id, etc.
+  BodyType type = BodyType::UNKNOWN;
+};
+
+BodyIdentifier AgvIdentifier(unsigned int id);
+BodyIdentifier TrayIdentifier(unsigned int id);
+BodyIdentifier BayIdentifier(unsigned int id);
+BodyIdentifier PayloadIdentifier(unsigned int id);
+BodyIdentifier ChargerIdentifier(unsigned int id);
+BodyIdentifier ObstructionIdentifier(unsigned int id);
+
+std::ostream& operator<<(std::ostream& os, const BodyIdentifier& iden);
+bool operator<(const BodyIdentifier& a, const BodyIdentifier& b);
+
+// Struct used internally in the collision detector.
+struct BodyData {
+  BodyIdentifier iden;
+  OrientedBoundingBox3D volume {};
+};
+
+// A collection of collision volumes and identifiers to them.
+// All collision volumes are 3D boxes that can rotate in yaw.
+// This class allows us to detect collisions between these volumes.
+class CollisionDetector {
+public:
+  CollisionDetector() = default;
+
+  // Add a body to the collision detector. Returns when it was successul.
+  bool AddBody(const BodyIdentifier& iden, const OrientedBoundingBox3D& volume);
+
+  // Update the position and orientation of a collision volume. Returns when it was successul.
+  bool UpdateVolume(const BodyIdentifier& iden, const GeometricPoseMsg& pose);
+
+  // Overwrite a collision volume.  Returns when it was successul.
+  bool SetVolume(const BodyIdentifier& iden, const OrientedBoundingBox3D& volume);
+
+  // Remove a body.  Returns when it was successul.
+  bool RemoveBody(const BodyIdentifier& iden);
+
+  std::optional<OrientedBoundingBox3D> GetVolume(const BodyIdentifier& iden);
+
+  // Find any pairwise collisions between objects. Each pair contains the names of the two
+  // intersecting bodies.
+  // This method is a fairly crude O(n^2) approach.
+  std::vector<std::pair<BodyIdentifier, BodyIdentifier>> FindCollisions();
+
+  // Contstruct a list of collision body ROS messages.
+  std::vector<CollisionBodyMsg> ConstructBodyMessages() const;
+
+private:
+  // Map of name to data.
+  // NOTE: std::map imposes an ordering according to the key's inequality check.
+  std::map<BodyIdentifier, BodyData> body_data_;
+};
+
+}  // namespace volley::sim
+</file>
+
+<file path="include/sim/collision_utils.hpp">
+#pragma once
+
+#include "sim/oriented_bounding_box.hpp"
+
+namespace volley::sim {
+
+using BoxVertices = std::array<std::pair<double, double>, 4>;
+BoxVertices GetBoxVertices(const OrientedBoundingBox& box);
+
+std::pair<double, double> GetProjectionExtents(
+    double bx, double by, double ux, double uy, const BoxVertices& box_vertices);
+
+// Run the seprating axis theorem check on each of box a's normal directions.
+// Returns true if every axis intersected, and false otherwise.
+// NOTE: Abutting is _not_ considered a collision, but floating point imprecision makes this
+// finicky.
+bool RunSeparatingAxisTest(const OrientedBoundingBox& box_a, const OrientedBoundingBox& box_b);
+
+// True iff box_a intersects with box_b
+// The separated axis theorem states that for two convex 2D polygons to intersect,
+// their projection on every axis must overlap.
+// It is sufficient to project along the normal of every face of the two polygons.
+// Find the minimum and maximum extents (largest and smallest value) of the projection of all the
+// vertex corner points of both shapes onto that axis If they don't overlap, no intersection.
+bool DoesIntersect(const OrientedBoundingBox& box_a, const OrientedBoundingBox& box_b);
+
+// True if the interval [a_lo, a_hi] overlaps with the interval [b_lo, b_hi].
+// Note, abutting is not considered overlapping.
+// We assume a_hi > a_lo and b_hi > b_lo.
+bool IntervalOverlaps(double a_lo, double a_hi, double b_lo, double b_hi);
+
+// True iff box_a intersects with box_b
+bool DoesIntersect(const OrientedBoundingBox3D& box_a, const OrientedBoundingBox3D& box_b);
+
+};  // namespace volley::sim
+</file>
+
+<file path="include/sim/oriented_bounding_box.hpp">
+#pragma once
+
+#include "sim/sim_msgs.hpp"
+
+namespace volley::sim {
+// A 2D box with a location and orientation, often call OBB in the literature.
+struct OrientedBoundingBox {
+  double x;
+  double y;
+  double yaw;  // [rad]
+  double half_x_len;
+  double half_y_len;
+};
+
+// A 3D rectangular volume with a position and yaw.
+struct OrientedBoundingBox3D {
+  OrientedBoundingBox box;
+  double z_lo;
+  double z_hi;
+};
+
+// Constructors for entity oriented bounding boxes.
+OrientedBoundingBox MakeBoundingBox(const GeometricPoseMsg& pose, double len_x, double len_y);
+OrientedBoundingBox3D MakeBoundingBoxForAGV(const AgvStateMsg& agv_state, double ground_z = 0);
+OrientedBoundingBox3D MakeBoundingBoxForTray(const GeometricPoseMsg& pose, double ground_z = 0);
+OrientedBoundingBox3D MakeBoundingBoxForBay(
+    const GarageNodeMsg& bay_node, bool system_open, double ground_z = 0);
+OrientedBoundingBox3D MakeBoundingBoxForPayload(
+    const GeometricPoseMsg& pose, const PayloadMsg& payload, double ground_z = 0);
+OrientedBoundingBox3D MakeBoundingBoxForCharger(const GarageNodeMsg& charge_node, double ground_z = 0);
+
+}  // namespace volley::sim
+</file>
+
+<file path="include/sim/patrons.hpp">
+#pragma once
+
+#include <common_ros/node.hpp>
+#include <common_ros/print_utils.hpp>
+#include <common_ros/ros_utils.hpp>
+#include <structures/unique_queue.hpp>
+
+#include "sim/sim_msgs.hpp"
+
+namespace volley::sim {
+
+struct PayloadComparator {
+  bool operator()(const PayloadMsg& lhs, const PayloadMsg& rhs) const {
+    return volley::GuidComparator()(lhs.id, rhs.id);
+  }
+};
+
+// This class models all the patrons currently interacting with the volley sim. It maintains an
+// insert queue accounting for patrons waiting to store vehicles in the garage. It also maintains
+// and calls the simulated bay patron entities that model when a patron confirms insert/retrieve.
+class Patrons {
+public:
+  explicit Patrons(const rclcpp::Logger& logger);
+
+  // Returns the payload at the front of the insert queue if it exists.
+  std::optional<PayloadMsg> GetWaitingPayload() const;
+
+  // Removes the payload at the front of the insert queue if it exists.
+  void PopWaitingPayload() { insert_queue_.PopFront(); }
+
+  // Enter the back of the insert queue.
+  bool EnterInsertQueueCallback(const PayloadMsg& payload);
+
+  unsigned int GetNumWaitingPatrons() const { return insert_queue_.Size(); }
+
+  // Get the current insert queue
+  std::vector<PayloadMsg> GetInsertQueue() const;
+
+private:
+  // A queue of patron payloads
+  volley::UniqueQueue<PayloadMsg, std::numeric_limits<size_t>::max(), PayloadComparator> insert_queue_;
+
+  rclcpp::Logger logger_;
+};
+
+}  // namespace volley::sim
+</file>
+
+<file path="include/sim/scenario_runner.hpp">
+#pragma once
+
+#include <common/enum.hpp>
+#include <common_ros/layout.hpp>
+#include <queue>
+#include <string>
+#include <vector>
+
+#include "sim/collision_utils.hpp"
+#include "sim/sim_msgs.hpp"
+
+namespace volley::sim {
+
+// AGVs, Trays, and Payloads that should be initially loaded into the sim
+struct InitialConditions {
+  std::vector<AddAgvSrv::Request> agvs;
+  std::vector<AddTraySrv::Request> trays;
+  std::vector<AddPayloadSrv::Request> payloads;
+  std::vector<std::pair<uint16_t, OrientedBoundingBox3D>> obstructions;
+  void Clear() {
+    agvs.clear();
+    trays.clear();
+    payloads.clear();
+  }
+  bool IsEmpty() const { return agvs.empty() && trays.empty() && payloads.empty(); }
+};
+
+// A single event in a scenario. Must contain a time and a type. Other fields may be used depending
+// on the event type.
+struct Event {
+  enum class Type {
+    MOVE_AGV,
+    MOVE_TRAY,
+    REMOVE_AGV,
+    SET_AGV_BATTERY_FRACTION,
+    SET_NODE_DISABLEDNESS,
+    SET_TRAY_DISABLEDNESS,
+    SET_DISPATCH_MODE,
+    START_DISPATCH,
+    STOP_DISPATCH,
+    PAUSE_DISPATCH,
+    PATRON_ARRIVAL,
+    REPARK_TRAY,
+    RETRIEVE_REQUEST,
+    SET_BAY_READINESS_RATIO,
+    SET_AUTO_PLANNER,
+    CALL_PLANNER,
+    TRANSITION_BAY_TO_INSERT,
+    TRANSITION_BAY_TO_RETRIEVE,
+    CHARGE_PAYLOAD,
+  };
+
+  Event() = delete;
+  Event(Type type, double time) : type(type), time(time) { }
+  explicit Event(const SimEventSrv::Request::SharedPtr ev) {
+    auto type_opt = common::EnumCastCaseInsensitive<Type>(ev->type);
+    if(!type_opt) {
+      throw std::runtime_error("Failed to construct Event from type " + ev->type);
+    }
+    type = type_opt.value();
+    time = ev->time;
+    resource_id = ev->resource_id;
+    garage_pose = ev->pose;
+    float_value = ev->float_value;
+    uint_value = ev->uint_value;
+    bool_value = ev->bool_value;
+    payload = ev->payload;
+  }
+
+  // Note: because a priority queue by default sorts items in descending order, we reverse the
+  // comparison operator here to ensure we get a priority queue of events in ascending order.
+  bool operator<(const Event& rhs) const { return time > rhs.time; }
+
+  // Required fields for each event type
+  Type type;
+  double time;  // The simulated time at which this event should occur
+
+  // Possible fields for each event type
+  unsigned int resource_id = 0;
+  GaragePoseMsg garage_pose {};
+  float float_value = 0.0f;
+  unsigned int uint_value = 0;
+  bool bool_value = false;
+  PayloadMsg payload {};
+};
+
+// TODO(Gunther) Just parse directly into a DiscreteGarageState just like from mysql
+// In fact, doesn't even need to be just discrete, starting the sim mid-action would
+// be rad.
+std::tuple<std::vector<Event>, InitialConditions, LayoutSPtr> ParseScenarioFile(
+    const std::string& scenario_file);
+
+// A simple class for processing a scenario file, creating the initial conditions and processing the
+// requested events as needed.
+class ScenarioRunner {
+public:
+  explicit ScenarioRunner(const std::vector<Event>& events);
+
+  // Based on the time since the simulation started, return the number of new events that should
+  // be processed. Once an event is returned by this function, it will not be processed again.
+  std::vector<Event> GetNextEvents(double seconds_since_start);
+
+  unsigned int GetNumRemainingEvents() const { return events_.size(); }
+
+  // Adds events to the priority queue based on the event time.
+  // Events timed before the last tick are automatically executed on the
+  // next Tick, in timing order.
+  void AddEvent(Event&& ev) { events_.emplace(ev); }
+
+private:
+  // Events are sorted by time in the priority queue. Why it wasn't just a vector, sorted
+  // once at creation time is lost on me, but ends up working in our favor perhaps for adding
+  // events on the fly.
+  std::priority_queue<Event> events_;
+};
+
+}  // namespace volley::sim
+</file>
+
+<file path="include/sim/sim_clients.hpp">
+#pragma once
+
+#include <common_ros/node.hpp>
+#include <rclcpp/time.hpp>
+
+#include "sim/scenario_runner.hpp"
+#include "sim/sim_msgs.hpp"
+
+namespace volley::sim {
+
+//! @brief Container for ROS clients used by the simulator to request jobs/actions from the rest of the stack
+class SimClients {
+public:
+  explicit SimClients(NodeSPtr node);
+  ~SimClients() = default;
+
+  bool ProcessInitialConditions(const InitialConditions& initial_conditions);
+
+  void CallPlanner(const rclcpp::Time& now);
+  bool ChargePayload(const GuidMsg& payload_id, const rclcpp::Time& now);
+  bool MoveAgv(unsigned int agv_id, const GaragePoseMsg& pose, const rclcpp::Time& now);
+  bool MoveTray(unsigned int tray_id, const GaragePoseMsg& pose, const rclcpp::Time& now);
+  bool Pause();
+  bool RemoveAgv(unsigned int agv_id);
+  bool ReparkTray(
+      unsigned int tray_id, const GaragePoseMsg& pose, bool allow_reciprocal, const rclcpp::Time& now);
+  bool Retrieve(const GuidMsg& payload_id, const rclcpp::Time& now);
+  bool SetAutoPlanner(bool plan_ready_jobs);
+  bool SetBayReadinessRatio(float bay_readiness_ratio);
+  bool SetMode(unsigned int mode);
+  bool SetNodeDisabledness(unsigned int node_id, bool disable);
+  bool SetTrayDisabledness(unsigned int tray_id, bool disable);
+  bool Start(const rclcpp::Time& now);
+  bool Stop();
+  bool TransitionBayToInsert(unsigned int bay_id, const rclcpp::Time& now);
+  bool TransitionBayToRetrieve(unsigned int bay_id, const rclcpp::Time& now);
+
+private:
+  // Service clients
+  rclcpp::CallbackGroup::SharedPtr clients_callback_group_;
+  rclcpp::Client<SetUInt16Srv>::SharedPtr add_agv_cli_;
+  rclcpp::Client<AddTraySrv>::SharedPtr add_tray_cli_;
+  rclcpp::Client<AddPayloadSrv>::SharedPtr add_payload_cli_;
+  rclcpp::Client<MoveAgvSrv>::SharedPtr move_agv_cli_;
+  rclcpp::Client<MoveTraySrv>::SharedPtr move_tray_cli_;
+  rclcpp::Client<SetUInt16Srv>::SharedPtr remove_agv_cli_;
+  rclcpp::Client<SetResourceDisablednessSrv>::SharedPtr set_node_disabledness_cli_;
+  rclcpp::Client<SetResourceDisablednessSrv>::SharedPtr set_tray_disabledness_cli_;
+  rclcpp::Client<SetUInt8Srv>::SharedPtr set_mode_cli_;
+  rclcpp::Client<TriggerSrv>::SharedPtr start_cli_;
+  rclcpp::Client<TriggerSrv>::SharedPtr stop_cli_;
+  rclcpp::Client<TriggerSrv>::SharedPtr pause_cli_;
+  rclcpp::Client<ReparkTraySrv>::SharedPtr repark_tray_cli_;
+  rclcpp::Client<RetrieveSrv>::SharedPtr retrieve_cli_;
+  rclcpp::Client<SetFloat32Srv>::SharedPtr set_bay_readiness_ratio_cli_;
+  rclcpp::Client<TriggerSrv>::SharedPtr stop_planner_cli_;
+  rclcpp::Client<TriggerSrv>::SharedPtr start_planner_cli_;
+  rclcpp::Client<TriggerSrv>::SharedPtr trigger_plan_cli_;
+  rclcpp::Client<TransitionBayToInsertSrv>::SharedPtr transition_bay_to_insert_cli_;
+  rclcpp::Client<TransitionBayToRetrieveSrv>::SharedPtr transition_bay_to_retrieve_cli_;
+  rclcpp::Client<ChargePayloadSrv>::SharedPtr charge_payload_cli_;
+
+  rclcpp::Logger logger_;
+};
+
+}  // namespace volley::sim
+</file>
+
+<file path="include/sim/sim_clock_ros.hpp">
+#pragma once
+
+#include <atomic>
+#include <chrono>
+#include <rclcpp/node.hpp>
+#include <rclcpp/publisher.hpp>
+#include <rclcpp/time.hpp>
+#include <rclcpp/timer.hpp>
+#include <rosgraph_msgs/msg/clock.hpp>
+#include <string_view>
+
+namespace volley::sim {
+
+/// Publishes sim time on @c /clock, scaled by the @c real_time_factor parameter.
+/// @note Nodes must set @c use_sim_time to follow it.
+class SimClockRos {
+public:
+  static constexpr std::string_view kNodeName = "sim_clock";
+
+  explicit SimClockRos(rclcpp::Node::SharedPtr node);
+
+private:
+  /// Advances sim time by one scaled period and publishes it on @c /clock.
+  void Tick();
+
+  void Publish();
+
+  rclcpp::Node::SharedPtr node_;
+
+  rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_pub_;
+  rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::node_interfaces::PostSetParametersCallbackHandle::SharedPtr param_cb_;
+
+  std::chrono::duration<double, std::milli> publish_period_ {};
+  rclcpp::Time sim_time_ {0, 0, RCL_ROS_TIME};
+  std::atomic<double> real_time_factor_ {};
+};
+
+}  // namespace volley::sim
+</file>
+
+<file path="include/sim/sim_msgs.hpp">
+#pragma once
+
+#include <bay_interfaces/msg/io_link_sensors.hpp>
+#include <bay_interfaces/msg/load_cells.hpp>
+#include <bay_interfaces/msg/radar.hpp>
+#include <bay_interfaces/msg/vehicle_prox_sensor.hpp>
+#include <bay_interfaces/srv/patron_light_control.hpp>
+#include <interfaces/msg/agv_battery_fraction.hpp>
+#include <interfaces/msg/agv_command.hpp>
+#include <interfaces/msg/agv_command_report.hpp>
+#include <interfaces/msg/agv_command_report_list.hpp>
+#include <interfaces/msg/agv_goal.hpp>
+#include <interfaces/msg/agv_report.hpp>
+#include <interfaces/msg/agv_sim_state.hpp>
+#include <interfaces/msg/agv_snapshot.hpp>
+#include <interfaces/msg/agv_state.hpp>
+#include <interfaces/msg/bay_command.hpp>
+#include <interfaces/msg/bay_report.hpp>
+#include <interfaces/msg/bay_state.hpp>
+#include <interfaces/msg/collision_body.hpp>
+#include <interfaces/msg/consistency_report.hpp>
+#include <interfaces/msg/continuous_garage_info.hpp>
+#include <interfaces/msg/discrete_garage_event_stamped.hpp>
+#include <interfaces/msg/discrete_garage_state.hpp>
+#include <interfaces/msg/dispatch_report.hpp>
+#include <interfaces/msg/door_report.hpp>
+#include <interfaces/msg/garage_event.hpp>
+#include <interfaces/msg/garage_layout.hpp>
+#include <interfaces/msg/garage_node.hpp>
+#include <interfaces/msg/garage_pose.hpp>
+#include <interfaces/msg/garage_snapshot.hpp>
+#include <interfaces/msg/geometric_pose.hpp>
+#include <interfaces/msg/odp_observer.hpp>
+#include <interfaces/msg/payload.hpp>
+#include <interfaces/msg/schedule.hpp>
+#include <interfaces/msg/sim_report.hpp>
+#include <interfaces/msg/vehicle_bay_pose.hpp>
+#include <interfaces/msg/version_info.hpp>
+#include <interfaces/srv/add_agv.hpp>
+#include <interfaces/srv/add_payload.hpp>
+#include <interfaces/srv/add_tray.hpp>
+#include <interfaces/srv/agv_command.hpp>
+#include <interfaces/srv/agv_stop.hpp>
+#include <interfaces/srv/bay_command.hpp>
+#include <interfaces/srv/charge_payload.hpp>
+#include <interfaces/srv/localize_agv.hpp>
+#include <interfaces/srv/move_agv.hpp>
+#include <interfaces/srv/move_tray.hpp>
+#include <interfaces/srv/place_payload_in_bay.hpp>
+#include <interfaces/srv/plan.hpp>
+#include <interfaces/srv/remove_agv.hpp>
+#include <interfaces/srv/remove_payload.hpp>
+#include <interfaces/srv/repark_tray.hpp>
+#include <interfaces/srv/retrieve.hpp>
+#include <interfaces/srv/set_float32.hpp>
+#include <interfaces/srv/set_payload_info.hpp>
+#include <interfaces/srv/set_resource_disabledness.hpp>
+#include <interfaces/srv/set_u_int16.hpp>
+#include <interfaces/srv/set_u_int32.hpp>
+#include <interfaces/srv/set_u_int8.hpp>
+#include <interfaces/srv/sim_event.hpp>
+#include <interfaces/srv/transition_bay_to_insert.hpp>
+#include <interfaces/srv/transition_bay_to_retrieve.hpp>
+#include <rosgraph_msgs/msg/clock.hpp>
+#include <std_srvs/srv/trigger.hpp>
+
+using AgvBatteryFractionMsg = interfaces::msg::AgvBatteryFraction;
+using AgvStateMsg = interfaces::msg::AgvState;
+using AgvStopSrv = interfaces::srv::AgvStop;
+using AgvReportMsg = interfaces::msg::AgvReport;
+using AgvCommandMsg = interfaces::msg::AgvCommand;
+using AgvSimStateMsg = interfaces::msg::AgvSimState;
+using AgvCommandReportListMsg = interfaces::msg::AgvCommandReportList;
+using AgvCommandReportMsg = interfaces::msg::AgvCommandReport;
+using AgvFaultMsg = interfaces::msg::AgvFault;
+using AgvGoalMsg = interfaces::msg::AgvGoal;
+using AgvSnapshotMsg = interfaces::msg::AgvSnapshot;
+
+using BayReportMsg = interfaces::msg::BayReport;
+using BayCommandMsg = interfaces::msg::BayCommand;
+using BayStateMsg = interfaces::msg::BayState;
+
+using CollisionBodyMsg = interfaces::msg::CollisionBody;
+using ContinuousGarageInfoMsg = interfaces::msg::ContinuousGarageInfo;
+
+using ConsistencyReportMsg = interfaces::msg::ConsistencyReport;
+
+using DoorReportMsg = interfaces::msg::DoorReport;
+using DoorsReportMsg = interfaces::msg::DoorsReport;
+using DiscreteGarageStateMsg = interfaces::msg::DiscreteGarageState;
+using DiscreteTrayStateMsg = interfaces::msg::DiscreteTrayState;
+using DiscreteGarageEventStampedMsg = interfaces::msg::DiscreteGarageEventStamped;
+using DiscreteAgvStateMsg = interfaces::msg::DiscreteAgvState;
+using DiscretePayloadStateMsg = interfaces::msg::DiscretePayloadState;
+using DispatchReportMsg = interfaces::msg::DispatchReport;
+
+using GarageSnapshotMsg = interfaces::msg::GarageSnapshot;
+using GaragePoseMsg = interfaces::msg::GaragePose;
+using GarageTrayMsg = interfaces::msg::GarageTray;
+using GaragePayloadMsg = interfaces::msg::GaragePayload;
+using GarageEventMsg = interfaces::msg::GarageEvent;
+using GarageNodeMsg = interfaces::msg::GarageNode;
+using GarageLayoutMsg = interfaces::msg::GarageLayout;
+using GeometricPoseMsg = interfaces::msg::GeometricPose;
+using GuidMsg = interfaces::msg::Guid;
+
+using IoLinkSensorsMsg = bay_interfaces::msg::IoLinkSensors;
+
+using LoadCellsMsg = bay_interfaces::msg::LoadCells;
+
+using OdpObserverMsg = interfaces::msg::OdpObserver;
+
+using PayloadMsg = interfaces::msg::Payload;
+using PlanSrv = interfaces::srv::Plan;
+
+using RadarMsg = bay_interfaces::msg::Radar;
+
+using ScheduleMsg = interfaces::msg::Schedule;
+using SetPayloadInfoSrv = interfaces::srv::SetPayloadInfo;
+using SimReportMsg = interfaces::msg::SimReport;
+using SimEventSrv = interfaces::srv::SimEvent;
+
+using TriggerSrv = std_srvs::srv::Trigger;
+
+using VehicleBayPoseMsg = interfaces::msg::VehicleBayPose;
+using VehicleProxSensorMsg = bay_interfaces::msg::VehicleProxSensor;
+
+using SetUInt8Srv = interfaces::srv::SetUInt8;
+using SetUInt16Srv = interfaces::srv::SetUInt16;
+using SetUInt32Srv = interfaces::srv::SetUInt32;
+
+using AddTraySrv = interfaces::srv::AddTray;
+using AddPayloadSrv = interfaces::srv::AddPayload;
+
+using AddAgvSrv = interfaces::srv::AddAgv;
+using ChargePayloadSrv = interfaces::srv::ChargePayload;
+
+using LocalizeAgvSrv = interfaces::srv::LocalizeAgv;
+
+using MoveAgvSrv = interfaces::srv::MoveAgv;
+using MoveTraySrv = interfaces::srv::MoveTray;
+using PatronLightControlSrv = bay_interfaces::srv::PatronLightControl;
+using PlacePayloadInBaySrv = interfaces::srv::PlacePayloadInBay;
+
+using ReparkTraySrv = interfaces::srv::ReparkTray;
+using RetrieveSrv = interfaces::srv::Retrieve;
+
+using SetResourceDisablednessSrv = interfaces::srv::SetResourceDisabledness;
+using SetFloat32Srv = interfaces::srv::SetFloat32;
+
+using TransitionBayToInsertSrv = interfaces::srv::TransitionBayToInsert;
+using TransitionBayToRetrieveSrv = interfaces::srv::TransitionBayToRetrieve;
+
+using AgvCommandMsgVec = std::vector<AgvCommandMsg>;
+</file>
+
+<file path="include/sim/simulator.hpp">
+#pragma once
+
+#include <common_ros/layout.hpp>
+#include <common_ros/node.hpp>
+#include <map>
+#include <memory>
+#include <unordered_map>
+
+#include "sim/collision_detector.hpp"
+#include "sim/patrons.hpp"
+#include "sim/scenario_runner.hpp"
+#include "sim/sim_clients.hpp"
+#include "sim/sim_msgs.hpp"
+
+namespace volley::sim {
+
+//! @brief A class that manages the simulation based on a provided scenario file. This class also manages
+//! "events" that get sent to the dispatcher to create jobs as well as a collision detector to validate all
+//! simulated entities do not collide.
+class Simulator {
+public:
+  Simulator(
+      NodeSPtr node, LayoutSPtr layout, InitialConditions initial_conditions, ScenarioRunner scenario_runner);
+
+private:
+  //! @brief Update the simulation based on the time provided by @c now by handling active events and updating
+  //! the collision detector
+  void Update(const rclcpp::Time& now);
+
+  //! @brief Pop events whose time is at or before @c now and "handle" each event by requesting the
+  //! corresponding service from the dispatcher
+  void HandleEvents(const rclcpp::Time& now);
+
+  //! @brief Register the collision bodies that never move and never appear in a snapshot (chargers,
+  //! obstructions)
+  //! @note Dynamic bodies (AGVs, trays, etc) are added/updated using the snapshot in @c RunCollisionCheck
+  void RegisterStaticCollisionBodies();
+
+  //! @brief Update collision volumes from the latest snapshot and fault if anything in the garage collides
+  void RunCollisionCheck();
+
+  //! @brief Updates the body's collision volume if the body is already tracked by the collision detector,
+  //! otherwise register the body with the collision detector for the first time
+  void UpsertCollisionBody(const BodyIdentifier& iden, const OrientedBoundingBox3D& volume);
+
+  //! @brief Returns whether the two collision bodies @c a and @c b represent an AGV carrying a tray and thus
+  //! should not be treated as a collision
+  bool IsCarriedTrayCollision(const BodyIdentifier& a, const BodyIdentifier& b,
+      const std::unordered_map<unsigned int, GeometricPoseMsg>& agv_pose_by_id,
+      const std::unordered_map<unsigned int, GeometricPoseMsg>& tray_pose_by_id) const;
+
+  //! @brief Offer the front of the patron insert queue to each simulated bay. A bay will accept the payload
+  //! only when it is @c READY_TO_INSERT so we can offer blindly to all bays and pop from the patron queue
+  //! once a bay accepts the payload.
+  void OfferWaitingPayloadsToBays();
+
+  //! @brief Publish the @c SimReport for the current time @c now
+  void PublishReport(const rclcpp::Time& now);
+
+  //! @brief Returns whether the dispatcher state is valid and also stopped
+  //! @note This is used to determine when we can start sending event jobs to the dispatcher
+  bool IsDispatchStopped(const rclcpp::Time& now) const;
+
+  NodeSPtr node_;
+  LayoutSPtr layout_;
+
+  CollisionDetector collision_detector_;
+  Patrons patrons_;
+  ScenarioRunner scenario_runner_;
+  InitialConditions initial_conditions_;
+
+  std::unique_ptr<SimClients> sim_clients_;
+
+  GarageSnapshotMsg::ConstSharedPtr snapshot_;
+  DispatchReportMsg::ConstSharedPtr dispatch_report_;
+
+  // The set of payload collision body IDs from the previous snapshot that are being tracked by the collision
+  // detector. This is used to remove payloads in the case where a previously tracked payload does not appear
+  // in the current snapshot.
+  std::set<BodyIdentifier> tracked_payloads_;
+
+  // The scenario clock starts once dispatch reaches a stable stopped/consistent state
+  bool running_ = false;
+  rclcpp::Time start_time_ {0, 0, RCL_ROS_TIME};
+
+  rclcpp::Publisher<SimReportMsg>::SharedPtr report_pub_;
+  rclcpp::Subscription<GarageSnapshotMsg>::SharedPtr snapshot_sub_;
+  rclcpp::Subscription<DispatchReportMsg>::SharedPtr dispatch_sub_;
+  rclcpp::Service<SimEventSrv>::SharedPtr event_srv_;
+  rclcpp::TimerBase::SharedPtr update_timer_;
+
+  // Per-bay "offer inserting payload" clients (one per bay-like node in the layout). On a separate
+  // callback group so the blocking offer calls can complete while the update callback waits.
+  rclcpp::CallbackGroup::SharedPtr bay_offer_cb_group_;
+  std::map<unsigned int, rclcpp::Client<PlacePayloadInBaySrv>::SharedPtr> bay_offer_clients_;
+};
+
+}  // namespace volley::sim
+</file>
+
+<file path="include/sim/tray.hpp">
+#pragma once
+
+#include <optional>
+#include <sim/sim_msgs.hpp>
+
+namespace volley::sim {
+
+struct Tray {
+  unsigned int id {};
+
+  // If our tray is carried by an AGV, this field tells us
+  // whether our heading is 180 degrees opposed.
+  bool reciprocal_to_agv = false;
+
+  // If our tray is carrying a payload, this field tell us
+  // whether our heading is 180 degrees opposed.
+  bool reciprocal_to_payload = false;
+
+  // The tray's continuous position and orientation; yaw in [rad]
+  GeometricPoseMsg geometric_pose {};
+  GaragePoseMsg garage_pose {};
+
+  // The payload, if we have one.
+  std::optional<PayloadMsg> payload {};
+};
+
+GeometricPoseMsg GetPayloadPose(const Tray& tray);
+
+}  // namespace volley::sim
+</file>
+
+<file path="scripts/confirm_insert.bash">
+#! /bin/bash
+UUID=$(uuidgen)
+echo "UUID: ${UUID}"
+DATA=$(printf '{"payload_id":"%s","payload_id_claim":"%s","patron_name":"","patron_identity":"","payload_type":"auto"}' "${UUID}" "${UUID}")
+# Need to change the bay number to the correct bay number if not using Eccles layout
+echo "Data: ${DATA}"
+curl -d "${DATA}" -H "Content-Type: application/json" -X POST "http://localhost:5000/api/bay/b39/confirm-insert"
+</file>
+
+<file path="scripts/trigger_patron_arrival.bash">
+#! /bin/bash
+# shellcheck source=/dev/null
+# shellcheck disable=SC2154
+. "/opt/ros/${ROS_DISTRO}/setup.bash"
+
+# Suppress warnings for the colcon install setup script, which only exists after the workspace is built.
+# shellcheck source=/dev/null
+. "$(dirname "$0")/../../../../install/setup.bash"
+
+# 75 is the simulation domain ID default if not set
+export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-75}
+
+# Generate a new UUID and convert it to a byte array
+uuid=$(uuidgen)
+od_output=$(od -N 16 /dev/urandom -tu1 -An)
+uuid_bytes=$(sed -E 's/[ ]+/,/g; s/^,//' <<< "${od_output}")
+uuid_array="[${uuid_bytes}]"
+echo "Generated UUID: ${uuid}"
+echo "UUID byte array: ${uuid_array}"
+
+# Call the ROS2 service with the generated UUID
+ros2 service call /sim/enqueue_garage_event interfaces/srv/SimEvent "type: 'patron_arrival'
+time: 0.0
+resource_id: 0
+pose:
+  node_id: 0
+  heading: 0
+float_value: 0.0
+uint_value: 0
+bool_value: false
+payload:
+  id:
+    bytes: ${uuid_array}
+  mass: 1500.0
+  length_m: 5.0
+  width_m: 2.0
+  height_m: 3.0"
+</file>
+
+<file path="src/bay_sim_component.cpp">
+#include <chrono>
+#include <common/topics_sim.hpp>
+#include <common_ros/component.hpp>
+#include <common_ros/node.hpp>
+#include <common_ros/ros_utils.hpp>
+#include <memory>
+#include <optional>
+#include <rclcppx/interface_factories.hpp>
+#include <string>
+
+#include "sim/bay_sim.hpp"
+#include "sim/tray.hpp"
+
+namespace volley::sim {
+
+using namespace std::chrono_literals;
+
+// How often the bay hardware sim advances, in simulated time (scales with real_time_factor via /clock).
+constexpr auto kBayTickPeriod = 50ms;
+
+// Self-contained per-bay hardware simulator. It wraps the BaySim, which publishes the bay's simulated sensor
+// streams (load cells, IO-link break beams, vehicle prox, ODP observer) and serves the reset_hardware /
+// patron_light / door services that the REAL bay state machine node needs in order to boot and operate.
+class BaySimComponent : public volley::Component {
+public:
+  explicit BaySimComponent(const rclcpp::NodeOptions& options) {
+    node_ = std::make_shared<volley::Node>("bay_sim", options);
+    SetNode(node_);
+
+    bay_id_ = static_cast<unsigned int>(volley::RequiredParam<int64_t>(*node_, "bay_id"));
+
+    bay::sim::BayDoorTimes door_times;
+    door_times.open = bay::sim::SecondsF {node_->Param<float>("bay.door.open_time")};
+    door_times.close = bay::sim::SecondsF {node_->Param<float>("bay.door.close_time")};
+
+    // When false, the sim leaves the insert for something outside it to confirm (the app, the REST API, or
+    // a manual `/bay/b{bay_id}/confirm_insert` call) rather than auto confirming on the patron's behalf
+    const bool auto_confirm_insert = node_->Param<bool>("simulator.auto_confirm_insert", true);
+
+    bay_sim_ = std::make_unique<BaySim>(bay_id_, door_times, auto_confirm_insert, node_);
+
+    // Simulator (which owns the patron queue) offers a waiting payload here. SetInsertingPayload
+    // only accepts when this bay is READY_TO_INSERT and not already inserting, so Simulator can
+    // offer to every bay and rely on this to land it in the one that's actually ready.
+    offer_inserting_payload_srv_ = rclcppx::CreateService<PlacePayloadInBaySrv>(node_,
+        "/bay/b" + std::to_string(bay_id_) + "/sim_offer_inserting_payload",
+        [this](PlacePayloadInBaySrv::Request::SharedPtr request,
+            PlacePayloadInBaySrv::Response::SharedPtr response) {
+          response->success = bay_sim_->SetInsertingPayload(request->payload);
+          response->message = response->success ? "accepted" : "bay not ready to insert";
+        });
+
+    snapshot_sub_ = node_->create_subscription<GarageSnapshotMsg>(
+        "/central/" + volley::TopicGarageSnapshot().Name(), volley::GetBestEffortQoS(1),
+        [this](GarageSnapshotMsg::ConstSharedPtr msg) { snapshot_ = std::move(msg); });
+
+    tick_timer_ =
+        rclcpp::create_timer(node_, node_->get_clock(), kBayTickPeriod, [this]() { Tick(node_->now()); });
+  }
+
+private:
+  // Find the tray currently parked in this bay (and join its payload), from the latest snapshot.
+  std::optional<Tray> GetTrayInBay() const {
+    if(!snapshot_) {
+      return std::nullopt;
+    }
+    for(const auto& garage_tray : snapshot_->trays) {
+      if(garage_tray.pose.node_id != bay_id_) {
+        continue;
+      }
+      Tray tray {};
+      tray.id = garage_tray.id;
+      tray.garage_pose = garage_tray.pose;
+      tray.geometric_pose = garage_tray.geometric_pose;
+      tray.reciprocal_to_payload = garage_tray.reciprocal_to_payload;
+      if(garage_tray.payload_id != volley::kEmptyGuid) {
+        for(const auto& garage_payload : snapshot_->payloads) {
+          if(garage_payload.payload.id == garage_tray.payload_id) {
+            tray.payload = garage_payload.payload;
+            break;
+          }
+        }
+      }
+      return tray;
+    }
+    return std::nullopt;
+  }
+
+  void Tick(const rclcpp::Time& now) {
+    const std::optional<Tray> tray_opt = GetTrayInBay();
+    bay_sim_->Tick(tray_opt, now);
+  }
+
+  NodeSPtr node_;
+  unsigned int bay_id_ = 0;
+  std::unique_ptr<BaySim> bay_sim_;
+
+  GarageSnapshotMsg::ConstSharedPtr snapshot_;
+
+  rclcpp::Subscription<GarageSnapshotMsg>::SharedPtr snapshot_sub_;
+  rclcpp::Service<PlacePayloadInBaySrv>::SharedPtr offer_inserting_payload_srv_;
+  rclcpp::TimerBase::SharedPtr tick_timer_;
+};
+
+}  // namespace volley::sim
+
+#include <rclcpp_components/register_node_macro.hpp>
+RCLCPP_COMPONENTS_REGISTER_NODE(volley::sim::BaySimComponent)
+</file>
+
+<file path="src/bay_sim.cpp">
+#include "sim/bay_sim.hpp"
+
+#include <bay/bay_floor_spec.hpp>
+#include <bay/bay_insert_state_machine.hpp>
+#include <bay/bay_retrieve_state_machine.hpp>
+#include <bay/sim/garage_door_sim.hpp>
+#include <bay_interfaces/topics.hpp>
+#include <common/constants.hpp>
+#include <common/enum.hpp>
+#include <common/topics_bay.hpp>
+#include <common_ros/ros_utils.hpp>
+#include <rclcppx/interface_factories.hpp>
+#include <site_config/paths.hpp>
+
+#include "sim/tray.hpp"
+
+namespace volley::sim {
+
+using namespace std::chrono_literals;
+
+// When mocking a tire sensor, this is the number of times it will return broken.
+constexpr int kTireSensorBrokenCounts = 6;
+
+namespace {
+
+// Returns true when the bay insert state machine reports a state that can only reach once the insert has been
+// confirmed. Used when `auto_confirm_insert` is false so the sim can watch for one of these to learn that
+// something outside the sim confirmed the patron's insert.
+bool InsertConfirmedExternally(int internal_state) {
+  const auto state = common::EnumCast<bay::insert::State>(internal_state);
+  if(!state.has_value()) {
+    return false;
+  }
+  switch(state.value()) {
+  case bay::insert::State::PATRON_DOOR_CLOSING:
+  case bay::insert::State::VERIFYING_VEHICLE:
+  case bay::insert::State::VEHICLE_VETTED:
+    return true;
+  default:
+    return false;
+  }
+}
+
+}  // namespace
+
+BaySim::BaySim(
+    unsigned int bay_id, const bay::sim::BayDoorTimes& door_times, bool auto_confirm_insert, NodeSPtr node) :
+    bay_id_(bay_id), auto_confirm_insert_(auto_confirm_insert), logger_(node->get_logger()) {
+  if(!auto_confirm_insert_) {
+    INFOS(node->get_logger(),
+        "Bay " << bay_id << " will wait for an external confirm_insert instead of auto-confirming.");
+  }
+  // Construct our simulated doors
+
+  std::string floor_spec_name;
+  try {
+    floor_spec_name = node->Param<std::string>("bay.floor_spec");
+  }
+  catch(const std::exception& exception) {
+    ERRORS(node->get_logger(), "Failed to load bay floor spec: " << exception.what());
+    exit(1);
+  }
+
+  INFOS(
+      node->get_logger(), "Loading floor spec: " << (floor_spec_name.empty() ? "default" : floor_spec_name));
+
+  std::vector<bay::FloorSpec> floor_specs = {bay::DefaultFloorSpec()};
+  if(!floor_spec_name.empty()) {
+    const auto floor_spec_path_or = site_config::GetFloorSpecPathByName(floor_spec_name);
+    if(!floor_spec_path_or.has_value()) {
+      ERRORS(node->get_logger(), floor_spec_path_or.error());
+      exit(1);
+    }
+    std::string msg;
+    std::tie(floor_specs, msg) = bay::LoadFloorSpec(floor_spec_path_or.value());
+    if(floor_specs.empty()) {
+      ERRORS(node->get_logger(), "Failed to load floor spec: " << msg);
+      exit(1);
+    }
+  }
+
+  for(const auto& floor : floor_specs) {
+    for(const auto& door : floor.patron_doors) {
+      bay_doors_.emplace_back(std::make_unique<bay::GarageDoorRos>(node,
+          std::make_unique<bay::sim::GarageDoorSimRt>(node, door_times, bay_id, door.name,
+              [this, door](const bay::open_close::DoorState& state) { true_door_state_[door.id] = state; }),
+          bay_id));
+    }
+    for(const auto& door : floor.system_doors) {
+      bay_doors_.emplace_back(std::make_unique<bay::GarageDoorRos>(node,
+          std::make_unique<bay::sim::GarageDoorSimRt>(node, door_times, bay_id, door.name,
+              [this, door](const bay::open_close::DoorState& state) { true_door_state_[door.id] = state; }),
+          bay_id));
+    }
+  }
+
+  // Subscriptions
+  vehicle_pose_sub_ = node->create_subscription<VehicleBayPoseMsg>(
+      volley::TopicBayVehiclePose().Name(), 1, [this](VehicleBayPoseMsg::UniquePtr msg) {
+        // Reset the tire trip counter if we've seen a change in the number of estimated axles
+        if(msg->num_axles_on_tray != vehicle_pose_.num_axles_on_tray) {
+          tire_trip_counter_.reset();
+        }
+        vehicle_pose_ = *msg;
+      });
+  report_sub_ = node->create_subscription<BayReportMsg>(volley::TopicBayReport().Name(),
+      volley::GetReliableQoS(1), [this](BayReportMsg::UniquePtr msg) { report_ = *msg; });
+
+  // Publishers
+  load_cells_pub_ = rclcppx::CreatePublisher(node, bay_interfaces::kLoadCellsTopic);
+  io_link_sensors_pub_ = rclcppx::CreatePublisher(node, bay_interfaces::kIoLinkSensorsTopic);
+  vehicle_prox_sensor_pub_ = rclcppx::CreatePublisher(node, bay_interfaces::kVehicleProxSensorTopic);
+  radar_pub_ = rclcppx::CreatePublisher(node, bay_interfaces::kRadarTopic);
+  observer_pub_ = node->create_publisher<OdpObserverMsg>(
+      volley::TopicBayOdpObserver(bay::doors::OdpDoor::OVERDRIVE_LEFT).Name(), 1);
+
+  // Services
+  reset_hardware_srv_ = rclcppx::CreateService<TriggerSrv>(
+      node, "reset_hardware", [](TriggerSrv::Request::SharedPtr, TriggerSrv::Response::SharedPtr response) {
+        response->success = true;
+        response->message = "Successful simulated hardware reset.";
+      });
+  light_control_srv_ = rclcppx::CreateService<PatronLightControlSrv>(node, "patron_light_control",
+      [this](const PatronLightControlSrv::Request::SharedPtr request,
+          PatronLightControlSrv::Response::SharedPtr response) {
+        SetPatronLight(request->light_state);
+        response->success = true;
+        response->message = "";
+      });
+
+  // Clients
+  // Use a separate callback group so we can use blocking service calls
+  client_cb_group_ = node->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  confirm_insert_cli_ =
+      node->create_client<SetPayloadInfoSrv>("confirm_insert", rclcpp::ServicesQoS(), client_cb_group_);
+  confirm_retrieve_cli_ =
+      node->create_client<TriggerSrv>("confirm_retrieve", rclcpp::ServicesQoS(), client_cb_group_);
+}
+
+void BaySim::Tick(const std::optional<Tray>& tray_opt, const rclcpp::Time& now) {
+  // Assume all break beam sensors are open until shown otherwise
+  auto io_link_sensors = std::make_unique<IoLinkSensorsMsg>();
+  io_link_sensors->lidar_patron = io_link_sensors->BREAK_BEAM_OPEN;
+  io_link_sensors->lidar_system = io_link_sensors->BREAK_BEAM_OPEN;
+  io_link_sensors->lidar_left = io_link_sensors->BREAK_BEAM_OPEN;
+  io_link_sensors->lidar_right = io_link_sensors->BREAK_BEAM_OPEN;
+  io_link_sensors->lidar_height_tall = io_link_sensors->BREAK_BEAM_OPEN;
+  io_link_sensors->lidar_height_mid = io_link_sensors->BREAK_BEAM_OPEN;
+  io_link_sensors->lidar_height_short = io_link_sensors->BREAK_BEAM_OPEN;
+  io_link_sensors->tire_system = io_link_sensors->BREAK_BEAM_OPEN;
+  io_link_sensors->tire_patron = io_link_sensors->BREAK_BEAM_OPEN;
+
+  auto vehicle_prox_sensor = std::make_unique<VehicleProxSensorMsg>();
+  vehicle_prox_sensor->activation_detection = false;
+  vehicle_prox_sensor->presence_detection = false;
+
+  // Calculate simulated sensor values
+  double load_cell_total_mass = 0.0;  // [kg]
+  if(tray_opt.has_value()) {
+    // We have a tray in the bay!
+    load_cell_total_mass = kTrayMass;
+
+    if(tray_opt->payload.has_value() && !awaiting_payload_removal_) {
+      // Model the payload as in place if the dispatcher knows about a payload in the bay.
+      load_cell_total_mass = tray_opt->payload->mass + kTrayMass;
+    }
+    else if(GetInsertingPayload().has_value()) {
+      // If a patron is inserting, model them as coming onto the tray and properly parking
+
+      // Have the vehicle proximity sensor detect the patron
+      vehicle_prox_sensor->activation_detection = true;
+      vehicle_prox_sensor->presence_detection = true;
+
+      load_cell_total_mass =
+          GetInsertingPayload()->mass * static_cast<double>(vehicle_pose_.num_axles_on_tray) / 2.0 +
+          kTrayMass;
+
+      // Until we have two axles on the tray, mimic a vehicle driving onto the tray
+      if(vehicle_pose_.num_axles_on_tray < 2) {
+        // Start the tire trip counter if we haven't already
+        if(!tire_trip_counter_.has_value()) {
+          tire_trip_counter_ = 0;
+        }
+        // Once we are halfway through the broken count, increase the load cell mass
+        if(tire_trip_counter_.value() > kTireSensorBrokenCounts / 2) {
+          load_cell_total_mass =
+              GetInsertingPayload()->mass * static_cast<double>(vehicle_pose_.num_axles_on_tray + 1) / 2.0 +
+              kTrayMass;
+        }
+      }
+    }
+  }
+
+  // Break the patron tire sensor if needed
+  if(report_.state == report_.STATE_PROCESSING_INSERT && tire_trip_counter_.has_value() &&
+      tire_trip_counter_.value()++ < kTireSensorBrokenCounts) {
+    io_link_sensors->tire_patron = io_link_sensors->BREAK_BEAM_BROKEN;
+  }
+
+  auto load_cells = std::make_unique<LoadCellsMsg>();
+  load_cells->header.stamp = now;
+  double load_cell_mass = load_cell_total_mass / static_cast<double>(load_cells->mass.size());
+  load_cells->mass.fill(static_cast<float>(load_cell_mass));
+  load_cells_pub_->publish(std::move(load_cells));
+
+  // Send io link sensors
+  io_link_sensors->header.stamp = now;
+  io_link_sensors_pub_->publish(std::move(io_link_sensors));
+
+  // Send vehicle prox sensor
+  vehicle_prox_sensor->header.stamp = now;
+  vehicle_prox_sensor_pub_->publish(std::move(vehicle_prox_sensor));
+
+  // The radar is always modeled as valid and clear
+  auto radar = std::make_unique<RadarMsg>();
+  radar->header.stamp = now;
+  radar->valid = true;
+  radar->tripped = false;
+  radar_pub_->publish(std::move(radar));
+
+  // Send Odp data
+  auto observer = std::make_unique<OdpObserverMsg>();
+  observer->header.stamp = now;
+  observer_pub_->publish(std::move(observer));
+
+  DoorsReportMsg patron_floor_doors_report {};
+  for(const auto& doors_report : report_.doors_reports) {
+    if(doors_report.floor == report_.insert_floor) {
+      patron_floor_doors_report = doors_report;
+      break;
+    }
+  }
+
+  // If we are waiting for the patron to come and drive their vehicle away, assume the vehicle leaves
+  // immediately after the patron door opens
+  if(report_.state == report_.STATE_PROCESSING_RETRIEVE &&
+      report_.internal_state == common::EnumInteger(bay::retrieve::State::AWAITING_VEHICLE_RETRIEVAL) &&
+      patron_floor_doors_report.state == DoorsReportMsg::DOORS_PATRON_OPEN && tray_opt.has_value() &&
+      tray_opt->payload.has_value()) {
+    awaiting_payload_removal_ = true;
+  }
+
+  // Once Insert has been confirmed, add the payload to the system. We deliberately do NOT clear the inserting
+  // payload here. The payload only lands in the snapshot a few ticks later (after the place-payload service
+  // round-trip), and until it does the block above falls back to tray-only mass on the load cells. That mass
+  // dip makes the bay's axle counter forget the parked vehicle, which then fails the VERIFYING_VEHICLE step.
+  // So we keep simulating the inserting payload's mass and only release it below, once the snapshot confirms
+  // the payload is on the tray.
+  const bool insert_machine_running = report_.internal_state_string.rfind("Insert State:", 0) == 0;
+  if(report_.state == report_.STATE_PROCESSING_INSERT && insert_machine_running &&
+      GetInsertingPayload().has_value() && !pending_insert_payload_) {
+    if(auto_confirm_insert_ &&
+        report_.internal_state == static_cast<int>(bay::insert::State::VEHICLE_INSERTED)) {
+      // Let the bay know that we are confirming insert. Pass through the patron's actual
+      // dimensions from the scenario so the bay records the real per-payload height/length/
+      // width (the bay's vehicle_estimator can only sense L/W and hardcodes height).
+      auto set_payload_request = std::make_shared<SetPayloadInfoSrv::Request>();
+      set_payload_request->payload_id = GetInsertingPayload().value().id;
+      set_payload_request->ev_charge_requested = GetInsertingPayload().value().ev_charge_requested;
+      set_payload_request->length_m = GetInsertingPayload().value().length_m;
+      set_payload_request->width_m = GetInsertingPayload().value().width_m;
+      set_payload_request->height_m = GetInsertingPayload().value().height_m;
+      set_payload_request->mass = GetInsertingPayload().value().mass;
+      volley::Call<SetPayloadInfoSrv::Response>(confirm_insert_cli_, set_payload_request, GetLogger());
+      pending_insert_payload_ = true;
+    }
+    else if(!auto_confirm_insert_ && InsertConfirmedExternally(report_.internal_state)) {
+      INFOS(GetLogger(), "Bay " << GetId() << " saw an external confirmation for payload "
+                                << std::to_string(GetInsertingPayload().value().id));
+      pending_insert_payload_ = true;
+    }
+  }
+
+  // Release the inserting payload once the placed payload shows up in the snapshot. From here the
+  // tray-payload branch above carries the load-cell mass, so the simulated vehicle never disappears.
+  if(pending_insert_payload_ && tray_opt.has_value() && tray_opt->payload.has_value()) {
+    ResetInsertingPayload();
+    pending_insert_payload_ = false;
+  }
+
+  // Release the retrieving-payload flag once the payload leaves the garage snapshot. While the retrieve runs,
+  // the snapshot still shows the payload on the tray, and we deliberately suppress its mass (tray-only) so
+  // the bay sees the vehicle depart and completes the retrieve. Once the dispatcher drops the payload from
+  // the snapshot, the flag has done its job. Then we must clear it so the NEXT payload registers on the load
+  // cells (otherwise the tray-payload branch above stays gated off forever).
+  if(awaiting_payload_removal_ && (!tray_opt.has_value() || !tray_opt->payload.has_value())) {
+    awaiting_payload_removal_ = false;
+  }
+
+  // Auto-confirm the patron retrieve from the sim side. The bay only accepts confirm_retrieve after
+  // StartRetrieve has constructed the internal retrieve state machine which happens when the bay-transition
+  // state machine reaches DONE and the retrieve state machine enters AWAITING_PATRON. While the bay is in
+  // PROCESSING_RETRIEVE but still running its pre-retrieve transition (close current-floor doors, move lift),
+  // the retrieve state machine does not yet exist. See the "fake hidden state" comment at BayStateMachine
+  // transition READY_TO_RETRIEVE -> PROCESSING_RETRIEVE.
+  //
+  // Gating on the report's internal_state INTEGER alone is not safe. When the transition state machine is
+  // alive its enum int (CLOSING=0) collides with the retrieve state machine's enum int (AWAITING_PATRON=0).
+  // The internal_state_string carries the discriminator, "Retrieve State: ..." vs "Transition State: ...",
+  // so we use that. Pre-fix the call fired during the transition window and produced ~10 noisy ERROR lines
+  // per retrieve cycle.
+  const bool retrieve_machine_running = report_.internal_state_string.rfind("Retrieve State:", 0) == 0;
+  if(report_.state == report_.STATE_PROCESSING_RETRIEVE && retrieve_machine_running &&
+      !retrieve_confirm_sent_) {
+    for(const auto& door_report : report_.doors_reports) {
+      if(door_report.floor == report_.current_floor && door_report.state == DoorsReportMsg::DOORS_CLOSED) {
+        auto request = std::make_shared<TriggerSrv::Request>();
+        volley::Call<TriggerSrv::Response>(confirm_retrieve_cli_, request, GetLogger());
+        retrieve_confirm_sent_ = true;
+        break;
+      }
+    }
+  }
+
+  // Reset once the bay leaves PROCESSING_RETRIEVE, so the next retrieve cycle can track confirm set
+  if(retrieve_confirm_sent_ && report_.state != report_.STATE_PROCESSING_RETRIEVE) {
+    retrieve_confirm_sent_ = false;
+  }
+
+  // Set the true door states
+  BayStateMsg bay_state {};
+  bay_state.id = GetId();
+  // TODO(Gunther): Get full door information from the doors reports so we don't rely
+  // on the doors interface to tell us where the doors are.
+  bay_state.system_doors_closed = report_.state != report_.STATE_READY_TO_RETRIEVE;
+  bay_state.patron_light_state = GetPatronLight();
+  SetState(bay_state);
+}
+
+BayDoors BaySim::GetDoors() const {
+  // TODO(Gunther): These need to be made generic for the new bay state machine doors
+  BayDoors doors;
+  doors[bay::doors::Door::PATRON] = common::EnumCast<bay::open_close::DoorState>(state_.patron_door_state)
+                                        .value_or(bay::open_close::DoorState::ERROR);
+  doors[bay::doors::Door::OVERDRIVE_LEFT] =
+      common::EnumCast<bay::open_close::DoorState>(state_.overdrive_left_state)
+          .value_or(bay::open_close::DoorState::ERROR);
+  doors[bay::doors::Door::OVERDRIVE_RIGHT] =
+      common::EnumCast<bay::open_close::DoorState>(state_.overdrive_right_state)
+          .value_or(bay::open_close::DoorState::ERROR);
+  doors[bay::doors::Door::SYSTEM] = common::EnumCast<bay::open_close::DoorState>(state_.system_door_state)
+                                        .value_or(bay::open_close::DoorState::ERROR);
+  return doors;
+}
+
+bool BaySim::SetInsertingPayload(const std::optional<PayloadMsg>& payload) {
+  // Accept a waiting payload only if the bay is ready to insert and there isn't already a payload
+  // inserting.
+  auto report = GetReport();
+  if(!payload.has_value() || report.state != report.STATE_READY_TO_INSERT || inserting_payload_.has_value()) {
+    return false;
+  }
+
+  inserting_payload_ = payload;
+
+  GarageEventMsg event {};
+  event.type = GarageEventMsg::EVENT_BAY_ENQUEUE;
+  event.payload_id = std::to_string(payload->id);
+  event.bay_id = bay_id_;
+  volley::PrintEvent(logger_, event);
+
+  return true;
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/collision_detector.cpp">
+#include "sim/collision_detector.hpp"
+
+#include <vis/math.hpp>
+
+namespace volley::sim {
+
+BodyIdentifier AgvIdentifier(unsigned int id) {
+  return BodyIdentifier {id, BodyType::AGV};
+}
+BodyIdentifier TrayIdentifier(unsigned int id) {
+  return BodyIdentifier {id, BodyType::TRAY};
+}
+BodyIdentifier BayIdentifier(unsigned int id) {
+  return BodyIdentifier {id, BodyType::BAY};
+}
+BodyIdentifier PayloadIdentifier(unsigned int id) {
+  return BodyIdentifier {id, BodyType::PAYLOAD};
+}
+BodyIdentifier ChargerIdentifier(unsigned int id) {
+  return BodyIdentifier {id, BodyType::CHARGER};
+}
+BodyIdentifier ObstructionIdentifier(unsigned int id) {
+  return BodyIdentifier {id, BodyType::OBSTRUCTION};
+}
+// TODO(any): Ev Charge Rig
+
+std::ostream& operator<<(std::ostream& os, const BodyIdentifier& iden) {
+  if(iden.type == BodyType::AGV) {
+    os << "a";
+  }
+  else if(iden.type == BodyType::TRAY) {
+    os << "t";
+  }
+  else if(iden.type == BodyType::BAY) {
+    os << "b";
+  }
+  else if(iden.type == BodyType::PAYLOAD) {
+    os << "p";
+  }
+  else if(iden.type == BodyType::CHARGER) {
+    os << "c";
+  }
+  else if(iden.type == BodyType::OBSTRUCTION) {
+    os << "o";
+  }
+  else {
+    os << "u";
+  }
+
+  os << iden.id;
+
+  return os;
+}
+
+bool operator<(const BodyIdentifier& a, const BodyIdentifier& b) {
+  if(a.type != b.type) {
+    return a.type < b.type;
+  }
+  return a.id < b.id;
+}
+
+bool CollisionDetector::AddBody(const BodyIdentifier& iden, const OrientedBoundingBox3D& volume) {
+  if(body_data_.find(iden) != body_data_.end()) {
+    // Already have a body with this identifier.
+    return false;
+  }
+
+  BodyData data;
+  data.iden = iden;
+  data.volume = volume;
+  body_data_.emplace(iden, data);
+
+  return true;
+}
+
+bool CollisionDetector::UpdateVolume(const BodyIdentifier& iden, const GeometricPoseMsg& pose) {
+  auto it = body_data_.find(iden);
+  if(it == body_data_.end()) {
+    return false;  // not found
+  }
+
+  OrientedBoundingBox3D& volume = it->second.volume;
+  volume.box.x = pose.x;
+  volume.box.y = pose.y;
+  volume.box.yaw = pose.yaw;
+  return true;
+}
+
+bool CollisionDetector::SetVolume(const BodyIdentifier& iden, const OrientedBoundingBox3D& volume) {
+  auto it = body_data_.find(iden);
+  if(it == body_data_.end()) {
+    return false;  // not found
+  }
+
+  it->second.volume = volume;
+  return true;
+}
+
+bool CollisionDetector::RemoveBody(const BodyIdentifier& iden) {
+  auto it = body_data_.find(iden);
+  if(it == body_data_.end()) {
+    return false;  // not found
+  }
+
+  body_data_.erase(it);
+  return true;
+}
+
+std::optional<OrientedBoundingBox3D> CollisionDetector::GetVolume(const BodyIdentifier& iden) {
+  auto it = body_data_.find(iden);
+  if(it != body_data_.end()) {
+    return it->second.volume;
+  }
+  return std::nullopt;
+}
+
+std::vector<std::pair<BodyIdentifier, BodyIdentifier>> CollisionDetector::FindCollisions() {
+  std::vector<std::pair<BodyIdentifier, BodyIdentifier>> collisions;
+
+  auto it = body_data_.begin();
+  while(it != body_data_.end()) {
+    const auto& data_a = it->second;
+    auto jt = it;
+    std::advance(jt, 1);
+    while(jt != body_data_.end()) {
+      const auto& data_b = jt->second;
+
+      if(DoesIntersect(data_a.volume, data_b.volume)) {
+        collisions.emplace_back(std::make_pair(data_a.iden, data_b.iden));
+      }
+
+      std::advance(jt, 1);
+    }
+    std::advance(it, 1);
+  }
+
+  return collisions;
+}
+
+std::vector<CollisionBodyMsg> CollisionDetector::ConstructBodyMessages() const {
+  std::vector<CollisionBodyMsg> bodies(body_data_.size());
+
+  size_t i = 0;
+  for(const auto& [iden, data] : body_data_) {
+    auto& body = bodies.at(i);
+    body.id = iden.id;
+    body.type = static_cast<uint8_t>(iden.type);
+    body.yaw = static_cast<float>(data.volume.box.yaw);
+    body.center =
+        volley::vis::Point(data.volume.box.x, data.volume.box.y, (data.volume.z_lo + data.volume.z_hi) / 2);
+    body.scale = volley::vis::Point(
+        2 * data.volume.box.half_x_len, 2 * data.volume.box.half_y_len, data.volume.z_hi - data.volume.z_lo);
+    i++;
+  }
+
+  return bodies;
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/collision_utils.cpp">
+#include "sim/collision_utils.hpp"
+
+#include <cmath>
+
+namespace volley::sim {
+
+using BoxVertices = std::array<std::pair<double, double>, 4>;
+BoxVertices GetBoxVertices(const OrientedBoundingBox& box) {
+  double x_x = box.half_x_len * std::cos(box.yaw);
+  double x_y = box.half_x_len * std::sin(box.yaw);
+  double y_x = box.half_y_len * std::cos(box.yaw + M_PI / 2);
+  double y_y = box.half_y_len * std::sin(box.yaw + M_PI / 2);
+  auto pt_front_left = std::make_pair(box.x + x_x + y_x, box.y + x_y + y_y);
+  auto pt_back_left = std::make_pair(box.x - x_x + y_x, box.y - x_y + y_y);
+  auto pt_back_right = std::make_pair(box.x - x_x - y_x, box.y - x_y - y_y);
+  auto pt_front_right = std::make_pair(box.x + x_x - y_x, box.y + x_y - y_y);
+
+  BoxVertices vertices {pt_front_left, pt_back_left, pt_back_right, pt_front_right};
+  return vertices;
+}
+
+std::pair<double, double> GetProjectionExtents(
+    double bx, double by, double ux, double uy, const BoxVertices& box_vertices) {
+  double proj_lo = std::numeric_limits<double>::infinity();
+  double proj_hi = -std::numeric_limits<double>::infinity();
+  for(auto [vx, vy] : box_vertices) {
+    double proj = (vx - bx) * ux + (vy - by) * uy;
+    proj_lo = std::min(proj_lo, proj);
+    proj_hi = std::max(proj_hi, proj);
+  }
+  return std::make_pair(proj_lo, proj_hi);
+}
+
+bool RunSeparatingAxisTest(const OrientedBoundingBox& box_a, const OrientedBoundingBox& box_b) {
+  // We only have two normals, along box_a yaw and along box_a yaw + pi/2
+  auto vertices_b = GetBoxVertices(box_b);
+
+  // Project along x
+  double ux = std::cos(box_a.yaw);
+  double uy = std::sin(box_a.yaw);
+  auto [proj_lo, proj_hi] = GetProjectionExtents(box_a.x, box_a.y, ux, uy, vertices_b);
+  if(proj_lo > box_a.half_x_len || proj_hi < -box_a.half_x_len) {
+    return false;  // separated!
+  }
+
+  // Project along y
+  std::swap(ux, uy);
+  ux = -ux;
+  std::tie(proj_lo, proj_hi) = GetProjectionExtents(box_a.x, box_a.y, ux, uy, vertices_b);
+  if(proj_lo > box_a.half_y_len || proj_hi < -box_a.half_y_len) {
+    return false;  // separated!
+  }
+
+  return true;
+}
+
+bool DoesIntersect(const OrientedBoundingBox& box_a, const OrientedBoundingBox& box_b) {
+  return RunSeparatingAxisTest(box_a, box_b) && RunSeparatingAxisTest(box_b, box_a);
+}
+
+bool IntervalOverlaps(double a_lo, double a_hi, double b_lo, double b_hi) {
+  return a_hi > b_lo && b_hi > a_lo;
+}
+
+bool DoesIntersect(const OrientedBoundingBox3D& a, const OrientedBoundingBox3D& b) {
+  return DoesIntersect(a.box, b.box) && IntervalOverlaps(a.z_lo, a.z_hi, b.z_lo, b.z_hi);
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/oriented_bounding_box.cpp">
+#include "sim/oriented_bounding_box.hpp"
+
+#include <common/constants.hpp>
+#include <common_ros/layout.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+#include <vis/math.hpp>
+
+namespace volley::sim {
+using namespace vis;
+
+OrientedBoundingBox MakeBoundingBox(const GeometricPoseMsg& pose, double len_x, double len_y) {
+  return OrientedBoundingBox {pose.x, pose.y, pose.yaw, len_x / 2.0f, len_y / 2.0f};
+}
+
+OrientedBoundingBox3D MakeBoundingBoxForAGV(const AgvStateMsg& agv_state, double ground_z) {
+  OrientedBoundingBox3D box_3d {};
+  box_3d.box = MakeBoundingBox(agv_state.geometric_pose, kAgvWidth, kAgvLength);
+  box_3d.z_lo = ground_z;
+  // Use the highest lift to determine the bounding box for the AGV (worse case)
+  box_3d.z_hi = ground_z + (kAgvHeightLowered + (kAgvHeightRaised - kAgvHeightLowered) *
+                                                    *std::max_element(agv_state.lift_fractions.begin(),
+                                                        agv_state.lift_fractions.end()));
+  return box_3d;
+}
+
+OrientedBoundingBox3D MakeBoundingBoxForTray(const GeometricPoseMsg& pose, double ground_z) {
+  OrientedBoundingBox3D box_3d {};
+  box_3d.box = MakeBoundingBox(pose, kTrayWidth, kTrayLength);
+  box_3d.z_lo = ground_z + (kTrayHeight - kTrayThickness);
+  box_3d.z_hi = ground_z + kTrayHeight;
+  return box_3d;
+}
+
+OrientedBoundingBox3D MakeBoundingBoxForBay(
+    const GarageNodeMsg& bay_node, bool system_open, double ground_z) {
+  OrientedBoundingBox3D box_3d {};
+  // Given the location of the node, create a bounding box for the overdrive plate and the system
+  // interior door. For the sake of collisions, we will have the overdrive plate be "in place" if
+  // the system interior door is closed so we don't have to additionally check for collisions with
+  // the door.
+  double buffer = 0.0064;  // model ~1/4" between tray and overdrive plate
+  double overdrive_y_length = (kBayLength - kTrayLength) / 2 - buffer;
+  double overdrive_yaw = volley::GetInboundHeading(bay_node) * kDeg2Rad;
+
+  // Get the center of the overdrive plate relative to a bay at the origin with zero heading
+  geometry_msgs::msg::Pose overdrive_pose {};
+  overdrive_pose.position.x = 0;
+  overdrive_pose.position.y = kTrayLength / 2 + overdrive_y_length / 2 + 2 * buffer;
+
+  geometry_msgs::msg::Pose bay_pose {};
+  bay_pose.position.x = bay_node.x;
+  bay_pose.position.y = bay_node.y;
+  bay_pose.orientation = Quaternion(0.0, 0.0, overdrive_yaw);
+
+  // Rotate the overdrive pose into the bay frame
+  overdrive_pose = bay_pose * overdrive_pose;
+
+  GeometricPoseMsg overdrive_xy {};
+  overdrive_xy.x = static_cast<float>(overdrive_pose.position.x);
+  overdrive_xy.y = static_cast<float>(overdrive_pose.position.y);
+  overdrive_xy.yaw = static_cast<float>(overdrive_yaw);
+  box_3d.box = MakeBoundingBox(overdrive_xy, kTrayWidth, overdrive_y_length);
+  box_3d.z_lo = ground_z;
+  // Assume it is slightly below the tray to avoid false collisions with payloads
+  box_3d.z_hi = ground_z + (kTrayHeight - buffer);
+
+  // If the system door and overdrive plate are fully open, we make the bounding box very small
+  // and slightly underground so that there are no collisions
+  if(system_open) {
+    box_3d.z_lo = ground_z - 0.2;
+    box_3d.z_hi = ground_z - 0.1;
+  }
+  return box_3d;
+}
+
+OrientedBoundingBox3D MakeBoundingBoxForPayload(
+    const GeometricPoseMsg& pose, const PayloadMsg& payload, double ground_z) {
+  OrientedBoundingBox3D box_3d {};
+  box_3d.box = MakeBoundingBox(pose, payload.width_m, payload.length_m);
+  box_3d.z_lo = ground_z + kTrayHeight;
+  box_3d.z_hi = box_3d.z_lo + payload.height_m;
+  return box_3d;
+}
+
+// TYPE_AGV_CHARGE
+OrientedBoundingBox3D MakeBoundingBoxForCharger(const GarageNodeMsg& charge_node, double ground_z) {
+  double charger_yaw = volley::GetInboundHeading(charge_node) * kDeg2Rad;
+
+  // Get the center of the charger relative to its charge node pose
+  // The charger is located in the direction opposite of the charge node's orientation
+  geometry_msgs::msg::Pose charger_pose {};
+  charger_pose.position.x = (kChargerLateralOffsetFromAgv + kAgvWidth / 2 + kChargerDepth / 2);
+
+  // Rotate the pose relative to the charger frame
+  geometry_msgs::msg::Pose node_pose {};
+  node_pose.position.x = charge_node.x;
+  node_pose.position.y = charge_node.y;
+  node_pose.orientation = Quaternion(0.0, 0.0, charger_yaw);
+  charger_pose = node_pose * charger_pose;
+
+  GeometricPoseMsg charger_xy {};
+  charger_xy.x = static_cast<float>(charger_pose.position.x);
+  charger_xy.y = static_cast<float>(charger_pose.position.y);
+  charger_xy.yaw = static_cast<float>(charger_yaw);
+
+  OrientedBoundingBox3D box_3d {};
+  box_3d.box = MakeBoundingBox(charger_xy, kChargerDepth, kChargerWidth);
+  box_3d.z_lo = ground_z;
+  box_3d.z_hi = ground_z + kChargerHeight;
+
+  return box_3d;
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/patrons.cpp">
+#include "sim/patrons.hpp"
+
+namespace volley::sim {
+
+Patrons::Patrons(const rclcpp::Logger& logger) : logger_(logger) {
+}
+
+std::optional<PayloadMsg> Patrons::GetWaitingPayload() const {
+  if(insert_queue_.IsEmpty()) {
+    return {};
+  }
+
+  return insert_queue_.Front();
+}
+
+bool Patrons::EnterInsertQueueCallback(const PayloadMsg& payload) {
+  if(!insert_queue_.Push(payload)) {
+    WARNS(logger_, "Cannot place " + std::to_string(payload.id) +
+                       " into the insert queue because that payload_id already exists in the queue.");
+    return false;
+  }
+
+  GarageEventMsg event {};
+  event.type = GarageEventMsg::EVENT_PATRON_ENQUEUE;
+  event.payload_id = std::to_string(payload.id);
+  volley::PrintEvent(logger_, event);
+
+  return true;
+}
+
+std::vector<PayloadMsg> Patrons::GetInsertQueue() const {
+  // Publish insert queue. The copy is obviously inefficient but for the sizes
+  // of queues we are dealing with, it shouldn't matter
+  return insert_queue_.GetElements();
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/scenario_runner.cpp">
+#include "sim/scenario_runner.hpp"
+
+#include <yaml-cpp/yaml.h>
+
+#include <algorithm>
+#include <common/enum.hpp>
+#include <common_ros/layout.hpp>
+#include <common_ros/ros_utils.hpp>
+
+namespace {
+// Default Payload constants
+constexpr float kDefaultPayloadMassKg = 1800.0;
+constexpr float kDefaultPayloadLengthM = 4.5;
+constexpr float kDefaultPayloadWidthM = 2.0;
+constexpr float kDefaultPayloadHeightM = 1.4;
+}  // namespace
+
+// Helper YAML function for decoding a garage pose message
+namespace YAML {  // NOLINT(readability-identifier-naming)
+template <>
+// NOLINTNEXTLINE(readability-identifier-naming)
+struct convert<GaragePoseMsg> {
+  // NOLINTNEXTLINE(readability-identifier-naming,google-runtime-references)
+  static bool decode(const Node& node, GaragePoseMsg& rhs) {
+    if(!node.IsMap() || !node["node_id"] || !node["heading"]) {
+      return false;
+    }
+
+    rhs.node_id = node["node_id"].as<uint32_t>();
+    rhs.heading = node["heading"].as<int16_t>();
+    return true;
+  }
+};
+}  // namespace YAML
+
+namespace volley::sim {
+
+template <typename T>
+T GetValue(const YAML::Node& node, const std::string& key, const T& default_value = T {}) {
+  if(node[key].IsDefined()) {
+    return node[key].as<T>();
+  }
+  return default_value;
+}
+
+Event YamlToEvent(const YAML::Node& node) {
+  // Note: we intentionally do not check if each expected entry exists in the YAML file. If a
+  // required field does not exist, we'll throw an exception in here and the
+  // scenario will not start.
+
+  auto type = common::EnumCastCaseInsensitive<Event::Type>(node["type"].as<std::string>()).value();
+  auto time = node["time"].as<double>();
+
+  Event event(type, time);
+
+  switch(event.type) {
+  case Event::Type::MOVE_AGV:
+    event.resource_id = node["agv_id"].as<unsigned int>();
+    event.garage_pose = node["pose"].as<GaragePoseMsg>();
+    break;
+  case Event::Type::MOVE_TRAY:
+    event.resource_id = node["tray_id"].as<unsigned int>();
+    event.garage_pose = node["pose"].as<GaragePoseMsg>();
+    break;
+  case Event::Type::REMOVE_AGV:
+    event.resource_id = node["agv_id"].as<unsigned int>();
+    break;
+  case Event::Type::SET_AGV_BATTERY_FRACTION:
+    event.resource_id = node["agv_id"].as<unsigned int>();
+    event.float_value = node["battery_fraction"].as<float>();
+    break;
+  case Event::Type::SET_NODE_DISABLEDNESS:
+    event.resource_id = node["node_id"].as<unsigned int>();
+    event.bool_value = node["disable"].as<bool>();
+    break;
+  case Event::Type::SET_TRAY_DISABLEDNESS:
+    event.resource_id = node["tray_id"].as<unsigned int>();
+    event.bool_value = node["disable"].as<bool>();
+    break;
+  case Event::Type::SET_DISPATCH_MODE:
+    event.uint_value = node["mode"].as<unsigned int>();
+    break;
+  case Event::Type::SET_AUTO_PLANNER:
+    event.bool_value = node["enabled"].as<bool>();
+  case Event::Type::START_DISPATCH:
+  case Event::Type::STOP_DISPATCH:
+  case Event::Type::PAUSE_DISPATCH:
+  case Event::Type::CALL_PLANNER:
+    // No parameters
+    break;
+  case Event::Type::PATRON_ARRIVAL:
+    event.payload.id = volley::ParseGuid(node["payload_id"].as<std::string>()).value();
+    event.payload.length_m = GetValue<float>(node, "length_m", kDefaultPayloadLengthM);
+    event.payload.width_m = GetValue<float>(node, "width_m", kDefaultPayloadWidthM);
+    event.payload.height_m = GetValue<float>(node, "height_m", kDefaultPayloadHeightM);
+    event.payload.mass = GetValue<float>(node, "mass", kDefaultPayloadMassKg);
+    event.payload.ev_charge_requested = GetValue<bool>(node, "ev_charge_requested", false);
+    break;
+  case Event::Type::REPARK_TRAY:
+    event.resource_id = node["tray_id"].as<unsigned int>();
+    event.garage_pose = node["pose"].as<GaragePoseMsg>();
+    event.bool_value = GetValue<bool>(node, "allow_reciprocal", false);
+    break;
+  case Event::Type::RETRIEVE_REQUEST:
+  case Event::Type::CHARGE_PAYLOAD:
+    event.payload.id = volley::ParseGuid(node["payload_id"].as<std::string>()).value();
+    break;
+  case Event::Type::SET_BAY_READINESS_RATIO:
+    event.float_value = node["bay_readiness_ratio"].as<float>();
+    break;
+  case Event::Type::TRANSITION_BAY_TO_INSERT:
+  case Event::Type::TRANSITION_BAY_TO_RETRIEVE:
+    event.resource_id = node["bay_id"].as<unsigned int>();
+    break;
+  }
+
+  return event;
+}
+
+std::tuple<std::vector<Event>, InitialConditions, LayoutSPtr> ParseScenarioFile(
+    const std::string& scenario_file) {
+  // Note: we intentionally do not check if each expected entry exists in the YAML file. If a
+  // required field does not exist, we'll throw an exception in here and the
+  // scenario will not start.
+
+  // Read the YAML scenario file
+  YAML::Node scenario = YAML::LoadFile(scenario_file);
+
+  // Load the layout
+  const auto layout_name = scenario["layout"].as<std::string>();
+  const auto layout_filepath_or = GetLayoutPathByName(layout_name);
+  if(!layout_filepath_or.has_value()) {
+    throw std::runtime_error(layout_filepath_or.error());
+  }
+  const auto& layout_filepath = layout_filepath_or.value();
+
+  LayoutSPtr layout = std::make_shared<volley::Layout>(layout_filepath);
+
+  // Load the initial conditions. These are either specified directly in the scenario file, or as
+  // a separate file to be loaded.
+  auto initial_conditions_yaml = scenario["initial_conditions"];
+  if(initial_conditions_yaml.IsScalar()) {
+    const auto initial_conditions_name = initial_conditions_yaml.as<std::string>();
+    const auto initial_conditions_path_or = GetLayoutPathByName(initial_conditions_name);
+    if(!initial_conditions_path_or.has_value()) {
+      throw std::runtime_error(initial_conditions_path_or.error());
+    }
+    initial_conditions_yaml = YAML::LoadFile(initial_conditions_path_or.value());
+  }
+
+  InitialConditions initial_conditions;
+  for(const auto& tray : initial_conditions_yaml["trays"]) {
+    AddTraySrv::Request tray_request {};
+    tray_request.id = tray["id"].as<uint16_t>();
+    tray_request.agv_id = GetValue<uint16_t>(tray, "agv_id");
+    tray_request.reciprocal_to_agv = GetValue<bool>(tray, "reciprocal_to_agv");
+    tray_request.garage_pose = GetValue<GaragePoseMsg>(tray, "garage_pose");
+    tray_request.disabled = GetValue<bool>(tray, "disabled");
+    if(tray["payload"]) {
+      auto payload = tray["payload"];
+      AddPayloadSrv::Request payload_request {};
+      payload_request.payload.id = volley::ParseGuid(payload["id"].as<std::string>()).value();
+      payload_request.payload.length_m = GetValue<float>(payload, "length_m", kDefaultPayloadLengthM);
+      payload_request.payload.width_m = GetValue<float>(payload, "width_m", kDefaultPayloadWidthM);
+      payload_request.payload.height_m = GetValue<float>(payload, "height_m", kDefaultPayloadHeightM);
+      payload_request.payload.mass = GetValue<float>(payload, "mass", kDefaultPayloadMassKg);
+      payload_request.tray_id = tray_request.id;
+      payload_request.reciprocal_to_tray = GetValue<bool>(payload, "reciprocal_to_tray", false);
+      initial_conditions.payloads.emplace_back(std::move(payload_request));
+    }
+    initial_conditions.trays.emplace_back(std::move(tray_request));
+  }
+
+  for(const auto& agv : initial_conditions_yaml["agvs"]) {
+    AddAgvSrv::Request agv_request {};
+    agv_request.id = agv["id"].as<uint16_t>();
+    agv_request.garage_pose = GetValue<GaragePoseMsg>(agv, "garage_pose");
+    agv_request.lift_fraction = GetValue<float>(agv, "lift_fraction", 0.0f);
+    agv_request.battery_fraction = GetValue<float>(agv, "battery_fraction", 1.0f);
+    initial_conditions.agvs.emplace_back(std::move(agv_request));
+  }
+
+  // Load scenario specific obstructions, such as poles or new non-garage elements
+  // to the collision detector.
+  for(const auto& obstruction : initial_conditions_yaml["obstructions"]) {
+    OrientedBoundingBox3D bb3D {};  // NOLINT(readability-identifier-naming)
+    auto& bb = bb3D.box;
+    auto obstruct_id = obstruction["id"].as<uint16_t>();
+
+    bb.x = obstruction["x_loc"].as<double>();
+    bb.y = obstruction["y_loc"].as<double>();
+    bb.yaw = obstruction["yaw"].as<double>();
+    bb.half_x_len = obstruction["x_len"].as<double>() / 2;
+    bb.half_y_len = obstruction["y_len"].as<double>() / 2;
+    // Default z is from floor (0.0) to max parking window height + tray height.
+    bb3D.z_lo = GetValue<double>(obstruction, "z_loc", 0.0);
+    bb3D.z_hi = bb3D.z_lo + GetValue<double>(obstruction, "z_len", kHeightDefault + kTrayHeight);
+    initial_conditions.obstructions.emplace_back(std::make_pair(obstruct_id, std::move(bb3D)));
+  }
+
+  std::vector<Event> events;
+
+  for(const auto&& event : scenario["events"]) {
+    events.emplace_back(YamlToEvent(event));
+  }
+
+  return {events, initial_conditions, layout};
+}
+
+ScenarioRunner::ScenarioRunner(const std::vector<Event>& events) {
+  for(const auto& event : events) {
+    events_.push(event);
+  }
+}
+
+std::vector<Event> ScenarioRunner::GetNextEvents(double seconds_since_start) {
+  std::vector<Event> events;
+  while(!events_.empty() && events_.top().time <= seconds_since_start) {
+    events.push_back(events_.top());
+    events_.pop();
+  }
+  return events;
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/sim_clients.cpp">
+#include "sim/sim_clients.hpp"
+
+#include <common/topics_central.hpp>
+#include <common_ros/ros_utils.hpp>
+
+namespace volley::sim {
+
+SimClients::SimClients(NodeSPtr node) : logger_(node->get_logger()) {
+  clients_callback_group_ = node->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  add_agv_cli_ =
+      node->create_client<SetUInt16Srv>("/central/add_agv", rclcpp::ServicesQoS(), clients_callback_group_);
+  add_tray_cli_ =
+      node->create_client<AddTraySrv>("/central/add_tray", rclcpp::ServicesQoS(), clients_callback_group_);
+  add_payload_cli_ = node->create_client<AddPayloadSrv>(
+      "/central/add_payload", rclcpp::ServicesQoS(), clients_callback_group_);
+  move_agv_cli_ =
+      node->create_client<MoveAgvSrv>("/central/move_agv", rclcpp::ServicesQoS(), clients_callback_group_);
+  move_tray_cli_ =
+      node->create_client<MoveTraySrv>("/central/move_tray", rclcpp::ServicesQoS(), clients_callback_group_);
+  remove_agv_cli_ = node->create_client<SetUInt16Srv>(
+      "/central/remove_agv", rclcpp::ServicesQoS(), clients_callback_group_);
+  set_node_disabledness_cli_ = node->create_client<SetResourceDisablednessSrv>(
+      "/central/set_node_disabledness", rclcpp::ServicesQoS(), clients_callback_group_);
+  set_tray_disabledness_cli_ = node->create_client<SetResourceDisablednessSrv>(
+      "/central/set_tray_disabledness", rclcpp::ServicesQoS(), clients_callback_group_);
+  set_mode_cli_ =
+      node->create_client<SetUInt8Srv>("/central/set_mode", rclcpp::ServicesQoS(), clients_callback_group_);
+  start_cli_ =
+      node->create_client<TriggerSrv>("/central/start", rclcpp::ServicesQoS(), clients_callback_group_);
+  stop_cli_ =
+      node->create_client<TriggerSrv>("/central/stop", rclcpp::ServicesQoS(), clients_callback_group_);
+  pause_cli_ =
+      node->create_client<TriggerSrv>("/central/pause", rclcpp::ServicesQoS(), clients_callback_group_);
+  repark_tray_cli_ = node->create_client<ReparkTraySrv>(
+      "/central/repark_tray", rclcpp::ServicesQoS(), clients_callback_group_);
+  retrieve_cli_ =
+      node->create_client<RetrieveSrv>("/central/retrieve", rclcpp::ServicesQoS(), clients_callback_group_);
+  transition_bay_to_insert_cli_ = node->create_client<TransitionBayToInsertSrv>(
+      "/central/transition_bay_to_insert", rclcpp::ServicesQoS(), clients_callback_group_);
+  transition_bay_to_retrieve_cli_ = node->create_client<TransitionBayToRetrieveSrv>(
+      "/central/transition_bay_to_retrieve", rclcpp::ServicesQoS(), clients_callback_group_);
+  charge_payload_cli_ = node->create_client<ChargePayloadSrv>(
+      "/central/charge_payload", rclcpp::ServicesQoS(), clients_callback_group_);
+  set_bay_readiness_ratio_cli_ = node->create_client<SetFloat32Srv>(
+      "/scheduler/set_bay_readiness_ratio", rclcpp::ServicesQoS(), clients_callback_group_);
+
+  stop_planner_cli_ = node->create_client<TriggerSrv>(
+      "/central/stop_auto_planner", rclcpp::ServicesQoS(), clients_callback_group_);
+  start_planner_cli_ = node->create_client<TriggerSrv>(
+      "/central/start_auto_planner", rclcpp::ServicesQoS(), clients_callback_group_);
+  trigger_plan_cli_ = node->create_client<TriggerSrv>(
+      "/central/trigger_plan_call", rclcpp::ServicesQoS(), clients_callback_group_);
+}
+
+bool SimClients::ProcessInitialConditions(const InitialConditions& initial_conditions) {
+  // Make sure all services are available before calling anything
+  bool all_services_available = add_agv_cli_->service_is_ready() && add_tray_cli_->service_is_ready() &&
+                                add_payload_cli_->service_is_ready();
+  if(!all_services_available) {
+    return false;
+  }
+
+  for(const auto& agv_request : initial_conditions.agvs) {
+    auto request = std::make_shared<SetUInt16Srv::Request>();
+    request->value = agv_request.id;
+
+    auto response_opt = volley::Call<SetUInt16Srv::Response>(add_agv_cli_, request, logger_);
+    if(!response_opt.has_value() || !response_opt.value()->success) {
+      throw std::runtime_error("Failed to add AGV to the tracker");
+    }
+  }
+  for(const auto& tray_request : initial_conditions.trays) {
+    auto request = std::make_shared<AddTraySrv::Request>(tray_request);
+    auto response_opt = volley::Call<AddTraySrv::Response>(add_tray_cli_, request, logger_);
+    if(!response_opt.has_value() || !response_opt.value()->success) {
+      throw std::runtime_error("Failed to add Tray to the tracker");
+    }
+  }
+  for(const auto& payload_request : initial_conditions.payloads) {
+    auto request = std::make_shared<AddPayloadSrv::Request>(payload_request);
+    auto response_opt = volley::Call<AddPayloadSrv::Response>(add_payload_cli_, request, logger_);
+    if(!response_opt.has_value() || !response_opt.value()->success) {
+      throw std::runtime_error("Failed to add Payload to the tracker");
+    }
+  }
+
+  return true;
+}
+
+bool SimClients::SetNodeDisabledness(unsigned int node_id, bool disable) {
+  auto request = std::make_shared<SetResourceDisablednessSrv::Request>();
+  request->resource_id = node_id;
+  request->disable = disable;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<SetResourceDisablednessSrv::Response>(
+      set_node_disabledness_cli_, request, logger_);
+}
+
+bool SimClients::SetTrayDisabledness(unsigned int tray_id, bool disable) {
+  auto request = std::make_shared<SetResourceDisablednessSrv::Request>();
+  request->resource_id = tray_id;
+  request->disable = disable;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<SetResourceDisablednessSrv::Response>(
+      set_tray_disabledness_cli_, request, logger_);
+}
+
+bool SimClients::SetMode(unsigned int mode) {
+  auto request = std::make_shared<SetUInt8Srv::Request>();
+  request->value = static_cast<uint8_t>(mode);
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<SetUInt8Srv::Response>(set_mode_cli_, request, logger_);
+}
+
+bool SimClients::Start(const rclcpp::Time&) {
+  auto request = std::make_shared<TriggerSrv::Request>();
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<TriggerSrv::Response>(start_cli_, request, logger_);
+}
+
+bool SimClients::Stop() {
+  auto request = std::make_shared<TriggerSrv::Request>();
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<TriggerSrv::Response>(stop_cli_, request, logger_);
+}
+
+bool SimClients::Pause() {
+  auto request = std::make_shared<TriggerSrv::Request>();
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<TriggerSrv::Response>(pause_cli_, request, logger_);
+}
+
+bool SimClients::MoveAgv(unsigned int agv_id, const GaragePoseMsg& pose, const rclcpp::Time&) {
+  auto request = std::make_shared<MoveAgvSrv::Request>();
+  request->agv_id = agv_id;
+  request->pose = pose;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<MoveAgvSrv::Response>(move_agv_cli_, request, logger_);
+}
+
+bool SimClients::MoveTray(unsigned int tray_id, const GaragePoseMsg& pose, const rclcpp::Time&) {
+  auto request = std::make_shared<MoveTraySrv::Request>();
+  request->tray_id = tray_id;
+  request->pose = pose;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<MoveTraySrv::Response>(move_tray_cli_, request, logger_);
+}
+
+bool SimClients::RemoveAgv(unsigned int agv_id) {
+  auto request = std::make_shared<SetUInt16Srv::Request>();
+  request->value = agv_id;
+  INFOS(logger_, "Central sim calling remove agv service for agv " << agv_id);
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<SetUInt16Srv::Response>(remove_agv_cli_, request, logger_);
+}
+
+bool SimClients::ReparkTray(
+    unsigned int tray_id, const GaragePoseMsg& pose, bool allow_reciprocal, const rclcpp::Time&) {
+  auto request = std::make_shared<ReparkTraySrv::Request>();
+  request->tray_id = tray_id;
+  request->pose = pose;
+  request->allow_reciprocal = allow_reciprocal;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<ReparkTraySrv::Response>(repark_tray_cli_, request, logger_);
+}
+
+bool SimClients::Retrieve(const GuidMsg& payload_id, const rclcpp::Time&) {
+  auto request = std::make_shared<RetrieveSrv::Request>();
+  request->payload_id = payload_id;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<RetrieveSrv::Response>(retrieve_cli_, request, logger_);
+}
+
+bool SimClients::SetBayReadinessRatio(float bay_readiness_ratio) {
+  auto request = std::make_shared<SetFloat32Srv::Request>();
+  request->value = bay_readiness_ratio;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<SetFloat32Srv::Response>(set_bay_readiness_ratio_cli_, request, logger_);
+}
+
+bool SimClients::TransitionBayToInsert(unsigned int bay_id, const rclcpp::Time&) {
+  auto request = std::make_shared<TransitionBayToInsertSrv::Request>();
+  request->bay_id = bay_id;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<TransitionBayToInsertSrv::Response>(
+      transition_bay_to_insert_cli_, request, logger_);
+}
+
+bool SimClients::TransitionBayToRetrieve(unsigned int bay_id, const rclcpp::Time&) {
+  auto request = std::make_shared<TransitionBayToRetrieveSrv::Request>();
+  request->bay_id = bay_id;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<TransitionBayToRetrieveSrv::Response>(
+      transition_bay_to_retrieve_cli_, request, logger_);
+}
+
+bool SimClients::ChargePayload(const GuidMsg& payload_id, const rclcpp::Time&) {
+  auto request = std::make_shared<ChargePayloadSrv::Request>();
+  request->payload_id = payload_id;
+  // NOTE: The return value here only indicates whether the call was sent successfully, not the
+  // actual success/failure of the service
+  return volley::CallAsync<ChargePayloadSrv::Response>(charge_payload_cli_, request, logger_);
+}
+
+// Triggers a call to the dispatcher to set the auto planner.
+// Note, this makes a blocking call to the dispatcher node.
+bool SimClients::SetAutoPlanner(bool plan_ready_jobs) {
+  auto request = std::make_shared<TriggerSrv::Request>();
+  std::optional<TriggerSrv::Response::SharedPtr> res_opt;
+  if(plan_ready_jobs) {
+    res_opt = volley::Call<TriggerSrv::Response>(start_planner_cli_, request, logger_);
+  }
+  else {
+    res_opt = volley::Call<TriggerSrv::Response>(stop_planner_cli_, request, logger_);
+  }
+
+  return res_opt && res_opt.value()->success;
+}
+
+void SimClients::CallPlanner(const rclcpp::Time&) {
+  volley::CallAsync<TriggerSrv::Response>(
+      trigger_plan_cli_, std::make_shared<TriggerSrv::Request>(), logger_);
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/sim_clock_component.cpp">
+#include <rclcppx/component.hpp>
+
+#include "sim/sim_clock_ros.hpp"
+
+namespace volley::sim {
+
+using SimClockComponent = rclcppx::Component<SimClockRos>;
+
+}  // namespace volley::sim
+
+#include <rclcpp_components/register_node_macro.hpp>
+RCLCPP_COMPONENTS_REGISTER_NODE(volley::sim::SimClockComponent)
+</file>
+
+<file path="src/sim_clock_ros.cpp">
+#include "sim/sim_clock_ros.hpp"
+
+#include <chrono>
+#include <limits>
+#include <memory>
+#include <rclcpp/clock.hpp>
+#include <rclcpp/create_timer.hpp>
+#include <rclcppx/parameter.hpp>
+#include <utility>
+#include <vector>
+
+namespace volley::sim {
+
+using namespace std::chrono_literals;
+
+namespace {
+
+using FractionalMilliseconds = std::chrono::duration<double, std::milli>;
+
+constexpr FractionalMilliseconds kDefaultPublishPeriod = 5.0ms;
+constexpr auto kDefaultStartTime = 0ns;
+
+constexpr auto kRealTimeFactorParam = "real_time_factor";
+
+}  // namespace
+
+SimClockRos::SimClockRos(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
+  // Directly use declare_parameter so the parameter can be updated
+  rclcppx::ParameterDescriptor real_time_factor_desc;
+  real_time_factor_desc.description = "Simulated time per wall time, 0 pauses the sim";
+  real_time_factor_desc.floating_point_range.resize(1);
+  real_time_factor_desc.floating_point_range[0].from_value = 0.0;
+  real_time_factor_desc.floating_point_range[0].to_value = std::numeric_limits<double>::max();
+  real_time_factor_ = node_->declare_parameter(kRealTimeFactorParam, 1.0, real_time_factor_desc);
+
+  publish_period_ = FractionalMilliseconds(
+      rclcppx::DeclareOptionalParameter(node_, "clock_publish_period_ms", kDefaultPublishPeriod.count()));
+
+  // Absolute "/clock" so it lands on the global topic, not under the node's namespace
+  clock_pub_ = node_->create_publisher<rosgraph_msgs::msg::Clock>("/clock", rclcpp::ClockQoS());
+
+  sim_time_ = rclcpp::Time(
+      rclcppx::DeclareOptionalParameter(node_, "start_time_ns", kDefaultStartTime.count()), RCL_ROS_TIME);
+
+  // Set a callback that fires when the real time factor parameter is changed at runtime
+  param_cb_ = node_->add_post_set_parameters_callback([this](const std::vector<rclcpp::Parameter>& params) {
+    for(const auto& p : params) {
+      if(p.get_name() == kRealTimeFactorParam) {
+        real_time_factor_ = p.as_double();
+      }
+    }
+  });
+
+  // Create a timer to publish time
+  // Note that this timer must use wall time (steady time) as it should run at a fixed, steady interval
+  // independent of sim time
+  timer_ = rclcpp::create_timer(
+      node_, std::make_shared<rclcpp::Clock>(RCL_STEADY_TIME), publish_period_, [this]() { Tick(); });
+}
+
+void SimClockRos::Tick() {
+  sim_time_ += rclcpp::Duration(publish_period_ * real_time_factor_.load());
+  Publish();
+}
+
+void SimClockRos::Publish() {
+  auto msg = std::make_unique<rosgraph_msgs::msg::Clock>();
+  msg->clock = sim_time_;
+  clock_pub_->publish(std::move(msg));
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/simulator_component.cpp">
+#include <common_ros/component.hpp>
+#include <common_ros/node.hpp>
+#include <memory>
+
+#include "sim/scenario_runner.hpp"
+#include "sim/simulator.hpp"
+
+namespace volley::sim {
+
+//! @brief Thin component wrapper that loads the scenario and creates a Simulator that runs the simulation
+class SimulatorComponent : public volley::Component {
+public:
+  explicit SimulatorComponent(const rclcpp::NodeOptions& options) {
+    const auto node = std::make_shared<volley::Node>("simulator", "sim", options);
+    SetNode(node);
+
+    const auto scenario_file = volley::RequiredParam<std::string>(*node, "simulator.scenario");
+    auto [events, initial_conditions, layout] = ParseScenarioFile(scenario_file);
+
+    simulator_ =
+        std::make_unique<Simulator>(node, layout, std::move(initial_conditions), ScenarioRunner(events));
+  }
+
+private:
+  std::unique_ptr<Simulator> simulator_;
+};
+
+}  // namespace volley::sim
+
+#include <rclcpp_components/register_node_macro.hpp>
+RCLCPP_COMPONENTS_REGISTER_NODE(volley::sim::SimulatorComponent)
+</file>
+
+<file path="src/simulator.cpp">
+#include "sim/simulator.hpp"
+
+#include <chrono>
+#include <cmath>
+#include <common/topics_agv.hpp>
+#include <common/topics_central.hpp>
+#include <common/topics_sim.hpp>
+#include <common_ros/print_utils.hpp>
+#include <common_ros/ros_utils.hpp>
+#include <rclcpp/create_timer.hpp>
+#include <rclcppx/interface_factories.hpp>
+#include <sstream>
+#include <utility>
+
+#include "sim/collision_detector.hpp"
+#include "sim/oriented_bounding_box.hpp"
+#include "sim/sim_clients.hpp"
+#include "sim/tray.hpp"
+
+namespace volley::sim {
+using namespace std::chrono_literals;
+
+// How often the simulator updates (in simulated time)
+constexpr auto kUpdatePeriod = 50ms;
+
+// A tray carried by an AGV is kept co-located with it by the tracker, so an AGV/tray pair within this
+// distance is treated as "carried" rather than a collision.
+constexpr double kCarriedTrayXyToleranceM = 0.15;
+
+Simulator::Simulator(
+    NodeSPtr node, LayoutSPtr layout, InitialConditions initial_conditions, ScenarioRunner scenario_runner) :
+    node_(std::move(node)),
+    layout_(std::move(layout)),
+    patrons_(node_->get_logger()),
+    scenario_runner_(std::move(scenario_runner)),
+    initial_conditions_(std::move(initial_conditions)) {
+  sim_clients_ = std::make_unique<SimClients>(node_);
+
+  report_pub_ = node_->create_publisher<SimReportMsg>(volley::TopicSimReport().Name(), 1);
+
+  snapshot_sub_ =
+      node_->create_subscription<GarageSnapshotMsg>("/central/" + volley::TopicGarageSnapshot().Name(),
+          volley::GetBestEffortQoS(1), [this](GarageSnapshotMsg::ConstSharedPtr msg) { snapshot_ = msg; });
+
+  dispatch_sub_ = node_->create_subscription<DispatchReportMsg>(
+      "/central/" + volley::TopicCentralReport().Name(), volley::GetBestEffortQoS(1),
+      [this](DispatchReportMsg::ConstSharedPtr msg) { dispatch_report_ = msg; });
+
+  // Lets external tools / tests enqueue scenario events at runtime.
+  event_srv_ = rclcppx::CreateService<SimEventSrv>(node_, "/sim/enqueue_garage_event",
+      [this](const SimEventSrv::Request::SharedPtr req, SimEventSrv::Response::SharedPtr resp) {
+        try {
+          scenario_runner_.AddEvent(Event(req));
+        }
+        catch(const std::runtime_error& e) {
+          resp->success = false;
+          resp->message = e.what();
+          return;
+        }
+        resp->success = true;
+      });
+
+  // One "offer inserting payload" client per bay-like node, on a dedicated callback group so the blocking
+  // offer calls in OfferWaitingPayloadsToBays() can complete while the tick waits.
+  bay_offer_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  for(const auto& bay_id : layout_->GetBayLikeNodeIds()) {
+    bay_offer_clients_[bay_id] = node_->create_client<PlacePayloadInBaySrv>(
+        "/bay/b" + std::to_string(bay_id) + "/sim_offer_inserting_payload", rclcpp::ServicesQoS(),
+        bay_offer_cb_group_);
+  }
+
+  RegisterStaticCollisionBodies();
+
+  update_timer_ =
+      rclcpp::create_timer(node_, node_->get_clock(), kUpdatePeriod, [this]() { Update(node_->now()); });
+
+  INFOS(node_->get_logger(), "Simulator initialized with "
+                                 << initial_conditions_.trays.size() << " trays, "
+                                 << initial_conditions_.payloads.size() << " payloads, "
+                                 << scenario_runner_.GetNumRemainingEvents() << " scenario events.");
+}
+
+void Simulator::Update(const rclcpp::Time& now) {
+  // Seed the garage tracker with the initial AGVs/trays/payloads. This uses blocking service calls, so it may
+  // take a few ticks until central's services are up, so retry until it succeeds.
+  if(!initial_conditions_.IsEmpty()) {
+    if(sim_clients_->ProcessInitialConditions(initial_conditions_)) {
+      initial_conditions_.Clear();
+    }
+    else {
+      return;
+    }
+  }
+
+  if(running_) {
+    HandleEvents(now);
+    OfferWaitingPayloadsToBays();
+  }
+
+  RunCollisionCheck();
+  PublishReport(now);
+
+  // Start the scenario clock once dispatch settles into a stopped, consistent state, so event times are
+  // measured from a well-defined zero.
+  if(!running_ && IsDispatchStopped(now)) {
+    running_ = true;
+    start_time_ = now;
+    INFOS(node_->get_logger(), "Simulator running; scenario clock started.");
+  }
+}
+
+void Simulator::HandleEvents(const rclcpp::Time& now) {
+  auto events = scenario_runner_.GetNextEvents((now - start_time_).seconds());
+  while(!events.empty()) {
+    Event event = events.back();
+    events.pop_back();
+    switch(event.type) {
+    case Event::Type::MOVE_AGV:
+      sim_clients_->MoveAgv(event.resource_id, event.garage_pose, now);
+      break;
+    case Event::Type::MOVE_TRAY:
+      sim_clients_->MoveTray(event.resource_id, event.garage_pose, now);
+      break;
+    case Event::Type::REMOVE_AGV:
+      sim_clients_->RemoveAgv(event.resource_id);
+      collision_detector_.RemoveBody(AgvIdentifier(event.resource_id));
+      break;
+    case Event::Type::SET_AGV_BATTERY_FRACTION: {
+      ERRORS(node_->get_logger(), "set_agv_battery_fraction event is not implemented");
+      break;
+    }
+    case Event::Type::SET_NODE_DISABLEDNESS:
+      sim_clients_->SetNodeDisabledness(event.resource_id, event.bool_value);
+      break;
+    case Event::Type::SET_TRAY_DISABLEDNESS:
+      sim_clients_->SetTrayDisabledness(event.resource_id, event.bool_value);
+      break;
+    case Event::Type::SET_DISPATCH_MODE:
+      sim_clients_->SetMode(event.uint_value);
+      break;
+    case Event::Type::START_DISPATCH:
+      sim_clients_->Start(now);
+      break;
+    case Event::Type::STOP_DISPATCH:
+      sim_clients_->Stop();
+      break;
+    case Event::Type::PAUSE_DISPATCH:
+      sim_clients_->Pause();
+      break;
+    case Event::Type::PATRON_ARRIVAL:
+      patrons_.EnterInsertQueueCallback(event.payload);
+      break;
+    case Event::Type::REPARK_TRAY:
+      sim_clients_->ReparkTray(event.resource_id, event.garage_pose, event.bool_value, now);
+      break;
+    case Event::Type::RETRIEVE_REQUEST:
+      sim_clients_->Retrieve(event.payload.id, now);
+      break;
+    case Event::Type::SET_BAY_READINESS_RATIO:
+      sim_clients_->SetBayReadinessRatio(event.float_value);
+      break;
+    case Event::Type::SET_AUTO_PLANNER:
+      sim_clients_->SetAutoPlanner(event.bool_value);
+      break;
+    case Event::Type::CALL_PLANNER:
+      sim_clients_->CallPlanner(now);
+      break;
+    case Event::Type::TRANSITION_BAY_TO_INSERT:
+      sim_clients_->TransitionBayToInsert(event.resource_id, now);
+      break;
+    case Event::Type::TRANSITION_BAY_TO_RETRIEVE:
+      sim_clients_->TransitionBayToRetrieve(event.resource_id, now);
+      break;
+    case Event::Type::CHARGE_PAYLOAD:
+      sim_clients_->ChargePayload(event.payload.id, now);
+      break;
+    }
+  }
+}
+
+void Simulator::OfferWaitingPayloadsToBays() {
+  for(const auto& [bay_id, client] : bay_offer_clients_) {
+    if(patrons_.GetNumWaitingPatrons() == 0) {
+      break;
+    }
+    const auto payload = patrons_.GetWaitingPayload();
+    if(!payload.has_value() || !client->service_is_ready()) {
+      continue;
+    }
+    auto request = std::make_shared<PlacePayloadInBaySrv::Request>();
+    request->payload = payload.value();
+    request->bay_id = bay_id;
+    // A sim bay will only accept a "payload offer" if it is READY_TO_INSERT. Once a bay accepts the payload,
+    // pop the patron off the queue.
+    const auto response = volley::Call<PlacePayloadInBaySrv::Response>(client, request, node_->get_logger());
+    if(response.has_value() && response.value()->success) {
+      patrons_.PopWaitingPayload();
+    }
+  }
+}
+
+void Simulator::RegisterStaticCollisionBodies() {
+  for(const auto& charger_id : layout_->GetNodeIdsOfType(GarageNodeMsg::TYPE_AGV_CHARGE)) {
+    const auto charge_node = layout_->GetNodeById(charger_id);
+    if(!charge_node.has_value()) {
+      continue;
+    }
+    const float floor_z = layout_->GetFloorZForNodeId(charger_id).value_or(0);
+    collision_detector_.AddBody(
+        ChargerIdentifier(charger_id), MakeBoundingBoxForCharger(charge_node.value(), floor_z));
+  }
+
+  for(const auto& [id, body] : initial_conditions_.obstructions) {
+    collision_detector_.AddBody(ObstructionIdentifier(id), body);
+  }
+}
+
+void Simulator::UpsertCollisionBody(const BodyIdentifier& iden, const OrientedBoundingBox3D& volume) {
+  if(collision_detector_.GetVolume(iden).has_value()) {
+    collision_detector_.SetVolume(iden, volume);
+  }
+  else {
+    collision_detector_.AddBody(iden, volume);
+  }
+}
+
+bool Simulator::IsCarriedTrayCollision(const BodyIdentifier& a, const BodyIdentifier& b,
+    const std::unordered_map<unsigned int, GeometricPoseMsg>& agv_pose_by_id,
+    const std::unordered_map<unsigned int, GeometricPoseMsg>& tray_pose_by_id) const {
+  const BodyIdentifier* agv = nullptr;
+  const BodyIdentifier* tray = nullptr;
+  if(a.type == BodyType::AGV && b.type == BodyType::TRAY) {
+    agv = &a;
+    tray = &b;
+  }
+  else if(a.type == BodyType::TRAY && b.type == BodyType::AGV) {
+    agv = &b;
+    tray = &a;
+  }
+  else {
+    return false;
+  }
+
+  const auto agv_it = agv_pose_by_id.find(agv->id);
+  const auto tray_it = tray_pose_by_id.find(tray->id);
+  if(agv_it == agv_pose_by_id.end() || tray_it == tray_pose_by_id.end()) {
+    return false;
+  }
+  return std::abs(agv_it->second.x - tray_it->second.x) < kCarriedTrayXyToleranceM &&
+         std::abs(agv_it->second.y - tray_it->second.y) < kCarriedTrayXyToleranceM;
+}
+
+void Simulator::RunCollisionCheck() {
+  if(!snapshot_) {
+    return;
+  }
+
+  // Update (or first-register) the volume of every dynamic body from the snapshot, recording AGV/tray poses
+  // so we can exempt an AGV from colliding with the tray it is carrying.
+  std::unordered_map<unsigned int, GeometricPoseMsg> agv_pose_by_id;
+  for(const auto& agv : snapshot_->agvs) {
+    const float floor_z = layout_->GetFloorZForNodeId(agv.state.garage_pose.node_id).value_or(0);
+    UpsertCollisionBody(AgvIdentifier(agv.agv_id), MakeBoundingBoxForAGV(agv.state, floor_z));
+    agv_pose_by_id.emplace(agv.agv_id, agv.state.geometric_pose);
+  }
+
+  // The payload body is keyed by its tray id (see PayloadIdentifier), so map payload GUID -> tray to recover
+  // the tray id when iterating payloads below.
+  std::unordered_map<GuidMsg, GarageTrayMsg> payload_guid_to_tray;
+  std::unordered_map<unsigned int, GeometricPoseMsg> tray_pose_by_id;
+  for(const auto& tray : snapshot_->trays) {
+    const float floor_z = layout_->GetFloorZForNodeId(tray.pose.node_id).value_or(0);
+    UpsertCollisionBody(TrayIdentifier(tray.id), MakeBoundingBoxForTray(tray.geometric_pose, floor_z));
+    tray_pose_by_id.emplace(tray.id, tray.geometric_pose);
+    if(tray.payload_id != volley::kEmptyGuid) {
+      payload_guid_to_tray[tray.payload_id] = tray;
+    }
+  }
+
+  // Create a copy of the tracked_payloads_ and remove new payloads from this snapshot in order to get a set
+  // of payloads that are no longer in the garage (in order to remove payloads from the collision detector).
+  std::set<BodyIdentifier> payloads_to_remove = tracked_payloads_;
+  tracked_payloads_.clear();
+  for(const auto& payload : snapshot_->payloads) {
+    if(!payload_guid_to_tray.contains(payload.payload.id)) {
+      continue;
+    }
+    const GarageTrayMsg& garage_tray = payload_guid_to_tray[payload.payload.id];
+    Tray tray {};
+    tray.geometric_pose = garage_tray.geometric_pose;
+    tray.reciprocal_to_payload = garage_tray.reciprocal_to_payload;
+    const float floor_z = layout_->GetFloorZForNodeId(payload.pose.node_id).value_or(0);
+    const BodyIdentifier payload_body_id = PayloadIdentifier(garage_tray.id);
+    UpsertCollisionBody(
+        payload_body_id, MakeBoundingBoxForPayload(GetPayloadPose(tray), payload.payload, floor_z));
+
+    tracked_payloads_.insert(payload_body_id);
+    payloads_to_remove.erase(payload_body_id);
+  }
+
+  // Remove payloads that are no longer in the garage
+  for(const auto& body_id : payloads_to_remove) {
+    collision_detector_.RemoveBody(body_id);
+  }
+
+  for(const auto& bay_state : snapshot_->bays) {
+    const auto bay_node = layout_->GetNodeById(bay_state.id);
+    if(!bay_node.has_value()) {
+      continue;
+    }
+    const bool system_open = !bay_state.system_doors_closed;
+    const float floor_z = layout_->GetFloorZForNodeId(bay_state.id).value_or(0);
+    UpsertCollisionBody(
+        BayIdentifier(bay_state.id), MakeBoundingBoxForBay(bay_node.value(), system_open, floor_z));
+  }
+
+  std::string collision_msg;
+  for(const auto& [iden_a, iden_b] : collision_detector_.FindCollisions()) {
+    if(IsCarriedTrayCollision(iden_a, iden_b, agv_pose_by_id, tray_pose_by_id)) {
+      continue;
+    }
+    std::ostringstream stream;
+    stream << "Collision: " << iden_a << " collided with " << iden_b << "!\n";
+    collision_msg += stream.str();
+  }
+
+  if(!collision_msg.empty()) {
+    RCLCPP_FATAL_STREAM(node_->get_logger(), collision_msg);
+    // TODO(SW2-306): tear the stack down cleanly instead of killing the process.
+    rclcpp::shutdown();
+  }
+}
+
+void Simulator::PublishReport(const rclcpp::Time& now) {
+  auto report = std::make_unique<SimReportMsg>();
+  report->header.stamp = now;
+  report->num_remaining_events = scenario_runner_.GetNumRemainingEvents();
+  report->running = running_;
+  report->payloads = patrons_.GetInsertQueue();
+  report_pub_->publish(std::move(report));
+}
+
+bool Simulator::IsDispatchStopped(const rclcpp::Time&) const {
+  return dispatch_report_ && dispatch_report_->status == dispatch_report_->STATUS_STOPPED &&
+         dispatch_report_->consistent;
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="src/tray.cpp">
+#include "sim/tray.hpp"
+
+#include <cmath>
+
+namespace volley::sim {
+
+GeometricPoseMsg GetPayloadPose(const Tray& tray) {
+  auto payload_pose = tray.geometric_pose;
+  payload_pose.yaw += static_cast<float>(tray.reciprocal_to_payload * M_PI);
+  return payload_pose;
+}
+
+}  // namespace volley::sim
+</file>
+
+<file path="CMakeLists.txt">
+cmake_minimum_required(VERSION 3.28)
+project(sim)
+
+find_package(volley_cmake REQUIRED)
+volley_package()
+
+volley_add_library(
+  simulator_lib
+  SHARED
+  src/bay_sim.cpp
+  src/sim_clients.cpp
+  src/collision_detector.cpp
+  src/collision_utils.cpp
+  src/oriented_bounding_box.cpp
+  src/patrons.cpp
+  src/scenario_runner.cpp
+  src/tray.cpp
+  LINK_LIBRARIES
+    mysqlcppconn
+)
+
+volley_add_library(${PROJECT_NAME}_clock SHARED src/sim_clock_ros.cpp)
+
+volley_add_component(
+  ${PROJECT_NAME}_clock_component
+  src/sim_clock_component.cpp
+  PLUGIN "volley::sim::SimClockComponent"
+  EXECUTABLE sim_clock_node
+  LINK_LIBRARIES
+    ${PROJECT_NAME}_clock
+)
+
+volley_add_component(
+  simulator_component
+  src/simulator.cpp
+  src/simulator_component.cpp
+  PLUGIN "volley::sim::SimulatorComponent"
+  EXECUTABLE sim_world_node
+  LINK_LIBRARIES
+    simulator_lib
+)
+
+volley_add_component(
+  bay_sim_component
+  src/bay_sim_component.cpp
+  PLUGIN "volley::sim::BaySimComponent"
+  EXECUTABLE bay_sim_node
+  LINK_LIBRARIES
+    simulator_lib
+)
+
+install(DIRECTORY test/test_files DESTINATION share/${PROJECT_NAME}/test)
+
+install(DIRECTORY 3d DESTINATION share/${PROJECT_NAME})
+
+if(BUILD_TESTING)
+  volley_add_gtest(obb_collision_tests test/obb_collision_tests.cpp LINK_LIBRARIES simulator_lib)
+
+  volley_add_gtest(
+    scenario_runner_tests
+    test/scenario_runner_tests.cpp
+    LINK_LIBRARIES
+      yaml-cpp
+      simulator_lib
+  )
+
+  volley_add_gtest(patrons_tests test/patrons_tests.cpp LINK_LIBRARIES simulator_lib)
+
+  volley_add_gtest(bay_sim_tests test/bay_sim_tests.cpp LINK_LIBRARIES simulator_lib)
+endif()
+
+volley_ament_auto_package()
+</file>
+
+<file path="package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>sim</name>
+  <version>0.0.1</version>
+  <description>Simulation nodes and utilities</description>
+  <maintainer email="sw@volleyautomation.com">dev</maintainer>
+  <license>proprietary</license>
+
+  <buildtool_depend>volley_cmake</buildtool_depend>
+
+  <depend>ament_index_cpp</depend>
+  <depend>backward_ros</depend>
+  <depend>bay</depend>
+  <depend>bay_interfaces</depend>
+  <depend>central</depend>
+  <depend>common</depend>
+  <depend>common_ros</depend>
+  <depend>geometry_msgs</depend>
+  <depend>interfaces</depend>
+  <depend>libmysqlcppconn-dev</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>rclcppx</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>site_config</depend>
+  <depend>std_srvs</depend>
+  <depend>structures</depend>
+  <depend>system_tests</depend>
+  <depend>vis</depend>
+  <depend>yaml-cpp</depend>
+
+  <test_depend>ament_cmake</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+</file>
+
+</files>

@@ -1,0 +1,3195 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
+The content has been processed where empty lines have been removed.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: package.xml, setup.py, setup.cfg, scenario/**/*.py, batch_configs/**/*.yaml, scenarios/5675_pecos_sandbox_*.yaml, scenarios/tiny_lot*.yaml, scenarios/clean_garage_unstashes_waypoint_tray.yaml, scenarios/multisize_inserts_and_retrieves.yaml, scenarios/events_insert_retrieve.yaml, scenarios/repark_tray.yaml, scenarios/charge_then_repark.yaml, scenarios/payload_starts_in_bay.yaml, scenarios/single_triple_pick_retrieve.yaml, scenarios/try_odp_agv_collide_bay_outbound_node.yaml, scenarios/exercise_576_eccles.yaml
+- Files matching these patterns are excluded: **/readme_*.md, scenarios/275_*
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Empty lines have been removed from all files
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+batch_configs/
+  standardized_tests/
+    pecos_sandbox_eng.yaml
+    pecos_sandbox_qa.yaml
+  550_14_car_pick_each.yaml
+  550_15_car_pick_each.yaml
+  550_16_car_pick_each.yaml
+scenario/
+  events/
+    __init__.py
+    event_base.py
+    move_agv_event.py
+    move_tray_event.py
+    patron_arrival_event.py
+    repark_tray_event.py
+    retrieve_request_event.py
+    sleep_event.py
+  __init__.py
+  exercise_sim_events.py
+scenarios/
+  5675_pecos_sandbox_combined_empty_start_in_auto.yaml
+  5675_pecos_sandbox_combined_events_drain_from_full.yaml
+  5675_pecos_sandbox_combined_events_fill_from_empty.yaml
+  5675_pecos_sandbox_combined_events_move_each_node.yaml
+  5675_pecos_sandbox_combined_full_start_in_auto.yaml
+  5675_pecos_sandbox_combined_single_agv_start_in_manual.yaml
+  5675_pecos_sandbox_eng_empty_no_op.yaml
+  5675_pecos_sandbox_eng_empty_start_in_auto.yaml
+  5675_pecos_sandbox_eng_events_drain_from_full.yaml
+  5675_pecos_sandbox_eng_events_fill_from_empty.yaml
+  5675_pecos_sandbox_eng_events_move_each_node.yaml
+  5675_pecos_sandbox_eng_full_no_op.yaml
+  5675_pecos_sandbox_eng_full_start_in_auto.yaml
+  5675_pecos_sandbox_qa_empty_no_op.yaml
+  5675_pecos_sandbox_qa_empty_start_in_auto.yaml
+  5675_pecos_sandbox_qa_events_drain_from_full.yaml
+  5675_pecos_sandbox_qa_events_fill_from_empty.yaml
+  5675_pecos_sandbox_qa_events_move_each_node.yaml
+  5675_pecos_sandbox_qa_full_no_op.yaml
+  5675_pecos_sandbox_qa_full_start_in_auto.yaml
+  5675_pecos_sandbox_qa_single_agv_start_in_manual.yaml
+  charge_then_repark.yaml
+  clean_garage_unstashes_waypoint_tray.yaml
+  events_insert_retrieve.yaml
+  exercise_576_eccles.yaml
+  multisize_inserts_and_retrieves.yaml
+  payload_starts_in_bay.yaml
+  repark_tray.yaml
+  single_triple_pick_retrieve.yaml
+  tiny_lot_events_fill.yaml
+  tiny_lot_idle.yaml
+  tiny_lot_move_tray.yaml
+  tiny_lot_retrieve.yaml
+  try_odp_agv_collide_bay_outbound_node.yaml
+package.xml
+setup.cfg
+setup.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="batch_configs/standardized_tests/pecos_sandbox_eng.yaml">
+batch_name: release-26.XX #Update with release number (or replace with image name) to group results
+layout: 5675_pecos_sandbox_eng
+layout_version: 1
+scenario: 5675_pecos_sandbox_eng_empty_start_in_auto
+events:
+  - 5675_pecos_sandbox_eng_events_fill_and_drain
+  - 5675_pecos_sandbox_eng_events_fill_and_drain
+  - 5675_pecos_sandbox_eng_events_fill_and_drain
+</file>
+
+<file path="batch_configs/standardized_tests/pecos_sandbox_qa.yaml">
+batch_name: release-26.XX #Update with release number (or replace with image name) to group results
+layout: 5675_pecos_sandbox_qa
+layout_version: 1
+scenario: 5675_pecos_sandbox_qa_empty_start_in_auto
+events:
+  - 5675_pecos_sandbox_qa_events_fill_and_drain
+  - 5675_pecos_sandbox_qa_events_fill_and_drain
+  - 5675_pecos_sandbox_qa_events_fill_and_drain
+</file>
+
+<file path="batch_configs/550_14_car_pick_each.yaml">
+batch_name: full_garage_14_cars_single_pick_each
+layout: 550_w21st
+layout_version: 1
+scenario: 550_w21st_full_start_in_auto_14_trays
+events:
+  - 550_w21st_events_retrieve_from_4
+  - 550_w21st_events_retrieve_from_5
+  - 550_w21st_events_retrieve_from_10
+  - 550_w21st_events_retrieve_from_11
+  - 550_w21st_events_retrieve_from_12
+  - 550_w21st_events_retrieve_from_15
+  - 550_w21st_events_retrieve_from_19
+  - 550_w21st_events_retrieve_from_20
+  - 550_w21st_events_retrieve_from_21
+  - 550_w21st_events_retrieve_from_25
+  - 550_w21st_events_retrieve_from_29
+  - 550_w21st_events_retrieve_from_30
+  - 550_w21st_events_retrieve_from_31
+  - 550_w21st_events_retrieve_from_35
+</file>
+
+<file path="batch_configs/550_15_car_pick_each.yaml">
+batch_name: full_garage_15_cars_single_pick_new_costs
+layout: 550_w21st
+layout_version: 1
+scenario: 550_w21st_full_start_in_auto_15_trays
+events:
+  - 550_w21st_events_retrieve_from_4
+  - 550_w21st_events_retrieve_from_5
+  - 550_w21st_events_retrieve_from_6
+  - 550_w21st_events_retrieve_from_10
+  - 550_w21st_events_retrieve_from_11
+  - 550_w21st_events_retrieve_from_12
+  - 550_w21st_events_retrieve_from_15
+  - 550_w21st_events_retrieve_from_19
+  - 550_w21st_events_retrieve_from_20
+  - 550_w21st_events_retrieve_from_21
+  - 550_w21st_events_retrieve_from_25
+  - 550_w21st_events_retrieve_from_29
+  - 550_w21st_events_retrieve_from_30
+  - 550_w21st_events_retrieve_from_31
+  - 550_w21st_events_retrieve_from_35
+</file>
+
+<file path="batch_configs/550_16_car_pick_each.yaml">
+batch_name: full_garage_16_cars_single_pick_new_costs
+layout: 550_w21st
+layout_version: 1
+scenario: 550_w21st_full_start_in_auto_16_trays
+events:
+  - 550_w21st_events_retrieve_from_4
+  - 550_w21st_events_retrieve_from_5
+  - 550_w21st_events_retrieve_from_6
+  - 550_w21st_events_retrieve_from_10
+  - 550_w21st_events_retrieve_from_11
+  - 550_w21st_events_retrieve_from_12
+  - 550_w21st_events_retrieve_from_15
+  - 550_w21st_events_retrieve_from_19
+  - 550_w21st_events_retrieve_from_20
+  - 550_w21st_events_retrieve_from_21
+  - 550_w21st_events_retrieve_from_25
+  - 550_w21st_events_retrieve_from_29
+  - 550_w21st_events_retrieve_from_30
+  - 550_w21st_events_retrieve_from_31
+  - 550_w21st_events_retrieve_from_33
+  - 550_w21st_events_retrieve_from_35
+</file>
+
+<file path="scenario/events/__init__.py">
+from .event_base import EventContext, EventBase
+from .move_agv_event import MoveAgvEvent
+from .move_tray_event import MoveTrayEvent
+from .patron_arrival_event import PatronArrivalEvent
+from .repark_tray_event import ReparkTrayEvent
+from .retrieve_request_event import RetrieveRequestEvent
+from .sleep_event import SleepEvent
+__all__ = [
+    "EventContext",
+    "EventBase",
+    "MoveAgvEvent",
+    "MoveTrayEvent",
+    "PatronArrivalEvent",
+    "ReparkTrayEvent",
+    "RetrieveRequestEvent",
+    "SleepEvent",
+]
+</file>
+
+<file path="scenario/events/event_base.py">
+from abc import ABC, abstractmethod
+import dataclasses
+from typing import Callable
+from rclpy.client import Client
+from rclpy.clock import Clock
+from rclpy.task import Future
+from rclpy.timer import Timer
+from common_py.general_utils import guid_to_string
+from interfaces.msg import DiscreteGarageState, DispatchReport, SchedulerJob
+from interfaces.srv import SimEvent
+from sim_metrics.csv_metrics_utils import SimEventMetrics
+@dataclasses.dataclass
+class EventContext:
+    sim_event_client: Client
+    create_timer: Callable[[float, Callable], Timer]
+    get_clock: Callable[[], Clock]
+    retrieve_req_payload_ids: set[str]
+    discrete_garage_state: DiscreteGarageState | None = None
+    dispatch_report: DispatchReport | None = None
+class EventBase(ABC):
+    NAME: str
+    UPDATE_TIMER_PERIOD_SEC: float = 1.0
+    def __init__(
+        self, event_id: int, context: EventContext, job_type: int | None = None
+    ):
+        self.id: int = event_id
+        self._context: EventContext = context
+        self._wait_for_job_completion: bool = False
+        self._event_handled: bool = False
+        self._job_finished: bool = False
+        self._job_tracker: SchedulerJobTracker | None = (
+            SchedulerJobTracker(context, job_type) if job_type is not None else None
+        )
+        self._metrics: SimEventMetrics | None = (
+            SimEventMetrics(self.NAME, self._context.get_clock().now().nanoseconds)
+            if job_type is not None
+            else None
+        )
+        self._update_timer: Timer | None = None
+        self._sim_event_future: Future | None = None
+        self._sim_event_response: SimEvent.Response | None = None
+        self._sim_event_failed: bool = False
+        self._has_logged_job: bool = False
+        self._has_logged_wait_for_job: bool = False
+        self._has_logged_wait_for_event: bool = False
+    @abstractmethod
+    def _execute(self, event_yaml: dict) -> None: ...
+    @abstractmethod
+    def _is_event_handled(self) -> bool: ...
+    def execute(self, event_yaml: dict) -> None:
+        starting_event_msg: str = f"Starting event {self.id}: '{self.NAME}'"
+        print(f"\n{starting_event_msg}")
+        print("-" * len(starting_event_msg))
+        self._update_timer = self._context.create_timer(
+            self.UPDATE_TIMER_PERIOD_SEC, self._update
+        )
+        self._wait_for_job_completion = event_yaml.get("wait_for_job_completion", False)
+        self._execute(event_yaml)
+    def is_event_handled(self) -> bool:
+        return self._event_handled
+    def has_job_finished(self) -> bool:
+        return self._job_finished
+    def did_job_error(self) -> bool:
+        if self._job_tracker is None:
+            return False
+        finished_job = self._job_tracker.get_finished_job()
+        return (
+            finished_job is not None and finished_job.state == SchedulerJob.STATE_ERROR
+        )
+    def get_metrics(self) -> SimEventMetrics | None:
+        return self._metrics
+    def _send_sim_event_request(self, request: SimEvent.Request) -> None:
+        self._sim_event_future = self._context.sim_event_client.call_async(request)
+    def _poll_sim_event_response(self) -> SimEvent.Response | None:
+        if self._sim_event_response is not None:
+            return self._sim_event_response
+        if self._sim_event_future is None or not self._sim_event_future.done():
+            return None
+        self._sim_event_response = self._sim_event_future.result()
+        if self._sim_event_response is None:
+            return None
+        if not self._sim_event_response.success:
+            print(
+                f"Failed to request {self.NAME} sim event: "
+                f"{self._sim_event_response.message}"
+            )
+            self._sim_event_failed = True
+        else:
+            print(f"Successfully requested {self.NAME} sim event")
+        return self._sim_event_response
+    def _is_sim_event_response_ready(self) -> bool:
+        return self._poll_sim_event_response() is not None
+    def _update(self) -> None:
+        if self._event_handled and self._job_finished:
+            if self._update_timer is not None:
+                self._update_timer.cancel()
+            return
+        # Update _event_handled and _job_finished statuses but only if it is False
+        # (no need to check once True)
+        self._event_handled = self._event_handled or self._update_event_handled()
+        self._job_finished = self._job_finished or self._update_job_finished()
+    def _update_event_handled(self) -> bool:
+        if not self._is_event_handled():
+            if not self._has_logged_wait_for_event:
+                self._has_logged_wait_for_event = True
+                print(f"Waiting for event {self.id} to be handled")
+            return False
+        if self._job_tracker is None:
+            return True
+        tracked_job_guid: str | None = (
+            self._job_tracker.get_tracked_job_guid()
+            if self._job_tracker.has_new_job_appeared()
+            else None
+        )
+        if tracked_job_guid is None:
+            return False
+        # Log tracked job for event if we haven't already
+        if not self._has_logged_job:
+            self._has_logged_job = True
+            print(
+                f"  Event {self.id} detected new job [guid={self._job_tracker.get_tracked_job_guid()}]"
+            )
+        if self._wait_for_job_completion:
+            if not self._has_logged_wait_for_job:
+                self._has_logged_wait_for_job = True
+                print(
+                    f"Waiting for event {self.id} job to finish [guid={self._job_tracker.get_tracked_job_guid()}]"
+                )
+            return self._job_tracker.has_job_finished()
+        # We have a tracked job and are not waiting for completion, so the event can be
+        # considered as handled
+        return True
+    def _update_job_finished(self) -> bool:
+        if self._job_tracker is None:
+            return True
+        self._job_tracker.update()
+        finished_job: SchedulerJob | None = self._job_tracker.get_finished_job()
+        if finished_job is not None:
+            print(
+                f"  Event {self.id} job has finished [guid={self._job_tracker.get_tracked_job_guid()}]"
+            )
+            if self._metrics:
+                self._metrics.update(finished_job)
+            return True
+        return False
+class SchedulerJobTracker:
+    """
+    Tracks the SchedulerJob created by an event. Captures a snapshot of pre-existing
+    jobs of a given type before the event is triggered, then identifies the first new
+    job of that type to appear in the dispatch report as belonging to the event.
+    """
+    def __init__(self, context: EventContext, job_type: int):
+        self._context: EventContext = context
+        self._job_type: int = job_type
+        self._pre_existing_guids: set[str] = set()
+        self._tracked_guid: str | None = None
+        self._finished_job: SchedulerJob | None = None
+        self._snapshot_existing_jobs()
+    def has_new_job_appeared(self) -> bool:
+        return self._tracked_guid is not None
+    def has_job_finished(self) -> bool:
+        return self._finished_job is not None
+    def get_tracked_job_guid(self) -> str | None:
+        return self._tracked_guid
+    def get_finished_job(self) -> SchedulerJob | None:
+        return self._finished_job
+    def update(self) -> None:
+        # No need to update if we don't have a dispatch_report or if we already have a
+        # _tracked_guid and _finished_job
+        if self._context.dispatch_report is None:
+            return
+        if (self._tracked_guid is not None) and (self._finished_job is not None):
+            return
+        for job in self._context.dispatch_report.jobs:
+            # Skip job if the type does not match our expected job type
+            if job.type != self._job_type:
+                continue
+            guid = guid_to_string(job.guid)
+            # Update _tracked_guid if job GUID is new
+            if (self._tracked_guid is None) and (guid not in self._pre_existing_guids):
+                self._tracked_guid = guid
+            # Update _finished_job if we are tracking a job GUID and that job is no
+            # longer executing
+            if (
+                (self._tracked_guid is not None)
+                and (guid == self._tracked_guid)
+                and (self._finished_job is None)
+                and (
+                    job.state in [SchedulerJob.STATE_SUCCESS, SchedulerJob.STATE_ERROR]
+                )
+            ):
+                self._finished_job = job
+    def _snapshot_existing_jobs(self) -> None:
+        if self._context.dispatch_report is None:
+            return
+        for job in self._context.dispatch_report.jobs:
+            if job.type == self._job_type:
+                self._pre_existing_guids.add(guid_to_string(job.guid))
+</file>
+
+<file path="scenario/events/move_agv_event.py">
+from interfaces.msg import SchedulerJob
+from interfaces.srv import SimEvent
+from .event_base import EventContext, EventBase
+class MoveAgvEvent(EventBase):
+    NAME = "move_agv"
+    def __init__(self, event_id: int, context: EventContext):
+        super().__init__(event_id, context, SchedulerJob.TYPE_MOVE_AGV)
+    def _execute(self, event_yaml: dict) -> None:
+        request = SimEvent.Request()
+        request.type = self.NAME
+        request.time = 0.0
+        request.resource_id = event_yaml["agv_id"]
+        request.pose.node_id = event_yaml["pose"]["node_id"]
+        request.pose.heading = event_yaml["pose"]["heading"]
+        print(
+            f"Requesting {self.NAME}: agv_id={request.resource_id}"
+            f" node={request.pose.node_id} heading={request.pose.heading}"
+        )
+        self._send_sim_event_request(request)
+    def _is_event_handled(self) -> bool:
+        return self._is_sim_event_response_ready()
+</file>
+
+<file path="scenario/events/move_tray_event.py">
+from interfaces.msg import SchedulerJob
+from interfaces.srv import SimEvent
+from .event_base import EventContext, EventBase
+class MoveTrayEvent(EventBase):
+    NAME = "move_tray"
+    def __init__(self, event_id: int, context: EventContext):
+        super().__init__(event_id, context, SchedulerJob.TYPE_MOVE_TRAY)
+    def _execute(self, event_yaml: dict) -> None:
+        request = SimEvent.Request()
+        request.type = self.NAME
+        request.time = 0.0
+        request.resource_id = event_yaml["tray_id"]
+        request.pose.node_id = event_yaml["pose"]["node_id"]
+        request.pose.heading = event_yaml["pose"]["heading"]
+        print(
+            f"Requesting {self.NAME}: tray_id={request.resource_id}"
+            f" node={request.pose.node_id} heading={request.pose.heading}"
+        )
+        self._send_sim_event_request(request)
+    def _is_event_handled(self) -> bool:
+        return self._is_sim_event_response_ready()
+</file>
+
+<file path="scenario/events/patron_arrival_event.py">
+from rclpy.timer import Timer
+from common_py.general_utils import guid_to_string, parse_guid, random_guid
+from interfaces.msg import BayReport, DiscreteBayState, SchedulerJob
+from interfaces.srv import SimEvent
+from .event_base import EventContext, EventBase
+# Default payload attributes
+DEFAULT_PAYLOAD_MASS_KG: float = 1500.0
+DEFAULT_PAYLOAD_LENGTH_M: float = 4.5
+DEFAULT_PAYLOAD_WIDTH_M: float = 2.0
+DEFAULT_PAYLOAD_HEIGHT_M: float = 1.4
+class PatronArrivalEvent(EventBase):
+    NAME = "patron_arrival"
+    CHECK_BAY_TIMER_PERIOD_SEC: float = 1.0
+    def __init__(self, event_id: int, context: EventContext):
+        super().__init__(event_id, context, SchedulerJob.TYPE_INSERT)
+        self._complete: bool = False
+        self._event_yaml: dict | None = None
+        self._bays_for_insertion: list[DiscreteBayState] = []
+        self._check_bay_timer: Timer | None = None
+    def _execute(self, event_yaml: dict) -> None:
+        self._event_yaml = event_yaml
+        print("Waiting for a bay to be ready for insertion...")
+        self._check_bay_timer = self._context.create_timer(
+            self.CHECK_BAY_TIMER_PERIOD_SEC, self._check_bay
+        )
+    def _is_event_handled(self) -> bool:
+        return self._complete
+    def _get_ready_to_insert_bays(self) -> list[DiscreteBayState]:
+        bays: list[DiscreteBayState] = []
+        if self._context.discrete_garage_state is not None:
+            for bay in self._context.discrete_garage_state.bays:
+                if bay.state == BayReport.STATE_READY_TO_INSERT:
+                    bays.append(bay)
+        return bays
+    def _request_insert(self):
+        request = SimEvent.Request()
+        request.type = self.NAME
+        request.time = 0.0
+        payload_id_str = self._event_yaml.get("payload_id")
+        request.payload.id = (
+            random_guid() if payload_id_str is None else parse_guid(payload_id_str)
+        )
+        request.payload.mass = self._event_yaml.get("mass", DEFAULT_PAYLOAD_MASS_KG)
+        request.payload.length_m = self._event_yaml.get(
+            "length_m", DEFAULT_PAYLOAD_LENGTH_M
+        )
+        request.payload.width_m = self._event_yaml.get(
+            "width_m", DEFAULT_PAYLOAD_WIDTH_M
+        )
+        request.payload.height_m = self._event_yaml.get(
+            "height_m", DEFAULT_PAYLOAD_HEIGHT_M
+        )
+        print(
+            f"Requesting {self.NAME}: payload_id={guid_to_string(request.payload.id)}"
+        )
+        self._send_sim_event_request(request)
+    def _check_bay(self):
+        # The insert request has already been sent, nothing left to do
+        if self._complete:
+            return
+        # Check if any bay is ready for insertion
+        if len(self._bays_for_insertion) == 0:
+            self._bays_for_insertion = self._get_ready_to_insert_bays()
+            # If a bay is ready for insertion, send request
+            if self._bays_for_insertion:
+                print("A bay is ready for insertion")
+                self._request_insert()
+            return
+        # Still waiting for response from enqueue sim event service
+        if not self._is_sim_event_response_ready():
+            print(f"Waiting for {self.NAME} sim event response")
+            return
+        # Loop through the bays that were ready for insertion and check if any have
+        # transitioned to a new state (signaling the bay is handling the insert)
+        for bay_for_insertion in self._bays_for_insertion:
+            for discrete_bay in self._context.discrete_garage_state.bays:
+                if bay_for_insertion.id == discrete_bay.id:
+                    if discrete_bay.state != BayReport.STATE_READY_TO_INSERT:
+                        print(f"Bay {discrete_bay.id} is processing the insertion")
+                        self._check_bay_timer.cancel()
+                        self._complete = True
+</file>
+
+<file path="scenario/events/repark_tray_event.py">
+from interfaces.msg import SchedulerJob
+from interfaces.srv import SimEvent
+from .event_base import EventContext, EventBase
+class ReparkTrayEvent(EventBase):
+    NAME = "repark_tray"
+    def __init__(self, event_id: int, context: EventContext):
+        super().__init__(event_id, context, SchedulerJob.TYPE_REPARK_TRAY)
+    def _execute(self, event_yaml: dict) -> None:
+        request = SimEvent.Request()
+        request.type = self.NAME
+        request.time = 0.0
+        request.resource_id = event_yaml["tray_id"]
+        request.pose.node_id = event_yaml["pose"]["node_id"]
+        request.pose.heading = event_yaml["pose"]["heading"]
+        request.bool_value = event_yaml["allow_reciprocal"]
+        print(
+            f"Requesting {self.NAME}: tray_id={request.resource_id}"
+            f" node={request.pose.node_id} heading={request.pose.heading}"
+            f" allow_reciprocal={request.bool_value}"
+        )
+        self._send_sim_event_request(request)
+    def _is_event_handled(self) -> bool:
+        return self._is_sim_event_response_ready()
+</file>
+
+<file path="scenario/events/retrieve_request_event.py">
+import random
+from common_py.general_utils import guid_to_string, parse_guid
+from interfaces.msg import SchedulerJob
+from interfaces.srv import SimEvent
+from .event_base import EventContext, EventBase
+class RetrieveRequestEvent(EventBase):
+    NAME = "retrieve_request"
+    def __init__(self, event_id: int, context: EventContext):
+        super().__init__(event_id, context, SchedulerJob.TYPE_RETRIEVE)
+    def _execute(self, event_yaml: dict) -> None:
+        request = SimEvent.Request()
+        request.type = self.NAME
+        request.time = 0.0
+        # Get payload ID from YAML or use random payload from garage if not provided
+        payload_id_str = event_yaml.get("payload_id", None)
+        if payload_id_str is None:
+            payload_id_str = self._get_random_payload_id_from_garage()
+            self._context.retrieve_req_payload_ids.add(payload_id_str)
+        request.payload.id = parse_guid(payload_id_str)
+        print(
+            f"Requesting {self.NAME}: payload_id={guid_to_string(request.payload.id)}"
+        )
+        self._send_sim_event_request(request)
+    def _is_event_handled(self) -> bool:
+        return self._is_sim_event_response_ready()
+    def _get_random_payload_id_from_garage(self) -> str:
+        if self._context.discrete_garage_state is None:
+            raise ValueError(
+                f"Cannot execute {self.NAME} event with random payload ID as no discrete_garage_state received yet"
+            )
+        candidates: list[str] = []
+        for payload_state in self._context.discrete_garage_state.payloads:
+            payload_id_str = guid_to_string(payload_state.payload.id)
+            if payload_id_str not in self._context.retrieve_req_payload_ids:
+                candidates.append(payload_id_str)
+        if not candidates:
+            raise ValueError(
+                f"Cannot execute {self.NAME} event as there are no more valid payloads"
+            )
+        return random.choice(candidates)
+</file>
+
+<file path="scenario/events/sleep_event.py">
+import time
+from .event_base import EventContext, EventBase
+class SleepEvent(EventBase):
+    NAME = "sleep"
+    def __init__(self, event_id: int, context: EventContext):
+        super().__init__(event_id, context)
+        self._end_time: float = 0.0
+    def _execute(self, event_yaml: dict) -> None:
+        duration_sec = float(event_yaml.get("duration", 0.0))
+        self._end_time = time.monotonic() + duration_sec
+        if duration_sec > 0:
+            print(f"Sleeping for {duration_sec} seconds...")
+    def _is_event_handled(self) -> bool:
+        return time.monotonic() >= self._end_time
+</file>
+
+<file path="scenario/__init__.py">
+
+</file>
+
+<file path="scenario/exercise_sim_events.py">
+"""
+Tool for exercising sim events
+"""
+import argparse
+import os
+from pathlib import Path
+import rclpy
+from rclpy.node import Node
+import subprocess
+import sys
+from common_py.scenario import load_scenario_by_name
+from interfaces.msg import (
+    DiscreteGarageState,
+    DispatchReport,
+)
+from interfaces.srv import SimEvent
+from scenario.events import (
+    EventContext,
+    EventBase,
+    MoveAgvEvent,
+    MoveTrayEvent,
+    PatronArrivalEvent,
+    ReparkTrayEvent,
+    RetrieveRequestEvent,
+    SleepEvent,
+)
+from sim_metrics.csv_metrics_utils import SimEventMetrics, SimMetricsWriter
+# ROS quality of service profile for best effort subscriptions
+QOS_BEST_EFFORT = rclpy.qos.QoSProfile(
+    history=rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
+    depth=1,
+    reliability=rclpy.qos.QoSReliabilityPolicy.BEST_EFFORT,
+    durability=rclpy.qos.QoSDurabilityPolicy.VOLATILE,
+)
+class EventFactory:
+    # pylint: disable=too-few-public-methods
+    """
+    Factory class used to construct specific Event objects based on type name
+    """
+    _REGISTRY: dict[str, type[EventBase]] = {
+        MoveAgvEvent.NAME: MoveAgvEvent,
+        MoveTrayEvent.NAME: MoveTrayEvent,
+        PatronArrivalEvent.NAME: PatronArrivalEvent,
+        ReparkTrayEvent.NAME: ReparkTrayEvent,
+        RetrieveRequestEvent.NAME: RetrieveRequestEvent,
+        SleepEvent.NAME: SleepEvent,
+    }
+    @staticmethod
+    def create(event_id: int, event_type: str, context: EventContext) -> EventBase:
+        event_cls = EventFactory._REGISTRY.get(event_type)
+        if event_cls is None:
+            raise ValueError(f"Unknown event type: {event_type}")
+        return event_cls(event_id, context)
+class ExerciseSimEventsNode(Node):
+    """
+    ROS node that exercises the sim events
+    """
+    def __init__(self, name: str, events: dict):
+        super().__init__(name)
+        # A future that stores the execution status of this node. It should only be
+        # marked as finished when this node is complete and the simulation can end
+        self.executing: rclpy.Future[bool] = rclpy.Future()
+        # A list of all events parsed from the events file
+        self._all_event_yamls: list[dict] = load_scenario_by_name(events)["events"]
+        # All events that have been started
+        self._handled_events: list[EventBase] = []
+        # Main timer that processes the events on each cycle
+        self._check_events_timer = self.create_timer(1, self._check_events)
+        # A service client for requesting that sim events get enqueued by the simulator
+        self._sim_event_client = self.create_client(
+            SimEvent, "/sim/enqueue_garage_event"
+        )
+        # Subscriber to the discrete garage state to track bay statuses
+        self._discrete_garage_state_subscriber = self.create_subscription(
+            DiscreteGarageState,
+            "/central/discrete_garage_state",
+            self._discrete_garage_state_callback,
+            QOS_BEST_EFFORT,
+        )
+        # Subscriber to dispatch report to track when dispatcher is running
+        self._dispatch_report_subscriber = self.create_subscription(
+            DispatchReport,
+            "/central/report",
+            self._dispatch_report_callback,
+            QOS_BEST_EFFORT,
+        )
+        # Context to share with all EventBase objects
+        self._event_context = EventContext(
+            sim_event_client=self._sim_event_client,
+            create_timer=self.create_timer,
+            get_clock=self.get_clock,
+            retrieve_req_payload_ids=set(),
+            discrete_garage_state=None,
+            dispatch_report=None,
+        )
+        # Wait for sim event service to exist before starting
+        if not self._sim_event_client.wait_for_service(timeout_sec=300):
+            print("Timeout waiting for sim event service")
+            self.executing.set_result(False)
+    def write_metrics(self, output_path: Path):
+        """
+        Write metrics from all events to a CSV file
+        """
+        metrics_writer = SimMetricsWriter(output_path)
+        for event in self._handled_events:
+            metrics: SimEventMetrics | None = event.get_metrics()
+            if metrics is not None:
+                metrics_writer.events.append(metrics)
+        metrics_writer.write_csv()
+    def _start_next_event(self) -> None:
+        """
+        Gets the next event from the YAML, construct it, and executes it
+        """
+        event_num: int = len(self._handled_events)
+        event_yaml: dict = self._all_event_yamls[event_num]
+        event_id = event_num + 1
+        event: EventBase = EventFactory.create(
+            event_id, event_yaml["type"], self._event_context
+        )
+        event.execute(event_yaml)
+        self._handled_events.append(event)
+    def _check_events(self):
+        """
+        Checks the status of the active event and, if finished, starts the next event
+        """
+        # If we just started up (no active event), wait until the dispatcher is running
+        if len(self._handled_events) == 0:
+            ready_to_start = (
+                (self._event_context.discrete_garage_state is not None)
+                and (self._event_context.dispatch_report is not None)
+                and (
+                    self._event_context.dispatch_report.status
+                    == DispatchReport.STATUS_RUNNING
+                )
+            )
+            if ready_to_start:
+                self._start_next_event()
+            else:
+                print("Waiting for dispatcher to start running")
+            return
+        # Still waiting for current event; check again on next cycle
+        if not self._handled_events[-1].is_event_handled():
+            return
+        # All events have been fired; wait for pending jobs to complete before exiting
+        if len(self._handled_events) == len(self._all_event_yamls):
+            if all(event.has_job_finished() for event in self._handled_events):
+                failed_events_or_none = [
+                    e for e in self._handled_events if e.did_job_error()
+                ]
+                if failed_events_or_none:
+                    print(
+                        f"{len(failed_events_or_none)} event(s) finished with an error: "
+                        + ", ".join(str(e.id) for e in failed_events_or_none)
+                    )
+                self.executing.set_result(len(failed_events_or_none) == 0)
+            return
+        # There are more events to handle so start the next event
+        self._start_next_event()
+    def _discrete_garage_state_callback(self, msg: DiscreteGarageState):
+        self._event_context.discrete_garage_state = msg
+    def _dispatch_report_callback(self, msg: DispatchReport):
+        self._event_context.dispatch_report = msg
+def end_simulation():
+    """Sends a SIGINT to all running ROS nodes except this process."""
+    try:
+        subprocess.run(
+            f'pgrep -f "ros-args" | grep -v {os.getpid()} | awk \'{{print "kill -2 " $1}}\' | sh',
+            shell=True,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        print(f"Error while killing simulation process: {e}")
+# Script arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("-l", "--layout", help="Layout name", type=str, required=True)
+parser.add_argument(
+    "-e", "--events", help="Scenario file name with events", type=str, required=True
+)
+parser.add_argument(
+    "-o",
+    "--output",
+    help="Output filename containing metrics",
+    type=str,
+    required=False,
+    default="/tmp/sim_results/events_summary.csv",
+)
+def main():
+    """ROS executable entry function."""
+    success = False
+    try:
+        args = parser.parse_args()
+        rclpy.init()
+        print(
+            f"Exercising sim events with layout {args.layout} and events {args.events}"
+        )
+        node = ExerciseSimEventsNode("sim_event_exerciser", args.events)
+        rclpy.spin_until_future_complete(node, node.executing)
+        success = node.executing.result()
+        node.write_metrics(Path(args.output))
+        print("Ending simulation...")
+        end_simulation()
+    except Exception as e:
+        print(f"Exception while exercising sim events: {e}")
+        sys.exit(1)
+    sys.exit(0 if success else 1)
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_combined_empty_start_in_auto.yaml">
+---
+layout: 5675_pecos_sandbox_combined
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 9
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 17
+        heading: 90
+  trays:
+    - id: 2
+      garage_pose:
+        node_id: 2
+        heading: 90
+    - id: 3
+      garage_pose:
+        node_id: 3
+        heading: 90
+    - id: 5
+      garage_pose:
+        node_id: 5
+        heading: 90
+    - id: 6
+      garage_pose:
+        node_id: 6
+        heading: 90
+    - id: 15
+      garage_pose:
+        node_id: 15
+        heading: 90
+    - id: 17
+      garage_pose:
+        node_id: 17
+        heading: 90
+    - id: 19
+      garage_pose:
+        node_id: 19
+        heading: 90
+    - id: 20
+      garage_pose:
+        node_id: 20
+        heading: 90
+    - id: 23
+      garage_pose:
+        node_id: 23
+        heading: 90
+    - id: 24
+      garage_pose:
+        node_id: 24
+        heading: 90
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1
+  - type: set_bay_readiness_ratio
+    time: 0.5
+    bay_readiness_ratio: 1.0
+  - type: start_dispatch
+    time: 1.0
+  - type: set_auto_planner
+    time: 5.0
+    enabled: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_combined_events_drain_from_full.yaml">
+---
+events:
+  - type: retrieve_request
+    payload_id: 00010022-0000-0000-0000-000000000022
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00010033-0000-0000-0000-000000000033
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00010055-0000-0000-0000-000000000055
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00020047-0000-0000-0000-000000000066
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00020015-0000-0000-0000-000000001515
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00030017-0000-0000-0000-000000001717
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00040019-0000-0000-0000-000000001919
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00050020-0000-0000-0000-000000002020
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00060023-0000-0000-0000-000000002323
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00070024-0000-0000-0000-000000002424
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_combined_events_fill_from_empty.yaml">
+---
+events:
+  - type: patron_arrival
+    payload_id: 00000000-0000-0000-0000-000000000001
+    length_m: 5.791
+    width_m: 2.21
+  - type: patron_arrival
+    payload_id: 00000000-0000-0000-0000-000000000006
+    length_m: 5.791
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00000000-0000-0000-0000-000000000011
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00000000-0000-0000-0000-000000000019
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00020015-0000-0000-0000-000000001515
+    length_m: 5.791
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00030017-0000-0000-0000-000000001717
+    length_m: 5.791
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00040019-0000-0000-0000-000000001919
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00050020-0000-0000-0000-000000002020
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00060023-0000-0000-0000-000000002323
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00070024-0000-0000-0000-000000002424
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_combined_events_move_each_node.yaml">
+---
+events:
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 1
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 2
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 3
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 4
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 5
+      heading: -90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 6
+      heading: -90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 7
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 8
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 9
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 10
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 11
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 13
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 14
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 15
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 16
+      heading: -90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 17
+      heading: -90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 18
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 19
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 20
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 21
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 22
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 23
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 24
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 25
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 26
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 27
+      heading: 90
+  - type: done_events_wait_jobs_end_simulation
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_combined_full_start_in_auto.yaml">
+---
+layout: 5675_pecos_sandbox_combined
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 15
+        heading: 90
+  trays:
+    - id: 2
+      garage_pose:
+        node_id: 2
+        heading: 90
+      payload:
+        id: 00010022-0000-0000-0000-000000000022
+        length_m: 5.182
+        width_m: 2.21
+    - id: 3
+      garage_pose:
+        node_id: 3
+        heading: 90
+      payload:
+        id: 00010033-0000-0000-0000-000000000033
+        length_m: 5.182
+        width_m: 2.21
+    - id: 5
+      garage_pose:
+        node_id: 5
+        heading: 90
+      payload:
+        id: 00010055-0000-0000-0000-000000000055
+        length_m: 5.182
+        width_m: 2.21
+    - id: 6
+      garage_pose:
+        node_id: 6
+        heading: 90
+      payload:
+        id: 00020047-0000-0000-0000-000000000066
+        length_m: 5.182
+        width_m: 2.21
+    - id: 15
+      garage_pose:
+        node_id: 15
+        heading: 90
+      payload:
+        id: 00020015-0000-0000-0000-000000001515
+        length_m: 5.182
+        width_m: 2.21
+    - id: 17
+      garage_pose:
+        node_id: 17
+        heading: 90
+      payload:
+        id: 00030017-0000-0000-0000-000000001717
+        length_m: 5.182
+        width_m: 2.21
+    - id: 19
+      garage_pose:
+        node_id: 19
+        heading: 90
+      payload:
+        id: 00040019-0000-0000-0000-000000001919
+        length_m: 5.182
+        width_m: 2.21
+    - id: 20
+      garage_pose:
+        node_id: 20
+        heading: 90
+      payload:
+        id: 00050020-0000-0000-0000-000000002020
+        length_m: 5.182
+        width_m: 2.21
+    - id: 23
+      garage_pose:
+        node_id: 23
+        heading: 90
+      payload:
+        id: 00060023-0000-0000-0000-000000002323
+        length_m: 5.182
+        width_m: 2.21
+    - id: 24
+      garage_pose:
+        node_id: 24
+        heading: 90
+      payload:
+        id: 00070024-0000-0000-0000-000000002424
+        length_m: 5.182
+        width_m: 2.21
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1
+  - type: set_bay_readiness_ratio
+    time: 0.0
+    bay_readiness_ratio: 0.0
+  - type: start_dispatch
+    time: 1.0
+  - type: set_auto_planner
+    time: 5.0
+    enabled: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_combined_single_agv_start_in_manual.yaml">
+---
+layout: 5675_pecos_sandbox_combined
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 13
+        heading: 90
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 2
+  - type: set_bay_readiness_ratio
+    time: 0.0
+    bay_readiness_ratio: 0.0
+  - type: start_dispatch
+    time: 1.0
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_eng_empty_no_op.yaml">
+---
+layout: 5675_pecos_sandbox_eng
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+  trays:
+    - id: 2
+      garage_pose:
+        node_id: 2
+        heading: 90
+    - id: 3
+      garage_pose:
+        node_id: 3
+        heading: 90
+    - id: 5
+      garage_pose:
+        node_id: 5
+        heading: 90
+    - id: 6
+      garage_pose:
+        node_id: 6
+        heading: 90
+events: []
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_eng_empty_start_in_auto.yaml">
+---
+layout: 5675_pecos_sandbox_eng
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+  trays:
+    - id: 2
+      garage_pose:
+        node_id: 2
+        heading: 90
+    - id: 3
+      garage_pose:
+        node_id: 3
+        heading: 90
+    - id: 5
+      garage_pose:
+        node_id: 5
+        heading: 90
+    - id: 6
+      garage_pose:
+        node_id: 6
+        heading: 90
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1
+  - type: set_bay_readiness_ratio
+    time: 0.5
+    bay_readiness_ratio: 1.0
+  - type: start_dispatch
+    time: 1.0
+  - type: set_auto_planner
+    time: 5.0
+    enabled: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_eng_events_drain_from_full.yaml">
+---
+events:
+  - type: retrieve_request
+    payload_id: 00010022-0000-0000-0000-000000000022
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00010033-0000-0000-0000-000000000033
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00010055-0000-0000-0000-000000000055
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00020047-0000-0000-0000-000000000066
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_eng_events_fill_from_empty.yaml">
+---
+events:
+  - type: patron_arrival
+    payload_id: 00000000-0000-0000-0000-000000000001
+    length_m: 5.791
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00000000-0000-0000-0000-000000000006
+    length_m: 5.791
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00000000-0000-0000-0000-000000000011
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00000000-0000-0000-0000-000000000019
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_eng_events_move_each_node.yaml">
+---
+events:
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 1
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 2
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 3
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 4
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 5
+      heading: -90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 6
+      heading: -90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 7
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 8
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 9
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 10
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 11
+      heading: 90
+  - type: done_events_wait_jobs_end_simulation
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_eng_full_no_op.yaml">
+---
+layout: 5675_pecos_sandbox_eng
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+  trays:
+    - id: 2
+      garage_pose:
+        node_id: 2
+        heading: 90
+      payload:
+        id: 00010022-0000-0000-0000-000000000022
+        length_m: 5.182
+        width_m: 2.21
+    - id: 3
+      garage_pose:
+        node_id: 3
+        heading: 90
+      payload:
+        id: 00010033-0000-0000-0000-000000000033
+        length_m: 5.182
+        width_m: 2.21
+    - id: 5
+      garage_pose:
+        node_id: 5
+        heading: 90
+      payload:
+        id: 00010055-0000-0000-0000-000000000055
+        length_m: 5.182
+        width_m: 2.21
+    - id: 6
+      garage_pose:
+        node_id: 6
+        heading: 90
+      payload:
+        id: 00020047-0000-0000-0000-000000000066
+        length_m: 5.182
+        width_m: 2.21
+events: []
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_eng_full_start_in_auto.yaml">
+---
+layout: 5675_pecos_sandbox_eng
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+  trays:
+    - id: 2
+      garage_pose:
+        node_id: 2
+        heading: 90
+      payload:
+        id: 00010022-0000-0000-0000-000000000022
+        length_m: 5.182
+        width_m: 2.21
+    - id: 3
+      garage_pose:
+        node_id: 3
+        heading: 90
+      payload:
+        id: 00010033-0000-0000-0000-000000000033
+        length_m: 5.182
+        width_m: 2.21
+    - id: 5
+      garage_pose:
+        node_id: 5
+        heading: 90
+      payload:
+        id: 00010055-0000-0000-0000-000000000055
+        length_m: 5.182
+        width_m: 2.21
+    - id: 6
+      garage_pose:
+        node_id: 6
+        heading: 90
+      payload:
+        id: 00020047-0000-0000-0000-000000000066
+        length_m: 5.182
+        width_m: 2.21
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1
+  - type: set_bay_readiness_ratio
+    time: 0.0
+    bay_readiness_ratio: 0.0
+  - type: start_dispatch
+    time: 1.0
+  - type: set_auto_planner
+    time: 5.0
+    enabled: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_qa_empty_no_op.yaml">
+---
+layout: 5675_pecos_sandbox_qa
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 15
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 17
+        heading: 90
+  trays:
+    - id: 15
+      garage_pose:
+        node_id: 15
+        heading: 90
+    - id: 17
+      garage_pose:
+        node_id: 17
+        heading: 90
+    - id: 19
+      garage_pose:
+        node_id: 19
+        heading: 90
+    - id: 20
+      garage_pose:
+        node_id: 20
+        heading: 90
+    - id: 23
+      garage_pose:
+        node_id: 23
+        heading: 90
+    - id: 24
+      garage_pose:
+        node_id: 24
+        heading: 90
+events: []
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_qa_empty_start_in_auto.yaml">
+---
+layout: 5675_pecos_sandbox_qa
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 15
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 17
+        heading: 90
+  trays:
+    - id: 15
+      garage_pose:
+        node_id: 15
+        heading: 90
+    - id: 17
+      garage_pose:
+        node_id: 17
+        heading: 90
+    - id: 19
+      garage_pose:
+        node_id: 19
+        heading: 90
+    - id: 20
+      garage_pose:
+        node_id: 20
+        heading: 90
+    - id: 23
+      garage_pose:
+        node_id: 23
+        heading: 90
+    - id: 24
+      garage_pose:
+        node_id: 24
+        heading: 90
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1
+  - type: set_bay_readiness_ratio
+    time: 0.5
+    bay_readiness_ratio: 1.0
+  - type: start_dispatch
+    time: 1.0
+  - type: set_auto_planner
+    time: 5.0
+    enabled: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_qa_events_drain_from_full.yaml">
+---
+events:
+  - type: retrieve_request
+    payload_id: 00020015-0000-0000-0000-000000001515
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00030017-0000-0000-0000-000000001717
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00040019-0000-0000-0000-000000001919
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00050020-0000-0000-0000-000000002020
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00060023-0000-0000-0000-000000002323
+    wait_for_job_completion: true
+  - type: retrieve_request
+    payload_id: 00070024-0000-0000-0000-000000002424
+    wait_for_job_completion: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_qa_events_fill_from_empty.yaml">
+---
+events:
+  - type: patron_arrival
+    payload_id: 00020015-0000-0000-0000-000000001515
+    length_m: 5.791
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00030017-0000-0000-0000-000000001717
+    length_m: 5.791
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00040019-0000-0000-0000-000000001919
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00050020-0000-0000-0000-000000002020
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00060023-0000-0000-0000-000000002323
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+  - type: patron_arrival
+    payload_id: 00070024-0000-0000-0000-000000002424
+    length_m: 5.182
+    width_m: 2.21
+    wait_for_job_completion: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_qa_events_move_each_node.yaml">
+---
+events:
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 13
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 14
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 15
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 16
+      heading: -90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 17
+      heading: -90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 18
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 19
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 20
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 21
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 22
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 23
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 24
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 25
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 26
+      heading: 90
+  - type: wait_for_any_non_busy_agv
+    sleep: 1.0
+  - type: move_agv
+    sleep: 1.0
+    agv_id: 1
+    pose:
+      node_id: 27
+      heading: 90
+  - type: done_events_wait_jobs_end_simulation
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_qa_full_no_op.yaml">
+---
+layout: 5675_pecos_sandbox_qa
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 15
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 17
+        heading: 90
+  trays:
+    - id: 15
+      garage_pose:
+        node_id: 15
+        heading: 90
+      payload:
+        id: 00020015-0000-0000-0000-000000001515
+        length_m: 5.182
+        width_m: 2.21
+    - id: 17
+      garage_pose:
+        node_id: 17
+        heading: 90
+      payload:
+        id: 00030017-0000-0000-0000-000000001717
+        length_m: 5.182
+        width_m: 2.21
+    - id: 19
+      garage_pose:
+        node_id: 19
+        heading: 90
+      payload:
+        id: 00040019-0000-0000-0000-000000001919
+        length_m: 5.182
+        width_m: 2.21
+    - id: 20
+      garage_pose:
+        node_id: 20
+        heading: 90
+      payload:
+        id: 00050020-0000-0000-0000-000000002020
+        length_m: 5.182
+        width_m: 2.21
+    - id: 23
+      garage_pose:
+        node_id: 23
+        heading: 90
+      payload:
+        id: 00060023-0000-0000-0000-000000002323
+        length_m: 5.182
+        width_m: 2.21
+    - id: 24
+      garage_pose:
+        node_id: 24
+        heading: 90
+      payload:
+        id: 00070024-0000-0000-0000-000000002424
+        length_m: 5.182
+        width_m: 2.21
+events: []
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_qa_full_start_in_auto.yaml">
+---
+layout: 5675_pecos_sandbox_qa
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 15
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 17
+        heading: 90
+  trays:
+    - id: 15
+      garage_pose:
+        node_id: 15
+        heading: 90
+      payload:
+        id: 00020015-0000-0000-0000-000000001515
+        length_m: 5.182
+        width_m: 2.21
+    - id: 17
+      garage_pose:
+        node_id: 17
+        heading: 90
+      payload:
+        id: 00030017-0000-0000-0000-000000001717
+        length_m: 5.182
+        width_m: 2.21
+    - id: 19
+      garage_pose:
+        node_id: 19
+        heading: 90
+      payload:
+        id: 00040019-0000-0000-0000-000000001919
+        length_m: 5.182
+        width_m: 2.21
+    - id: 20
+      garage_pose:
+        node_id: 20
+        heading: 90
+      payload:
+        id: 00050020-0000-0000-0000-000000002020
+        length_m: 5.182
+        width_m: 2.21
+    - id: 23
+      garage_pose:
+        node_id: 23
+        heading: 90
+      payload:
+        id: 00060023-0000-0000-0000-000000002323
+        length_m: 5.182
+        width_m: 2.21
+    - id: 24
+      garage_pose:
+        node_id: 24
+        heading: 90
+      payload:
+        id: 00070024-0000-0000-0000-000000002424
+        length_m: 5.182
+        width_m: 2.21
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1
+  - type: set_bay_readiness_ratio
+    time: 0.0
+    bay_readiness_ratio: 0.0
+  - type: start_dispatch
+    time: 1.0
+  - type: set_auto_planner
+    time: 5.0
+    enabled: true
+</file>
+
+<file path="scenarios/5675_pecos_sandbox_qa_single_agv_start_in_manual.yaml">
+---
+layout: 5675_pecos_sandbox_qa
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 13
+        heading: 90
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 2
+  - type: set_bay_readiness_ratio
+    time: 0.0
+    bay_readiness_ratio: 0.0
+  - type: start_dispatch
+    time: 1.0
+</file>
+
+<file path="scenarios/charge_then_repark.yaml">
+---
+layout: 5675_pecos_sandbox_eng
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 7
+        heading: 90
+  trays:
+    - id: 1
+      garage_pose:
+        node_id: 2
+        heading: 90
+      payload:
+        id: 00000000-0000-0000-0000-000000000001
+        length_m: 5.0
+        width_m: 2.1
+    - id: 2
+      garage_pose:
+        node_id: 7
+        heading: 90
+    - id: 3
+      garage_pose:
+        node_id: 3
+        heading: 90
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1 # auto
+  - type: start_dispatch
+    time: 1.0
+  - type: set_agv_battery_fraction
+    time: 1.1
+    agv_id: 2
+    battery_fraction: 1.0 # fully charged
+  - type: set_agv_battery_fraction
+    time: 150.0
+    agv_id: 2
+    battery_fraction: 0.09 # below the threshold to free the AGV from the bay
+  - type: set_agv_battery_fraction
+    time: 189.0
+    agv_id: 2
+    battery_fraction: 1.0 # fully charged
+  - type: repark_tray # This repark request happens well after the idle time threshold
+    time: 190.0
+    tray_id: 1
+    pose:
+      node_id: 5
+      heading: 90
+    allow_reciprocal: true
+</file>
+
+<file path="scenarios/clean_garage_unstashes_waypoint_tray.yaml">
+---
+layout: 5675_pecos_sandbox_eng
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 8
+        heading: 90
+  trays:
+    - id: 1
+      garage_pose:
+        node_id: 1 # Waypoint
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 7 # Bay
+        heading: 90
+events: []
+</file>
+
+<file path="scenarios/events_insert_retrieve.yaml">
+---
+events:
+  - type: wait_until_previous_completed
+    sleep: 10.0
+  - type: patron_arrival
+    time: 5.5
+    payload_id: 00000000-0000-0000-0000-000000001234
+    length_m: 4.5
+    width_m: 2.0
+  # Trying to make the simulator insert using multiple bays offset by half second.
+  - type: patron_arrival
+    sleep: 1.0
+    time: 6.0
+    payload_id: 00000000-0000-0000-0000-000000011111
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 10.0
+  # Trying to make the simulator insert using multiple bays at a time.
+  - type: patron_arrival
+    time: 5.5
+    payload_id: 00000000-0000-0000-0000-000000016543
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 5.5
+    payload_id: 00000000-0000-0000-0000-000000017654
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 10.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000044211
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 5.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000034311
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 5.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000014241
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 5.0
+  - type: patron_arrival
+    sleep: 7.0
+    payload_id: 00000000-0000-0000-0000-000000022222
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 15.0
+  - type: retrieve_request
+    sleep: 9.0
+    payload_id: 00000000-0000-0000-0000-000000001234
+  - type: wait_until_previous_completed
+    sleep: 10.0
+  - type: retrieve_request
+    sleep: 12.0
+    payload_id: 00000000-0000-0000-0000-000000011111
+  - type: wait_until_previous_completed
+    sleep: 13.0
+  - type: patron_arrival
+    time: 5.5
+    payload_id: 00000000-0000-0000-0000-000000001234
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 5.0
+  - type: retrieve_request
+    sleep: 12.0
+    payload_id: 00000000-0000-0000-0000-000000000013
+  - type: wait_until_previous_completed
+    sleep: 5.0
+  - type: patron_arrival
+    time: 5.5
+    payload_id: 00000000-0000-0000-0000-000000033333
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000031131
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000021121
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000024121
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000024421
+    length_m: 4.5
+    width_m: 2.0
+  - type: retrieve_request
+    sleep: 12.0
+    payload_id: 00000000-0000-0000-0000-000000011111
+  - type: wait_until_previous_completed
+    sleep: 5.0
+  - type: patron_arrival
+    time: 5.5
+    payload_id: 00000000-0000-0000-0000-000000044444
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_until_previous_completed
+    sleep: 4.0
+  - type: retrieve_request
+    sleep: 5.0
+    payload_id: 00000000-0000-0000-0000-000000022222
+  # This should fill up, when used on Fulton garage.
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000055444
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000055544
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000055554
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000055555
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000065555
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066555
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066655
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066665
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066666
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066667
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066668
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066669
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066670
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066671
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066672
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066673
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066674
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066675
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066676
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066677
+    length_m: 4.5
+    width_m: 2.0
+  - type: patron_arrival
+    time: 0.0
+    payload_id: 00000000-0000-0000-0000-000000066678
+    length_m: 4.5
+    width_m: 2.0
+</file>
+
+<file path="scenarios/exercise_576_eccles.yaml">
+---
+events:
+  - mode: 1
+    time: 0.5
+    type: set_dispatch_mode
+  - type: set_node_disabledness
+    time: 1.0
+    node_id: 26
+    disable: true
+  - time: 2.0
+    type: start_dispatch
+  - enabled: true
+    time: 10
+    type: set_auto_planner
+initial_conditions:
+  agvs:
+    - garage_pose:
+        heading: 180
+        node_id: 57
+      id: 1
+    - garage_pose:
+        heading: 0
+        node_id: 12
+      id: 2
+  trays:
+    - garage_pose:
+        heading: 0
+        node_id: 2
+      id: 2
+      payload:
+        height_m: 1.75
+        id: 0d457086-c673-4a97-8b92-25e82584e851
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 3
+      id: 3
+      payload:
+        height_m: 1.75
+        id: 974094f1-3895-4f43-9c75-d1003d4935a2
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 4
+      id: 4
+      payload:
+        height_m: 1.75
+        id: 9099ed03-4183-41af-8535-335271220ae6
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 5
+      id: 5
+      payload:
+        height_m: 1.75
+        id: 77276063-fe61-4396-aa0a-3a9b6a601d77
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 6
+      id: 6
+      payload:
+        height_m: 1.75
+        id: b9d79243-ed0a-4840-8d33-fd1b54c50eaa
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 7
+      id: 7
+      payload:
+        height_m: 1.75
+        id: e9d29bec-86e5-439b-aa0d-523617c2b7f1
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 90
+        node_id: 9
+      id: 9
+      payload:
+        height_m: 1.75
+        id: 74a7dbc3-0d0c-49e0-9f45-71e3f918dbe7
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 11
+      id: 11
+      payload:
+        height_m: 1.75
+        id: 26dab5a8-1260-46cb-a881-9907fdc4bbfd
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 12
+      id: 12
+      payload:
+        height_m: 1.75
+        id: b5cb3c45-7968-4b2b-b1d4-704c1700b2ee
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 13
+      id: 13
+      payload:
+        height_m: 1.75
+        id: 55111443-1683-4f9b-b721-4a747674461b
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 15
+      id: 15
+      payload:
+        height_m: 1.75
+        id: 6105f28c-f748-4425-b6ae-6f4813399f50
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 16
+      id: 16
+      payload:
+        height_m: 1.75
+        id: 1ed051c5-82d7-4d07-8089-24fe4a953ea5
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 90
+        node_id: 18
+      id: 18
+      payload:
+        height_m: 1.75
+        id: 2ddc219f-7e83-48d6-83eb-b7947facb998
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 90
+        node_id: 20
+      id: 20
+      payload:
+        height_m: 1.75
+        id: 5efac2be-9681-479b-81d0-f0e662a3cdc6
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 29
+      id: 29
+      payload:
+        height_m: 1.75
+        id: f27ff161-01df-4d50-ba54-13687804ed0a
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 49
+      id: 49
+      payload:
+        height_m: 1.75
+        id: 4e071f7f-effe-4f81-920a-afd8e454ad05
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 50
+      id: 50
+      payload:
+        height_m: 1.75
+        id: 9f8f56dd-e365-47f1-a11e-363addac34cf
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 51
+      id: 51
+      payload:
+        height_m: 1.75
+        id: 19c4d9c6-66d8-4ef3-9d79-875efd31a1ce
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 52
+      id: 52
+      payload:
+        height_m: 1.75
+        id: 60a8f268-bb85-4187-a88b-2a989996452c
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 53
+      id: 53
+      payload:
+        height_m: 1.75
+        id: e819a464-294f-4953-b8be-1572c738cdd5
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 54
+      id: 54
+      payload:
+        height_m: 1.75
+        id: 08cfee61-78e4-4a64-aaa1-d722906236b8
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 55
+      id: 55
+      payload:
+        height_m: 1.75
+        id: 809511bd-d31f-49af-be9f-72a876d60b8a
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 56
+      id: 56
+      payload:
+        height_m: 1.75
+        id: 6625db36-b7c9-412e-9964-073115c31910
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 57
+      id: 57
+      payload:
+        height_m: 1.75
+        id: 724bb35b-f665-4a6e-ba36-a40a0a36e7f4
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 59
+      id: 59
+      payload:
+        height_m: 1.75
+        id: 36c7d06a-f2a1-4fa6-a8e3-d2bc01359bd6
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 0
+        node_id: 60
+      id: 60
+      payload:
+        height_m: 1.75
+        id: 801d3862-ca89-4dd8-b5d0-c09750a987f8
+        length_m: 5.182
+        mass_kg: 2000.0
+        reciprocal_to_tray: false
+        width_m: 2.21
+    - garage_pose:
+        heading: 90
+        node_id: 39
+      id: 39
+layout: 576_eccles
+</file>
+
+<file path="scenarios/multisize_inserts_and_retrieves.yaml">
+---
+layout: multisize
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 11
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 9
+        heading: 0
+  trays:
+    - id: 7
+      garage_pose:
+        node_id: 7
+        heading: 0
+    - id: 8
+      garage_pose:
+        node_id: 8
+        heading: 0
+    - id: 9
+      garage_pose:
+        node_id: 9
+        heading: 0
+    - id: 10
+      garage_pose:
+        node_id: 10
+        heading: 90
+    - id: 11
+      garage_pose:
+        node_id: 11
+        heading: 90
+    - id: 12
+      garage_pose:
+        node_id: 12
+        heading: 90
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1 # auto
+  - type: start_dispatch
+    time: 1.0
+  - type: patron_arrival
+    time: 1.5
+    payload_id: 00000000-0000-0000-0000-000000000001
+    length_m: 5.4 # EXTRA_LONG
+    width_m: 2.1
+  - type: patron_arrival
+    time: 2.0
+    payload_id: 00000000-0000-0000-0000-000000000002
+    length_m: 5.0 # STANDARD
+    width_m: 2.1
+  - type: patron_arrival
+    time: 2.5
+    payload_id: 00000000-0000-0000-0000-000000000003
+    length_m: 4.4 # COMPACT
+    width_m: 2.1
+  - type: retrieve_request
+    time: 180.0
+    payload_id: 00000000-0000-0000-0000-000000000002
+  - type: patron_arrival
+    time: 180.5
+    payload_id: 00000000-0000-0000-0000-000000000004
+    length_m: 4.4 # COMPACT
+    width_m: 2.1
+</file>
+
+<file path="scenarios/payload_starts_in_bay.yaml">
+---
+layout: 5675_pecos_sandbox_eng
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+  trays:
+    - id: 1
+      garage_pose:
+        node_id: 7
+        heading: 90
+      payload:
+        id: 00000000-0000-0000-0000-000000001234
+        length_m: 5.0
+        width_m: 2.1
+    - id: 2
+      garage_pose:
+        node_id: 2
+        heading: 90
+    - id: 3
+      garage_pose:
+        node_id: 3
+        heading: 90
+events: []
+</file>
+
+<file path="scenarios/repark_tray.yaml">
+---
+layout: 5675_pecos_sandbox_eng
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+  trays:
+    - id: 1
+      garage_pose:
+        node_id: 2
+        heading: 90
+      payload:
+        id: 00000000-0000-0000-0000-000000000001
+        length_m: 5.0
+        width_m: 2.1
+events: []
+</file>
+
+<file path="scenarios/single_triple_pick_retrieve.yaml">
+---
+layout: 550_w21st
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 3
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 7
+        heading: 90
+  trays:
+    - id: 4
+      garage_pose:
+        node_id: 4
+        heading: -90
+      payload:
+        id: 00010004-0000-0000-0000-000000000004
+        length_m: 4.877
+        width_m: 2.21
+    - id: 5
+      garage_pose:
+        node_id: 5
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-000000000005
+        length_m: 5.791
+        width_m: 2.21
+    - id: 6
+      garage_pose:
+        node_id: 6
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-000000000006
+        length_m: 5.791
+        width_m: 2.21
+    - id: 7
+      garage_pose:
+        node_id: 7
+        heading: -90
+      payload:
+        id: 00010010-0000-0000-0000-00000000000a
+        length_m: 4.877
+        width_m: 2.21
+    - id: 11
+      garage_pose:
+        node_id: 11
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-00000000000b
+        length_m: 5.791
+        width_m: 2.21
+    - id: 12
+      garage_pose:
+        node_id: 12
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-00000000000c
+        length_m: 5.791
+        width_m: 2.21
+    - id: 15
+      garage_pose:
+        node_id: 15
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-00000000000f
+        length_m: 5.791
+        width_m: 2.21
+    - id: 19
+      garage_pose:
+        node_id: 19
+        heading: -90
+      payload:
+        id: 00010019-0000-0000-0000-000000000013
+        length_m: 4.877
+        width_m: 2.21
+    - id: 20
+      garage_pose:
+        node_id: 20
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-000000000014
+        length_m: 5.791
+        width_m: 2.21
+    - id: 21
+      garage_pose:
+        node_id: 21
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-000000000015
+        length_m: 5.791
+        width_m: 2.21
+    - id: 25
+      garage_pose:
+        node_id: 25
+        heading: -90
+      payload:
+        id: 00010025-0000-0000-0000-000000000019
+        length_m: 4.877
+        width_m: 2.21
+    - id: 29
+      garage_pose:
+        node_id: 29
+        heading: -90
+      payload:
+        id: 00010029-0000-0000-0000-00000000001d
+        length_m: 4.877
+        width_m: 2.21
+    - id: 30
+      garage_pose:
+        node_id: 30
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-00000000001e
+        length_m: 5.791
+        width_m: 2.21
+    - id: 31
+      garage_pose:
+        node_id: 31
+        heading: -90
+      payload:
+        id: 00000000-0000-0000-0000-00000000001f
+        length_m: 5.791
+        width_m: 2.21
+    - id: 35
+      garage_pose:
+        node_id: 35
+        heading: -90
+      payload:
+        id: 00010035-0000-0000-0000-000000000023
+        length_m: 4.877
+        width_m: 2.21
+events: []
+</file>
+
+<file path="scenarios/tiny_lot_events_fill.yaml">
+---
+events:
+  - type: wait_for_next_bay_ready_to_insert
+    sleep: 1.0
+  - type: patron_arrival
+    time: 5.0
+    payload_id: 00000000-0000-0000-0000-000000011111
+    length_m: 4.5
+    width_m: 2.0
+  - type: wait_for_next_bay_ready_to_insert
+    sleep: 1.0
+  - type: patron_arrival
+    time: 7.0
+    payload_id: 00000000-0000-0000-0000-000000011112
+    length_m: 4.5
+    width_m: 2.0
+  - type: done_events_wait_jobs_end_simulation
+</file>
+
+<file path="scenarios/tiny_lot_idle.yaml">
+---
+layout: tiny_lot
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: -90
+  trays:
+    - id: 6
+      garage_pose:
+        node_id: 6
+        heading: 0
+    - id: 8
+      garage_pose:
+        node_id: 8
+        heading: 0
+    - id: 9
+      garage_pose:
+        node_id: 1
+        heading: -90
+    - id: 11
+      garage_pose:
+        node_id: 11
+        heading: 0
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1 # auto
+  - type: start_dispatch
+    time: 1.0
+</file>
+
+<file path="scenarios/tiny_lot_move_tray.yaml">
+---
+layout: tiny_lot
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 9
+        heading: 0
+  trays:
+    - id: 1
+      garage_pose:
+        node_id: 1
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 8
+        heading: 0
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1 # auto
+  - type: start_dispatch
+    time: 1.0
+  - type: repark_tray
+    time: 3.0
+    tray_id: 2
+    pose:
+      node_id: 8
+      heading: 180
+</file>
+
+<file path="scenarios/tiny_lot_retrieve.yaml">
+---
+layout: tiny_lot
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 9
+        heading: 0
+  trays:
+    - id: 2
+      garage_pose:
+        node_id: 8
+        heading: 0
+      payload:
+        id: 00000000-0000-0000-0000-000000000001
+        mass: 1800.0
+        length_m: 5.0
+        width_m: 2.1
+        height_m: 1.6
+events:
+  - type: set_dispatch_mode
+    time: 0.5
+    mode: 1 # auto
+  - type: start_dispatch
+    time: 1.0
+  - type: retrieve_request
+    time: 5.0
+    payload_id: 00000000-0000-0000-0000-000000000001
+</file>
+
+<file path="scenarios/try_odp_agv_collide_bay_outbound_node.yaml">
+---
+layout: 576_eccles_mini
+initial_conditions:
+  agvs:
+    - id: 1
+      garage_pose:
+        node_id: 37
+        heading: 90
+    - id: 2
+      garage_pose:
+        node_id: 39
+        heading: 90
+  trays:
+    - id: 2
+      garage_pose:
+        node_id: 37
+        heading: 90
+    - id: 4
+      garage_pose:
+        node_id: 39
+        heading: 90
+events: []
+</file>
+
+<file path="package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>scenario</name>
+  <version>0.0.1</version>
+  <description>Methods and nodes related to scenarios</description>
+  <maintainer email="sw@volleyautomation.com">dev</maintainer>
+  <license>proprietary</license>
+  <exec_depend>common_py</exec_depend>
+  <exec_depend>interfaces</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sim_metrics</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
+</file>
+
+<file path="setup.cfg">
+[develop]
+script_dir=$base/lib/scenario
+[install]
+install_scripts=$base/lib/scenario
+</file>
+
+<file path="setup.py">
+import os
+from glob import glob
+from setuptools import setup
+package_name = "scenario"
+setup(
+    name=package_name,
+    version="0.0.1",
+    packages=[package_name, package_name + ".events"],
+    data_files=[
+        # Install marker file in the package index
+        ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
+        # Include our package.xml file
+        ("share/" + package_name, ["package.xml"]),
+        # Include all scenario files.
+        (
+            os.path.join("share", package_name, "scenarios"),
+            glob(os.path.join("scenarios", "*.yaml")),
+        ),
+    ],
+    install_requires=["setuptools"],
+    zip_safe=True,
+    maintainer="dev",
+    maintainer_email="sw@volleyautomation.com",
+    description="Methods and nodes related to scenarios",
+    license="proprietary",
+    extras_require={
+        "test": [
+            "pytest",
+        ],
+    },
+    entry_points={
+        "console_scripts": [
+            "exercise_sim_events = scenario.exercise_sim_events:main",
+        ],
+    },
+)
+</file>
+
+</files>

@@ -22,6 +22,8 @@ BADGES = {
     "analysis": ("ANALYSIS · ILLUSTRATIVE EXAMPLE", T.violet),
     "concept": ("CONCEPTUAL · INTERNALS NOT IN SNAPSHOT", T.violet),
     "yaml+concept": ("YAML GEOMETRY · CONCEPTUAL INTERNALS", T.violet),
+    "yaml+scenario": ("PECOS YAML · OCCUPANCY FROM SCENARIO FILES", T.green),
+    "inferred": ("LOCATIONS INFERRED FROM LAYOUT NAMES", T.amber),
 }
 
 

@@ -1,0 +1,2626 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+launch/
+  support/
+    recorder.launch.xml
+  bagplay.launch.py
+  bay.launch.py
+  central.launch.py
+  lift.launch.py
+  sim.launch.py
+  vecs.launch.py
+launcher/
+  __init__.py
+  bay_nodes.py
+  central_nodes.py
+  layout_plotter.py
+  lift_nodes.py
+  paths.py
+  sim_nodes.py
+  utils.py
+  vecs_nodes.py
+  vrc_nodes.py
+params/
+  installations/
+    params_1355_fulton.yaml
+    params_360_w_broadway.yaml
+    params_38_gramercy.yaml
+    params_415_east_grand_ave.yaml
+    params_5675_pecos_bench.yaml
+    params_5675_pecos_sandbox_combined.yaml
+    params_5675_pecos_sandbox_eng.yaml
+    params_5675_pecos_sandbox_qa.yaml
+    params_576_eccles_budget_sandbox_mini.yaml
+    params_576_eccles_budget_sandbox.yaml
+    params_576_eccles_half.yaml
+    params_576_eccles_mini.yaml
+    params_576_eccles_no_bay.yaml
+    params_576_eccles_under_vcr.yaml
+    params_576_eccles.yaml
+    params_vrc_sandbox.yaml
+  lifts/
+    params_l8.yaml
+  params_agv.yaml
+  params_b21.yaml
+  params_b7.yaml
+  params_bay.yaml
+  params_central.yaml
+  params_lift.yaml
+  params_sim.yaml
+  params_vecs.yaml
+  params.yaml
+resource/
+  launcher
+scripts/
+  generate_layout.py
+  layout_yaml_to_xml.py
+test/
+  test_launcher_utils.py
+  test_paths.py
+package.xml
+setup.cfg
+setup.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="launch/support/recorder.launch.xml">
+<?xml version="1.0"?>
+<!--
+  Standalone recorder that writes a selected set of topics, services and actions to mcap artifact(s).
+-->
+
+<launch>
+  <!-- Required launch arguments -->
+  <arg name="basename"
+       description="Directory created under output_dir as well as the prefix for recorded mcap files"/>
+
+  <arg name="output_dir"
+       description="Parent directory the basename is created in"/>
+
+  <!-- Defaulted launch arguments -->
+  <!-- The custom_data param reject an empty array, so default to a single placeholder entry -->
+  <arg name="custom_data"
+       default="[unset=]"
+       description="Artifact metadata as a YAML list of key=value strings"/>
+
+  <arg name="exclude_regex"
+       default=""
+       description="Drops topics matched by this regex"/>
+
+  <arg name="node_name"
+       default="recorder"
+       description="Node name, must be unique within the namespace"/>
+
+  <arg name="regex"
+       default=".*"
+       description="Topic selection, matched against fully qualified topic names"/>
+
+  <arg name="split_duration_sec"
+       default="600"
+       description="Split the bag after this many seconds, 0 to disable"/>
+
+  <arg name="split_size_bytes"
+       default="0"
+       description="Split the bag after this many bytes, 0 to disable"/>
+
+
+  <node pkg="rosbag2_transport" exec="recorder" name="$(var node_name)" output="screen" emulate_tty="true">
+    <!-- Remap recorder event topics to the nodes "private" namespace -->
+    <remap from="events/rosbag2_messages_lost" to="~/events/rosbag2_messages_lost"/>
+    <remap from="events/write_split" to="~/events/write_split"/>
+
+    <param name="storage.custom_data" type="yaml" value="$(var custom_data)"/>
+    <param name="storage.max_bagfile_duration" type="int" value="$(var split_duration_sec)"/>
+    <param name="storage.max_bagfile_size" type="int" value="$(var split_size_bytes)"/>
+    <param name="storage.storage_id" type="str" value="mcap"/>
+    <param name="storage.storage_preset_profile" type="str" value="zstd_fast"/>
+    <param name="storage.uri" type="str" value="$(var output_dir)/$(var basename)"/>
+
+    <param name="record.exclude_regex" type="str" value="$(var exclude_regex)"/>
+    <param name="record.regex" type="str" value="$(var regex)"/>
+
+    <!-- The regex and exclude_regex are used for topic matching, disable all record options -->
+    <param name="record.all_actions" type="bool" value="false"/>
+    <param name="record.all_services" type="bool" value="false"/>
+    <param name="record.all_topics" type="bool" value="false"/>
+
+    <!-- Runtime recording does not have TTY, so disable keyboard controls -->
+    <param name="record.disable_keyboard_controls" type="bool" value="true"/>
+
+    <!-- Ensure topics that appear after this node launches are captured -->
+    <param name="record.is_discovery_disabled" type="bool" value="false"/>
+  </node>
+</launch>
+</file>
+
+<file path="launch/bagplay.launch.py">
+# Launch the ROS2 bag play, and the Volley visualization node, and the Foxglove bridge.
+# https://answers.ros.org/question/409285/
+
+import sys
+import re
+import os
+from launch import LaunchDescription
+from launch.actions import ExecuteProcess
+from launch_ros.actions import Node
+
+RE_PARAM_BAGFILE = re.compile(r"bagfile:=(\S+)")
+
+
+def generate_launch_description():
+    bagfile = ""
+    args = sys.argv
+    for arg in args[2:]:
+        m = RE_PARAM_BAGFILE.match(arg)
+        if m:
+            bagfile = m[1]
+            continue
+
+    if not os.path.exists(bagfile):
+        print(f"bagplay.launch.py Error: file not found {bagfile}")
+        raise FileNotFoundError(f"Bag file not found: {bagfile}")
+
+    launch_description_entities = []
+
+    visualizer_node = Node(
+        package="vis",
+        namespace="vis",
+        executable="visualizer_node",
+        name="visualizer",
+        parameters=[{"use_remote_meshes": False}],
+        output="screen",
+        emulate_tty=True,
+        remappings=[
+            ("/rosout", "/sim/rosout"),
+        ],
+    )
+    launch_description_entities.append(visualizer_node)
+
+    foxglove_bridge = ExecuteProcess(
+        cmd=["ros2", "launch", "foxglove_bridge", "foxglove_bridge_launch.xml"]
+    )
+    launch_description_entities.append(foxglove_bridge)
+
+    bagplayer = ExecuteProcess(
+        cmd=[
+            "ros2",
+            "bag",
+            "play",
+            "--loop",
+            bagfile,
+        ],
+        output="screen",
+    )
+    launch_description_entities.append(bagplayer)
+
+    return LaunchDescription(launch_description_entities)
+</file>
+
+<file path="launch/bay.launch.py">
+from launch import LaunchDescription, LaunchDescriptionEntity
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import ComposableNodeContainer, PushRosNamespace, SetRemap
+from launch_ros.substitutions import FindPackageShare
+
+from launcher import bay_nodes
+from launcher import paths
+from launcher import utils
+
+
+def generate_launch_description() -> LaunchDescription:
+    # Load params and launch the nodes
+    params, bay_id = utils.load_params("bay")
+
+    bay_namespace = "/bay/b" + str(bay_id)
+
+    launch_description_entities: list[LaunchDescriptionEntity] = []
+
+    bay_id_to_core_nodes = bay_nodes.get_core_composable_nodes(params)
+    bay_id_to_driver_composable_nodes = bay_nodes.get_driver_composable_nodes(params)
+
+    launch_description_entities.append(
+        ComposableNodeContainer(
+            name="bay_nodes",
+            namespace=bay_namespace,
+            package="rclcpp_components",
+            # Using a composable multithreaded node container because some driver
+            # nodes are blocking and need to be run in their own thread.
+            executable="component_container",
+            arguments=["--executor-type", "multi-threaded"],
+            exec_name="b" + str(bay_id),
+            composable_node_descriptions=bay_id_to_core_nodes[bay_id]
+            + bay_id_to_driver_composable_nodes[bay_id],
+            output="screen",
+            emulate_tty=True,
+            remappings=[
+                ("/rosout", bay_namespace + "/rosout"),
+            ],
+        )
+    )
+
+    artifacts_output_dir = LaunchConfiguration("artifacts_output_dir")
+
+    declare_artifacts_output_dir = DeclareLaunchArgument(
+        "artifacts_output_dir",
+        default_value=paths.get_artifacts_dir(),
+        description="Parent directory for recorded bay artifacts",
+    )
+
+    recorder = GroupAction(
+        [
+            PushRosNamespace(bay_namespace),
+            SetRemap("/rosout", bay_namespace + "/rosout"),
+            IncludeLaunchDescription(
+                FindPackageShare("launcher") / "launch" / "recorder.launch.xml",
+                launch_arguments=[
+                    ("output_dir", artifacts_output_dir),
+                    ("basename", "b" + str(bay_id)),
+                    # This recorder should only record topics in its own namespace.
+                    ("regex", "^" + bay_namespace + "/"),
+                ],
+            ),
+        ]
+    )
+
+    ld = LaunchDescription()
+
+    # Add declared launch arguments before entities or other actions that depend on them
+    ld.add_action(declare_artifacts_output_dir)
+
+    for entity in launch_description_entities:
+        ld.add_entity(entity)
+
+    ld.add_action(recorder)
+
+    return ld
+</file>
+
+<file path="launch/central.launch.py">
+# The launch file run on the central garage server
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription, LaunchDescriptionEntity
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
+from launch.launch_description_sources import AnyLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import ComposableNodeContainer, Node, PushRosNamespace, SetRemap
+from launch_ros.substitutions import FindPackageShare
+
+from launcher import central_nodes
+from launcher import paths
+from launcher import utils
+import os
+
+
+def _get_otel_env_params():
+    host = os.environ.get("OTEL_ENDPOINT_HOST", "")
+    port = os.environ.get("OTEL_ENDPOINT_PORT", "")
+    return {"metrics": {"otel_endpoint": host + ":" + port if host else ""}}
+
+
+def generate_launch_description() -> LaunchDescription:
+    # Load params and launch the nodes
+    # Uses a multithreaded ComposableNodeContainer because the dispatcher uses blocking
+    # service calls.
+    params, _ = utils.load_params("central")
+
+    launch_description_entities: list[LaunchDescriptionEntity] = []
+
+    launch_description_entities.extend(central_nodes.get_standalone_nodes(params))
+
+    composable_nodes = central_nodes.get_composable_nodes(params)
+
+    launch_description_entities.append(
+        ComposableNodeContainer(
+            name="central_nodes",
+            package="rclcpp_components",
+            executable="component_container",
+            arguments=["--executor-type", "multi-threaded"],
+            exec_name="central",
+            namespace="central",
+            composable_node_descriptions=composable_nodes,
+            output="screen",
+            emulate_tty=True,
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        )
+    )
+
+    launch_description_entities.append(
+        Node(
+            package="central",
+            namespace="central",
+            executable="metrics_recorder",
+            name="metrics",
+            parameters=[params, _get_otel_env_params()],
+            output="screen",
+            emulate_tty=True,
+        )
+    )
+
+    # Vis node is needed for supporting Foxglove as the new NOC.
+    visualizer_node = Node(
+        package="vis",
+        namespace="vis",
+        executable="visualizer_node",
+        name="visualizer",
+        parameters=[params],
+        output="screen",
+        emulate_tty=True,
+        remappings=[
+            ("/rosout", "/vis/rosout"),
+        ],
+    )
+    launch_description_entities.append(visualizer_node)
+
+    # Foxglove bridge for supporting the NOC
+    foxglove_launch_file = os.path.join(
+        get_package_share_directory("foxglove_bridge"),
+        "launch",
+        "foxglove_bridge_launch.xml",
+    )
+    launch_description_entities.append(
+        IncludeLaunchDescription(
+            AnyLaunchDescriptionSource(foxglove_launch_file),
+        )
+    )
+
+    artifacts_output_dir = LaunchConfiguration("artifacts_output_dir")
+
+    declare_artifacts_output_dir = DeclareLaunchArgument(
+        "artifacts_output_dir",
+        default_value=paths.get_artifacts_dir(),
+        description="Parent directory for recorded central artifacts",
+    )
+
+    recorder = GroupAction(
+        [
+            PushRosNamespace("central"),
+            SetRemap("/rosout", "/central/rosout"),
+            IncludeLaunchDescription(
+                FindPackageShare("launcher") / "launch" / "recorder.launch.xml",
+                launch_arguments=[
+                    ("output_dir", artifacts_output_dir),
+                    ("basename", "central"),
+                    # Record everything except those that have specific recorders
+                    ("regex", ".*"),
+                    ("exclude_regex", "^/bay/"),
+                ],
+            ),
+        ]
+    )
+
+    ld = LaunchDescription()
+
+    # Add declared launch arguments before entities or other actions that depend on them
+    ld.add_action(declare_artifacts_output_dir)
+
+    for entity in launch_description_entities:
+        ld.add_entity(entity)
+
+    ld.add_action(recorder)
+
+    return ld
+</file>
+
+<file path="launch/lift.launch.py">
+"""
+Launch file for the lift node, only run this for statndalone lift nodes,
+a blift will integrate the lift directly (or maybe launch is in bay.layout.py)
+"""
+
+from launch_ros.actions import ComposableNodeContainer
+from launch import LaunchDescription
+from launcher import utils
+from launcher.lift_nodes import get_composable_nodes
+
+
+def generate_launch_description():
+    # Load parameters from params.yaml, params_lift.yaml and installation
+    # specific parameters.
+    # Also extracts device_id, layout, and installation id from environment
+    # variables.
+    params, device_id = utils.load_params("lift")
+
+    nodes = get_composable_nodes(params, device_id)
+    launch_description_entities = [
+        ComposableNodeContainer(
+            name="lift_nodes",
+            namespace="/lift/l" + str(device_id),
+            package="rclcpp_components",
+            executable="component_container",
+            arguments=["--executor-type", "multi-threaded"],
+            composable_node_descriptions=nodes,
+            output="screen",
+            emulate_tty=True,
+            remappings=[
+                ("/rosout", "/lift/l" + str(device_id) + "/rosout"),
+            ],
+        )
+    ]
+
+    return LaunchDescription(launch_description_entities)
+</file>
+
+<file path="launch/sim.launch.py">
+# The launch file that launches a simulation
+
+import sys
+from launch import LaunchDescription
+
+from launcher.sim_nodes import get_sim_launch_description
+
+
+def generate_launch_description():
+    # Run the simulation, defaulting to running visualization unless told otherwise
+    launch_description_entities, *_ = get_sim_launch_description(sys.argv, True)
+    return LaunchDescription(launch_description_entities)
+</file>
+
+<file path="launch/vecs.launch.py">
+from launch_ros.actions import ComposableNodeContainer
+from launch import LaunchDescription
+from launcher import utils
+
+from launcher import vecs_nodes
+
+
+def generate_launch_description():
+    # Load parameters and launch the nodes
+    params, device_id = utils.load_params("vecs")
+    vecs_core_nodes = vecs_nodes.make_core_nodes(device_id, params)
+    vecs_composable_driver_nodes = vecs_nodes.make_composable_driver_nodes(
+        device_id, params
+    )
+
+    # Derived variables
+    vecs_name = "v" + str(device_id)
+
+    # Launch description entities
+    launch_description_entities = [
+        ComposableNodeContainer(
+            name="vecs_nodes",
+            namespace="/vecs/" + vecs_name,
+            package="rclcpp_components",
+            # Using a composable multithreaded node container because some driver
+            # nodes are blocking and need to be run in their own thread.
+            executable="component_container",
+            arguments=["--executor-type", "multi-threaded"],
+            composable_node_descriptions=vecs_composable_driver_nodes,
+            output="screen",
+            emulate_tty=True,
+            remappings=[
+                ("/rosout", "/vecs/" + vecs_name + "/rosout"),
+            ],
+        ),
+    ]
+    launch_description_entities.extend(vecs_core_nodes)
+
+    return LaunchDescription(launch_description_entities)
+</file>
+
+<file path="launcher/__init__.py">
+
+</file>
+
+<file path="launcher/bay_nodes.py">
+from launch_ros.descriptions import ComposableNode
+import common_py.layout
+from interfaces.msg import GarageNode
+
+
+def _find_vrc_id_for_bay(layout, bay_id):
+    """Return the VRC id whose node list contains bay_id, or None."""
+    for vrc in layout.vrcs:
+        if bay_id in vrc.get("nodes", []):
+            return vrc["id"]
+    return None
+
+
+def get_core_composable_nodes(params):
+    # Get the core composable nodes
+    bay_id_to_core_nodes = dict()
+    layout = common_py.layout.load_layout(params["bay"]["layout"])
+    for bay_id in layout.get_bay_ids():
+        bay_node = layout.get_node(bay_id)
+        # Use BliftStateMachineComponent when the bay needs multi-floor handling. Two
+        # orthogonal triggers, both needed:
+        #   - type == TYPE_BLIFT: the new "bay node IS the lift terminal" case (e.g.
+        #     38 Gramercy node 26). The legacy system_floors clauses don't fire here
+        #     because system_floors and insert_floor default to [node.floor].
+        #   - len(system_floors) > 1, or system_floors[0] != insert_floor: pre-BLift
+        #     case for regular type: Bay nodes whose system doors live on a different
+        #     floor than the bay itself (Pecos-style "Bay above, separate Lift below").
+        if (
+            bay_node.type == GarageNode.TYPE_BLIFT
+            or len(bay_node.system_floors) > 1
+            or bay_node.system_floors[0] != bay_node.insert_floor
+        ):
+            state_machine_plugin = "bay::BliftStateMachineComponent"
+        else:
+            state_machine_plugin = "bay::StateMachineComponent"
+
+        # For a TYPE_BLIFT the bay's "lift" is a VRC commanded by the scheduler as part of
+        # AGV cross-floor plans, so the bay must NOT command the lift itself — it observes
+        # the lift's reports and waits for the carriage to arrive. Legacy multi-floor
+        # Bay+Lift installations keep driving the lift internally (false here).
+        bay_state_machine_params = {
+            "bay_id": bay_id,
+            "bay.external_lift_driver": bay_node.type == GarageNode.TYPE_BLIFT,
+        }
+
+        core_nodes = [
+            ComposableNode(
+                package="bay",
+                plugin=state_machine_plugin,
+                name="bay_state_machine",
+                namespace="/bay/b" + str(bay_id),
+                parameters=[bay_state_machine_params, params],
+                remappings=[
+                    ("/rosout", "/bay/b" + str(bay_id) + "/rosout"),
+                ],
+            ),
+            ComposableNode(
+                package="bay",
+                plugin="bay::VehicleEstimatorComponent",
+                name="vehicle_estimator",
+                namespace="/bay/b" + str(bay_id),
+                parameters=[params],
+                remappings=[
+                    ("/rosout", "/bay/b" + str(bay_id) + "/rosout"),
+                ],
+            ),
+            ComposableNode(
+                package="bay",
+                plugin="bay::BayGuidanceComponent",
+                name="bay_guidance",
+                namespace="/bay/b" + str(bay_id),
+                parameters=[params],
+                remappings=[
+                    ("/rosout", "/bay/b" + str(bay_id) + "/rosout"),
+                ],
+            ),
+        ]
+
+        # BLift nodes are bays AND lifts. The bay state machine's LiftInterface
+        # speaks LiftReport, but the actual hardware moving vehicles between
+        # floors is a VRC that publishes VrcReport. Spawn a bridge per BLift
+        # that maps /vrc/r{vrc_id}/report -> /lift/l{bay_id}/report.
+        if bay_node.type == GarageNode.TYPE_BLIFT:
+            vrc_id = _find_vrc_id_for_bay(layout, bay_id)
+            if vrc_id is None:
+                raise RuntimeError(
+                    f"BLift bay {bay_id} has no matching VRC in layout.vrcs"
+                )
+            core_nodes.append(
+                ComposableNode(
+                    package="bay",
+                    plugin="bay::VrcLiftBridgeComponent",
+                    name="vrc_lift_bridge",
+                    namespace="/bay/b" + str(bay_id),
+                    parameters=[params],
+                    remappings=[
+                        ("/rosout", "rosout"),
+                        ("lift/report", f"/lift/l{bay_id}/report"),
+                        ("lift/move", f"/lift/l{bay_id}/move"),
+                        ("vrc/report", f"/vrc/r{vrc_id}/report"),
+                        ("vrc/move", f"/vrc/r{vrc_id}/move"),
+                    ],
+                )
+            )
+        bay_id_to_core_nodes[bay_id] = core_nodes
+
+    return bay_id_to_core_nodes
+
+
+def get_driver_composable_nodes(params):
+    # Get the hardware driver composable nodes
+    bay_id_to_driver_nodes = dict()
+    layout = common_py.layout.load_layout(params["bay"]["layout"])
+    for bay_id in layout.get_bay_ids():
+        driver_nodes = [
+            ComposableNode(
+                package="bay",
+                plugin="bay::PlcControlComponent",
+                name="plc_control",
+                namespace="/bay/b" + str(bay_id),
+                parameters=[params, {"bay_id": bay_id}],
+                remappings=[
+                    ("/rosout", "/bay/b" + str(bay_id) + "/rosout"),
+                ],
+            ),
+            ComposableNode(
+                package="bay",
+                plugin="bay::IoLinkDriverComponent",
+                name="io_link_driver",
+                namespace="/bay/b" + str(bay_id),
+                parameters=[params],
+                remappings=[
+                    ("/rosout", "/bay/b" + str(bay_id) + "/rosout"),
+                ],
+            ),
+            ComposableNode(
+                package="bay",
+                plugin="bay::LoadCellDriverComponent",
+                name="load_cell_driver",
+                namespace="/bay/b" + str(bay_id),
+                parameters=[params],
+                remappings=[
+                    ("/rosout", "/bay/b" + str(bay_id) + "/rosout"),
+                ],
+            ),
+        ]
+
+        bay_id_to_driver_nodes[bay_id] = driver_nodes
+
+    return bay_id_to_driver_nodes
+</file>
+
+<file path="launcher/central_nodes.py">
+import os
+
+from launch_ros.actions import Node
+from launch_ros.descriptions import ComposableNode
+
+PROXY_NAME = "hito_proxy"
+
+
+def _get_hito_proxy_env_as_params():
+    """Map connection environment variables to hito_proxy ROS params, skipping unset ones."""
+    env_to_param = {
+        "MQTT_BROKER_HOST": ("mqtt_broker_host", str),
+        "MQTT_BROKER_PORT": ("mqtt_broker_port", int),
+        "MAP_SERVER_HOST": ("map_server_host", str),
+        "MAP_SERVER_PORT": ("map_server_port", int),
+    }
+    connection_params = {}
+    for env_var, (param_name, param_type) in env_to_param.items():
+        value = os.environ.get(env_var)
+        if value is not None:
+            connection_params[param_name] = param_type(value)
+    return connection_params
+
+
+def get_standalone_nodes(params):
+    launch_description_entities = [
+        Node(
+            package="central_api",
+            executable="rest_api",
+            parameters=[params, {"introspection_mode": "metadata"}],
+            output="screen",
+            emulate_tty=True,
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        )
+    ]
+
+    # Add the HITO AGV proxy node for non-simulation runs
+    if not params.get("is_simulation"):
+        launch_description_entities.append(
+            Node(
+                package="agvhito",
+                executable="proxy_node",
+                name=PROXY_NAME,
+                parameters=[
+                    params,
+                    _get_hito_proxy_env_as_params(),
+                ],
+                remappings=[
+                    ("/rosout", f"/{PROXY_NAME}/rosout"),
+                ],
+            )
+        )
+
+    return launch_description_entities
+
+
+def get_composable_nodes(params):
+    composable_nodes = [
+        ComposableNode(
+            package="central",
+            plugin="central::AgvMonitorComponent",
+            namespace="central",
+            name="agv_monitor",
+            parameters=[params],
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        ),
+        ComposableNode(
+            package="central",
+            plugin="central::SafetyHardwareMonitorComponent",
+            namespace="central",
+            name="safety_hardware_monitor",
+            parameters=[params],
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        ),
+        ComposableNode(
+            package="central",
+            plugin="central::ConsistencyMonitorComponent",
+            namespace="central",
+            name="consistency_monitor",
+            parameters=[params],
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        ),
+        ComposableNode(
+            package="central",
+            plugin="central::DispatchComponent",
+            namespace="central",
+            name="dispatcher",
+            parameters=[params],
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        ),
+        ComposableNode(
+            package="central",
+            plugin="central::GarageTrackerComponent",
+            namespace="central",
+            name="garage_tracker",
+            parameters=[params],
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        ),
+        ComposableNode(
+            package="central",
+            plugin="central::GarageMonitorComponent",
+            namespace="central",
+            name="garage_monitor",
+            parameters=[params],
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        ),
+        ComposableNode(
+            package="scheduler",
+            plugin="volley::SchedulerComponent",
+            namespace="scheduler",
+            name="scheduler",
+            parameters=[params],
+            remappings=[
+                ("/rosout", "/central/rosout"),
+            ],
+        ),
+    ]
+
+    return composable_nodes
+</file>
+
+<file path="launcher/layout_plotter.py">
+#!/usr/bin/env python3
+"""
+Input a layout yaml file. Output generated layout visual.
+
+Draws every node labeled with its node ID, and a line for every edge.
+Node shape indicates node type:
+  Waypoint   -> circle
+  Parking    -> square
+  AgvCharge  -> triangle
+  EvCharge   -> triangle (different color)
+  Bay        -> star (larger)
+  Lift/BLift -> diamond
+
+Example:
+ros2 run launcher layout_plotter 5675_pecos_combined
+ros2 run launcher layout_plotter 5675_pecos_combined -o /tmp/5675_pecos_combined.png --show
+"""
+import sys
+
+import click
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+import common_py.layout
+from common_py.layout import NODE_TYPE_MAP
+
+from pathlib import Path
+
+NODE_STYLE = {
+    "Waypoint": {"marker": "o", "color": "tab:blue", "size": 120},
+    "Parking": {"marker": "s", "color": "tab:green", "size": 120},
+    "AgvCharge": {"marker": "^", "color": "tab:orange", "size": 160},
+    "EvCharge": {"marker": "^", "color": "tab:red", "size": 160},
+    "Bay": {"marker": "*", "color": "tab:purple", "size": 320},
+    "Lift": {"marker": "D", "color": "tab:brown", "size": 200},
+    "BLift": {"marker": "D", "color": "tab:pink", "size": 200},
+}
+DEFAULT_STYLE = {"marker": "x", "color": "black", "size": 120}
+
+GRID_LINE_COLOR = "#e5e5e5"
+EDGE_LINE_COLOR = "#999999"
+
+
+def plot_grid(ax, layout, node_ids, label_nodes=True, show_grid=False):
+    node_by_id = {node_id: layout.get_node(node_id) for node_id in node_ids}
+
+    if show_grid:
+        ax.grid(True, color=GRID_LINE_COLOR, linewidth=0.5, zorder=0)
+        ax.set_axisbelow(True)
+
+    for src_index, dst_index in layout.graph.edges():
+        src = layout.nodes[src_index]
+        dst = layout.nodes[dst_index]
+        if src.id not in node_by_id or dst.id not in node_by_id:
+            continue
+        ax.plot(
+            [src.x, dst.x],
+            [src.y, dst.y],
+            color=EDGE_LINE_COLOR,
+            linewidth=1,
+            zorder=1,
+        )
+
+    seen_types = set()
+    for node in node_by_id.values():
+        type_name = NODE_TYPE_MAP.inverse.get(node.type, "Unknown")
+        style = NODE_STYLE.get(type_name, DEFAULT_STYLE)
+        seen_types.add(type_name)
+        ax.scatter(
+            node.x,
+            node.y,
+            marker=style["marker"],
+            color=style["color"],
+            s=style["size"],
+            edgecolors="black",
+            linewidths=0.5,
+            zorder=2,
+        )
+        if node.rotation_allowed:
+            ax.scatter(
+                node.x,
+                node.y,
+                marker="o",
+                facecolors="none",
+                edgecolors="black",
+                linewidths=1,
+                s=style["size"] * 2.2,
+                zorder=1.5,
+            )
+        if label_nodes:
+            ax.annotate(
+                str(node.id),
+                (node.x, node.y),
+                textcoords="offset points",
+                xytext=(9, 0),
+                ha="left",
+                va="center",
+                fontsize=7,
+                zorder=3,
+            )
+
+    legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker=NODE_STYLE.get(type_name, DEFAULT_STYLE)["marker"],
+            color="w",
+            markerfacecolor=NODE_STYLE.get(type_name, DEFAULT_STYLE)["color"],
+            markeredgecolor="black",
+            markersize=10,
+            label=type_name,
+        )
+        for type_name in sorted(seen_types)
+    ]
+    if any(node.rotation_allowed for node in node_by_id.values()):
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor="none",
+                markeredgecolor="black",
+                markersize=12,
+                label="Rotation allowed",
+            )
+        )
+    ax.legend(handles=legend_handles, loc="upper right", fontsize=8)
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+
+
+def plot_nodes(layout, title, label_nodes=True, show_grid=False):
+    floors = sorted({node.floor for node in layout.nodes})
+    fig, axes = plt.subplots(
+        1, len(floors), figsize=(9 * len(floors), 9), squeeze=False
+    )
+    axes = axes[0]
+
+    for ax, floor in zip(axes, floors):
+        node_ids = [node.id for node in layout.nodes if node.floor == floor]
+        plot_grid(ax, layout, node_ids, label_nodes=label_nodes, show_grid=show_grid)
+        ax_title = title
+        if len(floors) > 1:
+            ax_title += f" - floor {floor}"
+        ax.set_title(ax_title)
+
+    fig.tight_layout()
+    return fig
+
+
+@click.command()
+@click.argument("layout_name", type=click.STRING)
+@click.option(
+    "-o",
+    "--output",
+    default=None,
+    help="Output image path (default: <layout_name>.png)",
+)
+@click.option(
+    "--show",
+    is_flag=True,
+    help="Open an interactive window in addition to saving the image",
+)
+@click.option("--no-labels", is_flag=True, help="Don't label nodes with their ID")
+@click.option("--grid", "show_grid", is_flag=True, help="Show faint XY grid lines")
+def render_layout(layout_name, output, show, no_labels, show_grid):
+    """
+    Renders a layout yaml file to an image. The LAYOUT_NAME can be specified by a name
+    (e.g. 5675_pecos_combined) or by a full path to the layout yaml file
+    (e.g. src/config/site_config/layouts/5675_pecos_combined.yaml).
+    """
+
+    layout = common_py.layout.load_layout(layout_name)
+    layout_path = Path(layout_name)
+    fig = plot_nodes(
+        layout, title=layout_path.stem, label_nodes=not no_labels, show_grid=show_grid
+    )
+
+    if output is None:
+        output = layout_path.with_suffix(".png")
+    fig.savefig(output, dpi=150)
+    print(f"Wrote file {output}")
+
+    if show:
+        plt.show()
+
+
+def main():
+    try:
+        render_layout()
+    except Exception as e:
+        print("Failed to generate the layout image:", e)
+        sys.exit(127)
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="launcher/lift_nodes.py">
+from launch_ros.descriptions import ComposableNode
+
+
+def get_composable_nodes(params, device_id):
+    lift_name = f"l{device_id}"
+    print(f"namespacing to lift/{lift_name}")
+    return [
+        ComposableNode(
+            package="lift",
+            plugin="lift::LiftComponent",
+            name="lift_node",
+            namespace=f"lift/{lift_name}",
+            parameters=[params],
+        )
+    ]
+</file>
+
+<file path="launcher/paths.py">
+import os
+
+
+def get_artifacts_dir() -> str:
+    """Returns the artifacts directory, defaulting to artifacts/ under the ROS home directory."""
+    artifacts_dir = os.environ.get("ARTIFACTS_DIR")
+    if not artifacts_dir:
+        artifacts_dir = os.path.join(get_ros_home_dir(), "artifacts")
+
+    return artifacts_dir
+
+
+def get_ros_home_dir() -> str:
+    """Returns the ROS home directory, defaulting to ~/.ros when ROS_HOME is unset."""
+    ros_home = os.environ.get("ROS_HOME")
+    if not ros_home:
+        ros_home = os.path.join(os.path.expanduser("~"), ".ros")
+
+    return ros_home
+</file>
+
+<file path="launcher/sim_nodes.py">
+# The launch file that launches a simulation
+
+# pylint: disable=too-many-branches, too-many-statements, too-many-locals
+# pylint: disable=too-many-public-methods, too-few-public-methods, too-many-lines, too-many-instance-attributes
+
+import common_py.layout
+import common_py.pose_graph
+import common_py.processing.grid_generation as grid_generation
+import common_py.scenario
+import os
+import re
+import tempfile
+from datetime import datetime, timezone
+from common_py.general_utils import merge_params_dict
+from ament_index_python.packages import get_package_share_directory
+from launch.actions import (
+    GroupAction,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+    Shutdown,
+)
+from launch.event_handlers import OnProcessExit
+from launch.launch_description_sources import AnyLaunchDescriptionSource
+from launch_ros.actions import (
+    ComposableNodeContainer,
+    Node,
+    PushRosNamespace,
+    SetParameter,
+    SetRemap,
+)
+from launch_ros.descriptions import ComposableNode
+from launch_ros.substitutions import FindPackageShare
+
+from launcher import bay_nodes
+from launcher import vecs_nodes
+from launcher import vrc_nodes
+from launcher import central_nodes
+from launcher import paths
+from launcher import utils
+import copy
+
+
+def write_grid_to_file(layout, layout_md5sum):
+    """
+    Generate a temporary grid XML file, of the sort consumed by the NOC.
+    The grid file is written to a temp file, and the name of which is returned.
+    """
+
+    grid = grid_generation.generate_grid_for_layout(layout, layout_md5sum)
+
+    # Write out the config XML to a file in our temp directory.
+    filepath = os.path.join(tempfile.gettempdir(), "grid.xml")
+    grid_generation.write_xml_element_to_utf8(grid, filepath)
+
+    return filepath
+
+
+def load_params_and_initial_conditions(scenario_filepath):
+    """
+    Construct our ROS parameters dictionary, which maps node names to node parameter dictionaries.
+    We first load the default parameters file, launcher/params/params.yaml.
+    We then load our scenario file, which contains the layout and may contain parameter overrides.
+    """
+
+    # Make sure that any simulated environment has the GITSHA variable set for
+    # the consistency monitor
+    os.environ.setdefault("GITSHA", "unknown")
+
+    # Choose a fixed default domain ID if unset.
+    if "ROS_DOMAIN_ID" not in os.environ:
+        os.environ["ROS_DOMAIN_ID"] = "75"
+
+    # Load the scenario and parameters
+    scenario = common_py.scenario.load_scenario(scenario_filepath)
+    params, _ = utils.load_params(
+        "sim", layout=scenario["layout"], installation_id=9998, use_sim_time=True
+    )
+
+    initial_conditions = common_py.scenario.load_initial_conditions(scenario)
+
+    # A scenario may carry its own node param overrides, which win over the param files
+    params = merge_params_dict(params, scenario.get("params", {}))
+
+    return params, initial_conditions
+
+
+def get_sim_clock_node(params, real_time_factor=1.0, clock_publish_period_ms=5.0):
+    """Launch the SimClock node: the single /clock publisher for the simulation.
+
+    Standalone process (not in shared "sim" container) to minimize lost-wakeup stalls
+
+    use_sim_time is forced False here regardless of the shared params dict -- the clock source
+    must run on wall time, since it *produces* simulated time for every other node. Drive the
+    sim faster than real time by raising real_time_factor (1.0 = real time, 10.0 = 10x, 0 = paused).
+    """
+    return Node(
+        package="sim",
+        executable="sim_clock_node",
+        namespace="sim",
+        name="clock",
+        parameters=[
+            params,
+            {
+                "use_sim_time": False,
+                "real_time_factor": real_time_factor,
+                "clock_publish_period_ms": clock_publish_period_ms,
+            },
+        ],
+        output="screen",
+        emulate_tty=True,
+        remappings=[
+            ("/rosout", "/sim/rosout"),
+        ],
+    )
+
+
+# pylint: disable=too-many-arguments
+# pylint: disable=too-many-locals
+def get_sim_launch_description_entities(
+    params,
+    initial_conditions,
+    scenario_filepath,
+    record_artifacts=True,
+    artifacts_output_dir=None,
+    artifact_basename=None,
+    run_visualization=True,
+    run_rviz=True,
+    use_remote_meshes=False,
+    remote_mesh_prefix=None,
+    real_time_factor=1.0,
+):
+    launch_description_entities = []
+    composable_nodes = []
+
+    # SimClock publishes /clock (optionally faster than real time). It runs as its own
+    # process, since all other sim nodes depend on it
+    sim_clock_node = get_sim_clock_node(params, real_time_factor=real_time_factor)
+    launch_description_entities.append(sim_clock_node)
+
+    # Trigger launch shutdown on an unexpected exit, but not during a clean teardown.
+    launch_description_entities.append(
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=sim_clock_node,
+                on_exit=lambda event, context: (
+                    None
+                    if context.is_shutdown
+                    else [
+                        Shutdown(reason=f"SimClock exited with code {event.returncode}")
+                    ]
+                ),
+            )
+        )
+    )
+
+    agvs = copy.deepcopy(initial_conditions["agvs"])
+
+    # Launch the agvs
+    for agv in agvs:
+        agv_id = agv["id"]
+        composable_nodes.append(
+            ComposableNode(
+                package="agvhito",
+                plugin="volley::agvhito::sim::SimAgvComponent",
+                name="sim",
+                namespace=f"agv/a{agv_id}",
+                parameters=[
+                    params,
+                    {
+                        "agv_id": agv_id,
+                        "initial_node_id": agv["garage_pose"]["node_id"],
+                        "initial_heading": agv["garage_pose"]["heading"],
+                        "initial_lifted": agv.get("lift_fraction", 0.0) == 1.0,
+                    },
+                ],
+                remappings=[
+                    ("/rosout", f"/agv/a{agv_id}" + "/rosout"),
+                ],
+            )
+        )
+
+    # Simulator owns the global concerns (collisions, patrons, scenario events)
+    composable_nodes.append(
+        ComposableNode(
+            package="sim",
+            plugin="volley::sim::SimulatorComponent",
+            namespace="sim",
+            name="sim_world",
+            parameters=[params, {"simulator.scenario": scenario_filepath}],
+            remappings=[
+                ("/rosout", "/sim/rosout"),
+            ],
+        )
+    )
+
+    # Launch the bays
+    for bay_id, core_nodes in bay_nodes.get_core_composable_nodes(params).items():
+        core_nodes = core_nodes + [
+            ComposableNode(
+                package="sim",
+                plugin="volley::sim::BaySimComponent",
+                name="bay_sim",
+                namespace=f"/bay/b{bay_id}",
+                parameters=[params, {"bay_id": bay_id}],
+                remappings=[
+                    ("/rosout", "/sim/rosout"),
+                ],
+            )
+        ]
+
+        launch_description_entities.append(
+            ComposableNodeContainer(
+                name="b" + str(bay_id) + "_nodes",
+                package="rclcpp_components",
+                executable="component_container",
+                arguments=["--executor-type", "multi-threaded"],
+                exec_name="sim-b" + str(bay_id),
+                namespace="sim",
+                composable_node_descriptions=core_nodes,
+                output="screen",
+                emulate_tty=True,
+                remappings=[
+                    ("/rosout", "/sim/rosout"),
+                ],
+            )
+        )
+
+    # Launch the vexen
+    for vecs_id, vecs_core_nodes in vecs_nodes.get_vecs_sim_nodes(params).items():
+        for node in vecs_core_nodes:
+            print(f"adding vecs node: v{vecs_id}")
+            launch_description_entities.append(node)
+
+    # Launch the VRCs
+    for vrc_sim_nodes in vrc_nodes.get_vrc_sim_nodes(
+        params, initial_conditions
+    ).values():
+        for node in vrc_sim_nodes:
+            launch_description_entities.append(node)
+
+    if run_visualization:
+        vis_params = {"use_remote_meshes": use_remote_meshes}
+        # Only pass the prefix through when it was given, so the node falls back to its own default.
+        if remote_mesh_prefix:
+            vis_params["remote_mesh_prefix"] = remote_mesh_prefix
+
+        visualizer_node = Node(
+            package="vis",
+            namespace="vis",
+            executable="visualizer_node",
+            name="visualizer",
+            parameters=[params, vis_params],
+            output="screen",
+            emulate_tty=True,
+            remappings=[
+                ("/rosout", "/sim/rosout"),
+            ],
+        )
+        launch_description_entities.append(visualizer_node)
+
+        foxglove_launch_file = os.path.join(
+            get_package_share_directory("foxglove_bridge"),
+            "launch",
+            "foxglove_bridge_launch.xml",
+        )
+        launch_description_entities.append(
+            IncludeLaunchDescription(
+                AnyLaunchDescriptionSource(foxglove_launch_file),
+            )
+        )
+
+        if run_rviz:
+            launch_description_entities.append(
+                Node(package="rviz2", executable="rviz2")
+            )
+
+    # Launch the central nodes
+    launch_description_entities.append(
+        ComposableNodeContainer(
+            name="central_sim_nodes",
+            package="rclcpp_components",
+            executable="component_container",
+            arguments=["--executor-type", "multi-threaded"],
+            exec_name="sim-central",
+            namespace="sim",
+            composable_node_descriptions=central_nodes.get_composable_nodes(params),
+            output="screen",
+            emulate_tty=True,
+            remappings=[
+                ("/rosout", "/sim/rosout"),
+            ],
+        )
+    )
+    launch_description_entities.extend(central_nodes.get_standalone_nodes(params))
+
+    if record_artifacts:
+        launch_description_entities.append(
+            GroupAction(
+                [
+                    PushRosNamespace("sim"),
+                    SetRemap("/rosout", "/sim/rosout"),
+                    SetParameter(name="use_sim_time", value=True),
+                    IncludeLaunchDescription(
+                        FindPackageShare("launcher") / "launch" / "recorder.launch.xml",
+                        launch_arguments={
+                            "output_dir": artifacts_output_dir,
+                            "basename": artifact_basename or "sim",
+                            "regex": ".*",
+                            "split_duration_sec": "0",
+                        }.items(),
+                    ),
+                ]
+            )
+        )
+
+    # Start all the composable nodes
+    sim_node = ComposableNodeContainer(
+        name="sim_nodes",
+        package="rclcpp_components",
+        executable="component_container",
+        arguments=["--executor-type", "multi-threaded"],
+        exec_name="sim",
+        namespace="sim",
+        composable_node_descriptions=composable_nodes,
+        output="screen",
+        emulate_tty=True,
+        remappings=[
+            ("/rosout", "/sim/rosout"),
+        ],
+    )
+    launch_description_entities.append(sim_node)
+
+    # Trigger launch shutdown on an unexpected exit, but not during a clean teardown.
+    launch_description_entities.append(
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=sim_node,
+                on_exit=lambda event, context: (
+                    None
+                    if context.is_shutdown
+                    else [
+                        Shutdown(
+                            reason=f"Simulator exited with code {event.returncode}"
+                        )
+                    ]
+                ),
+            )
+        )
+    )
+
+    return launch_description_entities
+
+
+RE_PARAM_VIS = re.compile(r"vis:=(\S+)")
+RE_PARAM_RVIZ = re.compile(r"rviz:=(\S+)")
+RE_PARAM_SCENARIO = re.compile(r"scenario:=(\S+)")
+RE_PARAM_RECORD_ARTIFACTS = re.compile(r"record_artifacts:=(\S+)")
+RE_PARAM_ENABLE_DISPATCH_CHARGING_MODE = re.compile(
+    r"enable_dispatch_charging_mode:=(\S+)"
+)
+RE_PARAM_PRINTDAGS = re.compile(r"printdags:=(\S+)")
+RE_PARAM_ARTIFACTS_OUTPUT_DIR = re.compile(r"artifacts_output_dir:=(\S+)")
+RE_PARAM_ARTIFACT_BASENAME = re.compile(r"artifact_basename:=(\S+)")
+RE_PARAM_USE_REMOTE_MESHES = re.compile(r"use_remote_meshes:=(\S+)")
+# Base URL the visualizer prepends to mesh filenames when use_remote_meshes is on. Unset means the
+# visualizer's built-in default.
+RE_PARAM_REMOTE_MESH_PREFIX = re.compile(r"remote_mesh_prefix:=(\S+)")
+# Simulated-time / wall-time ratio for the clock-driven sim (1 = real time, >1 = faster)
+RE_PARAM_REAL_TIME_FACTOR = re.compile(r"real_time_factor:=(\S+)")
+# Whether the simulated bay node will automatically confirm payload inserts
+RE_PARAM_AUTO_CONFIRM_INSERT = re.compile(r"auto_confirm_insert:=(\S+)")
+# GarageDirtiness() threshold above which an idle garage queues a CleanGarageJob
+RE_PARAM_GARAGE_DIRTINESS_THRESHOLD_RATIO = re.compile(
+    r"garage_dirtiness_threshold_ratio:=(\S+)"
+)
+
+
+# pylint: disable=too-many-arguments,too-many-branches
+def get_sim_launch_description(
+    args,
+    vis_default,
+    scenario=None,
+    artifacts_output_dir=None,
+    artifact_basename=None,
+    param_overrides=None,
+    real_time_factor=1.0,
+):
+    # Extract arguments
+    run_visualization = vis_default
+    run_rviz = True
+    record_artifacts = False
+    use_remote_meshes = False
+    remote_mesh_prefix = None
+    enable_dispatch_charging_mode = True
+    printdags = False
+    # None means "not passed on the command line", so params.yaml keeps its default
+    auto_confirm_insert = None
+    garage_dirtiness_threshold_ratio = None
+
+    for arg in args[2:]:
+        m = RE_PARAM_VIS.match(arg)
+        if m:
+            run_visualization = utils.string_to_bool(m[1])
+            continue
+        m = RE_PARAM_RVIZ.match(arg)
+        if m:
+            run_rviz = utils.string_to_bool(m[1])
+            continue
+        m = RE_PARAM_SCENARIO.match(arg)
+        if m:
+            scenario = m[1]
+            continue
+        m = RE_PARAM_RECORD_ARTIFACTS.match(arg)
+        if m:
+            record_artifacts = utils.string_to_bool(m[1])
+            continue
+        m = RE_PARAM_ENABLE_DISPATCH_CHARGING_MODE.match(arg)
+        if m:
+            enable_dispatch_charging_mode = utils.string_to_bool(m[1])
+            continue
+        m = RE_PARAM_PRINTDAGS.match(arg)
+        if m:
+            printdags = utils.string_to_bool(m[1])
+            continue
+        if m := RE_PARAM_ARTIFACTS_OUTPUT_DIR.match(arg):
+            artifacts_output_dir = m[1]
+            continue
+        if m := RE_PARAM_ARTIFACT_BASENAME.match(arg):
+            artifact_basename = m[1]
+            continue
+        if m := RE_PARAM_USE_REMOTE_MESHES.match(arg):
+            use_remote_meshes = utils.string_to_bool(m[1])
+            continue
+        if m := RE_PARAM_REMOTE_MESH_PREFIX.match(arg):
+            remote_mesh_prefix = m[1]
+            continue
+        if m := RE_PARAM_REAL_TIME_FACTOR.match(arg):
+            real_time_factor = float(m[1])
+            continue
+        if m := RE_PARAM_AUTO_CONFIRM_INSERT.match(arg):
+            auto_confirm_insert = utils.string_to_bool(m[1])
+            continue
+        if m := RE_PARAM_GARAGE_DIRTINESS_THRESHOLD_RATIO.match(arg):
+            garage_dirtiness_threshold_ratio = float(m[1])
+            continue
+
+    if not artifacts_output_dir:
+        # Filesystem safe ISO 8601 timestamp (excluding milliseconds)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        artifacts_output_dir = os.path.join(paths.get_artifacts_dir(), timestamp)
+
+    print(
+        f"Parsed arguments: run_visualization={run_visualization}, scenario={scenario}, "
+        f"record_artifacts={record_artifacts}, real_time_factor={real_time_factor}, "
+        f"auto_confirm_insert={'default' if auto_confirm_insert is None else auto_confirm_insert}"
+    )
+
+    if os.path.isfile(scenario):
+        scenario_file = scenario
+    else:
+        scenario_file = os.path.join(
+            get_package_share_directory("scenario"), "scenarios", scenario
+        )
+
+    params, initial_conditions = load_params_and_initial_conditions(scenario_file)
+
+    # This is simulation.
+    params["is_simulation"] = True
+
+    # Override any needed parameters
+    if param_overrides is not None:
+        params = merge_params_dict(params, param_overrides)
+
+    if auto_confirm_insert is not None:
+        params["simulator"]["auto_confirm_insert"] = auto_confirm_insert
+
+    if enable_dispatch_charging_mode is False:
+        params["enable_dispatch_charging_mode"] = enable_dispatch_charging_mode
+
+    if garage_dirtiness_threshold_ratio is not None:
+        params["dispatch"][
+            "garage_dirtiness_threshold_ratio"
+        ] = garage_dirtiness_threshold_ratio
+
+    params["printdags"] = printdags
+
+    scenario_name = os.path.basename(scenario_file)
+
+    scenario = common_py.scenario.load_scenario(scenario_file)
+    scenario_events = scenario["events"]
+
+    # Load the layout file
+    layout = common_py.layout.load_layout(scenario["layout"])
+
+    launch_description_entities = get_sim_launch_description_entities(
+        params,
+        initial_conditions,
+        scenario_file,
+        record_artifacts=record_artifacts,
+        artifacts_output_dir=artifacts_output_dir,
+        artifact_basename=artifact_basename,
+        run_visualization=run_visualization,
+        run_rviz=run_rviz,
+        use_remote_meshes=use_remote_meshes,
+        remote_mesh_prefix=remote_mesh_prefix,
+        real_time_factor=real_time_factor,
+    )
+
+    return (
+        launch_description_entities,
+        initial_conditions,
+        layout,
+        scenario_events,
+        scenario_name,
+    )
+</file>
+
+<file path="launcher/utils.py">
+import os
+import yaml
+from common_py.general_utils import merge_params_dict
+
+from ament_index_python.packages import get_package_share_directory
+from launch.substitutions import EnvironmentVariable
+from launch import LaunchContext
+
+
+ENV_VAR__DEVICE_ID = "DEVICE_ID"
+ENV_VAR__LAYOUT = "LAYOUT"
+ENV_VAR__INSTALLATION_ID = "INSTALLATION_ID"
+
+
+def string_to_bool(s):
+    return s.lower() in [
+        "true",
+        "1",
+        "t",
+        "y",
+        "yes",
+        "yeah",
+        "yup",
+        "certainly",
+        "uh-huh",
+    ]
+
+
+# Load a parameter file from the launcher/params directory
+def load_param_file(file_name):
+    params_file = os.path.join(
+        get_package_share_directory("launcher"), "params", file_name
+    )
+    # Note: we are not handling the exception that will be thrown if the file does not exist as,
+    # in most cases, we'd like to exit the program if this happens.
+    with open(params_file, "r") as f:
+        params = yaml.load(f, Loader=yaml.FullLoader)
+
+    return params if params is not None else {}
+
+
+# Load parameters in most generic to most specific order. Allows for more specific files to
+# override more generic ones.
+def load_params(device_type, layout=None, installation_id=None, use_sim_time=False):
+    # If layout and installation_id are not passed in, we are running a production system.
+    production = layout is None and installation_id is None
+
+    # Load layout and installation_id if they are not passed in
+    if layout is None:
+        layout = str(EnvironmentVariable(ENV_VAR__LAYOUT).perform(LaunchContext()))
+    if installation_id is None:
+        installation_id = int(
+            EnvironmentVariable(ENV_VAR__INSTALLATION_ID).perform(LaunchContext())
+        )
+
+    # Always load the device id. This gets ignored in the sim and so defaulting to zero is ok
+    device_id = int(
+        EnvironmentVariable(ENV_VAR__DEVICE_ID, default_value="0").perform(
+            LaunchContext()
+        )
+    )
+
+    # Load the default parameters
+    params = load_param_file("params.yaml")
+
+    # Merge in the device-specific params file
+    device_specific_params = load_param_file("params_" + device_type + ".yaml")
+    params = merge_params_dict(params, device_specific_params)
+
+    # Merge in the layout-specific params file if such a file exists
+    try:
+        installation_params = load_param_file("params_" + layout + ".yaml")
+        params = merge_params_dict(params, installation_params)
+    except FileNotFoundError:
+        if production:
+            print(
+                f"ERROR: Running a production system with layout {layout}. Requires a "
+                f"params_{layout}.yaml parameter override file in the params/installations "
+                f"folder, but that file was not found. Exiting."
+            )
+            raise
+
+    # Merge in the device-specific params file if such a file exists. This file is not required.
+    name = device_type[0] + str(device_id)
+    try:
+        device_params = load_param_file("params_" + name + ".yaml")
+        params = merge_params_dict(params, device_params)
+    except FileNotFoundError:
+        pass
+
+    # Parameters that all nodes should know about
+    common_params = {
+        "layout": layout,
+        "installation_id": installation_id,
+        "use_sim_time": use_sim_time,
+    }
+
+    # Merge the common params into all other param sets. Also add them at the top layer
+    for name, param_dict in params.items():
+        params[name] = merge_params_dict(param_dict, common_params)
+    params = merge_params_dict(params, common_params)
+
+    return params, device_id
+</file>
+
+<file path="launcher/vecs_nodes.py">
+from launch_ros.actions import Node
+from launch_ros.descriptions import ComposableNode
+from common_py.layout import load_layout
+
+
+def get_vecs_sim_nodes(params):
+    """Returns a map of all core VECS nodes by vecs_id.
+    Primary purpose for sim launcher"""
+    vecs_id_to_core_nodes = dict()
+    layout = load_layout(params["vecs"]["layout"])
+
+    for vecs_id in layout.get_ev_charge_ids():
+        print(f"vecs_id: v{str(vecs_id)}")
+        vecs_id_to_core_nodes[vecs_id] = make_core_nodes(vecs_id, params)
+        vecs_id_to_core_nodes[vecs_id].append(
+            Node(
+                package="vecs",
+                namespace="vecs/v" + str(vecs_id),
+                executable="vecs_sim_node",
+                name="vecs_sim_node",
+                parameters=[params, {"vecs_id": vecs_id}],
+                output="screen",
+                emulate_tty=True,
+                remappings=[
+                    ("/rosout", "/vecs/v" + str(vecs_id) + "/rosout"),
+                ],
+            )
+        )
+
+    return vecs_id_to_core_nodes
+
+
+def make_core_nodes(vecs_id, params):
+    vecs_name = "v" + str(vecs_id)
+    core_nodes = [
+        Node(
+            package="vecs",
+            namespace="vecs/" + vecs_name,
+            executable="vecs_node",
+            name="vecs_node",
+            parameters=[params, {"vecs_id": vecs_id}],
+            output="screen",
+            emulate_tty=True,
+            remappings=[
+                ("/rosout", "/vecs/" + vecs_name + "/rosout"),
+            ],
+        )
+    ]
+    return core_nodes
+
+
+def get_composable_hardware_driver_nodes(params):
+    """Returns a map of all hardware driver VECS nodes by vecs_id.
+    Primary purpose for sim launcher"""
+    vecs_id_to_composable_driver_nodes = dict()
+    layout = load_layout(params["vecs"]["layout"])
+
+    for vecs_id in layout.get_ev_charge_ids():
+        vecs_id_to_composable_driver_nodes[vecs_id] = make_composable_driver_nodes(
+            vecs_id, params
+        )
+
+    return vecs_id_to_composable_driver_nodes
+
+
+def make_composable_driver_nodes(vecs_id, params):
+    vecs_name = "v" + str(vecs_id)
+    driver_nodes = [
+        ComposableNode(
+            package="vecs",
+            namespace="vecs/" + vecs_name,
+            plugin="vecs::io::VecsIoComponent",
+            name="vecs_io_node",
+            parameters=[params, {"vecs_id": vecs_id}],
+            remappings=[
+                ("/rosout", "/vecs/" + vecs_name + "/rosout"),
+            ],
+        ),
+        ComposableNode(
+            package="vecs",
+            namespace="vecs/" + vecs_name,
+            plugin="vecs::evse::VecsEvseComponent",
+            name="vecs_evse_node",
+            parameters=[params, {"vecs_id": vecs_id}],
+            remappings=[
+                ("/rosout", "/vecs/" + vecs_name + "/rosout"),
+            ],
+        ),
+    ]
+    return driver_nodes
+</file>
+
+<file path="launcher/vrc_nodes.py">
+from launch_ros.actions import Node
+from common_py.layout import load_layout
+
+
+def get_vrc_sim_nodes(params, initial_conditions=None):
+    """Returns a map of VRC nodes by vrc_id for the sim launcher."""
+    layout = load_layout(params["layout"])
+
+    floor_ids = [f.id for f in layout.floors]
+    floor_z_positions = [f.z for f in layout.floors]
+
+    vrc_params = params.get("vrc", {})
+    transit = vrc_params.get("performance_limits", {}).get("transit", {})
+    door = vrc_params.get("door", {})
+
+    initial_floors_by_id = {
+        vrc["id"]: vrc["initial_floor"]
+        for vrc in (initial_conditions or {}).get("vrcs", [])
+        if "initial_floor" in vrc
+    }
+
+    vrc_id_to_nodes = {}
+    for vrc in layout.vrcs:
+        vrc_id = vrc["id"]
+        print(f"adding vrc node: /vrc/r{vrc_id}/manager")
+        vrc_id_to_nodes[vrc_id] = [
+            Node(
+                package="vrc",
+                executable="vrc",
+                name="manager",
+                namespace="/vrc/r" + str(vrc_id),
+                parameters=[
+                    {
+                        "id": vrc_id,
+                        "config.floors": floor_ids,
+                        "config.floor_z_positions": floor_z_positions,
+                        "performance_limits.transit.speed": transit["speed"],
+                        "performance_limits.transit.accel": transit["accel"],
+                        "door.open_time": door["open_time"],
+                        "door.close_time": door["close_time"],
+                        "initial.floor": initial_floors_by_id.get(vrc_id, -1),
+                        "use_sim_time": params.get("use_sim_time", False),
+                    }
+                ],
+                output="screen",
+                emulate_tty=True,
+                remappings=[
+                    ("/rosout", "/vrc/r" + str(vrc_id) + "/rosout"),
+                ],
+            )
+        ]
+
+    return vrc_id_to_nodes
+</file>
+
+<file path="params/installations/params_1355_fulton.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.60"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.61"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  load_cells:
+    scale: 0.001
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.1816
+      width_m: 2.2098
+
+scheduler:
+  bay_readiness_ratio: 0.5 # fraction of bays we wish to be ready-to-insert
+</file>
+
+<file path="params/installations/params_360_w_broadway.yaml">
+---
+# Installation parameter overrides for 360 W Broadway
+bay:
+  floor_spec: 360_w_broadway_blift
+</file>
+
+<file path="params/installations/params_38_gramercy.yaml">
+# Installation overrides for 38 Gramercy.
+#
+# 38 Gramercy combines a Bay and a VRC into a single "BLift" node at node 26.
+# Patrons insert vehicles on floor 1 (motor court level); the system shuttles
+# the car down via VRC 1 to parking on floor 0.
+bay:
+  floor_spec: 38_gramercy_blift
+</file>
+
+<file path="params/installations/params_415_east_grand_ave.yaml">
+bay:
+  io_link:
+    master1:
+      devices_in_ports: [ 31, 30, 21, 20, 0, 0, 41, 40 ]
+    master2:
+      devices_in_ports: [ 11, 13, 12, 10, 33, 32, 0, 0 ]
+</file>
+
+<file path="params/installations/params_5675_pecos_bench.yaml">
+
+</file>
+
+<file path="params/installations/params_5675_pecos_sandbox_combined.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.62"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.60"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.791
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_5675_pecos_sandbox_eng.yaml">
+bay:
+  load_cells:
+    scale: 0.001 # 5kN scale factor
+  io_link:
+    master1:
+      address: "192.168.1.60"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.62"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.791
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_5675_pecos_sandbox_qa.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.62"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.60"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.791
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_576_eccles_budget_sandbox_mini.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.62"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.60"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.1816
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_576_eccles_budget_sandbox.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.62"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.60"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.791
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_576_eccles_half.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.62"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.60"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.1816
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_576_eccles_mini.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.62"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.60"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.1816
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_576_eccles_no_bay.yaml">
+bay:
+  io_link:
+    master1:
+      devices_in_ports: [ 31, 30, 21, 20, 0, 0, 41, 40 ]
+    master2:
+      devices_in_ports: [ 11, 13, 12, 10, 33, 32, 0, 0 ]
+</file>
+
+<file path="params/installations/params_576_eccles_under_vcr.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.62"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.60"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.1816
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_576_eccles.yaml">
+bay:
+  io_link:
+    master1:
+      address: "192.168.1.62"
+      devices_in_ports: [ 11, 12, 0, 0, 40, 41, 0, 0 ]
+    master2:
+      address: "192.168.1.60"
+      devices_in_ports: [ 13, 10, 20, 21, 0, 0, 0, 0 ]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.1816
+      width_m: 2.2098
+</file>
+
+<file path="params/installations/params_vrc_sandbox.yaml">
+bay:
+  io_link:
+    master1:
+      address: '192.168.1.62'
+      devices_in_ports: [11, 12, 0, 0, 40, 41, 0, 0]
+    master2:
+      address: '192.168.1.60'
+      devices_in_ports: [13, 10, 20, 21, 0, 0, 0, 0]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.791
+      width_m: 2.2098
+</file>
+
+<file path="params/lifts/params_l8.yaml">
+lift:
+  type: "autoquip"
+  hostname: 192.168.1.10
+  port: 502
+  tick_ms: 1500
+</file>
+
+<file path="params/params_agv.yaml">
+
+</file>
+
+<file path="params/params_b21.yaml">
+bay:
+  io_link:
+    master1:
+      address: '192.168.1.62'
+      devices_in_ports: [11, 10, 20, 21, 40, 41, 0, 0]
+    master2:
+      address: '192.168.1.60'
+      devices_in_ports: [13, 12, 0, 0, 0, 0, 0, 0]
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.791
+      width_m: 2.2098
+</file>
+
+<file path="params/params_b7.yaml">
+bay:
+  load_cells:
+    scale: 0.001 # 5kN scale factor
+  io_link:
+    num_masters: 3
+    master1:
+      address: '192.168.1.60'
+      devices_in_ports: [13, 10, 0, 0, 40, 41, 0, 0]
+    master2:
+      address: '192.168.1.62'
+      devices_in_ports: [11, 12, 20, 21, 0, 0, 0, 0]
+    master3:
+      address: 192.168.1.61
+      devices_in_ports: [50, 51, 52, 0, 60, 61, 0, 0]
+
+  estimator:
+    sensor_bounding_box:
+      length_m: 5.791
+      width_m: 2.2098
+</file>
+
+<file path="params/params_bay.yaml">
+
+</file>
+
+<file path="params/params_central.yaml">
+
+</file>
+
+<file path="params/params_lift.yaml">
+
+</file>
+
+<file path="params/params_sim.yaml">
+# Param overrides for the simulator
+garage_tracker:
+  write_to_mysql: false # Do not write to MySQL in the sim
+  mysql:
+    host: 'localhost'
+
+bay:
+  guidance:
+    websocket_port: 0
+</file>
+
+<file path="params/params_vecs.yaml">
+
+</file>
+
+<file path="params/params.yaml">
+---
+agv:
+  # Firmware version specification used to ensure firmware compatibility.
+  firmware_version_spec: ^2.0.0
+  performance_limits:
+    # General speed/accel limits
+    restricted_node_speed_multiplier: 0.4 # Multiplier used when src or dst node is restricted (bay, charger, lift,)
+    locomote:
+      speed: 1.0 # m/s
+      loaded_speed: 0.8 # m/s. Applied instead of speed when the vehicle is loaded
+      accel: 0.2 # m/s^2
+    strafe:
+      speed: 0.6 # m/s
+      loaded_speed: 0.32 # m/s. Applied instead of speed when the vehicle is loaded
+      accel: 0.2 # m/s^2
+    rotate:
+      speed: 0.17 # rad/s
+      loaded_speed: 0.136 # rad/s. Applied instead of speed when the vehicle is loaded
+      accel: 0.035 # rad/s^2
+
+  # AGV lift durations. Shared source of truth between the scheduler's cost model and the
+  # AGV sim, so the time the planner budgets matches the time sim actually holds the lift.
+  lift:
+    up_time: 6.0 # [s] time for AGV to raise its lift
+    down_time: 6.0 # [s] time for AGV to lower its lift
+  # Duration to reorient AGV drive wheels when switching between LOCOMOTE / STRAFE / ROTATE.
+  wheel_turn_time: 1.75 # [s]
+
+agv_monitor:
+  low_agv_battery_fraction_threshold: 0.1 # Disable AGVs with battery fractions below this value
+
+bay:
+  plc:
+    ip: '192.168.1.33' # IP address of the PLC
+    port: 502 # Port to talk to the PLC over
+  load_cells:
+    # A modbus-proxy is used to connect to the MCS-08EN load cell digitizer
+    # Following values are set to the modbus-proxy and NOT the digitizer
+    address: '192.168.1.50'
+    port: 5020
+    scale: 0.01 # Factor to multiply raw readings by to convert to kg. Ex: 0.01 for 10kN load cells. 0.001 for 5kN load cells.
+  floor_spec: ''
+  io_link:
+    port: 502
+    num_masters: 2
+    master1:
+      address: '192.168.1.60'
+      # Array of IoLinkDevices plugged into specific ports in master. Set to EMPTY if a port is empty.
+      # First entry is the device plugged into port X01, second is port X02, and so forth.
+      devices_in_ports: [0, 0, 0, 0, 0, 0, 0, 0]
+    master2:
+      address: '192.168.1.62'
+      devices_in_ports: [0, 0, 0, 0, 0, 0, 0, 0]
+
+  estimator:
+    process_noise:
+      velocity: 0.1 # Process noise on vehicle velocity (x and y), std deviation [m/s^(3/2)]
+    measurement_noise:
+      load_cells: 10.0 #  Measurement noise for load cells, std deviation [kg]
+    sensor_bounding_box: # Size of bounding box configured for bay in which cars are accepted [m]
+      length_m: 4.5 # Old east grand ave sizes default required still for tests.
+      width_m: 2.0
+    height_lidar: # Mounting heights of the bay's height-check 2D lidars, above the tray [m]
+      tall_m: 1.97
+      mid_m: 1.82
+      short_m: 1.67
+
+  # Bay door event durations used by the scheduler when costing bay transitions.
+  door:
+    open_time: 4.0 # [s] time for bay door to open
+    close_time: 4.0 # [s] time for bay door to close
+    wait_to_open_time: 10.0 # [s] wait before opening the bay door
+
+dispatch:
+  garage_dirtiness_threshold_ratio: 0.10 # GarageDirtiness() threshold to queue a CleanGarageJob while idle
+
+garage_monitor:
+  status_period_ms: 10000
+
+garage_tracker:
+  write_to_mysql: true
+  mysql:
+    port: 3306 # Default port used by mysql
+    host: 'mysql'
+    user: 'scheduler'
+    password: 'password'
+    database: 'scheduler'
+
+lift:
+  type: 'autoquip'
+  hostname: 192.168.1.10
+  port: 502
+
+scheduler:
+  bay_readiness_ratio: 0.5 # fraction of bays we wish to be ready-to-insert
+  cost_audit: false # if true, emit CSV per-segment cost audit lines for each plan
+
+simulator:
+  # When false, the sim leaves the insert for something outside it to confirm (the app, the REST
+  # API, or a manual /bay/b{bay_id}/confirm_insert call) rather than auto confirming on the
+  # patron's behalf
+  auto_confirm_insert: true
+
+vecs:
+  io: # IO PLC for LEDs, buttons, etc
+    ip: '192.168.1.100'
+    port: 502
+  evse: # Electric Vehicle Supply Equipment. Charges EV
+    ip: '192.168.1.110'
+    port: 502
+  # VECS transition duration used by the scheduler when costing VECS events.
+  transition_time: 120.0 # [s]
+
+# Vertical Reciprocating Conveyor (VRC) motion params used by the scheduler when costing
+# floor-to-floor moves, and by the VRC sim driver. Hardware driver config lives in the `lift:`
+# section below. All VRC gates use the same open/close timing.
+vrc:
+  performance_limits:
+    transit:
+      speed: 0.254 # [m/s] (50 ft/min, per autoquip spec)
+      accel: 0.2 # [m/s^2] placeholder, AGV-equivalent
+  door:
+    open_time: 5.0 # [s] time for any VRC gate to open
+    close_time: 5.0 # [s] time for any VRC gate to close
+</file>
+
+<file path="resource/launcher">
+
+</file>
+
+<file path="scripts/generate_layout.py">
+#!/usr/bin/env python3
+# pylint: disable=E1120, R0913
+
+"""Helpful utility for generating layouts"""
+
+from pathlib import Path
+import click
+import yaml
+from common_py.layout_generation import generate_stacked_corridors
+
+from interfaces.msg import ParkingWindow
+
+
+@click.command()
+@click.argument("layout_filename", required=1)
+@click.argument("corridor_length", type=int, required=1)
+@click.argument("corridor_depth", type=int, required=1)
+@click.option("--num_bays", type=int, default=1)
+@click.option("--parking_window_width", default=2.2)
+@click.option("--parking_window_length", default=5.2)
+@click.option("--parking_perimeter_buffer", default=0.25)
+def generate_corridor_layout(
+    layout_filename,
+    corridor_length,
+    corridor_depth,
+    num_bays,
+    parking_window_width,
+    parking_window_length,
+    parking_perimeter_buffer,
+):
+    pw = ParkingWindow()
+    pw.width_m = parking_window_width
+    pw.length_m = parking_window_length
+    pw.name = "STANDARD"
+    buffer = ParkingWindow()
+    buffer.length_m = parking_perimeter_buffer
+    buffer.width_m = parking_perimeter_buffer
+    layout = generate_stacked_corridors(
+        num_bays, corridor_length, corridor_depth, pw, ParkingWindow(), buffer
+    )
+    layout.name = Path(layout_filename).stem
+    yml = layout.as_yaml()
+    with open(layout_filename, "w") as f:
+        f.write(
+            "# ------------------------------------------\n"
+            "# | Auto-generated using generate_layout.py | \n"
+            "# ------------------------------------------\n"
+        )
+        yaml.dump(yml, f)
+        f.close()
+
+
+if __name__ == "__main__":
+    generate_corridor_layout()
+</file>
+
+<file path="scripts/layout_yaml_to_xml.py">
+#!/usr/bin/env python3
+# pylint: disable=E1120
+
+import os
+import click
+from common_py.layout import load_layout, get_layout_filepath
+from common_py.shell_utils import get_md5sum
+from common_py.processing.grid_generation import (
+    generate_grid_for_layout,
+    write_xml_element_to_utf8,
+)
+
+
+# Load the layout and generate the grid
+@click.command()
+@click.argument("layout_name", required=1)
+@click.argument("xml_output_path", required=0, default=None)
+def layout_yaml_to_xml(layout_name, xml_output_path):
+    layout = load_layout(layout_name)
+    yaml_path = get_layout_filepath(layout_name)
+    layout_yaml_md5sum = get_md5sum(yaml_path)
+    grid = generate_grid_for_layout(layout, layout_yaml_md5sum)
+
+    if xml_output_path is None:
+        xml_output_path = os.path.join(os.path.dirname(yaml_path), layout_name + ".xml")
+
+    write_xml_element_to_utf8(grid, xml_output_path)
+    print(f"Wrote to {xml_output_path}")
+
+
+if __name__ == "__main__":
+    layout_yaml_to_xml()
+</file>
+
+<file path="test/test_launcher_utils.py">
+import unittest
+from unittest import mock
+import os
+
+from launcher import utils
+import launch.substitutions
+
+
+class TestParamLoadAndMerge(unittest.TestCase):
+    """Testing loading and merging parameters"""
+
+    def test_load_param_file(self):
+        """Test loading a param file"""
+
+        # Confirm we can load the default params file
+        params = utils.load_param_file("params.yaml")
+
+        # Sanity-check a few values
+        self.assertEqual(params["bay"]["io_link"]["master1"]["devices_in_ports"][0], 0)
+
+        # Loading a non-existent file should raise an exception
+        self.assertRaises(FileNotFoundError, utils.load_param_file, "_params_.yaml")
+
+    def test_load_params(self):
+        params, device_id = utils.load_params(
+            "agv", layout="415_east_grand_ave", installation_id=1234
+        )
+
+        # Sanity-check a few values.
+        # Layout, installation_id, and use_sim_time are set in all param dictionaries
+        for _, value in params.items():
+            if isinstance(value, dict):
+                self.assertEqual(value["layout"], "415_east_grand_ave")
+                self.assertEqual(value["installation_id"], 1234)
+                self.assertFalse(value["use_sim_time"])
+        self.assertEqual(params["layout"], "415_east_grand_ave")
+        self.assertEqual(params["installation_id"], 1234)
+        self.assertFalse(params["use_sim_time"])
+        # Device_id is zero because we didn't set the env var
+        self.assertEqual(device_id, 0)
+
+        # Bay device params are overridden by the layout-specific params
+        # (params_415_east_grand_ave.yaml)
+        self.assertEqual(params["bay"]["io_link"]["master1"]["devices_in_ports"][0], 31)
+
+        # Confirm that a different layout has different values
+        params, device_id = utils.load_params(
+            "central", layout="1355_fulton", installation_id=4321, use_sim_time=True
+        )
+        self.assertEqual(params["garage_monitor"]["layout"], "1355_fulton")
+        self.assertEqual(params["garage_monitor"]["installation_id"], 4321)
+        self.assertTrue(params["garage_monitor"]["use_sim_time"])
+        self.assertEqual(device_id, 0)
+
+        # Params overridden by the layout-specific params (params_1355_fulton.yaml)
+        self.assertEqual(params["bay"]["io_link"]["master1"]["devices_in_ports"][0], 11)
+
+        # We can load nonsensical layouts as long as they are directly specified
+        params, device_id = utils.load_params(
+            "central", layout="abcdefghigk", installation_id=42
+        )
+        self.assertEqual(params["garage_monitor"]["layout"], "abcdefghigk")
+        self.assertEqual(params["garage_monitor"]["installation_id"], 42)
+        self.assertEqual(device_id, 0)
+
+        # No params overridden by the layout-specific params
+        self.assertEqual(params["bay"]["io_link"]["master1"]["devices_in_ports"][0], 0)
+
+    # An AGV-specific params_a<N>.yaml override file is optional. When none exists, loading
+    # must still succeed and leave the layout/device-type layers in place.
+    @mock.patch.dict(
+        os.environ,
+        {"LAYOUT": "415_east_grand_ave", "INSTALLATION_ID": "2222", "DEVICE_ID": "9"},
+    )
+    def test_load_params_agv_specific_missing_ok(self):
+        params, device_id = utils.load_params("agv")
+        self.assertEqual(device_id, 9)
+        self.assertEqual(params["agv"]["layout"], "415_east_grand_ave")
+        # Still overridden by the layout file (params_415_east_grand_ave.yaml)
+        self.assertEqual(params["bay"]["io_link"]["master1"]["devices_in_ports"][0], 31)
+
+    @mock.patch.dict(
+        os.environ,
+        {"LAYOUT": "415_east_grand_ave", "INSTALLATION_ID": "2222", "DEVICE_ID": "42"},
+    )
+    def test_load_params_env_vars(self):
+        params, device_id = utils.load_params("bay", use_sim_time=True)
+        self.assertEqual(params["bay"]["layout"], "415_east_grand_ave")
+        self.assertEqual(params["bay"]["installation_id"], 2222)
+        self.assertTrue(params["bay"]["use_sim_time"])
+        self.assertEqual(device_id, 42)
+
+    # In this test we load a valid layout, but one that doesn't have a parameter override.
+    # Because we are loading parameters using env variables the system assumes we are
+    # running in production mode and will not start with the missing file.
+    @mock.patch.dict(
+        os.environ,
+        {"LAYOUT": "tiny_log", "INSTALLATION_ID": "2", "DEVICE_ID": "88"},
+    )
+    def test_load_params_env_vars_bad_layout(self):
+        self.assertRaises(FileNotFoundError, utils.load_params, "bay")
+
+    @mock.patch.dict(
+        os.environ,
+        {"LAYOUT": "415_east_grand_ave", "INSTALLATION_ID": "2"},
+    )
+    def test_load_params_missing_device_id_ok(self):
+        params, device_id = utils.load_params("bay")
+        self.assertEqual(params["bay"]["layout"], "415_east_grand_ave")
+        self.assertEqual(params["bay"]["installation_id"], 2)
+        self.assertEqual(device_id, 0)
+
+    @mock.patch.dict(
+        os.environ,
+        {"LAYOUT": "415_east_grand_ave"},
+    )
+    def test_load_params_installation_id_required(self):
+        os.environ.pop("INSTALLATION_ID", None)
+        self.assertRaises(
+            launch.substitutions.substitution_failure.SubstitutionFailure,
+            utils.load_params,
+            "bay",
+        )
+
+    @mock.patch.dict(
+        os.environ,
+        {"INSTALLATION_ID": "2"},
+    )
+    def test_load_params_layout_required(self):
+        os.environ.pop("LAYOUT", None)
+        self.assertRaises(
+            launch.substitutions.substitution_failure.SubstitutionFailure,
+            utils.load_params,
+            "bay",
+        )
+</file>
+
+<file path="test/test_paths.py">
+import os
+import unittest
+from unittest import mock
+
+from launcher import paths
+
+_ARTIFACTS_DIR = "/tmp/artifacts"
+_ROS_HOME_DIR = "/tmp/ros_home"
+
+
+class TestGetArtifactsDir(unittest.TestCase):
+    def test_env_override(self):
+        """ARTIFACTS_DIR is used as-is when set."""
+        with mock.patch.dict(os.environ, {"ARTIFACTS_DIR": _ARTIFACTS_DIR}):
+            self.assertEqual(paths.get_artifacts_dir(), _ARTIFACTS_DIR)
+
+    def test_ros_home_default(self):
+        """An empty ARTIFACTS_DIR falls back to artifacts/ under ROS_HOME."""
+        with mock.patch.dict(
+            os.environ, {"ARTIFACTS_DIR": "", "ROS_HOME": _ROS_HOME_DIR}
+        ):
+            self.assertEqual(
+                paths.get_artifacts_dir(), os.path.join(_ROS_HOME_DIR, "artifacts")
+            )
+
+
+class TestGetRosHomeDir(unittest.TestCase):
+    def test_env_override(self):
+        """ROS_HOME is used as-is when set."""
+        with mock.patch.dict(os.environ, {"ROS_HOME": _ROS_HOME_DIR}):
+            self.assertEqual(paths.get_ros_home_dir(), _ROS_HOME_DIR)
+
+    def test_home_default(self):
+        """An empty ROS_HOME falls back to .ros under HOME."""
+        home_dir = "/home/tester"
+        with mock.patch.dict(os.environ, {"ROS_HOME": "", "HOME": home_dir}):
+            self.assertEqual(paths.get_ros_home_dir(), os.path.join(home_dir, ".ros"))
+</file>
+
+<file path="package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>launcher</name>
+  <version>0.0.1</version>
+  <description>Launch files and associated material</description>
+  <maintainer email="sw@volleyautomation.com">dev</maintainer>
+  <license>proprietary</license>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>central_api</exec_depend>
+  <exec_depend>common_py</exec_depend>
+  <exec_depend>foxglove_bridge</exec_depend>
+  <exec_depend>rcl_logging_noop</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>rosbag2_storage_mcap</exec_depend>
+  <exec_depend>rosbag2_transport</exec_depend>
+  <exec_depend>scenario</exec_depend>
+  <exec_depend>site_config</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
+</file>
+
+<file path="setup.cfg">
+[develop]
+script_dir=$base/lib/launcher
+[install]
+install_scripts=$base/lib/launcher
+</file>
+
+<file path="setup.py">
+import os
+from glob import glob
+from setuptools import setup
+
+package_name = "launcher"
+
+setup(
+    name=package_name,
+    version="0.0.1",
+    packages=[package_name],
+    data_files=[
+        # Install marker file in the package index
+        ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
+        # Include our package.xml file
+        ("share/" + package_name, ["package.xml"]),
+        # Install all launch files.
+        # ROS recommended Python glob pattern to match .py, .xml and .yaml launch files
+        (
+            os.path.join("share", package_name, "launch"),
+            glob(os.path.join("launch", "**", "*launch.[pxy][yma]*"), recursive=True),
+        ),
+        # Install all param files.
+        (
+            os.path.join("share", package_name, "params"),
+            glob(os.path.join("params/**/*.yaml"), recursive=True),
+        ),
+    ],
+    install_requires=["setuptools"],
+    zip_safe=True,
+    maintainer="dev",
+    maintainer_email="sw@volleyautomation.com",
+    description="Launch files and associated material",
+    license="proprietary",
+    extras_require={
+        "test": [
+            "pytest",
+        ],
+    },
+    entry_points={
+        "console_scripts": [
+            "layout_plotter = launcher.layout_plotter:main",
+        ],
+    },
+)
+</file>
+
+</files>

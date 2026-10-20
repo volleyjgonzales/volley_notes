@@ -1,0 +1,3419 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+config/
+  default.rviz.in
+include/
+  vis/
+    visualizer/
+      agv_visualizer.hpp
+      bay_visualizer.hpp
+      i_visualizer.hpp
+      layout_visualizer.hpp
+      queue_visualizer.hpp
+      schedule_visualizer.hpp
+      tray_visualizer.hpp
+      vrc_visualizer.hpp
+    math.hpp
+    models.hpp
+    topics.hpp
+    utils.hpp
+    vis_context.hpp
+    vis_manager.hpp
+src/
+  visualizer/
+    agv_visualizer.cpp
+    bay_visualizer.cpp
+    layout_visualizer.cpp
+    queue_visualizer.cpp
+    schedule_visualizer.cpp
+    tray_visualizer.cpp
+    vrc_visualizer.cpp
+  math.cpp
+  models.cpp
+  utils.cpp
+  vis_manager.cpp
+  visualizer_node.cpp
+test/
+  math_test.cpp
+CMakeLists.txt
+package.xml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="config/default.rviz.in">
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Status1
+        - /VRCs1
+        - /VRCs1/Topic1
+        - /RequestQueue1
+      Splitter Ratio: 0.5
+    Tree Height: 365
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Expanded:
+      - /2D Goal Pose1
+      - /Publish Point1
+    Name: Tool Properties
+    Splitter Ratio: 0.5886790156364441
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+  - Class: rviz_common/Time
+    Experimental: false
+    Name: Time
+    SyncMode: 0
+    SyncSource: ""
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 1000
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: AGVs
+      Namespaces:
+        agvs: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/agvs
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: AGV Commands
+      Namespaces:
+        agv_commands1_move: true
+        agv_commands1_movement_arrow: true
+        agv_commands1_text_label: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/agv_commands
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Bays
+      Namespaces:
+        bays_door: true
+        bays_door_mechanism: true
+        bays_floor_front: true
+        bays_floor_left: true
+        bays_floor_right: true
+        bays_overdrive_plate: true
+        bays_patron_light: true
+        bays_patron_light_sphere: true
+        bays_ramp: true
+        bays_walls: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/bays
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Chargers
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/chargers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Edges
+      Namespaces:
+        edges: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/edges
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Environment
+      Namespaces:
+        environment_bounds: true
+        environment_floor: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/environment
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Layout Spaces
+      Namespaces:
+        layout_spaces_rectangular_1: true
+        layout_spaces_rectangular_10: true
+        layout_spaces_rectangular_11: true
+        layout_spaces_rectangular_13: true
+        layout_spaces_rectangular_14: true
+        layout_spaces_rectangular_15: true
+        layout_spaces_rectangular_17: true
+        layout_spaces_rectangular_18: true
+        layout_spaces_rectangular_19: true
+        layout_spaces_rectangular_2: true
+        layout_spaces_rectangular_20: true
+        layout_spaces_rectangular_23: true
+        layout_spaces_rectangular_24: true
+        layout_spaces_rectangular_25: true
+        layout_spaces_rectangular_27: true
+        layout_spaces_rectangular_28: true
+        layout_spaces_rectangular_29: true
+        layout_spaces_rectangular_3: true
+        layout_spaces_rectangular_30: true
+        layout_spaces_rectangular_33: true
+        layout_spaces_rectangular_34: true
+        layout_spaces_rectangular_35: true
+        layout_spaces_rectangular_37: true
+        layout_spaces_rectangular_4: true
+        layout_spaces_rectangular_5: true
+        layout_spaces_rectangular_7: true
+        layout_spaces_rectangular_8: true
+        layout_spaces_rectangular_9: true
+        layout_spaces_rotational_12: true
+        layout_spaces_rotational_21: true
+        layout_spaces_rotational_31: true
+        layout_spaces_rotational_6: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/layout_spaces
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Nodes
+      Namespaces:
+        nodes: true
+        nodes_rotation: true
+        nodes_text: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/nodes
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Payloads
+      Namespaces:
+        payloads_car: true
+        payloads_wheels: true
+        payloads_windows: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/payloads
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Schedule DAG
+      Namespaces:
+        schedule_dag_agv1_move: true
+        schedule_dag_agv1_movement_arrow: true
+        schedule_dag_agv1_text_label: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/schedule_dag
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Tape
+      Namespaces:
+        edges: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/tape
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Trays
+      Namespaces:
+        trays: true
+        trays_text: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/trays
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: VRCs
+      Namespaces:
+        vrc_tracks: true
+        vrcs_carriage: true
+        vrcs_door: true
+        vrcs_vrc_shaft: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/vrcs
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: RequestQueue
+      Namespaces:
+        inserts_and_requests: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vis/request_markers
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 204; 204; 204
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /clicked_point
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 41.55366134643555
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 20.101093292236328
+        Y: 1.4694973230361938
+        Z: 3.430356740951538
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Pitch: 0.5297984480857849
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz_default_plugins)
+      Yaw: 0.5680036544799805
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: true
+  Height: 1059
+  Hide Left Dock: true
+  Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd00000004000000000000021f0000058afc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed0000023000000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c00610079007300000000140000058a000000c700fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000010f000002b4fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003b000002b4000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000009090000003efc0100000002fb0000000800540069006d00650000000000000009090000025300fffffffb0000000800540069006d0065010000000000000450000000000000000000000a000000058a00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730000000000ffffffff0000000000000000
+  Selection:
+    collapsed: false
+  Time:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: true
+  Width: 1423
+  X: 1085
+  Y: 324
+</file>
+
+<file path="include/vis/visualizer/agv_visualizer.hpp">
+#pragma once
+
+#include <interfaces/msg/agv_command_report_list.hpp>
+#include <interfaces/msg/agv_state.hpp>
+#include <unordered_map>
+#include <vector>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+class AgvVisualizer : public IVisualizer {
+public:
+  explicit AgvVisualizer(VisContextSPtr context);
+
+  std::vector<VisMessage> GetVisMessages() override;
+
+  void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) override;
+
+  void HandleAgvCommandReportList(
+      const uint32_t agv_id, interfaces::msg::AgvCommandReportList::ConstSharedPtr command_report_list);
+
+private:
+  visualization_msgs::msg::MarkerArray CreateAgvsMarkerArray();
+
+  visualization_msgs::msg::MarkerArray CreateCommandsMarkerArray();
+
+  visualization_msgs::msg::Marker CreateAgvMarker(
+      const uint32_t agv_id, const interfaces::msg::AgvState& agv_state);
+
+  std::unordered_map<uint32_t, interfaces::msg::AgvState> agv_states_;
+
+  std::unordered_map<uint32_t, interfaces::msg::AgvCommandReportList::ConstSharedPtr> command_report_lists_;
+
+  // Mapping from AGV ID to VRC height (only set if the AGV is on a node that belongs to a VRC)
+  std::unordered_map<uint32_t, std::optional<float>> agv_to_vrc_height_;
+};
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/visualizer/bay_visualizer.hpp">
+#pragma once
+
+#include <interfaces/msg/bay_state.hpp>
+#include <interfaces/msg/garage_node.hpp>
+#include <optional>
+#include <rclcpp/time.hpp>
+#include <unordered_map>
+#include <vector>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "vis/models.hpp"
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+class BayVisualizer : public IVisualizer {
+public:
+  explicit BayVisualizer(VisContextSPtr context);
+
+  std::vector<VisMessage> GetVisMessages() override;
+
+  void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) override;
+
+private:
+  visualization_msgs::msg::MarkerArray CreateBaysMarkerArray();
+
+  std::vector<visualization_msgs::msg::Marker> CreateBayMarkers(const interfaces::msg::GarageNode& node);
+
+  std::unordered_map<uint32_t, interfaces::msg::BayState> bay_states_;
+
+  // Per-bay animation state for the overdrive plate slide. The marker offset is
+  // integrated toward `target` (0 when the bay reports the ODP as in, kModelOriginOffsetM
+  // when it reports the ODP as out) at a fixed speed each frame, so the plate slides
+  // smoothly during the sim's MOVING window instead of snapping.
+  struct OdpAnimState {
+    float current_offset_m = 0.0f;
+    std::optional<rclcpp::Time> last_update_time;
+  };
+  std::unordered_map<uint32_t, OdpAnimState> odp_anim_states_;
+};
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/visualizer/i_visualizer.hpp">
+#pragma once
+
+#include <interfaces/msg/garage_snapshot.hpp>
+#include <memory>
+#include <string>
+#include <vector>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "vis/vis_context.hpp"
+
+namespace volley::vis {
+
+struct VisMessage {
+  std::string topic_name;
+  visualization_msgs::msg::MarkerArray marker_array;
+};
+
+class IVisualizer {
+public:
+  explicit IVisualizer(VisContextSPtr context) : context_(std::move(context)) { }
+
+  virtual ~IVisualizer() = default;
+
+  virtual void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) = 0;
+
+  virtual std::vector<VisMessage> GetVisMessages() = 0;
+
+protected:
+  VisContextSPtr context_;
+};
+
+using VisualizerUPtr = std::unique_ptr<IVisualizer>;
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/visualizer/layout_visualizer.hpp">
+#pragma once
+
+#include <interfaces/msg/garage_layout.hpp>
+#include <interfaces/msg/garage_node.hpp>
+#include <optional>
+#include <vector>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+class LayoutVisualizer : public IVisualizer {
+public:
+  explicit LayoutVisualizer(VisContextSPtr context);
+
+  std::vector<VisMessage> GetVisMessages() override;
+
+  void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr) override { return; }
+
+private:
+  visualization_msgs::msg::MarkerArray CreateEdgesMarkerArray();
+  visualization_msgs::msg::MarkerArray CreateTapeMarkerArray();
+  visualization_msgs::msg::MarkerArray CreateNodesMarkerArray();
+  visualization_msgs::msg::MarkerArray CreateLayoutSpacesMarkerArray();
+  visualization_msgs::msg::MarkerArray CreateChargersMarkerArray();
+  visualization_msgs::msg::MarkerArray CreateEnvironmentMarkerArray();
+
+  visualization_msgs::msg::Marker CreateNodeCenterMarker(const interfaces::msg::GarageNode& node);
+  visualization_msgs::msg::Marker CreateRectangularLayoutSpaceMarker(
+      const interfaces::msg::GarageNode& node, const int heading);
+  visualization_msgs::msg::Marker CreationRotationalLayoutSpaceMarker(
+      const interfaces::msg::GarageNode& node);
+
+  interfaces::msg::GarageLayout garage_layout_;
+  std::vector<Segment> tape_edges_;
+
+  std::optional<std::vector<VisMessage>> vis_messages_;
+};
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/visualizer/queue_visualizer.hpp">
+#pragma once
+
+#include <interfaces/msg/dispatch_report.hpp>
+#include <interfaces/msg/payload.hpp>
+#include <interfaces/msg/scheduler_job.hpp>
+#include <interfaces/msg/sim_report.hpp>
+#include <unordered_map>
+#include <vector>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+class QueueVisualizer : public IVisualizer {
+public:
+  explicit QueueVisualizer(VisContextSPtr context);
+
+  std::vector<VisMessage> GetVisMessages() override;
+
+  void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr) override { }
+
+  void HandleDispatchReport(interfaces::msg::DispatchReport::ConstSharedPtr dispatch_report);
+
+  void HandleSimReport(interfaces::msg::SimReport::ConstSharedPtr sim_report);
+
+private:
+  visualization_msgs::msg::MarkerArray CreateRequestQueueMarkerArray();
+
+  void AddRetrieveMarker(const std::string& payload_id_str, const interfaces::msg::SchedulerJob& job);
+
+  void RemoveRetrieveMarker(const std::string& payload_id_str);
+
+  void RecalculateRetrieveMarkerPositions();
+
+  void AddInsertMarker(const std::string& payload_id_str, const interfaces::msg::Payload& payload);
+
+  void RemoveInsertMarker(const std::string& payload_id_str);
+
+  void RecalculateInsertMarkerPositions();
+
+  // Insertion-ordered list of payload_id_strs in the retrieve queue
+  std::vector<std::string> retrieve_queue_order_;
+
+  // Maps payload_id_str to its active retrieve queue markers (body, wheels, windows)
+  std::unordered_map<std::string, std::vector<visualization_msgs::msg::Marker>> retrieve_markers_;
+
+  // Insertion-ordered list of payload_id_strs in the insert queue (from SimReport)
+  std::vector<std::string> insert_queue_order_;
+
+  // Maps payload_id_str to its active insert queue markers (body, wheels, windows)
+  std::unordered_map<std::string, std::vector<visualization_msgs::msg::Marker>> insert_markers_;
+
+  // Markers to publish with DELETE action on the next render, then clear
+  std::vector<visualization_msgs::msg::Marker> pending_deletions_;
+};
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/visualizer/schedule_visualizer.hpp">
+#pragma once
+
+#include <interfaces/msg/schedule.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+class ScheduleVisualizer : public IVisualizer {
+public:
+  explicit ScheduleVisualizer(VisContextSPtr context);
+
+  std::vector<VisMessage> GetVisMessages() override;
+
+  void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr) override { return; };
+
+  void HandleSchedule(interfaces::msg::Schedule::ConstSharedPtr schedule);
+
+private:
+  visualization_msgs::msg::MarkerArray CreateScheduleMarkerArray();
+
+  interfaces::msg::Schedule::ConstSharedPtr schedule_;
+};
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/visualizer/tray_visualizer.hpp">
+#pragma once
+
+#include <common_ros/ros_utils.hpp>
+#include <interfaces/msg/garage_payload.hpp>
+#include <interfaces/msg/garage_tray.hpp>
+#include <interfaces/msg/guid.hpp>
+#include <unordered_map>
+#include <vector>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+class TrayVisualizer : public IVisualizer {
+public:
+  explicit TrayVisualizer(VisContextSPtr context);
+
+  std::vector<VisMessage> GetVisMessages() override;
+
+  void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) override;
+
+private:
+  visualization_msgs::msg::MarkerArray CreateTraysMarkerArray();
+
+  visualization_msgs::msg::MarkerArray CreatePayloadsMarkerArray();
+
+  // Maps tray ID to GarageTray object
+  std::unordered_map<uint16_t, interfaces::msg::GarageTray> trays_;
+
+  // Mapping from tray ID to VRC height (only set if the tray is on a node that belongs to a VRC)
+  std::unordered_map<uint32_t, std::optional<float>> tray_to_vrc_height_;
+
+  // Maps stringified payload GUID to GaragePayload object
+  std::unordered_map<std::string, interfaces::msg::GaragePayload> payloads_;
+
+  // Mapping from payload GUID to VRC height (only set if the payload is on a node that belongs to a VRC)
+  std::unordered_map<interfaces::msg::Guid, std::optional<float>> payload_to_vrc_height_;
+};
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/visualizer/vrc_visualizer.hpp">
+#pragma once
+
+#include <interfaces/msg/garage_node.hpp>
+#include <rclcpp/time.hpp>
+#include <unordered_map>
+#include <vector>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+#include <vrc_interfaces/msg/vrc_report.hpp>
+
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+class VrcVisualizer : public IVisualizer {
+public:
+  explicit VrcVisualizer(VisContextSPtr context);
+
+  std::vector<VisMessage> GetVisMessages() override;
+
+  void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) override;
+
+private:
+  visualization_msgs::msg::MarkerArray CreateVrcsMarkerArray();
+
+  std::vector<visualization_msgs::msg::Marker> CreateVrcMarkers(const Vrc& vrc);
+
+  float GetDoorHeightAtVrcNode(const uint32_t node_id, const vrc_interfaces::msg::GateState gate_state,
+      const float floor_to_ceiling_height_m);
+
+  std::unordered_map<uint32_t, vrc_interfaces::msg::VrcReport> vrc_reports_;
+
+  // Mapping from node ID to a timestamp for when the active door starting opening or closing. The time value
+  // will be nullopt if the door is fully open or closed.
+  std::unordered_map<uint32_t, std::optional<rclcpp::Time>> door_start_time_;
+};
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/math.hpp">
+#pragma once
+
+#include <Eigen/Geometry>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/quaternion.hpp>
+
+namespace volley::vis {
+
+// Construct a quaternion given roll, pitch, and yaw [rad], in ZYX order.
+geometry_msgs::msg::Quaternion Quaternion(double roll, double pitch, double yaw);
+
+// Convenient Point constructor
+geometry_msgs::msg::Point Point(double x, double y, double z);
+
+// Eigen to ROS types and vice versa conversions
+Eigen::Quaterniond QuatToQuatd(const geometry_msgs::msg::Quaternion& quat);
+geometry_msgs::msg::Quaternion QuatdToQuat(const Eigen::Quaterniond& quat);
+
+// Pose multiplication operator
+// P1 is the pose from O to P specified in frame O
+// P2 is the pose from P to Q specified in frame Q
+// Then P1*P2 is the pose from O to Q specified in frame O
+geometry_msgs::msg::Pose operator*(const geometry_msgs::msg::Pose& p1, const geometry_msgs::msg::Pose& p2);
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/models.hpp">
+#pragma once
+
+#include <common_ros/ros_utils.hpp>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <std_msgs/msg/color_rgba.hpp>
+
+namespace volley::vis {
+
+inline constexpr auto kMeshResourcePrefixLocal = "package://sim/3d/";
+// Used when the `remote_mesh_prefix` param isn't set.
+inline constexpr auto kMeshResourcePrefixRemoteDefault = "https://aws-mesh-proxy.tailfadbb4.ts.net/model/";
+
+inline constexpr auto kAgvModelFilename = "hito_agv.dae";
+inline constexpr auto kFloorModelFilename = "concrete_floor.dae";
+inline constexpr auto kTrayModelFilename = "tray.dae";
+
+enum class BayPiece : uint8_t {
+  FLOOR_FRONT_WALKWAY = 0,
+  FLOOR_LEFT_WALKWAY,
+  FLOOR_OVERDRIVE_PLATE,
+  FLOOR_REAR_WALKWAY,
+  FLOOR_RIGHT_WALKWAY,
+  GARAGE_DOOR_CLOSED,
+  GARAGE_DOOR_MECHANISM,
+  GARAGE_DOOR_OPEN,
+  RAMP,
+  WALLS,
+  TRAFFIC_LIGHT
+};
+
+// Returns nullopt if this piece isn't defined for the given bay type (e.g. FLOOR_OVERDRIVE_PLATE
+// for a blift, which doesn't have one). Callers should skip rendering that piece rather than
+// treating it as an error.
+std::optional<std::filesystem::path> GetBayPieceFilename(BayPiece piece, bool is_blift = false);
+
+struct CarModel {
+  std::filesystem::path body_filename;
+  std::filesystem::path wheels_trim_filename;
+  std::filesystem::path windows_filename;
+};
+
+CarModel GetCarModelFromGuid(const GuidMsg& guid);
+
+std_msgs::msg::ColorRGBA GetColorFromGuid(const GuidMsg& guid);
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/topics.hpp">
+#pragma once
+
+#include <string>
+
+namespace volley::vis::topics {
+
+inline const std::string kAgvs = "agvs";
+inline const std::string kAgvCommands = "agv_commands";
+inline const std::string kAgvSensors = "agv_sensors";
+inline const std::string kBays = "bays";
+inline const std::string kChargers = "chargers";
+inline const std::string kCollisionBodies = "collision_bodies";
+inline const std::string kControlTowerState = "control_tower_state";
+inline const std::string kDisabledNodes = "disabled_nodes";
+inline const std::string kDiscreteGarageState = "discrete_garage_state";
+inline const std::string kEdges = "edges";
+inline const std::string kEnvironment = "environment";
+inline const std::string kLayoutSpaces = "layout_spaces";
+inline const std::string kNodes = "nodes";
+inline const std::string kPayloads = "payloads";
+inline const std::string kScheduleDag = "schedule_dag";
+inline const std::string kTape = "tape";
+inline const std::string kTrays = "trays";
+inline const std::string kRequestQueue = "request_markers";
+inline const std::string kVrcs = "vrcs";
+
+}  // namespace volley::vis::topics
+</file>
+
+<file path="include/vis/utils.hpp">
+#pragma once
+
+#include <common_ros/layout.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/quaternion.hpp>
+#include <interfaces/msg/agv_command.hpp>
+#include <rclcpp/time.hpp>
+#include <std_msgs/msg/color_rgba.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+
+#include "vis/models.hpp"
+
+namespace volley::vis {
+
+std_msgs::msg::ColorRGBA CreateColorRGBA(float r, float g, float b, float a = 1.0);
+
+visualization_msgs::msg::Marker CreateDefaultMarker(
+    const rclcpp::Time& time, const std::string& ns, int32_t id);
+
+visualization_msgs::msg::Marker CreateDefaultMeshMarker(
+    const rclcpp::Time& time, const std::string& ns, int32_t id);
+
+struct VisAgvCommandConfig {
+  // The AgvCommand message object
+  interfaces::msg::AgvCommand agv_command;
+  // Timestamp used for the header of the vis Marker message
+  rclcpp::Time timestamp;
+  // Layout object used to get pose of nodes
+  LayoutSPtr layout;
+  // The base name used for the vis Marker namespace
+  std::string marker_base_ns;
+  // The ID used for the vis Marker
+  int32_t marker_id;
+  // The base color to use for all vis Marker objects
+  std_msgs::msg::ColorRGBA base_color = CreateColorRGBA(0.0, 1.0, 0.0);
+  // Offset in the z direction (in meters) to apply to the vis Marker objects
+  float z_offset_m = -0.25;
+};
+
+std::vector<visualization_msgs::msg::Marker> CreateAgvCommandMarkers(const VisAgvCommandConfig& config);
+
+// Returns three markers: body (with body_color), black wheels, and dark windows.
+// ns is used as the base namespace; "_car", "_wheels", "_windows" are appended.
+// The caller is responsible for computing the final position (including any z offset).
+std::vector<visualization_msgs::msg::Marker> CreatePayloadMarkers(const rclcpp::Time& time,
+    const std::string& mesh_resource_prefix, const std::string& ns, int32_t marker_id,
+    const CarModel& car_model, const geometry_msgs::msg::Point& position,
+    const geometry_msgs::msg::Quaternion& orientation, const std_msgs::msg::ColorRGBA& body_color);
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/vis_context.hpp">
+#pragma once
+
+#include <common_ros/layout.hpp>
+#include <memory>
+#include <rclcpp/clock.hpp>
+#include <string>
+
+namespace volley::vis {
+
+class VisContext {
+public:
+  VisContext(LayoutSPtr layout, std::string mesh_resource_prefix, rclcpp::Clock::SharedPtr clock = nullptr) :
+      layout_(std::move(layout)),
+      mesh_resource_prefix_(std::move(mesh_resource_prefix)),
+      clock_((nullptr == clock) ? std::make_shared<rclcpp::Clock>() : clock) { }
+
+  rclcpp::Time GetTimeNow() const { return clock_->now(); }
+
+  LayoutSPtr GetLayout() const { return layout_; }
+
+  const std::string& GetMeshResourcePrefix() const { return mesh_resource_prefix_; }
+
+private:
+  LayoutSPtr layout_;
+  std::string mesh_resource_prefix_;
+  rclcpp::Clock::SharedPtr clock_;
+};
+
+using VisContextSPtr = std::shared_ptr<VisContext>;
+
+}  // namespace volley::vis
+</file>
+
+<file path="include/vis/vis_manager.hpp">
+#pragma once
+
+#include <common_ros/node.hpp>
+#include <interfaces/msg/agv_command_report_list.hpp>
+#include <interfaces/msg/dispatch_report.hpp>
+#include <interfaces/msg/garage_snapshot.hpp>
+#include <interfaces/msg/schedule.hpp>
+#include <interfaces/msg/sim_report.hpp>
+#include <memory>
+#include <rclcpp/rclcpp.hpp>
+#include <vector>
+#include <vrc_interfaces/msg/vrc_report.hpp>
+
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/agv_visualizer.hpp"
+#include "vis/visualizer/bay_visualizer.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+#include "vis/visualizer/layout_visualizer.hpp"
+#include "vis/visualizer/queue_visualizer.hpp"
+#include "vis/visualizer/schedule_visualizer.hpp"
+#include "vis/visualizer/tray_visualizer.hpp"
+#include "vis/visualizer/vrc_visualizer.hpp"
+
+namespace volley::vis {
+
+using MarkerArrayPub = rclcpp::Publisher<visualization_msgs::msg::MarkerArray>;
+using MarkerArrayPubSPtr = std::shared_ptr<MarkerArrayPub>;
+
+class VisManager {
+public:
+  explicit VisManager(NodeSPtr node);
+
+private:
+  bool AddPublisher(const std::string& topic_name);
+
+  void HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot);
+
+  bool Publish(const VisMessage& vis_message);
+  bool Publish(const std::vector<VisMessage>& vis_messages);
+  void Render();
+
+  NodeSPtr node_;
+  VisContextSPtr context_;
+
+  std::vector<VisualizerUPtr> visualizers_;
+  // A pointer to the schedule visualizer inside visualizers_ so that we can pass Schedule messages directly
+  // to the visualizer without dynamic casting
+  ScheduleVisualizer* schedule_visualizer_;
+  // A pointer to the AGV visualizer inside visualizers_ so that we can pass AGVCommand messages directly
+  // to the visualizer without dynamic casting
+  AgvVisualizer* agv_visualizer_;
+  // A pointer to the tray visualizer inside visualizers_ so that we can pass DispatchReport messages directly
+  // to the visualizer without dynamic casting
+  QueueVisualizer* queue_visualizer_;
+
+  rclcpp::TimerBase::SharedPtr render_timer_;
+
+  rclcpp::Subscription<interfaces::msg::GarageSnapshot>::SharedPtr garage_snapshot_sub_;
+
+  rclcpp::Subscription<interfaces::msg::Schedule>::SharedPtr schedule_sub_;
+
+  rclcpp::Subscription<interfaces::msg::DispatchReport>::SharedPtr dispatch_report_sub_;
+
+  rclcpp::Subscription<interfaces::msg::SimReport>::SharedPtr sim_report_sub_;
+
+  std::unordered_map<uint32_t, rclcpp::Subscription<interfaces::msg::AgvCommandReportList>::SharedPtr>
+      agv_command_subs_;
+
+  std::unordered_map<std::string, MarkerArrayPubSPtr> publishers_;
+};
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/visualizer/agv_visualizer.cpp">
+#include "vis/visualizer/agv_visualizer.hpp"
+
+#include <interfaces/msg/agv_sim_state.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+
+#include "vis/math.hpp"
+#include "vis/models.hpp"
+#include "vis/topics.hpp"
+#include "vis/utils.hpp"
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+AgvVisualizer::AgvVisualizer(VisContextSPtr context) : IVisualizer(std::move(context)) {
+}
+
+std::vector<VisMessage> AgvVisualizer::GetVisMessages() {
+  return {VisMessage {.topic_name = topics::kAgvs, .marker_array = CreateAgvsMarkerArray()},
+      VisMessage {.topic_name = topics::kAgvCommands, .marker_array = CreateCommandsMarkerArray()}};
+}
+
+void AgvVisualizer::HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) {
+  for(const interfaces::msg::AgvSimState& agv_sim_state : garage_snapshot->agvs) {
+    agv_states_[agv_sim_state.agv_id] = agv_sim_state.state;
+
+    const uint32_t agv_node_id = agv_sim_state.state.garage_pose.node_id;
+
+    // Check if the AGV is on a node that belongs to a VRC. If so, update the corresponding vrc height to be
+    // the carriage height from the garage_snapshot, nullopt otherwise
+    std::optional<float> vrc_height_m = std::nullopt;
+    for(const auto& vrc_report : garage_snapshot->vrcs) {
+      const auto vrc_layout = context_->GetLayout()->GetVrc(vrc_report.id);
+      if(!vrc_layout.has_value()) {
+        continue;
+      }
+
+      for(const auto& vrc_node : vrc_layout.value().nodes) {
+        if(agv_node_id == vrc_node.id) {
+          vrc_height_m = vrc_report.carriage_height_m;
+        }
+      }
+    }
+
+    agv_to_vrc_height_[agv_sim_state.agv_id] = vrc_height_m;
+  }
+}
+
+void AgvVisualizer::HandleAgvCommandReportList(
+    const uint32_t agv_id, interfaces::msg::AgvCommandReportList::ConstSharedPtr command_report_list) {
+  command_report_lists_[agv_id] = command_report_list;
+}
+
+visualization_msgs::msg::MarkerArray AgvVisualizer::CreateAgvsMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  for(const auto& [agv_id, agv_state] : agv_states_) {
+    marker_array.markers.push_back(CreateAgvMarker(agv_id, agv_state));
+  }
+
+  return marker_array;
+}
+
+visualization_msgs::msg::MarkerArray AgvVisualizer::CreateCommandsMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  for(const auto& [agv_id, command_report_list] : command_report_lists_) {
+    const std::string marker_base_ns = topics::kAgvCommands + std::to_string(agv_id);
+    if(!command_report_list) {
+      continue;
+    }
+
+    for(size_t i = 0; i < command_report_list->command_queue.size(); i++) {
+      const auto& command_report = command_report_list->command_queue.at(i);
+      const auto agv_markers = CreateAgvCommandMarkers({.agv_command = command_report.command,
+          .timestamp = context_->GetTimeNow(),
+          .layout = context_->GetLayout(),
+          .marker_base_ns = marker_base_ns,
+          .marker_id = static_cast<int32_t>(i)});
+
+      marker_array.markers.insert(marker_array.markers.end(), agv_markers.begin(), agv_markers.end());
+    }
+  }
+
+  return marker_array;
+}
+
+visualization_msgs::msg::Marker AgvVisualizer::CreateAgvMarker(
+    const uint32_t agv_id, const interfaces::msg::AgvState& agv_state) {
+  visualization_msgs::msg::Marker agv_marker =
+      CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kAgvs, agv_id);
+  agv_marker.mesh_resource = context_->GetMeshResourcePrefix() + kAgvModelFilename;
+
+  const auto GetAgvZ = [&]() {
+    if(agv_to_vrc_height_.contains(agv_id) && agv_to_vrc_height_.at(agv_id).has_value()) {
+      return agv_to_vrc_height_.at(agv_id).value();
+    }
+    else {
+      return context_->GetLayout()->GetFloorZForFloorId(agv_state.floor).value_or(0);
+    }
+  };
+
+  agv_marker.pose.position = Point(agv_state.geometric_pose.x, agv_state.geometric_pose.y, GetAgvZ());
+  agv_marker.pose.orientation = Quaternion(0, 0, Wrap(agv_state.geometric_pose.yaw + radians(180.0)));
+
+  agv_marker.mesh_use_embedded_materials = true;
+  agv_marker.color = CreateColorRGBA(0.0, 0.0, 0.0);
+
+  // Color the AGV based on its lift fraction.
+  const float lift_fraction = *std::ranges::max_element(agv_state.lift_fractions);
+  if(lift_fraction > 0.1) {
+    const std_msgs::msg::ColorRGBA lifting_color = CreateColorRGBA(1.0, 1.0, 0.0);
+    agv_marker.color = volley::Lerp(agv_marker.color, lifting_color, lift_fraction);
+  }
+
+  return agv_marker;
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/visualizer/bay_visualizer.cpp">
+#include "vis/visualizer/bay_visualizer.hpp"
+
+#include <bay_interfaces/srv/patron_light_control.hpp>
+#include <interfaces/msg/bay_state.hpp>
+#include <interfaces/msg/door_report.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+
+#include "vis/math.hpp"
+#include "vis/models.hpp"
+#include "vis/topics.hpp"
+#include "vis/utils.hpp"
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+BayVisualizer::BayVisualizer(VisContextSPtr context) : IVisualizer(std::move(context)) {
+}
+
+std::vector<VisMessage> BayVisualizer::GetVisMessages() {
+  return {VisMessage {.topic_name = topics::kBays, .marker_array = CreateBaysMarkerArray()}};
+}
+
+void BayVisualizer::HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) {
+  for(const auto& bay_state : garage_snapshot->bays) {
+    bay_states_[bay_state.id] = bay_state;
+  }
+}
+
+visualization_msgs::msg::MarkerArray BayVisualizer::CreateBaysMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  for(const auto& node_id : context_->GetLayout()->GetBayLikeNodeIds()) {
+    const auto node = context_->GetLayout()->GetNodeById(node_id);
+    if(!node.has_value()) {
+      continue;
+    }
+
+    const std::vector<visualization_msgs::msg::Marker> markers = CreateBayMarkers(node.value());
+    marker_array.markers.insert(marker_array.markers.end(), markers.begin(), markers.end());
+  }
+
+  return marker_array;
+}
+
+std::vector<visualization_msgs::msg::Marker> BayVisualizer::CreateBayMarkers(
+    const interfaces::msg::GarageNode& node) {
+  std::vector<visualization_msgs::msg::Marker> markers;
+
+  if(!bay_states_.contains(node.id)) {
+    return markers;
+  }
+
+  const interfaces::msg::BayState& bay_state = bay_states_.at(node.id);
+  const LayoutSPtr& layout = context_->GetLayout();
+
+  const int bay_heading_deg = node.headings.at(0) + 180 * node.faces_reciprocal;
+  geometry_msgs::msg::Pose bay_pose;
+  bay_pose.position = Point(node.x, node.y, layout->GetFloorZForFloorId(node.floor).value_or(0));
+  bay_pose.orientation = Quaternion(0.0, 0.0, bay_heading_deg * kDeg2Rad);
+  const bool is_blift = (node.type == GarageNodeMsg::TYPE_BLIFT);
+
+  // Overdrive plate. Slides linearly between its in (offset 0) and out
+  // (offset kModelOriginOffsetM) positions while the bay's door state machines report any
+  // ODP/system door as MOVING or OPEN. The animation runs at a fixed speed matching the
+  // sim's bay.door.{open,close}_time so the marker reaches its destination right around
+  // when the door state machine settles.
+  const auto odp_filename = GetBayPieceFilename(BayPiece::FLOOR_OVERDRIVE_PLATE, is_blift);
+  if(odp_filename.has_value()) {
+    static constexpr float kModelOriginOffsetM = 2.4384f;  // 8 feet in meters
+    static constexpr float kOdpTravelTimeS = 4.0f;         // matches bay.door.open_time
+    static constexpr float kOdpSpeedMps = kModelOriginOffsetM / kOdpTravelTimeS;
+
+    visualization_msgs::msg::Marker marker =
+        CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_overdrive_plate", node.id);
+    marker.pose = bay_pose;
+    marker.mesh_resource = context_->GetMeshResourcePrefix() + odp_filename->string();
+
+    const bool odp_open = bay_state.overdrive_left_state == interfaces::msg::DoorReport::DOOR_STATE_OPEN ||
+                          bay_state.overdrive_left_state == interfaces::msg::DoorReport::DOOR_STATE_MOVING ||
+                          bay_state.overdrive_right_state == interfaces::msg::DoorReport::DOOR_STATE_OPEN ||
+                          bay_state.overdrive_right_state == interfaces::msg::DoorReport::DOOR_STATE_MOVING ||
+                          bay_state.system_door_state == interfaces::msg::DoorReport::DOOR_STATE_OPEN ||
+                          bay_state.system_door_state == interfaces::msg::DoorReport::DOOR_STATE_MOVING ||
+                          bay_state.patron_light_state > 1u;
+
+    // Integrate the offset toward its target each frame at kOdpSpeedMps. Naturally handles
+    // direction reversals (e.g. the bay flips back to closed mid-slide).
+    const float target_offset_m = odp_open ? kModelOriginOffsetM : 0.0f;
+    OdpAnimState& anim = odp_anim_states_[node.id];
+    const rclcpp::Time now = context_->GetTimeNow();
+    if(anim.last_update_time.has_value()) {
+      const float dt = static_cast<float>((now - anim.last_update_time.value()).seconds());
+      const float max_step = kOdpSpeedMps * dt;
+      if(target_offset_m > anim.current_offset_m) {
+        anim.current_offset_m = std::min(target_offset_m, anim.current_offset_m + max_step);
+      }
+      else if(target_offset_m < anim.current_offset_m) {
+        anim.current_offset_m = std::max(target_offset_m, anim.current_offset_m - max_step);
+      }
+    }
+    anim.last_update_time = now;
+
+    const float current_offset = anim.current_offset_m;
+    switch(bay_heading_deg) {
+    case 0:
+    case 360:
+      marker.pose.position.x += current_offset;
+      break;
+    case 90:
+    case -270:
+      marker.pose.position.y += current_offset;
+      break;
+    case 180:
+    case -180:
+      marker.pose.position.x -= current_offset;
+      break;
+    case -90:
+    case 270:
+      marker.pose.position.y -= current_offset;
+      break;
+    default:
+      break;
+    }
+
+    markers.push_back(marker);
+  }
+
+  // Front part of the walkway
+  {
+    const auto floor_front_filename = GetBayPieceFilename(BayPiece::FLOOR_FRONT_WALKWAY, is_blift);
+    if(floor_front_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_floor_front", node.id);
+      marker.pose = bay_pose;
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + floor_front_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Right side of the walkway
+  {
+    const auto floor_right_filename = GetBayPieceFilename(BayPiece::FLOOR_RIGHT_WALKWAY, is_blift);
+    if(floor_right_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_floor_right", node.id);
+      marker.pose = bay_pose;
+
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + floor_right_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Left side of the walkway
+  {
+    const auto floor_left_filename = GetBayPieceFilename(BayPiece::FLOOR_LEFT_WALKWAY, is_blift);
+    if(floor_left_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_floor_left", node.id);
+      marker.pose = bay_pose;
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + floor_left_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Rear part of the walkway
+  {
+    const auto rear_walkway_filename = GetBayPieceFilename(BayPiece::FLOOR_REAR_WALKWAY, is_blift);
+    if(rear_walkway_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_floor_rear", node.id);
+      marker.pose = bay_pose;
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + rear_walkway_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Ramp
+  {
+    const auto ramp_filename = GetBayPieceFilename(BayPiece::RAMP, is_blift);
+    if(ramp_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_ramp", node.id);
+      marker.pose = bay_pose;
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + ramp_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Walls
+  {
+    const auto walls_filename = GetBayPieceFilename(BayPiece::WALLS, is_blift);
+    if(walls_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_walls", node.id);
+      marker.pose = bay_pose;
+      marker.color = CreateColorRGBA(1.0, 1.0, 1.0, 0.5);
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + walls_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Patron garage door mechanism
+  {
+    const auto door_mechanism_filename = GetBayPieceFilename(BayPiece::GARAGE_DOOR_MECHANISM, is_blift);
+    if(door_mechanism_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_door_mechanism", node.id);
+      marker.pose = bay_pose;
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + door_mechanism_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Patron garage door
+  {
+    const bool door_open =
+        bay_state.patron_door_state == interfaces::msg::DoorReport::DOOR_STATE_OPEN ||
+        bay_state.patron_light_state == bay_interfaces::srv::PatronLightControl::Request::LIGHT_GREEN;
+    const auto door_filename =
+        GetBayPieceFilename(door_open ? BayPiece::GARAGE_DOOR_OPEN : BayPiece::GARAGE_DOOR_CLOSED, is_blift);
+    if(door_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_door", node.id);
+      marker.pose = bay_pose;
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + door_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Patron Light
+  {
+    const auto patron_light_filename = GetBayPieceFilename(BayPiece::TRAFFIC_LIGHT, is_blift);
+    if(patron_light_filename.has_value()) {
+      visualization_msgs::msg::Marker marker =
+          CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kBays + "_patron_light", node.id);
+      marker.pose = bay_pose;
+      marker.mesh_resource = context_->GetMeshResourcePrefix() + patron_light_filename->string();
+      markers.push_back(marker);
+    }
+  }
+
+  // Patron Light
+  {
+    visualization_msgs::msg::Marker marker =
+        CreateDefaultMarker(context_->GetTimeNow(), topics::kBays + "_patron_light_sphere", node.id);
+    marker.type = visualization_msgs::msg::Marker::SPHERE;
+
+    marker.scale.x = 0.5;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.5;
+
+    static constexpr float walkway_width_m = (kBayWidth - kTrayWidth) / 2;
+    static constexpr float wall_thickness_m = 0.1;
+    marker.pose.position.x = -((kTrayWidth + walkway_width_m) / 2) - 0.15f;
+    marker.pose.position.y = -(kBayLength / 2 - wall_thickness_m / 2) - 0.15f;
+    marker.pose.position.z = (kGarageDoorHeight / 2 + kTrayHeight) + 0.75f;
+
+    marker.pose = bay_pose * marker.pose;
+
+    if(bay_state.patron_light_state == bay_interfaces::srv::PatronLightControl::Request::LIGHTS_OFF) {
+      marker.color = CreateColorRGBA(0.5, 0.5, 0.5);
+    }
+    else if(bay_state.patron_light_state == bay_interfaces::srv::PatronLightControl::Request::LIGHT_GREEN) {
+      marker.color = CreateColorRGBA(0.0, 1.0, 0.0);
+    }
+    else {
+      marker.color = CreateColorRGBA(1.0, 0.0, 0.0);
+    }
+
+    markers.push_back(marker);
+  }
+
+  return markers;
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/visualizer/layout_visualizer.cpp">
+#include "vis/visualizer/layout_visualizer.hpp"
+
+#include <common/constants.hpp>
+#include <common/geometry_utils.hpp>
+#include <common_ros/tape_layout.hpp>
+
+#include "vis/math.hpp"
+#include "vis/models.hpp"
+#include "vis/topics.hpp"
+#include "vis/utils.hpp"
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+LayoutVisualizer::LayoutVisualizer(VisContextSPtr context) :
+    IVisualizer(std::move(context)),
+    garage_layout_(context_->GetLayout()->GetGarageLayout()),
+    tape_edges_(ComputeAllConsolidatedTapeSegments(*(context_->GetLayout()))) {
+}
+
+std::vector<VisMessage> LayoutVisualizer::GetVisMessages() {
+  if(vis_messages_.has_value()) {
+    return vis_messages_.value();
+  }
+
+  vis_messages_ = {
+      {.topic_name = topics::kEdges, .marker_array = CreateEdgesMarkerArray()},
+      {.topic_name = topics::kTape, .marker_array = CreateTapeMarkerArray()},
+      {.topic_name = topics::kNodes, .marker_array = CreateNodesMarkerArray()},
+      {.topic_name = topics::kLayoutSpaces, .marker_array = CreateLayoutSpacesMarkerArray()},
+      {.topic_name = topics::kChargers, .marker_array = CreateChargersMarkerArray()},
+      {.topic_name = topics::kEnvironment, .marker_array = CreateEnvironmentMarkerArray()},
+  };
+
+  return vis_messages_.value();
+}
+
+visualization_msgs::msg::MarkerArray LayoutVisualizer::CreateEdgesMarkerArray() {
+  static constexpr float kEdgeLineWidthM = 0.15;
+
+  visualization_msgs::msg::Marker marker = CreateDefaultMarker(context_->GetTimeNow(), topics::kEdges, 0);
+  marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+  marker.scale.x = kEdgeLineWidthM;
+  marker.color = CreateColorRGBA(0, 0.5, 1, 0.5);
+  marker.pose.position.x = 0.0;
+  marker.pose.position.y = 0.0;
+  marker.pose.position.z = 0.0;
+
+  for(const auto& edge : garage_layout_.edges) {
+    const auto& src_node = garage_layout_.nodes.at(edge.src);
+    const auto& dst_node = garage_layout_.nodes.at(edge.dst);
+    const float src_z = context_->GetLayout()->GetFloorZForNodeId(src_node.id).value_or(0);
+    const float dst_z = context_->GetLayout()->GetFloorZForNodeId(dst_node.id).value_or(0);
+    marker.points.emplace_back(Point(src_node.x, src_node.y, src_z));
+    marker.points.emplace_back(Point(dst_node.x, dst_node.y, dst_z));
+  }
+
+  visualization_msgs::msg::MarkerArray marker_array;
+  marker_array.markers.push_back(std::move(marker));
+  return marker_array;
+}
+
+visualization_msgs::msg::MarkerArray LayoutVisualizer::CreateTapeMarkerArray() {
+  static constexpr float kTapeLineWidthM = 0.05;
+  static constexpr float kTapeZOffsetM = 0.01;
+
+  visualization_msgs::msg::Marker marker = CreateDefaultMarker(context_->GetTimeNow(), topics::kEdges, 0);
+  marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+  marker.scale.x = kTapeLineWidthM;
+  marker.color = CreateColorRGBA(1.0, 1.0, 0.0);
+  for(const auto& edge : tape_edges_) {
+    const float tape_z = context_->GetLayout()->GetFloorZForFloorId(edge.floor).value_or(0) + kTapeZOffsetM;
+    marker.points.emplace_back(Point(edge.p1.x(), edge.p1.y(), tape_z));
+    marker.points.emplace_back(Point(edge.p2.x(), edge.p2.y(), tape_z));
+  }
+
+  visualization_msgs::msg::MarkerArray marker_array;
+  marker_array.markers.push_back(std::move(marker));
+  return marker_array;
+}
+
+visualization_msgs::msg::MarkerArray LayoutVisualizer::CreateNodesMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  for(const auto& node : garage_layout_.nodes) {
+    const visualization_msgs::msg::Marker node_marker = CreateNodeCenterMarker(node);
+    marker_array.markers.push_back(node_marker);
+
+    if(node.rotation_allowed) {
+      // Render a cylinder to indicate rotation
+      visualization_msgs::msg::Marker rotation_marker =
+          CreateDefaultMarker(context_->GetTimeNow(), topics::kNodes + "_rotation", node.id);
+      rotation_marker.type = visualization_msgs::msg::Marker::CYLINDER;
+      rotation_marker.pose = node_marker.pose;
+      rotation_marker.color = CreateColorRGBA(0.0, 0.5, 1.0, 0.5);
+      rotation_marker.scale.x = 1.0;
+      rotation_marker.scale.y = 1.0;
+      rotation_marker.scale.z = node_marker.scale.z;
+      marker_array.markers.push_back(std::move(rotation_marker));
+    }
+
+    // Add the node id text on the node
+    visualization_msgs::msg::Marker text_marker =
+        CreateDefaultMarker(context_->GetTimeNow(), topics::kNodes + "_text", node.id);
+    text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+    text_marker.text = std::to_string(node.id);
+    text_marker.color = node_marker.color;
+    text_marker.pose = node_marker.pose;
+    text_marker.pose.position.z += 0.25;
+    text_marker.scale.z = 0.5f;
+    marker_array.markers.push_back(std::move(text_marker));
+  }
+
+  return marker_array;
+}
+
+visualization_msgs::msg::MarkerArray LayoutVisualizer::CreateLayoutSpacesMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  for(const auto& node : garage_layout_.nodes) {
+    if(node.rotation_allowed) {
+      marker_array.markers.push_back(CreationRotationalLayoutSpaceMarker(node));
+    }
+    else {
+      for(const int heading : node.headings) {
+        marker_array.markers.push_back(CreateRectangularLayoutSpaceMarker(node, heading));
+      }
+    }
+  }
+
+  return marker_array;
+}
+
+visualization_msgs::msg::MarkerArray LayoutVisualizer::CreateChargersMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  for(const auto& node : garage_layout_.nodes) {
+    if(node.type != interfaces::msg::GarageNode::TYPE_AGV_CHARGE) {
+      continue;
+    }
+
+    visualization_msgs::msg::Marker marker =
+        CreateDefaultMarker(context_->GetTimeNow(), topics::kChargers, node.id);
+    marker.type = visualization_msgs::msg::Marker::CUBE;
+    marker.color = CreateColorRGBA(1.0, 0.65, 0.0);
+
+    const double charger_yaw = GetInboundHeading(node) * kDeg2Rad;
+
+    // Get the center of the charger relative to its charge node pose
+    // The charger is located in the direction opposite of the charge node's orientation
+    geometry_msgs::msg::Pose charger_pose;
+    charger_pose.position.x = (kChargerLateralOffsetFromAgv + kAgvWidth / 2 + kChargerDepth / 2);
+
+    // Rotate the pose relative to the charger frame
+    geometry_msgs::msg::Pose node_pose {};
+    node_pose.position.x = node.x;
+    node_pose.position.y = node.y;
+    node_pose.position.z =
+        context_->GetLayout()->GetFloorZForNodeId(node.id).value_or(0) + kChargerHeight / 2;
+    node_pose.orientation = Quaternion(0.0, 0.0, charger_yaw);
+
+    marker.pose = node_pose * charger_pose;
+    marker.scale.z = kChargerHeight;
+    marker.scale.x = kChargerDepth;
+    marker.scale.y = kChargerWidth;
+
+    marker_array.markers.push_back(std::move(marker));
+  }
+
+  return marker_array;
+}
+
+visualization_msgs::msg::MarkerArray LayoutVisualizer::CreateEnvironmentMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  static constexpr float kBoundsLineWidthM = 0.05;
+
+  float min_x = std::numeric_limits<float>::max();
+  float min_y = std::numeric_limits<float>::max();
+  float max_x = std::numeric_limits<float>::min();
+  float max_y = std::numeric_limits<float>::min();
+
+  for(const auto& node : garage_layout_.nodes) {
+    min_x = std::min(min_x, node.x);
+    min_y = std::min(min_y, node.y);
+    max_x = std::max(max_x, node.x);
+    max_y = std::max(max_y, node.y);
+  }
+
+  const float floor_width_m = fabsf(max_x - min_x);
+  const float floor_length_m = fabsf(max_y - min_y);
+
+  // Draw the garage layout bounding box.
+  for(const auto& floor : context_->GetLayout()->GetFloors()) {
+    visualization_msgs::msg::Marker bounds_marker =
+        CreateDefaultMarker(context_->GetTimeNow(), topics::kEnvironment + "_bounds", floor.id);
+    bounds_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
+    bounds_marker.scale.x = kBoundsLineWidthM;
+    bounds_marker.color = CreateColorRGBA(1.0, 0.0, 1.0, 0.5);
+    bounds_marker.pose.position = Point(0.0, 0.0, 0.0);
+    bounds_marker.pose.orientation = Quaternion(0.0, 0.0, 0.0);
+    bounds_marker.points.push_back(Point(min_x, min_y, floor.z));
+    bounds_marker.points.push_back(Point(max_x, min_y, floor.z));
+    bounds_marker.points.push_back(Point(max_x, max_y, floor.z));
+    bounds_marker.points.push_back(Point(min_x, max_y, floor.z));
+    bounds_marker.points.push_back(Point(min_x, min_y, floor.z));
+    marker_array.markers.push_back(std::move(bounds_marker));
+
+    // Floor
+    visualization_msgs::msg::Marker floor_marker =
+        CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kEnvironment + "_floor", floor.id);
+    floor_marker.mesh_resource = context_->GetMeshResourcePrefix() + kFloorModelFilename;
+    floor_marker.color = CreateColorRGBA(0.7, 0.7, 0.7, 0.1);
+    floor_marker.pose.orientation = Quaternion(0.0, 0.0, 0.0);
+    const float with_margin = 1.35;
+    const float half_margin = 0.175;
+    floor_marker.scale.x = floor_width_m * with_margin;
+    floor_marker.scale.y = floor_length_m * with_margin;
+    floor_marker.scale.z = 1.0f;
+    floor_marker.pose.position = Point(
+        min_x - (floor_width_m * half_margin), min_y - (floor_length_m * half_margin), floor.z - 0.025f);
+    marker_array.markers.push_back(std::move(floor_marker));
+  }
+
+  return marker_array;
+}
+
+visualization_msgs::msg::Marker LayoutVisualizer::CreateNodeCenterMarker(
+    const interfaces::msg::GarageNode& node) {
+  visualization_msgs::msg::Marker marker =
+      CreateDefaultMarker(context_->GetTimeNow(), topics::kNodes, node.id);
+  marker.type = visualization_msgs::msg::Marker::CYLINDER;
+  marker.pose.position =
+      Point(node.x, node.y, context_->GetLayout()->GetFloorZForFloorId(node.floor).value_or(0));
+  marker.pose.orientation = Quaternion(0.0, 0.0, 0.0);
+  marker.scale.z = 0.2f;
+  marker.scale.x = 0.25f;
+  marker.scale.y = 0.25f;
+  marker.color = CreateColorRGBA(1.0, 1.0, 0.0);
+
+  // TODO(justin): handle disabled node
+  bool disabled = false;
+  // if(*ctx_.has_dgs) {
+  //   disabled = ctx_.state->IsNodeDisabled(node.id);
+  // }
+
+  if(disabled) {
+    marker.color = CreateColorRGBA(1.0, 0.0, 0.5);
+  }
+  else {
+    if(node.type == interfaces::msg::GarageNode::TYPE_PARKING) {
+      marker.color = CreateColorRGBA(0.1, 0.63, 0.91);  // Blue
+    }
+    else if(node.type == interfaces::msg::GarageNode::TYPE_LIFT) {
+      marker.color = CreateColorRGBA(0.7, 0.0, 0.6);  // Purple-ish
+    }
+    else if(node.type == interfaces::msg::GarageNode::TYPE_BAY) {
+      marker.color = CreateColorRGBA(1.0, 0.64, 0.0);  // Orange
+    }
+    else if(node.type == interfaces::msg::GarageNode::TYPE_AGV_CHARGE) {
+      marker.color = CreateColorRGBA(0.0, 1.0, 0.0);  // Green
+    }
+    else if(node.type == interfaces::msg::GarageNode::TYPE_EV_CHARGE) {
+      marker.color = CreateColorRGBA(0.1, 0.82, 0.92);  // sky blue
+    }
+  }
+
+  return marker;
+}
+
+visualization_msgs::msg::Marker LayoutVisualizer::CreateRectangularLayoutSpaceMarker(
+    const interfaces::msg::GarageNode& node, const int heading) {
+  const std::string marker_ns = topics::kLayoutSpaces + "_rectangular_" + std::to_string(node.id);
+  visualization_msgs::msg::Marker marker = CreateDefaultMarker(context_->GetTimeNow(), marker_ns, heading);
+  marker.type = visualization_msgs::msg::Marker::CUBE;
+  marker.pose.position =
+      Point(node.x, node.y, context_->GetLayout()->GetFloorZForNodeId(node.id).value_or(0));
+  marker.pose.orientation = Quaternion(0.0, 0.0, heading * kDeg2Rad);
+  marker.scale.z = 0.05;
+
+  marker.color = CreateColorRGBA(0.67, 0.67, 0.67);
+  // Make parking spots a bit darker for visibility
+  marker.color.a = node.type == interfaces::msg::GarageNode::TYPE_PARKING ? 0.5 : 0.25;
+
+  // Note that we add our parking window buffer to show the collision volume used when
+  // computing overlaps
+  const auto window_opt = context_->GetLayout()->GetBufferedResourceWindow(node.max_resource_size);
+  if(window_opt.has_value()) {
+    marker.scale.x = window_opt.value().width_m;
+    marker.scale.y = window_opt.value().length_m;
+  }
+
+  return marker;
+}
+
+visualization_msgs::msg::Marker LayoutVisualizer::CreationRotationalLayoutSpaceMarker(
+    const interfaces::msg::GarageNode& node) {
+  const int heading = !node.headings.empty() ? node.headings.at(0) : 0;
+  // Start by copying any parking space marker for this node with any heading
+  visualization_msgs::msg::Marker marker = CreateRectangularLayoutSpaceMarker(node, heading);
+  marker.ns = topics::kLayoutSpaces + "_rotational_" + std::to_string(node.id);
+  marker.id = 0;
+  marker.type = visualization_msgs::msg::Marker::CYLINDER;
+
+  double radius = 1.0;  // Default to a small radius
+  const auto window_opt = context_->GetLayout()->GetBufferedResourceWindow(node.max_resource_size);
+  if(window_opt.has_value()) {
+    radius = std::hypot(window_opt.value().width_m, window_opt.value().length_m);
+  }
+
+  marker.scale.x = radius;
+  marker.scale.y = marker.scale.x;
+  return marker;
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/visualizer/queue_visualizer.cpp">
+#include "vis/visualizer/queue_visualizer.hpp"
+
+#include <cmath>
+#include <common/constants.hpp>
+#include <common_ros/layout.hpp>
+#include <interfaces/msg/payload.hpp>
+#include <interfaces/msg/scheduler_job.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+
+#include "vis/math.hpp"
+#include "vis/models.hpp"
+#include "vis/topics.hpp"
+#include "vis/utils.hpp"
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+namespace {
+constexpr auto kRequestQueueNs = "inserts_and_requests";
+constexpr double kRetrieveQueueCarSpacingM = 1.0;
+constexpr double kInsertQueueCarSpacingM = 2.5;
+constexpr double kRetrieveQueueOffsetM = 5.0;
+constexpr double kInsertQueueOffsetM = 5.0;
+constexpr double kQueueOffset = -1.0;
+}  // namespace
+
+QueueVisualizer::QueueVisualizer(VisContextSPtr context) : IVisualizer(std::move(context)) {
+}
+
+std::vector<VisMessage> QueueVisualizer::GetVisMessages() {
+  return {{.topic_name = topics::kRequestQueue, .marker_array = CreateRequestQueueMarkerArray()}};
+}
+
+void QueueVisualizer::HandleSimReport(interfaces::msg::SimReport::ConstSharedPtr sim_report) {
+  std::unordered_map<std::string, interfaces::msg::Payload> inserts_to_display;
+  for(const auto& payload : sim_report->payloads) {
+    const std::string id_str = GuidToString(payload.id);
+    inserts_to_display[id_str] = payload;
+  }
+
+  std::vector<std::string> to_remove;
+  for(const auto& id_str : insert_queue_order_) {
+    if(!inserts_to_display.count(id_str)) {
+      to_remove.push_back(id_str);
+    }
+  }
+  for(const auto& id_str : to_remove) {
+    RemoveInsertMarker(id_str);
+  }
+
+  for(const auto& [id_str, payload] : inserts_to_display) {
+    if(!insert_markers_.count(id_str)) {
+      AddInsertMarker(id_str, payload);
+    }
+  }
+}
+
+void QueueVisualizer::HandleDispatchReport(interfaces::msg::DispatchReport::ConstSharedPtr dispatch_report) {
+  // Retrieves require the patron to wait until the job is completely finished, so keep the marker
+  // in the queue while the job is unplanned OR executing. Inserts are sourced from SimReport instead.
+  std::unordered_map<std::string, interfaces::msg::SchedulerJob> retrieves_to_display;
+  for(const auto& job : dispatch_report->jobs) {
+    const bool retrieve_job_not_finished = (job.type == interfaces::msg::SchedulerJob::TYPE_RETRIEVE &&
+                                            (job.state == interfaces::msg::SchedulerJob::STATE_UNPLANNED ||
+                                                job.state == interfaces::msg::SchedulerJob::STATE_EXECUTING));
+    if(retrieve_job_not_finished) {
+      const std::string id_str = GuidToString(job.payload_id);
+      retrieves_to_display[id_str] = job;
+    }
+  }
+
+  std::vector<std::string> to_remove;
+  for(const auto& id_str : retrieve_queue_order_) {
+    if(!retrieves_to_display.count(id_str)) {
+      to_remove.push_back(id_str);
+    }
+  }
+  for(const auto& id_str : to_remove) {
+    RemoveRetrieveMarker(id_str);
+  }
+
+  for(const auto& [id_str, job] : retrieves_to_display) {
+    if(!retrieve_markers_.count(id_str)) {
+      AddRetrieveMarker(id_str, job);
+    }
+  }
+}
+
+visualization_msgs::msg::MarkerArray QueueVisualizer::CreateRequestQueueMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+  const auto now = context_->GetTimeNow();
+
+  for(auto& marker : pending_deletions_) {
+    marker_array.markers.push_back(marker);
+  }
+  pending_deletions_.clear();
+
+  for(const auto& id_str : retrieve_queue_order_) {
+    for(auto marker : retrieve_markers_.at(id_str)) {
+      marker.header.stamp = now;
+      marker_array.markers.push_back(marker);
+    }
+  }
+
+  for(const auto& id_str : insert_queue_order_) {
+    for(auto marker : insert_markers_.at(id_str)) {
+      marker.header.stamp = now;
+      marker_array.markers.push_back(marker);
+    }
+  }
+
+  return marker_array;
+}
+
+void QueueVisualizer::AddRetrieveMarker(
+    const std::string& payload_id_str, const interfaces::msg::SchedulerJob& job) {
+  const auto& bay_node_ids = context_->GetLayout()->GetBayLikeNodeIds();
+  if(bay_node_ids.empty()) {
+    return;
+  }
+  const auto bay_node_opt = context_->GetLayout()->GetNodeById(bay_node_ids[0]);
+  if(!bay_node_opt.has_value()) {
+    return;
+  }
+  const auto& bay_node = bay_node_opt.value();
+
+  const double outbound_rad = (GetInboundHeading(bay_node) + 180.0) * volley::kDeg2Rad;
+  const double dx = std::cos(outbound_rad);
+  const double dy = std::sin(outbound_rad);
+  const int slot = static_cast<int>(retrieve_queue_order_.size()) + 1;
+  const double along = slot * kRetrieveQueueCarSpacingM + kRetrieveQueueOffsetM;
+
+  const auto position =
+      Point(bay_node.x + dx * along - dy * kQueueOffset, bay_node.y + dy * along + dx * kQueueOffset, 0.0);
+  const auto orientation = Quaternion(0.0, 0.0, outbound_rad);
+
+  auto markers = CreatePayloadMarkers(context_->GetTimeNow(), context_->GetMeshResourcePrefix(),
+      std::format("{}_{}", kRequestQueueNs, payload_id_str), 0, GetCarModelFromGuid(job.payload_id), position,
+      orientation, GetColorFromGuid(job.payload_id));
+  for(auto& m : markers) {
+    m.scale.x = 0.5;
+    m.scale.y = 0.5;
+    m.scale.z = 0.5;
+  }
+  retrieve_markers_[payload_id_str] = std::move(markers);
+  retrieve_queue_order_.push_back(payload_id_str);
+}
+
+void QueueVisualizer::RemoveRetrieveMarker(const std::string& payload_id_str) {
+  auto it = retrieve_markers_.find(payload_id_str);
+  if(it == retrieve_markers_.end()) {
+    return;
+  }
+
+  const auto now = context_->GetTimeNow();
+  for(auto delete_marker : it->second) {
+    delete_marker.action = visualization_msgs::msg::Marker::DELETE;
+    delete_marker.header.stamp = now;
+    pending_deletions_.push_back(delete_marker);
+  }
+
+  retrieve_markers_.erase(it);
+  std::erase(retrieve_queue_order_, payload_id_str);
+
+  RecalculateRetrieveMarkerPositions();
+}
+
+void QueueVisualizer::RecalculateRetrieveMarkerPositions() {
+  const auto& bay_node_ids = context_->GetLayout()->GetBayLikeNodeIds();
+  if(bay_node_ids.empty()) {
+    return;
+  }
+  const auto bay_node_opt = context_->GetLayout()->GetNodeById(bay_node_ids[0]);
+  if(!bay_node_opt.has_value()) {
+    return;
+  }
+  const auto& bay_node = bay_node_opt.value();
+
+  const double outbound_rad = (GetInboundHeading(bay_node) + 180.0) * volley::kDeg2Rad;
+  const double dx = std::cos(outbound_rad);
+  const double dy = std::sin(outbound_rad);
+
+  int slot = 1;
+  for(const auto& id_str : retrieve_queue_order_) {
+    const double along = slot * kRetrieveQueueCarSpacingM + kRetrieveQueueOffsetM;
+    for(auto& marker : retrieve_markers_.at(id_str)) {
+      marker.pose.position.x = bay_node.x + dx * along - dy * kQueueOffset;
+      marker.pose.position.y = bay_node.y + dy * along + dx * kQueueOffset;
+      marker.header.stamp = context_->GetTimeNow();
+    }
+    ++slot;
+  }
+}
+
+void QueueVisualizer::AddInsertMarker(
+    const std::string& payload_id_str, const interfaces::msg::Payload& payload) {
+  const auto& bay_node_ids = context_->GetLayout()->GetBayLikeNodeIds();
+  if(bay_node_ids.empty()) {
+    return;
+  }
+  const auto bay_node_opt = context_->GetLayout()->GetNodeById(bay_node_ids[0]);
+  if(!bay_node_opt.has_value()) {
+    return;
+  }
+  const auto& bay_node = bay_node_opt.value();
+
+  const double inbound_rad = GetInboundHeading(bay_node) * volley::kDeg2Rad;
+  const double dx = std::cos(inbound_rad);
+  const double dy = std::sin(inbound_rad);
+  const int slot = static_cast<int>(insert_queue_order_.size()) + 1;
+  const double offset = slot * kInsertQueueCarSpacingM + kInsertQueueOffsetM;
+
+  const auto position = Point(bay_node.x + dx * offset, bay_node.y + dy * offset, 0.0);
+  const auto orientation = Quaternion(0.0, 0.0, inbound_rad);
+
+  auto markers = CreatePayloadMarkers(context_->GetTimeNow(), context_->GetMeshResourcePrefix(),
+      std::format("{}_{}", kRequestQueueNs, payload_id_str), 0, GetCarModelFromGuid(payload.id), position,
+      orientation, GetColorFromGuid(payload.id));
+
+  insert_markers_[payload_id_str] = std::move(markers);
+  insert_queue_order_.push_back(payload_id_str);
+}
+
+void QueueVisualizer::RemoveInsertMarker(const std::string& payload_id_str) {
+  auto it = insert_markers_.find(payload_id_str);
+  if(it == insert_markers_.end()) {
+    return;
+  }
+
+  const auto now = context_->GetTimeNow();
+  for(auto delete_marker : it->second) {
+    delete_marker.action = visualization_msgs::msg::Marker::DELETE;
+    delete_marker.header.stamp = now;
+    pending_deletions_.push_back(delete_marker);
+  }
+
+  insert_markers_.erase(it);
+  std::erase(insert_queue_order_, payload_id_str);
+
+  RecalculateInsertMarkerPositions();
+}
+
+void QueueVisualizer::RecalculateInsertMarkerPositions() {
+  const auto& bay_node_ids = context_->GetLayout()->GetBayLikeNodeIds();
+  if(bay_node_ids.empty()) {
+    return;
+  }
+  const auto bay_node_opt = context_->GetLayout()->GetNodeById(bay_node_ids[0]);
+  if(!bay_node_opt.has_value()) {
+    return;
+  }
+  const auto& bay_node = bay_node_opt.value();
+
+  const double inbound_rad = GetInboundHeading(bay_node) * volley::kDeg2Rad;
+  const double dx = std::cos(inbound_rad);
+  const double dy = std::sin(inbound_rad);
+
+  int slot = 1;
+  for(const auto& id_str : insert_queue_order_) {
+    const double offset = slot * kInsertQueueCarSpacingM + kInsertQueueOffsetM;
+    for(auto& marker : insert_markers_.at(id_str)) {
+      marker.pose.position.x = bay_node.x + dx * offset;
+      marker.pose.position.y = bay_node.y + dy * offset;
+      marker.header.stamp = context_->GetTimeNow();
+    }
+    ++slot;
+  }
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/visualizer/schedule_visualizer.cpp">
+#include "vis/visualizer/schedule_visualizer.hpp"
+
+#include <interfaces/msg/action_node.hpp>
+#include <interfaces/msg/schedule.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+
+#include "vis/topics.hpp"
+#include "vis/utils.hpp"
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+ScheduleVisualizer::ScheduleVisualizer(VisContextSPtr context) : IVisualizer(std::move(context)) {
+}
+
+std::vector<VisMessage> ScheduleVisualizer::GetVisMessages() {
+  return {VisMessage {.topic_name = topics::kScheduleDag, .marker_array = CreateScheduleMarkerArray()}};
+}
+
+void ScheduleVisualizer::HandleSchedule(interfaces::msg::Schedule::ConstSharedPtr schedule) {
+  schedule_ = schedule;
+}
+
+visualization_msgs::msg::MarkerArray ScheduleVisualizer::CreateScheduleMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  if(!schedule_) {
+    return marker_array;
+  }
+
+  for(size_t i = 0; i < schedule_->nodes.size(); i++) {
+    const auto& action_node = schedule_->nodes.at(i);
+
+    if(action_node.type == interfaces::msg::ActionNode::TYPE_AGV_COMMAND) {
+      const uint32_t agv_id = action_node.agv_id;
+      const std::string marker_base_ns = topics::kScheduleDag + "_agv" + std::to_string(agv_id);
+      const std::vector<visualization_msgs::msg::Marker> markers = CreateAgvCommandMarkers({
+          .agv_command = action_node.agv_command,
+          .timestamp = context_->GetTimeNow(),
+          .layout = context_->GetLayout(),
+          .marker_base_ns = marker_base_ns,
+          .marker_id = static_cast<int32_t>(i),
+          .base_color = CreateColorRGBA(1.0, 0.0, 0.25),
+          .z_offset_m = -1.0,
+      });
+      marker_array.markers.insert(marker_array.markers.end(), markers.begin(), markers.end());
+    }
+  }
+
+  return marker_array;
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/visualizer/tray_visualizer.cpp">
+#include "vis/visualizer/tray_visualizer.hpp"
+
+#include <common_ros/ros_utils.hpp>
+#include <geometry_msgs/msg/quaternion.hpp>
+#include <interfaces/msg/garage_payload.hpp>
+#include <interfaces/msg/garage_tray.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+
+#include "vis/math.hpp"
+#include "vis/models.hpp"
+#include "vis/topics.hpp"
+#include "vis/utils.hpp"
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+TrayVisualizer::TrayVisualizer(VisContextSPtr context) : IVisualizer(std::move(context)) {
+}
+
+std::vector<VisMessage> TrayVisualizer::GetVisMessages() {
+  return {{.topic_name = topics::kTrays, .marker_array = CreateTraysMarkerArray()},
+      {.topic_name = topics::kPayloads, .marker_array = CreatePayloadsMarkerArray()}};
+}
+
+void TrayVisualizer::HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) {
+  payloads_.clear();
+  for(const auto& garage_payload : garage_snapshot->payloads) {
+    const std::string id_str = GuidToString(garage_payload.payload.id);
+    payloads_[id_str] = garage_payload;
+  }
+
+  trays_.clear();
+  for(const auto& garage_tray : garage_snapshot->trays) {
+    trays_[garage_tray.id] = garage_tray;
+
+    const uint32_t tray_node_id = garage_tray.pose.node_id;
+
+    // Check if the tray is on a node that belongs to a VRC. If so, update the VRC height to be the carriage
+    // height from the garage_snapshot, nullopt otherwise
+    std::optional<float> vrc_height_m = std::nullopt;
+    for(const auto& vrc_report : garage_snapshot->vrcs) {
+      const auto vrc_layout = context_->GetLayout()->GetVrc(vrc_report.id);
+      if(!vrc_layout.has_value()) {
+        continue;
+      }
+
+      for(const auto& vrc_node : vrc_layout.value().nodes) {
+        if(tray_node_id == vrc_node.id) {
+          vrc_height_m = vrc_report.carriage_height_m;
+        }
+      }
+    }
+
+    tray_to_vrc_height_[garage_tray.id] = vrc_height_m;
+    payload_to_vrc_height_[garage_tray.payload_id] = vrc_height_m;
+  }
+}
+
+visualization_msgs::msg::MarkerArray TrayVisualizer::CreateTraysMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  const auto GetTrayZ = [&](const interfaces::msg::GarageTray tray) {
+    if(tray_to_vrc_height_.contains(tray.id) && tray_to_vrc_height_.at(tray.id).has_value()) {
+      return tray_to_vrc_height_.at(tray.id).value();
+    }
+    else {
+      return context_->GetLayout()->GetFloorZForFloorId(tray.floor).value_or(0);
+    }
+  };
+
+  for(const auto& [tray_id, tray] : trays_) {
+    const geometry_msgs::msg::Point tray_position =
+        Point(tray.geometric_pose.x, tray.geometric_pose.y, GetTrayZ(tray));
+
+    visualization_msgs::msg::Marker tray_marker =
+        CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kTrays, tray_id);
+    tray_marker.mesh_resource = context_->GetMeshResourcePrefix() + kTrayModelFilename;
+
+    tray_marker.pose.position = tray_position;
+    tray_marker.pose.orientation = Quaternion(0.0, 0.0, tray.geometric_pose.yaw);
+
+    marker_array.markers.push_back(tray_marker);
+
+    visualization_msgs::msg::Marker text_marker =
+        CreateDefaultMarker(context_->GetTimeNow(), topics::kTrays + "_text", tray_id);
+    text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+    text_marker.text = std::to_string(tray_id);
+    text_marker.pose.position = tray_position;
+    text_marker.pose.position.z += 0.65;
+    text_marker.scale.x = 0.25;
+    text_marker.scale.y = 0.25;
+    text_marker.scale.z = 0.25;
+    text_marker.color = CreateColorRGBA(1.0, 1.0, 1.0, 0.9);
+
+    marker_array.markers.push_back(text_marker);
+  }
+
+  return marker_array;
+}
+
+visualization_msgs::msg::MarkerArray TrayVisualizer::CreatePayloadsMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  const auto GetPayloadZ = [&](const interfaces::msg::GaragePayload payload) {
+    const auto guid = payload.payload.id;
+    if(payload_to_vrc_height_.contains(guid) && payload_to_vrc_height_.at(guid).has_value()) {
+      return payload_to_vrc_height_.at(guid).value();
+    }
+    else {
+      return context_->GetLayout()->GetFloorZForFloorId(payload.floor).value_or(0);
+    }
+  };
+
+  for(const auto& [payload_id, payload] : payloads_) {
+    const auto z = static_cast<float>(GetPayloadZ(payload) + kAgvHeightRaised + (kTrayThickness / 2));
+    const auto position = Point(payload.geometric_pose.x, payload.geometric_pose.y, z);
+    const auto orientation = Quaternion(0.0, 0.0, payload.geometric_pose.yaw);
+    for(auto& m : CreatePayloadMarkers(context_->GetTimeNow(), context_->GetMeshResourcePrefix(),
+            std::format("{}_{}", topics::kPayloads, payload_id), 0, GetCarModelFromGuid(payload.payload.id),
+            position, orientation, GetColorFromGuid(payload.payload.id))) {
+      marker_array.markers.push_back(std::move(m));
+    }
+  }
+
+  return marker_array;
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/visualizer/vrc_visualizer.cpp">
+#include "vis/visualizer/vrc_visualizer.hpp"
+
+#include <chrono>
+#include <cmath>
+#include <common_ros/roslog.hpp>
+#include <interfaces/msg/garage_node.hpp>
+#include <numbers>
+#include <rclcpp/time.hpp>
+#include <std_msgs/msg/header.hpp>
+
+#include "vis/math.hpp"
+#include "vis/topics.hpp"
+#include "vis/utils.hpp"
+#include "vis/vis_context.hpp"
+#include "vis/visualizer/i_visualizer.hpp"
+
+namespace volley::vis {
+
+namespace {
+constexpr float kDefaultFloorHeightM = 3.6;
+constexpr float kDefaultVrcWindowLengthM = 6.0;
+constexpr float kDefaultVrcWindowWidthM = 2.5;
+
+constexpr float kVrcBufferX = 1.0;
+constexpr float kVrcBufferY = 1.0;
+constexpr float kVrcCarriageMeshScaleZ = 0.5;
+constexpr float kVrcDoorThicknessM = 0.1;
+constexpr float kVrcModelScaleX = 4.8484;
+constexpr float kVrcModelScaleY = 6.2915;
+constexpr float kVrcModelScaleZ = 2.7408;
+
+constexpr std::chrono::seconds kDoorMoveDuration(3);
+
+constexpr auto kVrcShaftModelFileName = "vrc_shaft.dae";
+constexpr auto kVrcLiftModelFileName = "vrc_tracks.dae";
+constexpr auto kVrcCarriageModelFileName = "vrc_lift_plate.dae";
+}  // namespace
+
+VrcVisualizer::VrcVisualizer(VisContextSPtr context) : IVisualizer(std::move(context)) {
+}
+
+void VrcVisualizer::HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) {
+  for(const auto& vrc_report : garage_snapshot->vrcs) {
+    vrc_reports_[vrc_report.id] = vrc_report;
+  }
+}
+
+std::vector<VisMessage> VrcVisualizer::GetVisMessages() {
+  return {{.topic_name = topics::kVrcs, .marker_array = CreateVrcsMarkerArray()}};
+}
+
+visualization_msgs::msg::MarkerArray VrcVisualizer::CreateVrcsMarkerArray() {
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  for(const auto& vrc : context_->GetLayout()->GetVrcs()) {
+    const std::vector<visualization_msgs::msg::Marker> markers = CreateVrcMarkers(vrc);
+    marker_array.markers.insert(marker_array.markers.end(), markers.begin(), markers.end());
+  }
+
+  return marker_array;
+}
+
+std::vector<visualization_msgs::msg::Marker> VrcVisualizer::CreateVrcMarkers(const Vrc& vrc) {
+  std::vector<visualization_msgs::msg::Marker> markers;
+
+  if(vrc.nodes.empty()) {
+    return markers;
+  }
+
+  const LayoutSPtr& layout = context_->GetLayout();
+
+  // Use dimensions from bottom node for lift
+  const interfaces::msg::GarageNode& first_node = vrc.nodes.at(0);
+
+  // Get lift footprint dimensions (i.e. the max allowable parking window size from the layout)
+  const auto window = layout->GetBufferedResourceWindow(first_node.max_resource_size);
+  const float vrc_width_m =
+      window.has_value() ? (window.value().width_m + kVrcBufferX) : kDefaultVrcWindowWidthM;
+  const float vrc_length_m =
+      window.has_value() ? (window.value().length_m + kVrcBufferY) : kDefaultVrcWindowLengthM;
+
+  // Iterate through nodes in VRC layout object
+  // Note: `floor_index` does not equal floor "number" but rather index into the nodes vector
+  for(size_t floor_index = 0; floor_index < vrc.nodes.size(); floor_index++) {
+    const interfaces::msg::GarageNode node = vrc.nodes.at(floor_index);
+    // BLift terminals share a node with a Bay; the BayVisualizer draws walls,
+    // doors, etc. at that node, so skip the VRC shaft/tracks/door meshes here
+    // to avoid stacking two structures at the same pose.
+    if(node.type == interfaces::msg::GarageNode::TYPE_BLIFT) {
+      continue;
+    }
+    // Get the z value of the bottom of the floor
+    const float floor_z_m = layout->GetFloorZForNodeId(node.id).value_or(0);
+    // Get the height of the floor (floor to ceiling)
+    const auto current_floor = layout->GetFloorById(node.floor);
+    const auto next_floor = layout->GetFloorById(node.floor + 1);
+    const float floor_to_ceiling_height_m = (current_floor.has_value() && next_floor.has_value())
+                                                ? (next_floor.value().z - current_floor.value().z)
+                                                : kDefaultFloorHeightM;
+
+    geometry_msgs::msg::Pose base_pose;
+    base_pose.position = Point(node.x, node.y, floor_z_m);
+    const float heading_rad = GetInboundHeading(node) * volley::kDeg2Rad;
+    base_pose.orientation = Quaternion(0.0, 0.0, heading_rad);
+
+    visualization_msgs::msg::Marker base_marker =
+        CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kVrcs, node.id);
+    base_marker.pose = base_pose;
+    base_marker.color = CreateColorRGBA(0.5, 0.5, 0.5);
+    base_marker.scale.x = vrc_width_m / kVrcModelScaleX;
+    base_marker.scale.y = vrc_length_m / kVrcModelScaleY;
+    base_marker.scale.z = floor_to_ceiling_height_m / kVrcModelScaleZ;
+
+    visualization_msgs::msg::Marker lift_shaft_marker = base_marker;
+    lift_shaft_marker.ns += "_vrc_shaft";
+    lift_shaft_marker.mesh_resource = context_->GetMeshResourcePrefix() + kVrcShaftModelFileName;
+    markers.push_back(lift_shaft_marker);
+
+    visualization_msgs::msg::Marker lift_shaft_tracks = base_marker;
+    lift_shaft_tracks.ns = "vrc_tracks";
+    lift_shaft_tracks.mesh_resource = context_->GetMeshResourcePrefix() + kVrcLiftModelFileName;
+    markers.push_back(lift_shaft_tracks);
+
+    const float vrc_yaw_wrt_map = heading_rad + (std::numbers::pi / 2);
+    visualization_msgs::msg::Marker door_marker =
+        CreateDefaultMarker(context_->GetTimeNow(), topics::kVrcs + "_door", node.id);
+    door_marker.type = visualization_msgs::msg::Marker::CUBE;
+    door_marker.pose.position = Point(node.x + (vrc_length_m / 2.0) * std::cos(vrc_yaw_wrt_map),
+        node.y + (vrc_length_m / 2.0) * std::sin(vrc_yaw_wrt_map),
+        floor_z_m + floor_to_ceiling_height_m / 2.0);
+    door_marker.pose.orientation = Quaternion(0, 0, vrc_yaw_wrt_map);
+    door_marker.scale.x = kVrcDoorThicknessM;
+    door_marker.scale.y = vrc_width_m;
+    door_marker.scale.z = floor_to_ceiling_height_m;
+    door_marker.color = CreateColorRGBA(0.3, 0.1, 0.1, 0.7);
+
+    vrc_interfaces::msg::GateState gate_state;
+    gate_state.value = vrc_interfaces::msg::GateState::STATE_CLOSED;
+    if(vrc_reports_.contains(vrc.id) && floor_index < vrc_reports_.at(vrc.id).gates.size()) {
+      gate_state = vrc_reports_.at(vrc.id).gates.at(floor_index).state;
+    }
+
+    const float door_height_m = GetDoorHeightAtVrcNode(node.id, gate_state, floor_to_ceiling_height_m);
+    door_marker.scale.z = door_height_m;
+    door_marker.pose.position.z = (floor_z_m + floor_to_ceiling_height_m) - door_height_m / 2.0f;
+    markers.push_back(std::move(door_marker));
+  }
+
+  // Render VRC carriage using height from VRCReport if available, bottom floor if not
+  visualization_msgs::msg::Marker marker =
+      CreateDefaultMeshMarker(context_->GetTimeNow(), topics::kVrcs + "_carriage", vrc.id);
+  marker.scale.x = vrc_width_m / kVrcModelScaleX;
+  marker.scale.y = vrc_length_m / kVrcModelScaleY;
+  marker.scale.z = 1.0;
+
+  marker.mesh_resource = context_->GetMeshResourcePrefix() + kVrcCarriageModelFileName;
+
+  const float heading_rad = GetInboundHeading(first_node) * volley::kDeg2Rad;
+  marker.pose.orientation = Quaternion(0.0, 0.0, heading_rad);
+  marker.pose.position = Point(first_node.x, first_node.y, 0);
+
+  if(vrc_reports_.contains(vrc.id)) {
+    marker.pose.position.z = vrc_reports_.at(vrc.id).carriage_height_m;
+  }
+
+  marker.pose.position.z -= kVrcCarriageMeshScaleZ;
+
+  markers.push_back(std::move(marker));
+
+  return markers;
+}
+
+float VrcVisualizer::GetDoorHeightAtVrcNode(const uint32_t node_id,
+    const vrc_interfaces::msg::GateState gate_state, const float floor_to_ceiling_height_m) {
+  if(gate_state.value == vrc_interfaces::msg::GateState::STATE_OPEN) {
+    door_start_time_[node_id] = std::nullopt;
+    return 0;
+  }
+  if(gate_state.value == vrc_interfaces::msg::GateState::STATE_CLOSED) {
+    door_start_time_[node_id] = std::nullopt;
+    return floor_to_ceiling_height_m;
+  }
+
+  const rclcpp::Time time_now = context_->GetTimeNow();
+
+  if(!door_start_time_.contains(node_id) || !door_start_time_.at(node_id).has_value()) {
+    door_start_time_[node_id] = time_now;
+    return (vrc_interfaces::msg::GateState::STATE_OPENING) ? floor_to_ceiling_height_m : 0.0;
+  }
+
+  const rclcpp::Time door_move_start_time = door_start_time_.at(node_id).value();
+  const auto door_move_duration = (time_now - door_move_start_time).to_chrono<std::chrono::milliseconds>();
+
+  float move_ratio =
+      static_cast<float>(door_move_duration.count()) /
+      static_cast<float>(std::chrono::duration_cast<std::chrono::milliseconds>(kDoorMoveDuration).count());
+
+  move_ratio = std::max(std::min(move_ratio, 1.0f), 0.0f);
+
+  if(gate_state.value == vrc_interfaces::msg::GateState::STATE_OPENING) {
+    return floor_to_ceiling_height_m * (1.0 - move_ratio);
+  }
+
+  // STATE_CLOSING
+  return move_ratio * floor_to_ceiling_height_m;
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/math.cpp">
+#include "vis/math.hpp"
+
+#include <cmath>
+
+namespace volley::vis {
+
+geometry_msgs::msg::Point Point(double x, double y, double z) {
+  geometry_msgs::msg::Point point;
+  point.x = x;
+  point.y = y;
+  point.z = z;
+  return point;
+}
+
+geometry_msgs::msg::Quaternion Quaternion(double roll, double pitch, double yaw) {
+  double cy = std::cos(yaw / 2);
+  double sy = std::sin(yaw / 2);
+  double cp = std::cos(pitch / 2);
+  double sp = std::sin(pitch / 2);
+  double cr = std::cos(roll / 2);
+  double sr = std::sin(roll / 2);
+
+  geometry_msgs::msg::Quaternion q;
+  q.w = cr * cp * cy + sr * sp * sy;
+  q.x = sr * cp * cy - cr * sp * sy;
+  q.y = cr * sp * cy + sr * cp * sy;
+  q.z = cr * cp * sy - sr * sp * cy;
+  return q;
+}
+
+Eigen::Vector3d PointToVector3d(const geometry_msgs::msg::Point& point) {
+  return Eigen::Vector3d {point.x, point.y, point.z};
+}
+
+geometry_msgs::msg::Point Vector3dToPoint(const Eigen::Vector3d& vector) {
+  return Point(vector.x(), vector.y(), vector.z());
+}
+
+Eigen::Quaterniond QuatToQuatd(const geometry_msgs::msg::Quaternion& quat) {
+  return Eigen::Quaterniond {quat.w, quat.x, quat.y, quat.z};
+}
+
+geometry_msgs::msg::Quaternion QuatdToQuat(const Eigen::Quaterniond& quatd) {
+  geometry_msgs::msg::Quaternion quat;
+  quat.w = quatd.w();
+  quat.x = quatd.x();
+  quat.y = quatd.y();
+  quat.z = quatd.z();
+  return quat;
+}
+
+std::pair<Eigen::Vector3d, Eigen::Quaterniond> PoseToVector3dAndQuatd(const geometry_msgs::msg::Pose& pose) {
+  return std::make_pair(PointToVector3d(pose.position), QuatToQuatd(pose.orientation));
+}
+
+geometry_msgs::msg::Pose Vector3dAndQuatdToPose(
+    const Eigen::Vector3d& vector, const Eigen::Quaterniond& quat) {
+  geometry_msgs::msg::Pose pose;
+  pose.position = Vector3dToPoint(vector);
+  pose.orientation = QuatdToQuat(quat);
+  return pose;
+}
+
+geometry_msgs::msg::Pose operator*(const geometry_msgs::msg::Pose& p1, const geometry_msgs::msg::Pose& p2) {
+  auto [v1, q1] = PoseToVector3dAndQuatd(p1);
+  auto [v2, q2] = PoseToVector3dAndQuatd(p2);
+
+  // Rotate, then translate
+  Eigen::Vector3d v3 = q1 * v2;
+  v3 += v1;
+  Eigen::Quaterniond q3 = q1 * q2;
+  return Vector3dAndQuatdToPose(v3, q3);
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/models.cpp">
+#include "vis/models.hpp"
+
+#include <filesystem>
+#include <random>
+#include <std_msgs/msg/color_rgba.hpp>
+#include <unordered_map>
+
+#include "vis/utils.hpp"
+
+namespace volley::vis {
+
+namespace {
+// Initializes a static random value once per process
+uint64_t GetProcessSalt() {
+  static const uint64_t salt = std::random_device {}();
+  return salt;
+}
+
+// Hashes a GUID to a uint64_t value that is deterministic within the same process (using FNV-1a)
+uint64_t HashGuid(const GuidMsg& guid) {
+  static constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
+  static constexpr uint64_t kFnvPrime = 1099511628211ULL;
+  uint64_t hash = kFnvOffsetBasis;
+  for(uint8_t byte : guid.bytes) {
+    hash ^= byte;
+    hash *= kFnvPrime;
+  }
+  return hash ^ GetProcessSalt();
+}
+}  // namespace
+
+// This will need more work to truly represent a Blift model.  For now, it is the same as the simple bay, but
+// without the ODP
+const std::unordered_map<BayPiece, std::filesystem::path> kBliftPieceFilenames = {
+    {BayPiece::FLOOR_FRONT_WALKWAY, "bay_floor_front_walkway.dae"},
+    {BayPiece::FLOOR_LEFT_WALKWAY, "blift_floor_left_walkway.dae"},
+    {BayPiece::FLOOR_REAR_WALKWAY, "blift_floor_rear_walkway.dae"},
+    {BayPiece::FLOOR_RIGHT_WALKWAY, "blift_floor_right_walkway.dae"},
+    {BayPiece::GARAGE_DOOR_CLOSED, "bay_garage_door_closed.dae"},
+    {BayPiece::GARAGE_DOOR_MECHANISM, "bay_garage_door_mechanism.dae"},
+    {BayPiece::RAMP, "bay_ramp.dae"},
+    {BayPiece::GARAGE_DOOR_OPEN, "bay_garage_door_open.dae"},
+    {BayPiece::WALLS, "blift_walls.dae"},
+    {BayPiece::TRAFFIC_LIGHT, "bay_traffic_light.dae"},
+};
+
+const std::unordered_map<BayPiece, std::filesystem::path> kBayPieceFilenames = {
+    {BayPiece::FLOOR_FRONT_WALKWAY, "bay_floor_front_walkway.dae"},
+    {BayPiece::FLOOR_LEFT_WALKWAY, "bay_floor_left_walkway.dae"},
+    {BayPiece::FLOOR_OVERDRIVE_PLATE, "bay_floor_overdrive_plate.dae"},
+    {BayPiece::FLOOR_RIGHT_WALKWAY, "bay_floor_right_walkway.dae"},
+    {BayPiece::GARAGE_DOOR_CLOSED, "bay_garage_door_closed.dae"},
+    {BayPiece::GARAGE_DOOR_MECHANISM, "bay_garage_door_mechanism.dae"},
+    {BayPiece::GARAGE_DOOR_OPEN, "bay_garage_door_open.dae"},
+    {BayPiece::RAMP, "bay_ramp.dae"},
+    {BayPiece::WALLS, "bay_walls.dae"},
+    {BayPiece::TRAFFIC_LIGHT, "bay_traffic_light.dae"},
+};
+
+std::optional<std::filesystem::path> GetBayPieceFilename(BayPiece piece, bool is_blift) {
+  const auto& table = is_blift ? kBliftPieceFilenames : kBayPieceFilenames;
+  const auto it = table.find(piece);
+  if(it == table.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+const std::vector<CarModel> kCarModels = {
+    {
+        .body_filename = "pacifica_body.dae",
+        .wheels_trim_filename = "pacifica_wheels_trim.dae",
+        .windows_filename = "pacifica_windows.dae",
+    },
+    {
+        .body_filename = "fiat_500_body.dae",
+        .wheels_trim_filename = "fiat_500_wheels_trim.dae",
+        .windows_filename = "fiat_500_windows.dae",
+    },
+    {
+        .body_filename = "tesla_model3_body.dae",
+        .wheels_trim_filename = "tesla_model3_wheels_trim.dae",
+        .windows_filename = "tesla_model3_windows.dae",
+    },
+    {
+        .body_filename = "mercedes_gls_body.dae",
+        .wheels_trim_filename = "mercedes_gls_wheels_trim.dae",
+        .windows_filename = "mercedes_gls_windows.dae",
+    },
+    {
+        .body_filename = "toyota_corolla_body.dae",
+        .wheels_trim_filename = "toyota_corolla_wheels_trim.dae",
+        .windows_filename = "toyota_corolla_windows.dae",
+    },
+    {
+        .body_filename = "renault_clio_body.dae",
+        .wheels_trim_filename = "renault_clio_wheels_trim.dae",
+        .windows_filename = "renault_clio_windows.dae",
+    },
+    {
+        .body_filename = "peugeot_3008_body.dae",
+        .wheels_trim_filename = "peugeot_3008_wheels_trim.dae",
+        .windows_filename = "peugeot_3008_windows.dae",
+    },
+    {
+        .body_filename = "toyota_supra_body.dae",
+        .wheels_trim_filename = "toyota_supra_wheels_trim.dae",
+        .windows_filename = "toyota_supra_windows.dae",
+    },
+    {
+        .body_filename = "polestar2_body.dae",
+        .wheels_trim_filename = "polestar2_wheels_trim.dae",
+        .windows_filename = "polestar2_windows.dae",
+    },
+    {
+        .body_filename = "mazda_speed3_body.dae",
+        .wheels_trim_filename = "mazda_speed3_wheels_trim.dae",
+        .windows_filename = "mazda_speed3_windows.dae",
+    },
+    {
+        .body_filename = "tesla_y_body.dae",
+        .wheels_trim_filename = "tesla_y_wheels_trim.dae",
+        .windows_filename = "tesla_y_windows.dae",
+    },
+};
+
+CarModel GetCarModelFromGuid(const GuidMsg& guid) {
+  return kCarModels.at(HashGuid(guid) % kCarModels.size());
+}
+
+// https://wiki.rage.mp/index.php?title=Vehicle_Colors
+const std::vector<std_msgs::msg::ColorRGBA> kCarColors = {
+    CreateColorRGBA(0.05, 0.06, 0.08),  // 0 Metallic Black #0d1116
+    CreateColorRGBA(0.10, 0.11, 0.12),  // 1 Metallic Graphite Black #1c1d21
+    CreateColorRGBA(0.19, 0.21, 0.23),  // 2 Metallic Black Steal #32383d
+    CreateColorRGBA(0.27, 0.29, 0.30),  // 3 Metallic Dark Silver #454b4f
+    CreateColorRGBA(0.60, 0.61, 0.62),  // 4 Metallic Silver #999da0
+    CreateColorRGBA(0.76, 0.76, 0.77),  // 5 Metallic Blue Silver #c2c4c6
+    CreateColorRGBA(0.59, 0.60, 0.59),  // 6 Metallic Steel Gray #979a97
+    CreateColorRGBA(0.38, 0.45, 0.50),  // 7 Metallic Shadow Silver #637380
+    CreateColorRGBA(0.38, 0.38, 0.36),  // 8 Metallic Stone Silver #63625c
+    CreateColorRGBA(0.23, 0.24, 0.27),  // 9 Metallic Midnight Silver #3c3f47
+    CreateColorRGBA(0.26, 0.30, 0.32),  // 10 Metallic Gun Metal #444e54
+    CreateColorRGBA(0.11, 0.12, 0.16),  // 11 Metallic Anthracite Grey #1d2129
+    CreateColorRGBA(0.07, 0.09, 0.12),  // 12 Matte Black #13181f
+    CreateColorRGBA(0.14, 0.15, 0.16),  // 13 Matte Gray #26282a
+    CreateColorRGBA(0.31, 0.33, 0.32),  // 14 Matte Light Grey #515554
+    CreateColorRGBA(0.08, 0.09, 0.12),  // 15 Util Black #151921
+    CreateColorRGBA(0.11, 0.14, 0.16),  // 16 Util Black Poly #1e2429
+    CreateColorRGBA(0.20, 0.22, 0.23),  // 17 Util Dark silver #333a3c
+    CreateColorRGBA(0.54, 0.56, 0.58),  // 18 Util Silver #8c9095
+    CreateColorRGBA(0.22, 0.26, 0.30),  // 19 Util Gun Metal #39434d
+    CreateColorRGBA(0.31, 0.38, 0.44),  // 20 Util Shadow Silver #506272
+    CreateColorRGBA(0.11, 0.13, 0.18),  // 21 Worn Black #1e232f
+    CreateColorRGBA(0.21, 0.22, 0.24),  // 22 Worn Graphite #363a3f
+    CreateColorRGBA(0.62, 0.63, 0.60),  // 23 Worn Silver Grey #a0a199
+    CreateColorRGBA(0.82, 0.82, 0.82),  // 24 Worn Silver #d3d3d3
+    CreateColorRGBA(0.71, 0.74, 0.79),  // 25 Worn Blue Silver #b7bfca
+    CreateColorRGBA(0.46, 0.52, 0.58),  // 26 Worn Shadow Silver #778794
+    CreateColorRGBA(0.75, 0.05, 0.10),  // 27 Metallic Red #c00e1a
+    CreateColorRGBA(0.85, 0.09, 0.09),  // 28 Metallic Torino Red #da1918
+    CreateColorRGBA(0.71, 0.06, 0.10),  // 29 Metallic Formula Red #b6111b
+    CreateColorRGBA(0.64, 0.11, 0.13),  // 30 Metallic Blaze Red #a51e23
+    CreateColorRGBA(0.48, 0.10, 0.13),  // 31 Metallic Graceful Red #7b1a22
+    CreateColorRGBA(0.55, 0.10, 0.12),  // 32 Metallic Garnet Red #8e1b1f
+    CreateColorRGBA(0.43, 0.09, 0.09),  // 33 Metallic Desert Red #6f1818
+    CreateColorRGBA(0.28, 0.06, 0.11),  // 34 Metallic Cabernet Red #49111d
+    CreateColorRGBA(0.71, 0.05, 0.14),  // 35 Metallic Candy Red #b60f25
+    CreateColorRGBA(0.83, 0.29, 0.09),  // 36 Metallic Sunrise Orange #d44a17
+    CreateColorRGBA(0.76, 0.58, 0.30),  // 37 Metallic Classic Gold #c2944f
+    CreateColorRGBA(0.96, 0.52, 0.08),  // 38 Metallic Orange #f78616
+    CreateColorRGBA(0.81, 0.12, 0.12),  // 39 Matte Red #cf1f21
+    CreateColorRGBA(0.45, 0.12, 0.12),  // 40 Matte Dark Red #732021
+    CreateColorRGBA(0.94, 0.49, 0.12),  // 41 Matte Orange #f27d20
+    CreateColorRGBA(1.00, 0.78, 0.12),  // 42 Matte Yellow #ffc91f
+    CreateColorRGBA(0.61, 0.06, 0.08),  // 43 Util Red #9c1016
+    CreateColorRGBA(0.87, 0.05, 0.09),  // 44 Util Bright Red #de0f18
+    CreateColorRGBA(0.56, 0.11, 0.09),  // 45 Util Garnet Red #8f1e17
+    CreateColorRGBA(0.66, 0.27, 0.26),  // 46 Worn Red #a94744
+    CreateColorRGBA(0.21, 0.10, 0.14),  // 48 Worn Dark Red #371c25
+    CreateColorRGBA(0.07, 0.14, 0.15),  // 49 Metallic Dark Green #132428
+    CreateColorRGBA(0.07, 0.18, 0.16),  // 50 Metallic Racing Green #122e2b
+    CreateColorRGBA(0.07, 0.21, 0.23),  // 51 Metallic Sea Green #12383c
+    CreateColorRGBA(0.19, 0.25, 0.24),  // 52 Metallic Olive Green #31423f
+    CreateColorRGBA(0.08, 0.36, 0.17),  // 53 Metallic Green #155c2d
+    CreateColorRGBA(0.10, 0.40, 0.43),  // 54 Metallic Gasoline Blue Green #1b6770
+    CreateColorRGBA(0.13, 0.21, 0.24),  // 56 Util Dark Green #22383e
+    CreateColorRGBA(0.11, 0.35, 0.24),  // 57 Util Green #1d5a3f
+    CreateColorRGBA(0.17, 0.25, 0.24),  // 58 Worn Dark Green #2d423f
+    CreateColorRGBA(0.27, 0.34, 0.29),  // 59 Worn Green #45594b
+    CreateColorRGBA(0.39, 0.52, 0.49),  // 60 Worn Sea Wash #65867f
+    CreateColorRGBA(0.13, 0.18, 0.27),  // 61 Metallic Midnight Blue #222e46
+    CreateColorRGBA(0.13, 0.19, 0.33),  // 62 Metallic Dark Blue #233155
+    CreateColorRGBA(0.18, 0.29, 0.49),  // 63 Metallic Saxony Blue #304c7e
+    CreateColorRGBA(0.27, 0.34, 0.56),  // 64 Metallic Blue #47578f
+    CreateColorRGBA(0.38, 0.48, 0.65),  // 65 Metallic Mariner Blue #637ba7
+    CreateColorRGBA(0.22, 0.27, 0.38),  // 66 Metallic Harbor Blue #394762
+    CreateColorRGBA(0.83, 0.90, 0.94),  // 67 Metallic Diamond Blue #d6e7f1
+    CreateColorRGBA(0.46, 0.68, 0.74),  // 68 Metallic Surf Blue #76afbe
+    CreateColorRGBA(0.20, 0.36, 0.44),  // 69 Metallic Nautical Blue #345e72
+    CreateColorRGBA(0.04, 0.61, 0.94),  // 70 Metallic Bright Blue #0b9cf1
+    CreateColorRGBA(0.18, 0.17, 0.32),  // 71 Metallic Purple Blue #2f2d52
+    CreateColorRGBA(0.15, 0.17, 0.30),  // 72 Metallic Spinnaker Blue #282c4d
+    CreateColorRGBA(0.13, 0.32, 0.63),  // 73 Metallic Ultra Blue #2354a1
+    CreateColorRGBA(0.43, 0.63, 0.77),  // 74 Metallic Bright Blue #6ea3c6
+    CreateColorRGBA(0.06, 0.14, 0.32),  // 75 Util Dark Blue #112552
+    CreateColorRGBA(0.10, 0.12, 0.24),  // 76 Util Midnight Blue #1b203e
+    CreateColorRGBA(0.15, 0.31, 0.56),  // 77 Util Blue #275190
+    CreateColorRGBA(0.37, 0.52, 0.57),  // 78 Util Sea Foam Blue #608592
+    CreateColorRGBA(0.14, 0.27, 0.65),  // 79 Util Lightning blue #2446a8
+    CreateColorRGBA(0.25, 0.44, 0.88),  // 80 Util Maui Blue Poly #4271e1
+    CreateColorRGBA(0.23, 0.22, 0.87),  // 81 Util Bright Blue #3b39e0
+    CreateColorRGBA(0.12, 0.15, 0.32),  // 82 Matte Dark Blue #1f2852
+    CreateColorRGBA(0.14, 0.22, 0.65),  // 83 Matte Blue #253aa7
+    CreateColorRGBA(0.10, 0.20, 0.31),  // 84 Matte Midnight Blue #1c3551
+    CreateColorRGBA(0.29, 0.37, 0.50),  // 85 Worn Dark blue #4c5f81
+    CreateColorRGBA(0.34, 0.40, 0.55),  // 86 Worn Blue #58688e
+    CreateColorRGBA(0.45, 0.70, 0.84),  // 87 Worn Light blue #74b5d8
+    CreateColorRGBA(1.00, 0.81, 0.12),  // 88 Metallic Taxi Yellow #ffcf20
+    CreateColorRGBA(0.98, 0.88, 0.07),  // 89 Metallic Race Yellow #fbe212
+    CreateColorRGBA(0.56, 0.39, 0.19),  // 90 Metallic Bronze #916532
+    CreateColorRGBA(0.87, 0.88, 0.23),  // 91 Metallic Yellow Bird #e0e13d
+    CreateColorRGBA(0.60, 0.54, 0.47),  // 93 Metallic Champagne #9b8c78
+    CreateColorRGBA(0.31, 0.19, 0.09),  // 94 Metallic Pueblo Beige #503218
+    CreateColorRGBA(0.27, 0.24, 0.16),  // 95 Metallic Dark Ivory #473f2b
+    CreateColorRGBA(0.13, 0.10, 0.09),  // 96 Metallic Choco Brown #221b19
+    CreateColorRGBA(0.39, 0.24, 0.13),  // 97 Metallic Golden Brown #653f23
+    CreateColorRGBA(0.46, 0.36, 0.24),  // 98 Metallic Light Brown #775c3e
+    CreateColorRGBA(0.67, 0.60, 0.45),  // 99 Metallic Straw Beige #ac9975
+    CreateColorRGBA(0.42, 0.41, 0.29),  // 100 Metallic Moss Brown #6c6b4b
+    CreateColorRGBA(0.25, 0.18, 0.16),  // 101 Metallic Biston Brown #402e2b
+    CreateColorRGBA(0.64, 0.58, 0.37),  // 102 Metallic Beechwood #a4965f
+    CreateColorRGBA(0.27, 0.13, 0.10),  // 103 Metallic Dark Beechwood #46231a
+    CreateColorRGBA(0.45, 0.16, 0.09),  // 104 Metallic Choco Orange #752b19
+    CreateColorRGBA(0.74, 0.68, 0.48),  // 105 Metallic Beach Sand #bfae7b
+    CreateColorRGBA(0.87, 0.83, 0.69),  // 106 Metallic Sun Bleeched Sand #dfd5b2
+    CreateColorRGBA(0.96, 0.92, 0.83),  // 107 Metallic Cream #f7edd5
+    CreateColorRGBA(0.22, 0.16, 0.10),  // 108 Util Brown #3a2a1b
+    CreateColorRGBA(0.47, 0.37, 0.20),  // 109 Util Medium Brown #785f33
+    CreateColorRGBA(0.70, 0.62, 0.47),  // 110 Util Light Brown #b5a079
+    CreateColorRGBA(1.00, 1.00, 0.96),  // 111 Metallic White #fffff6
+    CreateColorRGBA(0.91, 0.91, 0.91),  // 112 Metallic Frost White #eaeaea
+    CreateColorRGBA(0.69, 0.67, 0.58),  // 113 Worn Honey Beige #b0ab94
+    CreateColorRGBA(0.27, 0.21, 0.19),  // 114 Worn Brown #453831
+    CreateColorRGBA(0.16, 0.15, 0.16),  // 115 Worn Dark Brown #2a282b
+    CreateColorRGBA(0.44, 0.42, 0.34),  // 116 Worn straw beige #726c57
+    CreateColorRGBA(0.41, 0.45, 0.48),  // 117 Brushed Steel #6a747c
+    CreateColorRGBA(0.20, 0.25, 0.34),  // 118 Brushed Black steel #354158
+    CreateColorRGBA(0.60, 0.62, 0.65),  // 119 Brushed Aluminium #9ba0a8
+    CreateColorRGBA(0.34, 0.43, 0.63),  // 120 Chrome #5870a1
+    CreateColorRGBA(0.91, 0.90, 0.87),  // 121 Worn Off White #eae6de
+    CreateColorRGBA(0.87, 0.86, 0.81),  // 122 Util Off White #dfddd0
+    CreateColorRGBA(0.94, 0.67, 0.18),  // 123 Worn Orange #f2ad2e
+    CreateColorRGBA(0.97, 0.64, 0.34),  // 124 Worn Light Orange #f9a458
+    CreateColorRGBA(0.94, 0.80, 0.25),  // 126 Worn Taxi Yellow #f1cc40
+    CreateColorRGBA(0.30, 0.39, 0.26),  // 128 Matte Green #4e6443
+    CreateColorRGBA(0.73, 0.67, 0.56),  // 129 Matte Brown #bcac8f
+    CreateColorRGBA(0.97, 0.71, 0.34),  // 130 Worn Orange #f8b658
+    CreateColorRGBA(0.98, 0.97, 0.94),  // 131 Matte White #fcf9f1
+    CreateColorRGBA(1.00, 1.00, 0.98),  // 132 Worn White #fffffb
+    CreateColorRGBA(0.50, 0.51, 0.29),  // 133 Worn Olive Army Green #81844c
+    CreateColorRGBA(1.00, 1.00, 1.00),  // 134 Pure White #ffffff
+    CreateColorRGBA(0.94, 0.12, 0.60),  // 135 Hot Pink #f21f99
+    CreateColorRGBA(0.99, 0.83, 0.80),  // 136 Salmon pink #fdd6cd
+    CreateColorRGBA(0.87, 0.34, 0.56),  // 137 Metallic Vermillion Pink #df5891
+    CreateColorRGBA(0.96, 0.68, 0.12),  // 138 Orange #f6ae20
+    CreateColorRGBA(0.03, 0.91, 0.98),  // 140 Blue #08e9fa
+    CreateColorRGBA(0.03, 0.04, 0.09),  // 141 Mettalic Black Blue #0a0c17
+    CreateColorRGBA(0.04, 0.05, 0.09),  // 142 Metallic Black Purple #0c0d18
+    CreateColorRGBA(0.05, 0.05, 0.07),  // 143 Metallic Black Red #0e0d14
+    CreateColorRGBA(0.62, 0.61, 0.54),  // 144 hunter green #9f9e8a
+    CreateColorRGBA(0.38, 0.07, 0.46),  // 145 Metallic Purple #621276
+    CreateColorRGBA(0.04, 0.07, 0.12),  // 146 Metaillic V Dark Blue #0b1421
+    CreateColorRGBA(0.06, 0.07, 0.10),  // 147 MODSHOP BLACK1 #11141a
+    CreateColorRGBA(0.41, 0.12, 0.48),  // 148 Matte Purple #6b1f7b
+    CreateColorRGBA(0.11, 0.11, 0.13),  // 149 Matte Dark Purple #1e1d22
+    CreateColorRGBA(0.73, 0.09, 0.09),  // 150 Metallic Lava Red #bc1917
+    CreateColorRGBA(0.17, 0.21, 0.16),  // 151 Matte Forest Green #2d362a
+    CreateColorRGBA(0.41, 0.40, 0.28),  // 152 Matte Olive Drab #696748
+    CreateColorRGBA(0.47, 0.42, 0.33),  // 153 Matte Desert Brown #7a6c55
+    CreateColorRGBA(0.76, 0.70, 0.57),  // 154 Matte Desert Tan #c3b492
+    CreateColorRGBA(0.35, 0.38, 0.32),  // 155 Matte Foilage Green #5a6352
+    CreateColorRGBA(0.50, 0.50, 0.49),  // 156 DEFAULT ALLOY COLOR #81827f
+    CreateColorRGBA(0.68, 0.83, 0.89),  // 157 Epsilon Blue #afd6e4
+    CreateColorRGBA(0.47, 0.39, 0.25),  // 158 Pure Gold #7a6440
+    CreateColorRGBA(0.49, 0.41, 0.28),  // 159 Brushed Gold #7f6a48
+};
+
+std_msgs::msg::ColorRGBA GetColorFromGuid(const GuidMsg& guid) {
+  return kCarColors.at(HashGuid(guid) % kCarColors.size());
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/utils.cpp">
+#include "vis/utils.hpp"
+
+#include <cmath>
+#include <common_ros/agv_motion_type.hpp>
+#include <rclcpp/time.hpp>
+#include <std_msgs/msg/color_rgba.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+
+#include "vis/math.hpp"
+
+namespace volley::vis {
+
+namespace {
+static constexpr float kArrowLengthM = 1.0;
+static constexpr float kArrowWidth = 0.15;
+}  // namespace
+
+std_msgs::msg::ColorRGBA CreateColorRGBA(float r, float g, float b, float a) {
+  std_msgs::msg::ColorRGBA color;
+  color.r = r;
+  color.g = g;
+  color.b = b;
+  color.a = a;
+  return color;
+}
+
+visualization_msgs::msg::Marker CreateDefaultMarker(
+    const rclcpp::Time& time, const std::string& ns, int32_t id) {
+  visualization_msgs::msg::Marker marker;
+  marker.header.stamp = time;
+  marker.header.frame_id = "map";
+  marker.ns = ns;
+  marker.id = id;
+  marker.action = visualization_msgs::msg::Marker::ADD;
+  marker.lifetime = rclcpp::Duration(1, 0);
+  marker.scale.x = 1.0f;
+  marker.scale.y = 1.0f;
+  marker.scale.z = 1.0f;
+  marker.color = CreateColorRGBA(0, 0, 0);
+  return marker;
+}
+
+visualization_msgs::msg::Marker CreateDefaultMeshMarker(
+    const rclcpp::Time& time, const std::string& ns, int32_t id) {
+  visualization_msgs::msg::Marker marker = CreateDefaultMarker(time, ns, id);
+  marker.type = visualization_msgs::msg::Marker::MESH_RESOURCE;
+  marker.mesh_use_embedded_materials = true;
+  return marker;
+}
+
+std::vector<visualization_msgs::msg::Marker> CreateAgvCommandMarkers(const VisAgvCommandConfig& config) {
+  std::vector<visualization_msgs::msg::Marker> markers;
+
+  const volley::AgvMotionType command_type = volley::GetMotionType(config.agv_command, *config.layout);
+  std::string command_text_label = volley::AgvMotionTypeStr(command_type);
+
+  const std::optional<interfaces::msg::GarageNode> src_node =
+      config.layout->GetNodeById(config.agv_command.src.pose.node_id);
+  const std::optional<interfaces::msg::GarageNode> dst_node =
+      config.layout->GetNodeById(config.agv_command.dst.pose.node_id);
+
+  if(!src_node.has_value() || !dst_node.has_value()) {
+    return markers;
+  }
+
+  const float dst_z = config.layout->GetFloorZForFloorId(dst_node->floor).value_or(0) + config.z_offset_m;
+
+  // Point and distance between src and dst nodes
+  const float px = std::min(dst_node->x, src_node->x);
+  const float py = std::min(dst_node->y, src_node->y);
+  const float dx = dst_node->x - src_node->x;
+  const float dy = dst_node->y - src_node->y;
+
+  // Midpoint between src and dst nodes.
+  const float mid_x = px + fabsf(dx * 0.5f);
+  const float mid_y = py + fabsf(dy * 0.5f);
+  const auto midpoint = Point(mid_x, mid_y, dst_z);
+
+  visualization_msgs::msg::Marker marker =
+      CreateDefaultMarker(config.timestamp, config.marker_base_ns, config.marker_id);
+  marker.color = config.base_color;
+
+  switch(command_type) {
+  case volley::AgvMotionType::ROTATE: {
+    marker.type = visualization_msgs::msg::Marker::CYLINDER;
+    marker.ns += "_rotate";
+    marker.color.a = 0.5;
+    marker.pose.position = Point(dst_node->x, dst_node->y, dst_z);
+
+    double radius = 1.0;  // Default to a small radius
+    auto window_opt = config.layout->GetBufferedResourceWindow(dst_node->max_resource_size);
+    if(window_opt.has_value()) {
+      radius = std::hypot(window_opt.value().width_m, window_opt.value().length_m);
+    }
+    marker.scale.x = radius;
+    marker.scale.y = radius;
+    marker.scale.z = 0.25f;
+    markers.push_back(marker);
+
+    command_text_label += std::format("_{}to{}", std::to_string(config.agv_command.src.pose.heading),
+        std::to_string(config.agv_command.dst.pose.heading));
+    break;
+  }
+  case volley::AgvMotionType::CENTER: {
+    marker.type = visualization_msgs::msg::Marker::SPHERE;
+    marker.ns += "_center";
+    marker.pose.position = Point(dst_node->x, dst_node->y, dst_z);
+    marker.scale.x = 0.75f;
+    marker.scale.y = 0.75f;
+    marker.scale.z = 0.25f;
+    markers.push_back(marker);
+    break;
+  }
+  case volley::AgvMotionType::LIFT: {
+    if(config.agv_command.dst.lift) {
+      command_text_label = "LIFT_TRAY";
+    }
+    else {
+      command_text_label = "LOWER_TRAY";
+    }
+
+    marker.type = visualization_msgs::msg::Marker::CYLINDER;
+    marker.ns += "_lift";
+    marker.pose.position = Point(dst_node->x, dst_node->y, dst_z - 0.15f);
+    marker.scale.x = 1.0f;
+    marker.scale.y = 1.0f;
+    marker.scale.z = 0.15f;
+    markers.push_back(marker);
+    break;
+  }
+  case volley::AgvMotionType::LOCOMOTE:
+  case volley::AgvMotionType::STRAFE: {
+    visualization_msgs::msg::Marker move_marker = marker;
+    move_marker.type = visualization_msgs::msg::Marker::CUBE;
+    move_marker.color.a = 0.5;
+    move_marker.ns += "_move";
+    move_marker.pose.position = midpoint;
+    move_marker.scale.x = std::max(fabsf(dx), 2.0f);
+    move_marker.scale.y = std::max(fabsf(dy), 2.0f);
+    move_marker.scale.z = 0.15;
+    markers.push_back(move_marker);
+
+    // Add an arrow to show movement direction
+    const auto angle_rad = std::atan2(dst_node->y - src_node->y, dst_node->x - src_node->x);
+
+    visualization_msgs::msg::Marker arrow_marker = marker;
+    arrow_marker.ns += "_movement_arrow";
+    arrow_marker.type = visualization_msgs::msg::Marker::ARROW;
+    arrow_marker.pose.position = midpoint;
+    arrow_marker.pose.position.z -= 0.3f;
+    arrow_marker.pose.orientation = Quaternion(0.0, 0.0, angle_rad);
+    arrow_marker.color.a = 1.0f;
+    arrow_marker.scale.x = kArrowLengthM;
+    arrow_marker.scale.y = kArrowWidth;
+    arrow_marker.scale.z = kArrowWidth;
+
+    markers.push_back(arrow_marker);
+    break;
+  }
+  default: {
+    visualization_msgs::msg::Marker between_marker = marker;
+    between_marker.type = visualization_msgs::msg::Marker::CUBE;
+    between_marker.ns += "_between";
+    between_marker.pose.position = midpoint;
+    between_marker.scale.x = std::max(dx, 2.0f);
+    between_marker.scale.y = std::max(dy, 2.0f);
+    between_marker.scale.z = 0.25f;
+    between_marker.color.a = 0.5;
+    markers.push_back(between_marker);
+    break;
+  }
+  }
+
+  // Add text label
+  visualization_msgs::msg::Marker text_marker = marker;
+  text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+  text_marker.ns += "_text_label";
+  text_marker.text = command_text_label;
+  text_marker.pose.position = midpoint;
+  text_marker.pose.position.z -= 0.6f;
+  text_marker.scale.z = 0.25f;
+  text_marker.color.a = 1.0;
+  markers.push_back(text_marker);
+
+  return markers;
+}
+
+std::vector<visualization_msgs::msg::Marker> CreatePayloadMarkers(const rclcpp::Time& time,
+    const std::string& mesh_resource_prefix, const std::string& ns, int32_t marker_id,
+    const CarModel& car_model, const geometry_msgs::msg::Point& position,
+    const geometry_msgs::msg::Quaternion& orientation, const std_msgs::msg::ColorRGBA& body_color) {
+  auto make = [&](const std::string& ns_suffix, const std::string& mesh_file,
+                  const std_msgs::msg::ColorRGBA& color) {
+    auto marker = CreateDefaultMeshMarker(time, ns + ns_suffix, marker_id);
+    marker.mesh_resource = mesh_resource_prefix + mesh_file;
+    marker.mesh_use_embedded_materials = true;
+    marker.color = color;
+    marker.pose.position = position;
+    marker.pose.orientation = orientation;
+    return marker;
+  };
+
+  return {
+      // Make the wheels the same transparency as the body
+      make("_car", car_model.body_filename.string(), body_color),
+      make("_wheels", car_model.wheels_trim_filename.string(),
+          CreateColorRGBA(0.0f, 0.0f, 0.0f, body_color.a)),
+      make("_windows", car_model.windows_filename.string(), CreateColorRGBA(0.15f, 0.15f, 0.15f, 0.85f)),
+  };
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/vis_manager.cpp">
+#include "vis/vis_manager.hpp"
+
+#include <common_ros/layout.hpp>
+#include <cstdlib>
+#include <interfaces/msg/sim_report.hpp>
+#include <memory>
+
+#include "vis/models.hpp"
+#include "vis/visualizer/schedule_visualizer.hpp"
+
+namespace volley::vis {
+
+using namespace std::chrono_literals;
+
+static constexpr auto kRenderPeriod = 50ms;
+
+namespace {
+VisContextSPtr BuildVisContext(const NodeSPtr& node) {
+  const std::string layout_param_name = "layout";
+  const auto layout_filepath_or = GetLayoutPathByName(node->Param<std::string>(layout_param_name));
+  if(!layout_filepath_or.has_value()) {
+    ERRORS(node->get_logger(), layout_filepath_or.error());
+    exit(EXIT_FAILURE);
+  }
+  const auto& layout_filepath = layout_filepath_or.value();
+
+  const LayoutSPtr layout = std::make_shared<volley::Layout>(layout_filepath);
+
+  const std::string use_remote_meshes_param_name = "use_remote_meshes";
+  const bool use_remote_meshes = node->Param<bool>(use_remote_meshes_param_name, true);
+
+  const std::string remote_mesh_prefix_param_name = "remote_mesh_prefix";
+  const auto remote_mesh_prefix =
+      node->Param<std::string>(remote_mesh_prefix_param_name, kMeshResourcePrefixRemoteDefault);
+
+  const std::string mesh_resource_prefix = use_remote_meshes ? remote_mesh_prefix : kMeshResourcePrefixLocal;
+
+  INFOS(node->get_logger(), "Starting VisManager with context:\n\t"
+                                << layout_param_name << ": " << layout_filepath << "\n\t"
+                                << use_remote_meshes_param_name << ": " << std::boolalpha << use_remote_meshes
+                                << "\n\t" << remote_mesh_prefix_param_name << ": " << remote_mesh_prefix);
+
+  return std::make_shared<VisContext>(layout, std::move(mesh_resource_prefix), node->get_clock());
+}
+}  // namespace
+
+VisManager::VisManager(NodeSPtr node) :
+    node_(node), context_(BuildVisContext(node_)), queue_visualizer_(nullptr) {
+  visualizers_.push_back(std::make_unique<BayVisualizer>(context_));
+  visualizers_.push_back(std::make_unique<LayoutVisualizer>(context_));
+  visualizers_.push_back(std::make_unique<TrayVisualizer>(context_));
+  visualizers_.push_back(std::make_unique<VrcVisualizer>(context_));
+
+  // Construct queue visualizer
+  {
+    auto queue_visualizer = std::make_unique<QueueVisualizer>(context_);
+    queue_visualizer_ = queue_visualizer.get();
+    visualizers_.push_back(std::move(queue_visualizer));
+  }
+
+  // Construct AGV visualizer
+  {
+    auto agv_visualizer = std::make_unique<AgvVisualizer>(context_);
+    agv_visualizer_ = agv_visualizer.get();
+    visualizers_.push_back(std::move(agv_visualizer));
+  }
+
+  // Construct schedule visualizer
+  {
+    auto schedule_visualizer = std::make_unique<ScheduleVisualizer>(context_);
+    schedule_visualizer_ = schedule_visualizer.get();
+    visualizers_.push_back(std::move(schedule_visualizer));
+  }
+
+  garage_snapshot_sub_ = node_->create_subscription<interfaces::msg::GarageSnapshot>(
+      "/central/garage_snapshot", volley::GetBestEffortQoS(1),
+      [&](interfaces::msg::GarageSnapshot::ConstSharedPtr msg) { HandleGarageSnapshot(msg); });
+
+  schedule_sub_ =
+      node_->create_subscription<interfaces::msg::Schedule>("/central/schedule", volley::GetBestEffortQoS(1),
+          [&](interfaces::msg::Schedule::ConstSharedPtr msg) { schedule_visualizer_->HandleSchedule(msg); });
+
+  dispatch_report_sub_ = node_->create_subscription<interfaces::msg::DispatchReport>("/central/report",
+      volley::GetBestEffortQoS(1), [&](interfaces::msg::DispatchReport::ConstSharedPtr msg) {
+        queue_visualizer_->HandleDispatchReport(msg);
+      });
+
+  sim_report_sub_ =
+      node_->create_subscription<interfaces::msg::SimReport>("/sim/report", volley::GetBestEffortQoS(1),
+          [&](interfaces::msg::SimReport::ConstSharedPtr msg) { queue_visualizer_->HandleSimReport(msg); });
+
+  render_timer_ = rclcpp::create_timer(node_->get_node_base_interface(), node_->get_node_timers_interface(),
+      node_->get_clock(), kRenderPeriod, [this] { Render(); });
+}
+
+void VisManager::HandleGarageSnapshot(interfaces::msg::GarageSnapshot::ConstSharedPtr garage_snapshot) {
+  for(const auto& visualizer : visualizers_) {
+    visualizer->HandleGarageSnapshot(garage_snapshot);
+  }
+
+  for(const auto& agv_sim_state : garage_snapshot->agvs) {
+    const uint8_t agv_id = agv_sim_state.agv_id;
+    if(!agv_command_subs_.contains(agv_sim_state.agv_id)) {
+      const std::string topic_name = "/agv/a" + std::to_string(agv_id) + "/command_list";
+      agv_command_subs_[agv_sim_state.agv_id] =
+          node_->create_subscription<interfaces::msg::AgvCommandReportList>(topic_name,
+              volley::GetBestEffortQoS(1),
+              [this, agv_id](interfaces::msg::AgvCommandReportList::ConstSharedPtr msg) {
+                agv_visualizer_->HandleAgvCommandReportList(agv_id, msg);
+              });
+    }
+  }
+}
+
+void VisManager::Render() {
+  for(const auto& visualizer : visualizers_) {
+    Publish(visualizer->GetVisMessages());
+  }
+}
+
+bool VisManager::Publish(const VisMessage& vis_message) {
+  if(publishers_.find(vis_message.topic_name) == publishers_.end()) {
+    AddPublisher(vis_message.topic_name);
+  }
+
+  publishers_.at(vis_message.topic_name)->publish(vis_message.marker_array);
+  return true;
+}
+
+bool VisManager::Publish(const std::vector<VisMessage>& vis_messages) {
+  bool success = true;
+  for(const auto& msg : vis_messages) {
+    success &= Publish(msg);
+  }
+  return success;
+}
+
+bool VisManager::AddPublisher(const std::string& topic_name) {
+  if(publishers_.find(topic_name) != publishers_.end()) {
+    ERRORS(node_->get_logger(), "Failed to add publisher, one already exists for topic name: " << topic_name);
+    return false;
+  }
+
+  publishers_[topic_name] = node_->create_publisher<visualization_msgs::msg::MarkerArray>(topic_name, 1);
+  return true;
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="src/visualizer_node.cpp">
+#include <common_ros/node.hpp>
+#include <common_ros/roslog.hpp>
+#include <cstdlib>
+#include <memory>
+#include <rclcpp/rclcpp.hpp>
+
+#include "vis/vis_manager.hpp"
+
+int main(int argc, char* argv[]) {
+  rclcpp::init(argc, argv);
+  const auto node = std::make_shared<volley::Node>("vis");
+
+  volley::vis::VisManager vis_manager(node);
+
+  rclcpp::spin(node);
+
+  rclcpp::shutdown();
+
+  return EXIT_SUCCESS;
+}
+</file>
+
+<file path="test/math_test.cpp">
+#include "vis/math.hpp"
+
+#include <gtest/gtest.h>
+
+#include <common/constants.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/quaternion.hpp>
+
+namespace volley::vis {
+constexpr double kEpsilon = 1e-6;
+
+TEST(GeometryUtils, Point) {
+  geometry_msgs::msg::Point point = Point(1.0, 2.0, 3.0);
+  EXPECT_EQ(point.x, 1.0);
+  EXPECT_EQ(point.y, 2.0);
+  EXPECT_EQ(point.z, 3.0);
+}
+
+TEST(GeometryUtils, Quaternion) {
+  geometry_msgs::msg::Quaternion quat = Quaternion(0.0, 0.0, 0.0);
+  EXPECT_EQ(quat.w, 1.0);
+  EXPECT_EQ(quat.x, 0.0);
+  EXPECT_EQ(quat.y, 0.0);
+  EXPECT_EQ(quat.z, 0.0);
+
+  quat = Quaternion(0.0, 0.0, 90.0 * kDeg2Rad);
+  EXPECT_NEAR(quat.w, 0.707107, kEpsilon);
+  EXPECT_EQ(quat.x, 0.0);
+  EXPECT_EQ(quat.y, 0.0);
+  EXPECT_NEAR(quat.z, 0.707107, kEpsilon);
+
+  quat = Quaternion(0.4, 0.6, 0.8);
+  EXPECT_NEAR(quat.w, 0.885246, kEpsilon);
+  EXPECT_NEAR(quat.x, 0.062026, kEpsilon);
+  EXPECT_NEAR(quat.y, 0.340676, kEpsilon);
+  EXPECT_NEAR(quat.z, 0.310534, kEpsilon);
+}
+
+TEST(GeometryUtils, QuatToQuatd) {
+  geometry_msgs::msg::Quaternion quat = Quaternion(0.1, -0.2, 0.3);
+  Eigen::Quaterniond quatd = QuatToQuatd(quat);
+  EXPECT_EQ(quatd.w(), quat.w);
+  EXPECT_EQ(quatd.x(), quat.x);
+  EXPECT_EQ(quatd.y(), quat.y);
+  EXPECT_EQ(quatd.z(), quat.z);
+}
+
+TEST(GeometryUtils, QuatdToQuat) {
+  Eigen::Quaterniond quatd {0.1, 0.2, 0.3, -0.4};
+  geometry_msgs::msg::Quaternion quat = QuatdToQuat(quatd);
+  EXPECT_EQ(quatd.w(), quat.w);
+  EXPECT_EQ(quatd.x(), quat.x);
+  EXPECT_EQ(quatd.y(), quat.y);
+  EXPECT_EQ(quatd.z(), quat.z);
+}
+
+TEST(GeometryUtils, PoseMultiplication) {
+  geometry_msgs::msg::Pose pose_global, pose_local;
+  pose_global.position = Point(1.0, 2.0, 3.0);
+  pose_global.orientation = Quaternion(0.1, 0.2, 0.3);
+  pose_local.position = Point(0, 0, 0);
+  pose_local.orientation = Quaternion(0, 0, 0);
+
+  // Identity local pose moved by a global pose results in the global pose.
+  geometry_msgs::msg::Pose pose_total = pose_global * pose_local;
+  EXPECT_EQ(pose_total.position.x, pose_global.position.x);
+  EXPECT_EQ(pose_total.position.y, pose_global.position.y);
+  EXPECT_EQ(pose_total.position.z, pose_global.position.z);
+  EXPECT_EQ(pose_total.orientation.w, pose_global.orientation.w);
+  EXPECT_EQ(pose_total.orientation.x, pose_global.orientation.x);
+  EXPECT_EQ(pose_total.orientation.y, pose_global.orientation.y);
+  EXPECT_EQ(pose_total.orientation.z, pose_global.orientation.z);
+
+  pose_global.orientation = Quaternion(0, 0, 0);
+  pose_local.position = Point(4, -5, 6);
+  pose_local.orientation = Quaternion(0, 0, 0);
+
+  // Without rotation, positions are additive.
+  pose_total = pose_global * pose_local;
+  EXPECT_EQ(pose_total.position.x, pose_global.position.x + pose_local.position.x);
+  EXPECT_EQ(pose_total.position.y, pose_global.position.y + pose_local.position.y);
+  EXPECT_EQ(pose_total.position.z, pose_global.position.z + pose_local.position.z);
+  EXPECT_EQ(pose_total.orientation.w, pose_global.orientation.w);
+  EXPECT_EQ(pose_total.orientation.x, pose_global.orientation.x);
+  EXPECT_EQ(pose_total.orientation.y, pose_global.orientation.y);
+  EXPECT_EQ(pose_total.orientation.z, pose_global.orientation.z);
+
+  pose_global.orientation = Quaternion(0, 0, 0.5);
+  pose_local.position = Point(0, 0, 0);
+  pose_local.orientation = Quaternion(0, 0, 0.5);
+  geometry_msgs::msg::Quaternion expected_orientation = Quaternion(0, 0, 1);
+
+  // Without positions, rotations are additive.
+  pose_total = pose_global * pose_local;
+  EXPECT_EQ(pose_total.position.x, pose_global.position.x + pose_local.position.x);
+  EXPECT_EQ(pose_total.position.y, pose_global.position.y + pose_local.position.y);
+  EXPECT_EQ(pose_total.position.z, pose_global.position.z + pose_local.position.z);
+  EXPECT_DOUBLE_EQ(pose_total.orientation.w, expected_orientation.w);
+  EXPECT_EQ(pose_total.orientation.x, expected_orientation.x);
+  EXPECT_EQ(pose_total.orientation.y, expected_orientation.y);
+  EXPECT_DOUBLE_EQ(pose_total.orientation.z, expected_orientation.z);
+
+  pose_global.orientation = Quaternion(0, 0, 0.1);
+  pose_local.position = Point(4, 5, 6);
+  pose_local.orientation = Quaternion(0, 0, 0.2);
+  expected_orientation = Quaternion(0, 0, 0.3);
+
+  // Full rotation and translation.
+  pose_total = pose_global * pose_local;
+  EXPECT_NEAR(pose_total.position.x, 4.48085, 1e-4);
+  EXPECT_NEAR(pose_total.position.y, 7.37435, 1e-4);
+  EXPECT_EQ(pose_total.position.z, 9);
+  EXPECT_DOUBLE_EQ(pose_total.orientation.w, expected_orientation.w);
+  EXPECT_EQ(pose_total.orientation.x, expected_orientation.x);
+  EXPECT_EQ(pose_total.orientation.y, expected_orientation.y);
+  EXPECT_DOUBLE_EQ(pose_total.orientation.z, expected_orientation.z);
+}
+
+}  // namespace volley::vis
+</file>
+
+<file path="CMakeLists.txt">
+cmake_minimum_required(VERSION 3.28)
+project(vis)
+
+find_package(volley_cmake REQUIRED)
+volley_package()
+
+volley_add_library(math_lib SHARED src/math.cpp LINK_LIBRARIES Eigen3::Eigen)
+
+# Both excluded files have targets of their own
+volley_glob_sources(
+  visualizer_sources
+  DIRECTORY src
+  RECURSIVE
+  EXCLUDE
+    "^src/math\\.cpp$"
+    "^src/visualizer_node\\.cpp$"
+)
+volley_add_library(visualizer_lib SHARED ${visualizer_sources} LINK_LIBRARIES math_lib)
+
+volley_add_executable(visualizer_node src/visualizer_node.cpp LINK_LIBRARIES visualizer_lib)
+
+if(BUILD_TESTING)
+  volley_add_gtest(math_test test/math_test.cpp LINK_LIBRARIES math_lib)
+endif()
+
+volley_ament_auto_package()
+</file>
+
+<file path="package.xml">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>vis</name>
+  <version>0.0.1</version>
+  <description>Visualization nodes and utilities</description>
+  <maintainer email="sw@volleyautomation.com">dev</maintainer>
+  <license>proprietary</license>
+
+  <buildtool_depend>volley_cmake</buildtool_depend>
+
+  <depend>backward_ros</depend>
+  <depend>bay_interfaces</depend>
+  <depend>common</depend>
+  <depend>common_ros</depend>
+  <depend>eigen</depend>
+  <depend>geometry_msgs</depend>
+  <depend>interfaces</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>vrc_interfaces</depend>
+
+  <exec_depend>site_config</exec_depend>
+
+  <test_depend>ament_cmake</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+</file>
+
+</files>

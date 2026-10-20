@@ -9,7 +9,7 @@ export interface Part {
 
 export interface DocConfig {
   key: string;
-  num: '01' | '02' | '03' | '04' | '05' | '06' | '07' | '08';
+  num: '01' | '02' | '03' | '04' | '05' | '06' | '07' | '08' | '09';
   file: string;
   prefix: string;
   tab: string;
@@ -92,6 +92,14 @@ export const DOCS: DocConfig[] = [
     prefix: 'vr',
     tab: 'Verification',
     summary: 'Regression parity and benchmarks for the extracted solvers.',
+  },
+  {
+    key: 'simulation',
+    num: '09',
+    file: 'src/content/09-simulation.html',
+    prefix: 'sm',
+    tab: 'Simulation',
+    summary: 'The sim package: the stack, a scenario run, writing and testing scenarios, and checking the refactor by replay and closed-loop runs.',
   },
 ];
 
