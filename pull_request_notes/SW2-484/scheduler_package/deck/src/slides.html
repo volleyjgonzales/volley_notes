@@ -650,7 +650,7 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   <div class="kicker">Staged plan</div>
   <h2>Five phases, each ending with unchanged behaviour</h2>
   <div class="phases">
-    <div class="card edge-accent"><div class="ph-n">1 · Baseline</div><p>Record the build, the 72 tests and event DAG snapshots on fixed inputs; document the dependencies.</p><span class="pill">SW2-484</span></div>
+    <div class="card edge-accent"><div class="ph-n">1 · Baseline</div><p>Run the 72 GoogleTest cases; store canonical results of fixed inputs as golden files; document the dependencies.</p><span class="pill">SW2-484</span></div>
     <div class="card edge-accent"><div class="ph-n">2 · Prepare</div><p>Names, stage folders, pure helpers and a single error type. No planning logic is relocated.</p><span class="pill">SW2-484</span></div>
     <div class="card edge-accent"><div class="ph-n">3 · Tray interface</div><p>Solver, default solver and apply function replace <code>DoTrayAssignments</code>.</p><span class="pill">SW2-484</span></div>
     <div class="card edge-accent"><div class="ph-n">4 · AGV interface</div><p>Solver and default solver, with the same module layout, replace <code>DoAgvAssignments</code>.</p><span class="pill">new ticket</span></div>
@@ -682,7 +682,7 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
     <text x="722" y="196" class="sub">• response messages, byte for byte</text>
   </svg>
   <div class="cols" style="margin-top:6px">
-    <div class="card"><h3>Parity</h3><p>The 72 active tests, plus recorded DAGs and response lists on curated fixtures. Every refactor step must reproduce them.</p></div>
+    <div class="card"><h3>Parity</h3><p>The 72 GoogleTest cases, plus golden files of canonical results on fixed and replayed inputs, stored in the repository. Every refactor step must reproduce them; no simulator required.</p></div>
     <div class="card"><h3>Benchmarks (SW2-487)</h3><p>≥10 real-site scenarios per solver, timed in a pinned environment, results stored with metadata. This is the reference for any future solver.</p></div>
   </div>
   <aside class="notes">

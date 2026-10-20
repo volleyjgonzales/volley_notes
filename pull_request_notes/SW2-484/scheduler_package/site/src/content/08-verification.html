@@ -289,7 +289,67 @@ colcon test-result --verbose
 </code></pre>
 <p>To run one test under a debugger, use the gtest binary in the build tree, for example <code>build/scheduler/scheduler_tests --gtest_filter=Scheduler.AmigaStash</code>. If the workspace uses wrappers (<code>poe</code>, <code>.colcon</code> profiles, a virtual environment), follow them. A successful build does not mean the tests ran; read <code>colcon test-result</code> and the logs.</p>
 <h2 data-num id="vr-system-level-checks-in-simulation">System-level checks in simulation</h2>
-<p>The fixtures above test the scheduler on hand-built inputs. The simulator runs the real stack against a simulated garage, and Dispatch already publishes every plan request and response for recording. That gives two more checks, described in the Simulation tab (<a class="ref" href="#sm-checking-the-refactor">section 5</a>): <strong>replay</strong>, which feeds recorded plan calls from baseline runs to the refactored scheduler and applies the canonical comparison of <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, on every pull request; and <strong>closed-loop runs</strong> of a scenario catalogue on the candidate, compared with the baseline on collisions, job outcomes and durations, before a stage is merged.</p>
+<p>The fixtures above test the scheduler on hand-built inputs. The simulator runs the real stack against a simulated garage, and Dispatch already publishes every plan request and response for recording. That gives two more checks, described in the Simulation tab (<a class="ref" href="#sm-checking-the-refactor">section 9</a>): <strong>replay</strong>, which feeds recorded plan calls from baseline runs to the refactored scheduler and applies the canonical comparison of <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, on every pull request; and <strong>closed-loop runs</strong> of a scenario catalogue on the candidate, compared with the baseline on collisions, job outcomes and durations, before a stage is merged.</p>
+
+<h2 data-num id="vr-test-layers-and-baselines">Test layers, and how baselines are computed and stored</h2>
+<p>The 72 existing tests are GoogleTest cases in <code>scheduler/test/</code>. They run as ordinary C++ test binaries, without ROS nodes and without the simulator: each builds a garage state in code or inline YAML, loads a named test layout, and calls <code>Plan()</code> or one stage (<a class="ref" href="#vr-what-the-existing-tests-cover">section 2</a>). They test correctness only in the sense of their own assertions, which are mostly success flags. They cannot show that a refactor left the plans unchanged. Three further layers are proposed; only the last needs the simulator.</p>
+<table>
+  <thead><tr><th>Layer</th><th>Inputs</th><th>What is compared</th><th>Simulator</th><th>When it runs</th></tr></thead>
+  <tbody>
+    <tr><td>1. Existing GoogleTest cases (72)</td><td>Hand-built states on <code>tiny_lot</code>, <code>1355_fulton</code>, <code>576_eccles_half</code>, <code>triple_pick_lot</code></td><td>Per-test assertions</td><td>No</td><td>Every build</td></tr>
+    <tr><td>2. Parity tests (new)</td><td>Fixture files: garage state, jobs, layout, parameters</td><td>The canonical result of <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, against a stored golden file</td><td>No</td><td>Every pull request</td></tr>
+    <tr><td>3. Replay (new)</td><td>Plan requests extracted from simulation recordings, stored as fixtures of layer 2</td><td>As layer 2, on realistic inputs</td><td>Only to record them, once</td><td>Every pull request</td></tr>
+    <tr><td>4. Closed-loop runs (new)</td><td>The scenario catalogue of the Simulation tab</td><td>Collisions, job outcomes and durations, over repeated runs</td><td>Yes</td><td>Before a phase is merged; nightly</td></tr>
+  </tbody>
+</table>
+<p>Benchmarks (<a class="ref" href="#vr-benchmark-method">section 5</a>) reuse the inputs of layers 2 and 3 and time them; they do not need the simulator either.</p>
+
+<h3 data-num id="vr-computing-a-baseline">Computing a baseline</h3>
+<ol>
+  <li><strong>Pin the baseline commit</strong> and tag it, for example <code>scheduler-parity-baseline</code>. Every golden file records this commit.</li>
+  <li><strong>Add the capture code first, as test-only code.</strong> The current code has no canonical output, so the first pull request adds <code>Canonicalize</code>, a fixture loader and a capture test under <code>test/parity/</code>, on top of the pinned commit, without touching <code>src/</code>. Its only effect is to write files.</li>
+  <li><strong>Run every fixture through the current code.</strong> End-to-end fixtures call <code>Plan()</code>; stage fixtures build the context up to the stage and call <code>DoTrayAssignments</code> or <code>DoAgvAssignments</code>. Each result is canonicalized and written as JSON.</li>
+  <li><strong>Commit the JSON files</strong> next to their inputs. From then on, the parity test runs the same fixtures on the branch under review and compares its canonical result with the stored one, field by field, printing the difference on failure.</li>
+</ol>
+
+<h3 data-num id="vr-where-results-are-stored">Where fixtures and results are stored</h3>
+<pre><code>scheduler/test/parity/
+├── fixtures/
+│   ├── tray_empty_bay_pecos_qa/
+│   │   ├── input.yaml        # garage state, jobs, layout name, parameters, plan time
+│   │   └── expected.json     # canonical result at the baseline commit
+│   ├── replay_550_w21st_0042/ # extracted from a simulation recording
+│   │   ├── input.yaml
+│   │   └── expected.json
+│   └── ...
+├── canonicalize.{hpp,cpp}    # proposed helpers of section 4
+└── parity_tests.cpp          # one parameterized test per fixture folder</code></pre>
+<p>A canonical result is small and readable, so a changed decision appears as a reviewable diff:</p>
+<pre><code class="language-json">{
+  "baseline_commit": "&lt;sha&gt;",
+  "success": true,
+  "tray_moves": [
+    {"tray": 15, "to_node": 21, "heading": 0, "agv": 1, "job": 0}
+  ],
+  "events": ["bay_transition:B21:retrieve#0", "tray_move:T15:21#0", "..."],
+  "edges_after_reduce": [[0, 1], [1, 2]],
+  "final_state_hash": "&lt;hash of the canonical final DiscreteGarageState&gt;"
+}</code></pre>
+<p>What is kept where:</p>
+<ul>
+  <li><strong>In the repository:</strong> fixture inputs and golden files. They are kilobytes each and change only by review.</li>
+  <li><strong>Outside the repository:</strong> simulation recordings (mcap files, often hundreds of megabytes) and raw benchmark timings (the CSV of <a class="ref" href="#vr-benchmark-method">section 5</a>), in CI artifacts or a shared bucket, each keyed by commit and host. A replay fixture names the recording it came from and its hash, so it can be traced back.</li>
+</ul>
+
+<h3 data-num id="vr-updating-a-golden-file">Updating a golden file</h3>
+<p>During the refactor, golden files are not updated: a difference is a defect, and the exit criterion of every phase is that all of them still match. After the refactor, a change that is meant to alter plans (a new solver, a tuned cost) regenerates them with an explicit switch, for example <code>UPDATE_GOLDEN=1 colcon test --packages-select scheduler</code>. The pull request then shows the JSON diff, and the closed-loop runs of layer 4 show whether the new plans are better.</p>
+
+<h3 data-num id="vr-testing-without-the-simulator">Testing the algorithm without the simulator</h3>
+<p>Layers 1 to 3 already do. The solver interfaces make it simpler: a test builds an <code>Input</code> (a garage state and an event DAG) directly, without a <code>Scheduler</code>, and checks the returned <code>Result</code>. Beyond fixed fixtures, the same entry point allows <strong>property tests</strong> on generated inputs: random occupancy on a test layout, then checks that hold for any input, such as an acyclic event DAG, every tray move with exactly one AGV, a valid final state, and an unchanged input (the invariants of the Issue &amp; proposal tab, <a class="ref" href="#pr-key-invariants-to-maintain">section 7</a>).</p>
+
+<h3 data-num id="vr-where-the-simulator-fits">Where the simulator fits</h3>
+<p>The simulator has two roles. It is a <strong>source of realistic inputs</strong>: a recorded run on a real-site layout contains every plan request Dispatch sent, and those requests become replay fixtures. And it is the <strong>system check</strong>: the closed-loop runs show the effect of a changed decision on later requests, on collisions and on job durations. Because simulation runs are not repeatable request for request (<a class="ref" href="#sm-determinism-and-what-to-compare">Simulation tab, section 8.3</a>), they are compared statistically, never against golden files.</p>
+<p class="small">The build commands of <a class="ref" href="#vr-build-and-run-commands">section 6</a> also name a <code>scheduler_advanced_tests</code> package. It is not in the snapshots, so its contents are unknown; it should be inspected before the baseline is pinned.</p>
 
 <h2 data-num id="vr-acceptance-checklist">Acceptance checklist</h2>
 <ul class="contains-task-list">
