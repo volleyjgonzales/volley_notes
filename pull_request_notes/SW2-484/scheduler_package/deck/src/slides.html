@@ -1,0 +1,789 @@
+<!-- ===================================================================== TITLE -->
+<section class="title center-v">
+  <div class="kicker">Scheduler Core Refactor · software review</div>
+  <h1>Making the scheduler's planning core testable and swappable</h1>
+  <p class="lede">What the scheduler does, what makes it hard to change today, the changes we propose, and what they enable next.</p>
+  <div class="meta">
+    <span class="pill accent">SW2-484 tray solver interface</span>
+    <span class="pill green">SW2-769 package reorganization</span>
+    <span class="pill amber">SW2-487 tray benchmark set</span>
+    <span class="pill">October 2026</span>
+  </div>
+  <aside class="notes">
+    Goal of this session: give everyone enough of a mental model of the scheduler to discuss the refactor, then agree on
+    the approach and the open decisions. No prior knowledge of the scheduler or the motion planner is assumed.
+    The study site has every detail behind these slides; the deck only carries the main line.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Agenda</div>
+  <h2>Four parts</h2>
+  <div class="cols c4" style="margin-top:28px">
+    <div class="card edge-accent fragment fade-up"><h3><span class="mono c-accent">01</span> The problem</h3><p>What the scheduler does, how it is designed and how one plan is built.</p></div>
+    <div class="card edge-red fragment fade-up"><h3><span class="mono c-red">02</span> The issues</h3><p>Why the code is hard to change, test and improve, and what the Jira ticket asks for.</p></div>
+    <div class="card edge-green fragment fade-up"><h3><span class="mono c-green">03</span> The proposal</h3><p>Solver interfaces, stage folders, names, and a staged plan that keeps behaviour identical.</p></div>
+    <div class="card edge-violet fragment fade-up"><h3><span class="mono c-violet">04</span> What comes next</h3><p>Better solvers, a richer event graph, planning while robots run, swappable motion planners.</p></div>
+  </div>
+  <p class="muted small" style="margin-top:40px">Animated figures advance with the normal "next" key. Press <code>S</code> for speaker notes.</p>
+  <aside class="notes">Roughly 10 minutes per part, then discussion. Part 1 is the longest because everything else depends on it.</aside>
+</section>
+
+<!-- ===================================================================== PART 1 -->
+<section class="part center-v">
+  <div class="num">01</div>
+  <h1>What the scheduler does</h1>
+  <p class="lede">A robotic parking garage, the planner that runs it, and one plan built step by step.</p>
+</section>
+
+<section>
+  <div class="kicker">The domain</div>
+  <h2>A robotic parking garage</h2>
+  <p class="lede small" style="margin-bottom:18px">Cars never move on their own. Every car sits on a <strong>tray</strong>, and every tray move needs an <strong>AGV</strong> to drive under it, lift it, carry it and lower it.</p>
+  <div class="cols c3">
+    <div class="card asset fragment fade-up">
+      <svg viewBox="0 0 64 64"><rect x="6" y="24" width="52" height="20" rx="5" fill="#0f172a" stroke="#38bdf8" stroke-width="2.5"/><circle cx="16" cy="48" r="5" fill="#38bdf8"/><circle cx="48" cy="48" r="5" fill="#38bdf8"/><path d="M40 34h10" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/><path d="M46 30l4 4-4 4" stroke="#38bdf8" stroke-width="2.5" fill="none"/></svg>
+      <div><h3>AGV</h3><p>Automated guided vehicle. Low, drives under trays, lifts and carries one. AGV-1, AGV-2, …</p></div>
+    </div>
+    <div class="card asset fragment fade-up">
+      <svg viewBox="0 0 64 64"><rect x="6" y="26" width="52" height="8" rx="2" fill="#0f172a" stroke="#f59e0b" stroke-width="2.5"/><path d="M12 34v14M52 34v14" stroke="#f59e0b" stroke-width="3"/><path d="M14 26c2-8 8-10 18-10s16 2 18 10" fill="none" stroke="#94a3b8" stroke-width="2"/><rect x="44" y="27" width="14" height="6" fill="#f59e0b" opacity=".5"/></svg>
+      <div><h3>Tray</h3><p>A platform with legs that holds a car or stands empty. Its front overdrive plate (ODP) retracts.</p></div>
+    </div>
+    <div class="card asset fragment fade-up">
+      <svg viewBox="0 0 64 64"><rect x="8" y="10" width="48" height="44" rx="4" fill="none" stroke="#22c55e" stroke-width="2.5"/><path d="M8 40h48" stroke="#22c55e" stroke-width="2" stroke-dasharray="4 3"/><path d="M26 54v-8h12v8" fill="#22c55e" opacity=".5"/><text x="32" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#22c55e" font-family="JetBrains Mono">B</text></svg>
+      <div><h3>Bay</h3><p>Where customers drop off and pick up cars. Switches between insert and retrieve modes.</p></div>
+    </div>
+    <div class="card asset fragment fade-up">
+      <svg viewBox="0 0 64 64"><g fill="none" stroke="#94a3b8" stroke-width="2"><rect x="6" y="12" width="16" height="40"/><rect x="24" y="12" width="16" height="40"/><rect x="42" y="12" width="16" height="40"/></g><text x="32" y="37" text-anchor="middle" font-size="13" font-weight="700" fill="#cbd5e1" font-family="JetBrains Mono">P</text></svg>
+      <div><h3>Stalls and waypoints</h3><p>Parking stalls (P) store trays; waypoints (W) are aisle positions the AGVs drive through.</p></div>
+    </div>
+    <div class="card asset fragment fade-up">
+      <svg viewBox="0 0 64 64"><rect x="14" y="8" width="36" height="48" rx="6" fill="none" stroke="#2dd4bf" stroke-width="2.5"/><path d="M35 16l-10 18h9l-5 14 12-20h-9z" fill="#2dd4bf"/></svg>
+      <div><h3>Chargers (VECS)</h3><p>Volley EV charging stations: charge AGVs, and the cars parked on trays.</p></div>
+    </div>
+    <div class="card asset fragment fade-up">
+      <svg viewBox="0 0 64 64"><rect x="14" y="6" width="36" height="52" rx="3" fill="none" stroke="#a78bfa" stroke-width="2.5"/><path d="M32 14v14M26 20l6-6 6 6M32 50V36M26 44l6 6 6-6" stroke="#a78bfa" stroke-width="2.5" fill="none"/></svg>
+      <div><h3>Lifts (VRC)</h3><p>Vertical reciprocating conveyors carry an AGV, with or without a tray, between floors.</p></div>
+    </div>
+  </div>
+  <aside class="notes">
+    Keep this concrete: a customer asks for their car; the system must bring the tray holding that car into a bay.
+    AGVs are the only things that move. Trays are passive obstacles: a tray parked in the way must be moved first.
+    Bays, chargers and lifts are resources with their own states and timing.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">The domain as a graph</div>
+  <h2>A real garage layout, and why moves interact</h2>
+  <div class="figside">
+    <div class="fig" data-fig="15_facility_scenario" data-crop="header" data-play></div>
+    <div class="side">
+      <p>The layout file turns the garage into a <strong>graph</strong>: nodes are places, edges are where an AGV may drive.</p>
+      <p class="small muted">One tray per node. Storage is dense, so reaching one tray often means moving others first.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    This is the real Pecos geometry. Step through: the root tray R is boxed in by K and T20. This is the core
+    difficulty of the domain: a simple request ("bring me R") creates extra work that depends on routes.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Where the scheduler sits</div>
+  <h2>Dispatch asks, the scheduler plans, the fleet executes</h2>
+  <svg class="dg" viewBox="0 0 1180 470">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker>
+      <marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#38bdf8"/></marker>
+      <marker id="ahG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#22c55e"/></marker>
+    </defs>
+    <g>
+      <rect class="box" x="10" y="40" width="230" height="120" rx="12"/>
+      <text class="lbl" x="125" y="92" text-anchor="middle">Customers, operators</text>
+      <text class="sub" x="125" y="118" text-anchor="middle">kiosk, app, maintenance</text>
+      <rect class="box" x="420" y="30" width="300" height="140" rx="12" style="stroke:#38bdf8"/>
+      <text class="lbl" x="570" y="80" text-anchor="middle">Dispatch</text>
+      <text class="sub mono" x="570" y="106" text-anchor="middle">central package</text>
+      <text class="sub" x="570" y="132" text-anchor="middle">queues jobs, runs the schedule</text>
+      <rect class="box" x="900" y="30" width="270" height="140" rx="12" style="stroke:#a78bfa"/>
+      <text class="lbl" x="1035" y="80" text-anchor="middle">Scheduler</text>
+      <text class="sub mono" x="1035" y="106" text-anchor="middle">Scheduler::Plan()</text>
+      <text class="sub" x="1035" y="132" text-anchor="middle">this refactor</text>
+      <rect class="box" x="300" y="330" width="540" height="120" rx="12" style="stroke:#22c55e"/>
+      <text class="lbl" x="570" y="378" text-anchor="middle">The garage</text>
+      <text class="sub" x="570" y="406" text-anchor="middle">AGVs, bays, chargers, lifts</text>
+    </g>
+    <g class="fragment">
+      <path class="arrow flow" d="M240 100H412" marker-end="url(#ah)"/>
+      <text class="sub" x="326" y="88" text-anchor="middle">jobs</text>
+      <text class="sub" x="326" y="132" text-anchor="middle" style="font-size:13px">"retrieve the car on T17"</text>
+    </g>
+    <g class="fragment">
+      <path class="arrow flow" d="M720 75H892" marker-end="url(#ahA)" style="stroke:#38bdf8"/>
+      <text x="806" y="60" text-anchor="middle" class="mono" style="font-size:15px;fill:#38bdf8">PlanRequest</text>
+      <text class="sub" x="806" y="210" text-anchor="middle" style="font-size:14px"></text>
+    </g>
+    <g class="fragment">
+      <path class="arrow flow" d="M892 125H728" marker-end="url(#ahA)" style="stroke:#a78bfa"/>
+      <text x="806" y="150" text-anchor="middle" class="mono" style="font-size:15px;fill:#a78bfa">PlanResponse</text>
+    </g>
+    <g class="fragment">
+      <path class="arrow flow" d="M540 170V322" marker-end="url(#ahG)" style="stroke:#22c55e"/>
+      <text class="sub" x="530" y="230" text-anchor="end">commands, each released</text>
+      <text class="sub" x="530" y="252" text-anchor="end">when its parents finish</text>
+      <path class="arrow flow" d="M610 322V178" marker-end="url(#ah)"/>
+      <text class="sub" x="622" y="230">completion events update</text>
+      <text class="sub" x="622" y="252">Dispatch's copy of the garage</text>
+    </g>
+    <g class="fragment">
+      <rect x="880" y="230" width="290" height="200" rx="10" fill="#131c31" stroke="#334155"/>
+      <text x="898" y="262" style="font-size:16px;font-weight:600">PlanRequest carries</text>
+      <text class="sub" x="898" y="290">• the garage snapshot (base_state)</text>
+      <text class="sub" x="898" y="314">• new jobs to plan (pending_jobs)</text>
+      <text class="sub" x="898" y="346" style="fill:#e8eef7;font-weight:600;font-size:16px">PlanResponse carries</text>
+      <text class="sub" x="898" y="374">• an action graph: who does</text>
+      <text class="sub" x="898" y="396">  what, and after what</text>
+    </g>
+  </svg>
+  <aside class="notes">
+    Dispatch is the executive: it owns the job queue and the running schedule. Every 850 ms it may call the planner.
+    Today it only calls when no job is running, so each plan starts from an idle fleet; Part 4 comes back to this.
+    The scheduler is a pure function from (garage snapshot, jobs) to an action graph. It never talks to robots.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">The scheduler's job</div>
+  <h2>Jobs in, an ordered graph of actions out</h2>
+  <div class="cols" style="margin-bottom:16px">
+    <div class="card edge-accent"><h3>Input: goals</h3><p>"The car on T17 is handed over in a bay." A job states an outcome, not the moves. Which bay, which empty tray, which AGV and which route are the planner's choice.</p></div>
+    <div class="card edge-green"><h3>Output: an order, not a timetable</h3><p>Each action names one machine and the actions it must wait for. Robots run at whatever speed they run; the order keeps them safe.</p></div>
+  </div>
+  <svg class="dg" viewBox="0 0 1180 300">
+    <defs>
+      <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker>
+      <marker id="ah2r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#f59e0b"/></marker>
+    </defs>
+    <g>
+      <text x="0" y="74" class="mono" style="font-size:16px;fill:#38bdf8">AGV-1</text>
+      <line x1="90" y1="68" x2="1180" y2="68" stroke="#1e293b" stroke-width="2"/>
+      <text x="0" y="214" class="mono" style="font-size:16px;fill:#22c55e">Bay B21</text>
+      <line x1="90" y1="208" x2="1180" y2="208" stroke="#1e293b" stroke-width="2"/>
+    </g>
+    <g class="fragment">
+      <rect x="110" y="40" width="170" height="56" rx="8" class="box" style="stroke:#38bdf8"/><text x="195" y="74" text-anchor="middle" style="font-size:16px">drive to P17</text>
+      <rect x="330" y="40" width="150" height="56" rx="8" class="box" style="stroke:#38bdf8"/><text x="405" y="74" text-anchor="middle" style="font-size:16px">lift T17</text>
+      <rect x="560" y="40" width="190" height="56" rx="8" class="box" style="stroke:#38bdf8"/><text x="655" y="74" text-anchor="middle" style="font-size:16px">carry to B21</text>
+      <rect x="800" y="40" width="150" height="56" rx="8" class="box" style="stroke:#38bdf8"/><text x="875" y="74" text-anchor="middle" style="font-size:16px">lower</text>
+      <path d="M280 68H322M480 68H552M750 68H792" class="arrow" marker-end="url(#ah2)"/>
+    </g>
+    <g class="fragment">
+      <rect x="250" y="180" width="230" height="56" rx="8" class="box" style="stroke:#22c55e"/><text x="365" y="214" text-anchor="middle" style="font-size:16px">switch to retrieve mode</text>
+      <rect x="960" y="180" width="210" height="56" rx="8" class="box" style="stroke:#22c55e"/><text x="1065" y="214" text-anchor="middle" style="font-size:16px">hand car to customer</text>
+    </g>
+    <g class="fragment">
+      <path d="M480 200C540 200 560 130 600 100" class="arrow" style="stroke:#f59e0b" marker-end="url(#ah2r)"/>
+      <path d="M950 80C1010 100 1030 150 1050 176" class="arrow" style="stroke:#f59e0b" marker-end="url(#ah2r)"/>
+      <text x="560" y="270" class="sub" style="fill:#f59e0b">the tray may enter only after the bay is in retrieve mode; the hand-over waits for the lower</text>
+    </g>
+  </svg>
+  <aside class="notes">
+    This is the whole contract in one picture. Lanes are machines. Arrows are "must finish before". The amber arrows
+    cross lanes: those are what make the plan safe without clocks. Times are not part of the output; Dispatch releases
+    an action as soon as all its parents are done.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">How it is designed</div>
+  <h2>Five stages inside one <code style="font-size:.8em">Plan()</code> call</h2>
+  <div class="pipe">
+    <div class="st fragment fade-up" style="--c:#38bdf8"><div class="n">1</div><h3>Job expansion</h3><div class="q">What must happen?</div><div class="w">Each job becomes events: "bay to retrieve", "move T17 into B21", destinations still blank.</div></div>
+    <div class="st fragment fade-up" style="--c:#f59e0b"><div class="n">2</div><h3>Tray assignment</h3><div class="q">Which tray goes where, and what is in the way?</div><div class="w">Fills blanks (empty tray, parking spot), adds moves for blocking trays.</div></div>
+    <div class="st fragment fade-up" style="--c:#f472b6"><div class="n">3</div><h3>AGV assignment</h3><div class="q">Which AGV moves each tray?</div><div class="w">Matches AGVs to tray moves, adds drive, lift and lower events.</div></div>
+    <div class="st fragment fade-up" style="--c:#2dd4bf"><div class="n">4</div><h3>Motion planning</h3><div class="q">Which path, and when, without collisions?</div><div class="w">CHUGG plans timed paths for every AGV, one event at a time.</div></div>
+    <div class="st fragment fade-up" style="--c:#22c55e"><div class="n">5</div><h3>Action graph</h3><div class="q">What order must the robots respect?</div><div class="w">Turns timed paths into the dependency graph Dispatch runs.</div></div>
+  </div>
+  <div class="band fragment fade-up">
+    <div class="ev">event DAG: shared workspace of stages 1-3</div>
+    <div class="mo">timed motions</div>
+    <div class="ad">action DAG</div>
+  </div>
+  <p class="callout fragment" style="margin-top:22px">Stages 1-3 are <strong>task planning</strong> and live in the <code>scheduler</code> package: <strong>78% of its code</strong>. Stage 4 is a separate library (<code>motion_planner</code>). This refactor is about stages 2 and 3.</p>
+  <aside class="notes">
+    The event DAG is the key data structure: a graph of intended events (tray moves, AGV moves, bay transitions) with
+    "must happen before" edges. Each task-planning stage reads it and edits it in place. That in-place editing is also
+    the root of the coupling we want to fix.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">How it works · one retrieve, start to finish</div>
+  <h2>From one job to a finished plan</h2>
+  <div class="figside">
+    <div class="fig" data-fig="26_retrieve_walkthrough" data-crop="header" data-play></div>
+    <div class="side">
+      <p class="small">Top: the garage. Bottom: the event DAG as each stage writes it, then the plan played back.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    Walk through the 13 steps. Points to stress: expansion writes intent with blanks; tray assignment fills the blanks
+    and discovers the blocker T15; AGV assignment wraps each tray move in drive, lift, carry, lower; then the plan plays.
+    Note that one simple request became three tray moves.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Stage 2 · tray assignment</div>
+  <h2>Blocking trays create extra moves</h2>
+  <div class="figside">
+    <div class="fig" data-fig="15_blocking_tray_move" data-crop="header" data-play></div>
+    <div class="side">
+      <p class="small">The root tray R is boxed in. Tray assignment finds a route, finds what stands on it, and picks a free stall for each blocker.</p>
+      <p class="small muted">Which route and which stall are choices: a better solver could make fewer or shorter moves.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    This is the algorithm inside DoTrayAssignments, 560 lines today. The ticket's first interface wraps exactly this
+    decision: given the event DAG and the garage, fill the blanks and add the blocker moves.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Stage 3 · AGV assignment</div>
+  <h2>Matching AGVs to tray moves</h2>
+  <div class="figside">
+    <div class="fig" data-fig="29_agv_matching" data-crop="header" data-play></div>
+    <div class="side">
+      <p class="small">A cost per (AGV, tray move) pair, then a bottleneck matching: minimise the <em>worst</em> pair, not the total.</p>
+      <p class="small muted">The cost function and the matching rule are both policies a different solver could change.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    This is DoAgvAssignments, 365 lines. Step 9 is the interesting one: the matching with the cheaper total loses
+    because its worst pair is larger. Whether that is the right objective is exactly the kind of question benchmarks
+    should answer, which is why the ticket asks for a swappable interface plus a benchmark set.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Stage 4 · motion planning</div>
+  <h2>CHUGG plans one AGV at a time</h2>
+  <div class="fig h440" data-fig="97_prioritized_planning" data-crop="header" data-play></div>
+  <p class="tiny" style="margin-top:4px">CHUGG takes a multi-agent path-finding problem with precedence constraints (MAPF-PC) as input; its algorithm is prioritized planning with SIPP (safe-interval path planning) for each AGV.</p>
+  <aside class="notes">
+    Prioritized planning: plan events in the DAG's order; each planned motion becomes an obstacle in time for everyone
+    after it. It is fast, but earlier events never yield. That is why the order the scheduler hands over (its edges and
+    job order) steers the quality of the result. Motion planning is out of scope for this ticket.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Stage 5 · action graph</div>
+  <h2>Why the output is an order, not a timetable</h2>
+  <div class="fig h500" data-fig="84_adg_delay" data-crop="header"></div>
+  <aside class="notes">
+    Real robots are late. A timetable breaks the moment one AGV is delayed. An action dependency graph keeps only the
+    orders that matter for safety ("AGV-3 must leave C before AGV-1 enters"), so a delay simply makes the others wait.
+  </aside>
+</section>
+
+<section class="center-v">
+  <div class="kicker">Part 1 recap</div>
+  <h2>What to keep in mind</h2>
+  <div class="stack" style="max-width:1050px">
+    <div class="card edge-accent fragment fade-up"><p><strong>The scheduler is a planner, not a controller.</strong> It turns jobs and a garage snapshot into an action graph; Dispatch runs it.</p></div>
+    <div class="card edge-amber fragment fade-up"><p><strong>Requests create work.</strong> Dense storage means blockers, so the set of moves depends on routes and choices.</p></div>
+    <div class="card edge-violet fragment fade-up"><p><strong>Five stages, one shared workspace.</strong> Stages 1-3 edit one event DAG in place; stage 4 plans paths; stage 5 builds the order.</p></div>
+    <div class="card edge-green fragment fade-up"><p><strong>The decisions in stages 2 and 3 are policies.</strong> Better ones exist, but today they cannot be swapped or measured.</p></div>
+  </div>
+</section>
+
+<!-- ===================================================================== PART 2 -->
+<section class="part center-v">
+  <div class="num">02</div>
+  <h1>What we want to address, and why</h1>
+  <p class="lede">The Jira initiative, where the code stands, and what makes it hard to change.</p>
+</section>
+
+<section>
+  <div class="kicker">Jira · Scheduler Core Refactor</div>
+  <h2>What the ticket asks for</h2>
+  <div class="cols w60">
+    <div class="stack">
+      <div class="callout"><strong>Objective.</strong> Move tray-move planning and AGV assignment out of large <code>Scheduler</code> methods and behind generic, swappable interfaces. Defaults must reproduce today's behaviour.</div>
+      <div class="card">
+        <h3>Definition of Done</h3>
+        <ul class="small" style="margin-top:6px">
+          <li class="fragment">Two generic interfaces: tray assignment and AGV assignment</li>
+          <li class="fragment">Two behaviour-equivalent default implementations</li>
+          <li class="fragment">10+ real-site benchmark scenarios per solver, with saved baselines</li>
+          <li class="fragment">Every assignment call site routed through the interfaces; old paths removed</li>
+        </ul>
+      </div>
+      <p class="tiny">Out of scope: changes to CHUGG/SIPP motion planning, a new optimal solver, adding to active schedules.</p>
+    </div>
+    <div class="stack">
+      <div class="card edge-green"><h3><span class="mono">SW2-769</span> <span class="pill green">Done</span></h3><p>Scheduler package reorganization.</p></div>
+      <div class="card edge-accent"><h3><span class="mono">SW2-484</span> <span class="pill accent">In progress</span></h3><p>Tray solver interface. The natural first implementation ticket.</p></div>
+      <div class="card edge-amber"><h3><span class="mono">SW2-487</span> <span class="pill amber">To do</span></h3><p>Tray benchmark set. Can start once baseline capture is deterministic.</p></div>
+      <p class="tiny">No AGV-assignment child ticket exists yet; the plan needs one.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    The ticket is deliberately narrow: no new algorithm, no motion-planning change. It is an enabling refactor. The
+    payoff is that the next person who wants to try a better tray or AGV solver can do it behind an interface and
+    prove it with numbers.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Where the code is</div>
+  <h2>Task planning is most of the scheduler, in a few very large methods</h2>
+  <div class="bars" style="margin-top:20px">
+    <div class="lab">scheduler package</div><div class="track"><div class="bar go" style="--w:100%;--c:#475569"></div></div><div class="val">4,570</div>
+    <div class="lab">task planning (stages 1-3)</div><div class="track"><div class="bar go" style="--w:78%;--c:#a78bfa"></div></div><div class="val">~3,590</div>
+  </div>
+  <h3 style="margin-top:34px">The three largest methods</h3>
+  <div class="bars" style="margin-top:10px">
+    <div class="lab"><code>DoTrayAssignments</code></div><div class="track"><div class="bar go" style="--w:100%;--c:#f59e0b"></div></div><div class="val">560</div>
+    <div class="lab"><code>DoAgvAssignments</code></div><div class="track"><div class="bar go" style="--w:65%;--c:#f472b6"></div></div><div class="val">365</div>
+    <div class="lab"><code>Plan</code></div><div class="track"><div class="bar go" style="--w:52%;--c:#38bdf8"></div></div><div class="val">291</div>
+  </div>
+  <p class="callout amber fragment" style="margin-top:30px">The two methods the ticket targets are the two biggest functions in the package: about 925 lines that read and write the planner's shared state directly.</p>
+  <p class="source">lines of C++ in the scheduler package snapshot studied; with library code, task planning is ~5,000 and motion planning ~3,900</p>
+  <aside class="notes">
+    Size alone is not the problem; it is a symptom. The next slide shows why these methods are hard to change.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">The issues</div>
+  <h2>What makes the planning core hard to change</h2>
+  <div class="cols c3">
+    <div class="card edge-red fragment fade-up"><h3>Hidden inputs and outputs</h3><p>The assignment methods read and write the event DAG, the working garage state and member maps in place. Nothing says what a call needs or changes.</p></div>
+    <div class="card edge-red fragment fade-up"><h3>Untestable in isolation</h3><p>Testing tray assignment means building a whole <code>Scheduler</code>. There is no unit to test, and no seam to swap.</p></div>
+    <div class="card edge-red fragment fade-up"><h3>Shared helpers</h3><p>The same helpers (headings, blockers, empty-tray choice) serve job expansion. Moving them naively breaks callers or adds back-pointers.</p></div>
+    <div class="card edge-amber fragment fade-up"><h3>Inconsistent errors</h3><p><code>BoolStringPair</code>, <code>std::optional</code> and silent <code>false</code> returns mix; some failures lose their reason.</p></div>
+    <div class="card edge-amber fragment fade-up"><h3>One concept, many names</h3><p><code>gg_</code>, <code>table_</code>, <code>CollisionEntityId</code>, "disabled": names that hide what things are and slow down every reader.</p></div>
+    <div class="card edge-amber fragment fade-up"><h3>No yardstick</h3><p>No benchmark set, so no way to tell whether a change makes plans better, worse or slower.</p></div>
+  </div>
+  <aside class="notes">
+    Red items are what the interfaces fix directly. Amber items are what make the work safe and reviewable: one error
+    type, clear names, and numbers to compare against.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Today</div>
+  <h2>Everything meets inside one class</h2>
+  <svg class="dg" viewBox="0 0 1180 520">
+    <defs><marker id="ahR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ef4444"/></marker></defs>
+    <rect x="10" y="10" width="760" height="500" rx="14" fill="#0f172a" stroke="#475569" stroke-width="2"/>
+    <text x="34" y="46" class="mono" style="font-size:18px;fill:#94a3b8">class Scheduler</text>
+    <rect class="box" x="40" y="70" width="300" height="60" rx="8" style="stroke:#38bdf8"/><text x="190" y="107" text-anchor="middle" class="mono" style="font-size:17px">Plan()  291 lines</text>
+    <rect class="box" x="40" y="160" width="300" height="60" rx="8" style="stroke:#38bdf8"/><text x="190" y="197" text-anchor="middle" class="mono" style="font-size:17px">Plan&lt;Type&gt;Job ×10</text>
+    <rect class="box" x="40" y="250" width="300" height="70" rx="8" style="stroke:#f59e0b"/><text x="190" y="282" text-anchor="middle" class="mono" style="font-size:17px">DoTrayAssignments()</text><text x="190" y="305" text-anchor="middle" class="sub">560 lines</text>
+    <rect class="box" x="40" y="350" width="300" height="70" rx="8" style="stroke:#f472b6"/><text x="190" y="382" text-anchor="middle" class="mono" style="font-size:17px">DoAgvAssignments()</text><text x="190" y="405" text-anchor="middle" class="sub">365 lines</text>
+    <rect class="box" x="40" y="440" width="300" height="50" rx="8"/><text x="190" y="471" text-anchor="middle" class="sub">shared helpers</text>
+    <g>
+      <rect class="box" x="470" y="70" width="270" height="60" rx="8"/><text x="605" y="98" text-anchor="middle" class="mono" style="font-size:16px">gg_</text><text x="605" y="118" text-anchor="middle" class="sub" style="font-size:13px">motion graph of the garage</text>
+      <rect class="box" x="470" y="160" width="270" height="60" rx="8"/><text x="605" y="188" text-anchor="middle" class="mono" style="font-size:16px">table_</text><text x="605" y="208" text-anchor="middle" class="sub" style="font-size:13px">collision table</text>
+      <rect class="box" x="470" y="250" width="270" height="170" rx="8" style="stroke:#a78bfa"/><text x="605" y="282" text-anchor="middle" class="mono" style="font-size:16px">ScheduleContext* ctx</text>
+      <text x="605" y="314" text-anchor="middle" class="sub">event DAG</text><text x="605" y="340" text-anchor="middle" class="sub">working garage state</text><text x="605" y="366" text-anchor="middle" class="sub">per-job maps, first events</text><text x="605" y="392" text-anchor="middle" class="sub">scheduled jobs</text>
+    </g>
+    <g class="fragment">
+      <path d="M340 285C400 285 420 300 462 305" class="arrow" style="stroke:#ef4444" marker-end="url(#ahR)"/>
+      <path d="M340 275C410 240 430 120 462 105" class="arrow" style="stroke:#ef4444" marker-end="url(#ahR)"/>
+      <path d="M340 280C400 240 430 200 462 192" class="arrow" style="stroke:#ef4444" marker-end="url(#ahR)"/>
+      <path d="M340 385C400 380 420 360 462 350" class="arrow" style="stroke:#ef4444" marker-end="url(#ahR)"/>
+      <path d="M340 380C420 330 440 140 462 115" class="arrow" style="stroke:#ef4444" marker-end="url(#ahR)"/>
+      <path d="M340 190C400 190 420 260 462 290" class="arrow" style="stroke:#ef4444" marker-end="url(#ahR)"/>
+      <path d="M190 440V425M190 330V320M140 440C90 400 90 250 140 225" class="arrow" style="stroke:#ef4444;stroke-dasharray:5 5"/>
+    </g>
+    <g class="fragment">
+      <rect x="800" y="70" width="370" height="350" rx="12" fill="#131c31" stroke="#334155"/>
+      <text x="822" y="108" style="font-size:19px;font-weight:600">To change tray assignment</text>
+      <text x="822" y="142" class="sub" style="font-size:16px">you must know what it reads and</text>
+      <text x="822" y="166" class="sub" style="font-size:16px">writes in ctx, gg_ and table_,</text>
+      <text x="822" y="190" class="sub" style="font-size:16px">which helpers job expansion also</text>
+      <text x="822" y="214" class="sub" style="font-size:16px">uses, and what AGV assignment</text>
+      <text x="822" y="238" class="sub" style="font-size:16px">expects to find afterwards.</text>
+      <text x="822" y="286" style="font-size:19px;font-weight:600">To test it</text>
+      <text x="822" y="318" class="sub" style="font-size:16px">you build a whole Scheduler and</text>
+      <text x="822" y="342" class="sub" style="font-size:16px">compare the final event DAG.</text>
+      <text x="822" y="390" style="font-size:16px;fill:#ef4444">No seam to plug in another solver.</text>
+    </g>
+  </svg>
+  <aside class="notes">
+    Red arrows are reads and writes that the method signatures do not show. The study site's coupling matrix lists
+    every one of them; this is the simplified picture.
+  </aside>
+</section>
+
+<section class="center-v">
+  <div class="kicker">Why now</div>
+  <h2>Why this is worth doing</h2>
+  <div class="cols">
+    <div class="stack">
+      <div class="card edge-green fragment fade-up"><h3>Better plans become possible</h3><p>Tray and AGV choices decide how many moves a retrieve needs and how long customers wait. Interfaces let us try better policies without rewriting the scheduler.</p></div>
+      <div class="card edge-green fragment fade-up"><h3>Changes become measurable</h3><p>A benchmark set on real layouts turns "seems better" into numbers: moves, makespan, planning time.</p></div>
+    </div>
+    <div class="stack">
+      <div class="card edge-accent fragment fade-up"><h3>Safer day-to-day work</h3><p>Small pure functions with unit tests, one error type, explicit inputs: fixes stop reaching into unrelated stages.</p></div>
+      <div class="card edge-accent fragment fade-up"><h3>Faster onboarding</h3><p>Folders that match the pipeline and names that say what things are. New people find the stage they need.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== PART 3 -->
+<section class="part center-v">
+  <div class="num">03</div>
+  <h1>The proposed changes</h1>
+  <p class="lede">Interfaces, layout, names and errors, delivered in small steps that keep behaviour identical.</p>
+</section>
+
+<section>
+  <div class="kicker">Principles</div>
+  <h2>Four rules for the whole refactor</h2>
+  <div class="cols">
+    <div class="card edge-green fragment fade-up"><h3>1 · Same behaviour first</h3><p>The default solvers reproduce today exactly: same assignments, same event DAG after reduction, byte-identical responses on the baseline fixtures. Improvements come later, behind the interfaces.</p></div>
+    <div class="card edge-accent fragment fade-up"><h3>2 · Small mechanical steps</h3><p>Each pull request does one kind of change (move, rename, extract) and is checked by parity tests, not by reading 500-line diffs.</p></div>
+    <div class="card edge-violet fragment fade-up"><h3>3 · Rename only where we own the blast radius</h3><p>Names change in <code>scheduler</code> and <code>planner_core</code> only. <code>common_ros</code> is used by too many modules; its names are translated at the edge instead.</p></div>
+    <div class="card edge-amber fragment fade-up"><h3>4 · Folders now, packages when proven</h3><p>Stage folders with one build target each inside <code>scheduler</code>. A stage becomes its own package only once it has a second user and a stable API.</p></div>
+  </div>
+  <aside class="notes">
+    Rule 1 is the most important: it is what makes a large refactor reviewable. If a step changes a plan, it is a bug in
+    the step, by definition.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Target architecture</div>
+  <h2><code style="font-size:.8em">Plan()</code> becomes an orchestrator of swappable stages</h2>
+  <svg class="dg" viewBox="0 0 1180 500">
+    <defs>
+      <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker>
+    </defs>
+    <rect class="box" x="400" y="6" width="380" height="64" rx="10" style="stroke:#38bdf8"/>
+    <text x="590" y="36" text-anchor="middle" class="mono" style="font-size:18px">Scheduler::Plan()</text>
+    <text x="590" y="58" text-anchor="middle" class="sub" style="font-size:14px">runs the stages, owns the solvers</text>
+    <g>
+      <path d="M590 70V96M120 96H1060M120 96V120M355 96V120M590 96V120M825 96V120M1060 96V120" class="arrow" style="stroke:#475569"/>
+    </g>
+    <g>
+      <rect class="box" x="20" y="124" width="200" height="80" rx="10"/><text x="120" y="158" text-anchor="middle" class="mono" style="font-size:15px">job_expansion/</text><text x="120" y="182" text-anchor="middle" class="sub" style="font-size:13px">ExpandJob (later)</text>
+      <rect x="255" y="124" width="200" height="80" rx="10" fill="#1b2336" stroke="#f59e0b" stroke-width="2.5"/><text x="355" y="158" text-anchor="middle" class="mono" style="font-size:15px">tray_assignment/</text><text x="355" y="182" text-anchor="middle" class="sub" style="font-size:13px;fill:#f59e0b">Solver interface</text>
+      <rect x="490" y="124" width="200" height="80" rx="10" fill="#1b2336" stroke="#f472b6" stroke-width="2.5"/><text x="590" y="158" text-anchor="middle" class="mono" style="font-size:15px">agv_assignment/</text><text x="590" y="182" text-anchor="middle" class="sub" style="font-size:13px;fill:#f472b6">Solver interface</text>
+      <rect class="box" x="725" y="124" width="200" height="80" rx="10"/><text x="825" y="158" text-anchor="middle" class="mono" style="font-size:15px">motion_planning/</text><text x="825" y="182" text-anchor="middle" class="sub" style="font-size:13px">PlanMotions</text>
+      <rect class="box" x="960" y="124" width="200" height="80" rx="10"/><text x="1060" y="158" text-anchor="middle" class="mono" style="font-size:15px">action_graph/</text><text x="1060" y="182" text-anchor="middle" class="sub" style="font-size:13px">BuildActionDag</text>
+    </g>
+    <g class="fragment">
+      <path d="M355 204V250" class="arrow" marker-end="url(#ah3)" style="stroke-dasharray:5 4"/><path d="M590 204V250" class="arrow" marker-end="url(#ah3)" style="stroke-dasharray:5 4"/>
+      <rect x="265" y="254" width="180" height="62" rx="8" fill="#0f172a" stroke="#f59e0b"/><text x="355" y="282" text-anchor="middle" class="mono" style="font-size:14px">DefaultSolver</text><text x="355" y="302" text-anchor="middle" class="sub" style="font-size:12px">today's algorithm</text>
+      <rect x="500" y="254" width="180" height="62" rx="8" fill="#0f172a" stroke="#f472b6"/><text x="590" y="282" text-anchor="middle" class="mono" style="font-size:14px">DefaultSolver</text><text x="590" y="302" text-anchor="middle" class="sub" style="font-size:12px">today's algorithm</text>
+    </g>
+    <g class="fragment">
+      <rect x="265" y="334" width="180" height="62" rx="8" fill="#0f172a" stroke="#22c55e" stroke-dasharray="6 4"/><text x="355" y="362" text-anchor="middle" class="mono" style="font-size:14px">CandidateSolver</text><text x="355" y="382" text-anchor="middle" class="sub" style="font-size:12px;fill:#22c55e">same Input / Result</text>
+      <rect x="500" y="334" width="180" height="62" rx="8" fill="#0f172a" stroke="#22c55e" stroke-dasharray="6 4"/><text x="590" y="362" text-anchor="middle" class="mono" style="font-size:14px">CandidateSolver</text><text x="590" y="382" text-anchor="middle" class="sub" style="font-size:12px;fill:#22c55e">same Input / Result</text>
+      <text x="700" y="372" class="sub" style="fill:#22c55e">swap, run the benchmark set, compare</text>
+    </g>
+    <g class="fragment">
+      <rect x="20" y="420" width="1140" height="70" rx="10" fill="#131c31" stroke="#475569"/>
+      <text x="40" y="452" class="mono" style="font-size:16px;fill:#2dd4bf">core/</text>
+      <text x="110" y="452" class="sub" style="font-size:16px;fill:#cbd5e1">GarageServices: motion graph, collision table, headings · shared types · translated common_ros names</text>
+      <text x="110" y="476" class="sub" style="font-size:14px">every stage depends on core/; no stage includes another stage's private headers (checked in CI)</text>
+    </g>
+  </svg>
+  <aside class="notes">
+    The orchestrator keeps the order of stages and owns the solver objects. Each assignment stage gets a small
+    interface with one call. Shared services that today are Scheduler members (gg_, table_) become an explicit
+    GarageServices object passed in.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">The tray interface</div>
+  <h2>Read-only input, a returned result, one place that applies it</h2>
+  <div class="cols w40" style="align-items:center">
+    <pre><code>namespace volley::task_planning::tray_assignment {
+struct Input {          // read-only view
+  const DiscreteGarageState&amp; initial_state;
+  const EventDag&amp; event_dag;
+};
+struct Result {         // an edit log
+  std::vector&lt;TrayFill&gt; fills;   // blanks filled
+  std::vector&lt;DagEdit&gt;  edits;   // events, edges
+  /* first event per tray, for AGV assignment */
+};
+class Solver {
+ public:
+  virtual ~Solver() = default;
+  [[nodiscard]] virtual
+  stdx::Expected&lt;Result&gt; Solve(const Input&amp;) const = 0;
+};
+}
+// the only writer of the plan context
+ApplyTrayAssignment(plan_ctx, result);</code></pre>
+    <div class="stack">
+      <div class="card edge-accent fragment fade-up"><h3>Solve cannot touch the plan</h3><p>It sees a const view and returns what it decided. Two solvers can run on the same input and be compared.</p></div>
+      <div class="card edge-green fragment fade-up"><h3>The result is inspectable</h3><p>Fills and edits are data: tests assert on them directly, and a log shows exactly what a solver changed.</p></div>
+      <div class="card edge-amber fragment fade-up"><h3>Replay keeps parity</h3><p><code>ApplyTrayAssignment</code> replays the edits in the order today's code makes them, so the event DAG comes out identical.</p></div>
+      <p class="tiny fragment">AGV assignment gets the same layout and error type, but edits the event DAG in place for its first version (<code>SolveInPlace</code>): its loop is harder to turn into a pure edit log.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    This is the core design decision. Returning a result instead of mutating shared state is what makes the solver
+    testable and swappable. The edit log is ordered to reproduce today's DAG byte for byte.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">The tray interface · data flow</div>
+  <h2>How the pieces fit</h2>
+  <div class="fig h580" data-fig="58_tray_dataflow" data-crop="header"></div>
+</section>
+
+<section>
+  <div class="kicker">Layout</div>
+  <h2>One folder per pipeline stage</h2>
+  <div class="cols w60">
+<div class="tree"><span class="d">scheduler/</span>                 <span class="cm"># package name unchanged</span>
+├── CMakeLists.txt         <span class="cm"># one target per stage</span>
+├── include/scheduler/
+│   ├── scheduler.hpp      <span class="cm"># Plan(): the orchestrator</span>
+│   ├── plan_context.hpp   <span class="cm"># was ScheduleContext</span>
+│   ├── <span class="d c-teal">core/</span>              <span class="cm"># shared, includes no stage</span>
+│   ├── <span class="d c-teal">ros/</span>               <span class="cm"># messages ↔ internal types</span>
+│   ├── <span class="d c-violet">task_planning/</span>
+│   │   ├── job_expansion/
+│   │   ├── <span class="d c-amber">tray_assignment/</span> <span class="cm"># this ticket</span>
+│   │   ├── <span class="d c-pink">agv_assignment/</span>  <span class="cm"># this ticket</span>
+│   │   └── validation/
+│   ├── <span class="d c-teal">motion_planning/</span>
+│   └── <span class="d c-green">action_graph/</span>
+├── src/                   <span class="cm"># mirrors include/; private headers</span>
+└── test/                  <span class="cm"># mirrors include/</span></div>
+    <div class="stack">
+      <div class="card edge-accent fragment fade-up"><h3>Boundaries the build enforces</h3><p>Each stage is a library target. A CI include check stops one stage from reaching into another's private headers.</p></div>
+      <div class="card edge-amber fragment fade-up"><h3>Why not packages today?</h3><p>Packages add release and ownership overhead before the APIs settle. A folder is cheap to promote later; <code>action_graph</code> is the first candidate.</p></div>
+    </div>
+  </div>
+  <aside class="notes">
+    SW2-769 already reorganized the package; the first step is to check its structure against this layout. Tests mirror
+    the folders so each stage's tests link only that stage.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Errors and names</div>
+  <h2>One error type, names that say what things are</h2>
+  <div class="cols">
+    <div class="stack">
+      <h3>Errors</h3>
+<pre><code>// today
+BoolStringPair r = DoTrayAssignments(ctx);
+if (!r.first) { /* r.second: message */ }
+
+// proposed
+stdx::Expected&lt;Result&gt; r = solver.Solve(input);
+if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
+      <p class="small muted">Values and errors travel together; <code>[[nodiscard]]</code> stops a failure from being ignored.</p>
+    </div>
+    <div>
+      <h3>Headline renames <span class="pill violet">scheduler · planner_core</span></h3>
+      <table style="margin-top:6px">
+        <tr><th>Today</th><th>Proposed</th></tr>
+        <tr class="fragment"><td><code>gg_</code></td><td><code>motion_graph_</code></td></tr>
+        <tr class="fragment"><td><code>table_</code></td><td><code>collision_table_</code></td></tr>
+        <tr class="fragment"><td><code>ScheduleContext</code></td><td><code>PlanContext</code></td></tr>
+        <tr class="fragment"><td><code>Plan&lt;Type&gt;Job</code></td><td><code>Expand&lt;Type&gt;Job</code></td></tr>
+        <tr class="fragment"><td><code>CollisionEntityId</code></td><td><code>FootprintType</code></td></tr>
+        <tr class="fragment"><td><code>disabledness_filters</code></td><td><code>keep_out_filter_by_footprint</code></td></tr>
+        <tr class="fragment"><td><code>BAY_ODP</code></td><td><code>BAY_OVERDRIVE_PLATE</code></td></tr>
+      </table>
+      <p class="tiny" style="margin-top:8px"><code>common_ros</code> names stay; a translation header maps them to the new vocabulary.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    Renames are done as separate mechanical commits, one group at a time, so review is just "is the new name right".
+    planner_core renames come late (stage I), with deprecated aliases, because other packages depend on it.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Staged plan</div>
+  <h2>Thirteen small stages, each with an exit check</h2>
+  <div class="tl" style="grid-template-columns:repeat(13,1fr)">
+    <div class="stg fragment fade-up" data-fragment-index="1" style="--c:#94a3b8"><b>A</b><span>baseline: build, 72 tests, DAG snapshots</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="1" style="--c:#94a3b8"><b>B</b><span>dependency map, helper owners</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="1" style="--c:#94a3b8"><b>B2</b><span>vocabulary, scheduler renames</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="2" style="--c:#38bdf8"><b>C0</b><span>stage folders, CMake targets, CI check</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="2" style="--c:#38bdf8"><b>C1</b><span>pure helpers, stdx errors</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="3" style="--c:#f59e0b"><b>C2</b><span>tray module: Solver, DefaultSolver, Apply</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="3" style="--c:#f59e0b"><b>D</b><span>Plan calls Solve; old path kept to compare</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="3" style="--c:#f59e0b"><b>E</b><span>delete old tray code, port tests</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="4" style="--c:#f472b6"><b>F</b><span>AGV module, same layout</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="5" style="--c:#22c55e"><b>G</b><span>benchmarks: ≥10 real sites per solver</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="6" style="--c:#a78bfa"><b>H</b><span>final cleanup, vocabulary check fails build</span></div>
+    <div class="stg fragment fade-up" data-fragment-index="6" style="--c:#a78bfa"><b>I</b><span>planner_core renames, with aliases</span></div>
+    <div class="stg opt fragment fade-up" data-fragment-index="6" style="--c:#a78bfa"><b>J</b><span>optional: first stage package</span></div>
+  </div>
+  <div class="tlg" style="grid-template-columns:repeat(13,1fr)">
+    <div class="fragment" data-fragment-index="7" style="grid-column:1/span 8;background:rgba(56,189,248,.12);color:#38bdf8">SW2-484 · tray solver interface (B2, C0, C1 are good first PRs)</div>
+    <div class="fragment" data-fragment-index="7" style="grid-column:9;background:rgba(244,114,182,.12);color:#f472b6">new ticket</div>
+    <div class="fragment" data-fragment-index="7" style="grid-column:10;background:rgba(34,197,94,.12);color:#22c55e">SW2-487</div>
+    <div class="fragment" data-fragment-index="7" style="grid-column:11/span 3;background:rgba(167,139,250,.12);color:#a78bfa">after the Definition of Done</div>
+  </div>
+  <p class="callout green fragment" data-fragment-index="8" style="margin-top:18px">Exit check for most stages: all tests and DAG snapshots identical, response messages byte-identical on the baseline fixtures.</p>
+  <aside class="notes">
+    Group by colour: prepare (grey), restructure (blue), tray (amber), AGV (pink), measure (green), finish (violet).
+    D keeps the old DoTrayAssignments alive temporarily so we can run both and diff the DAGs before deleting it in E.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Verification</div>
+  <h2>How we know nothing changed</h2>
+  <svg class="dg" viewBox="0 0 1180 300">
+    <defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker></defs>
+    <rect class="box" x="10" y="110" width="220" height="80" rx="10"/><text x="120" y="145" text-anchor="middle" style="font-size:18px;font-weight:600">Baseline fixtures</text><text x="120" y="170" text-anchor="middle" class="sub">jobs + garage state</text>
+    <g class="fragment">
+      <path d="M230 135C270 135 280 70 322 70" class="arrow" marker-end="url(#ah4)"/>
+      <rect class="box" x="330" y="30" width="260" height="80" rx="10" style="stroke:#94a3b8"/><text x="460" y="65" text-anchor="middle" class="mono" style="font-size:16px">pinned commit</text><text x="460" y="90" text-anchor="middle" class="sub">today's Plan()</text>
+    </g>
+    <g class="fragment">
+      <path d="M230 165C270 165 280 230 322 230" class="arrow" marker-end="url(#ah4)"/>
+      <rect class="box" x="330" y="190" width="260" height="80" rx="10" style="stroke:#38bdf8"/><text x="460" y="225" text-anchor="middle" class="mono" style="font-size:16px">refactored branch</text><text x="460" y="250" text-anchor="middle" class="sub">Plan() through the interfaces</text>
+    </g>
+    <g class="fragment">
+      <path d="M590 70C640 70 650 150 692 150M590 230C640 230 650 150 692 150" class="arrow" marker-end="url(#ah4)"/>
+      <rect x="700" y="80" width="470" height="140" rx="10" fill="#131c31" stroke="#22c55e"/>
+      <text x="722" y="114" style="font-size:18px;font-weight:600;fill:#22c55e">compare</text>
+      <text x="722" y="144" class="sub" style="fill:#cbd5e1">• tray and AGV assignments</text>
+      <text x="722" y="170" class="sub" style="fill:#cbd5e1">• event DAG edges after Reduce, final state, errors</text>
+      <text x="722" y="196" class="sub" style="fill:#cbd5e1">• response messages, byte for byte</text>
+    </g>
+  </svg>
+  <div class="cols" style="margin-top:6px">
+    <div class="card edge-accent fragment fade-up"><h3>Parity</h3><p>72 active tests plus recorded DAGs and response lists on curated fixtures. Every refactor step must reproduce them.</p></div>
+    <div class="card edge-green fragment fade-up"><h3>Benchmarks (SW2-487)</h3><p>≥10 real-site scenarios per solver, timed in a pinned environment, results stored with metadata: the yardstick for any future solver.</p></div>
+  </div>
+  <aside class="notes">
+    Some test layouts (tiny_lot, triple_pick_lot) are synthetic; we need to confirm which are real sites before counting
+    them toward the ten-scenario goal.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Risks</div>
+  <h2>Odd behaviours we keep on purpose, for now</h2>
+  <p class="small muted" style="margin-bottom:14px">A reviewer may want to "fix" these during extraction. Doing so breaks parity; each gets its own ticket and test instead.</p>
+  <div class="cols">
+    <div class="card edge-amber fragment fade-up"><h3>AGV busy time is always zero</h3><p><code>GetAgvOccupiedDuration</code> is a stub, and the AGV matching costs depend on it.</p></div>
+    <div class="card edge-amber fragment fade-up"><h3>Where the DAG is reduced</h3><p>Reduction runs in two specific places; moving it earlier changes AGV matching, probably because some code reads only direct edges.</p></div>
+    <div class="card edge-amber fragment fade-up"><h3>Blank fields mean something</h3><p>A tray move with no destination removes the tray from the working state. Later jobs rely on it.</p></div>
+    <div class="card edge-amber fragment fade-up"><h3>Vertex indices are identities</h3><p>Removing an event shifts later indices, and CHUGG maps motions back by index. Never remove; never cache indices.</p></div>
+  </div>
+</section>
+
+<section class="center-v">
+  <div class="kicker">For this review</div>
+  <h2>Decisions we would like to settle</h2>
+  <table>
+    <tr><th>Decision</th><th>Recommendation</th></tr>
+    <tr class="fragment"><td>Input and output style</td><td>Tray: read-only input, returned result, one apply function. AGV: in-place for the first pass.</td></tr>
+    <tr class="fragment"><td>Interface mechanism</td><td>Virtual <code>Solve</code>, solver owned by <code>Scheduler</code> through <code>std::unique_ptr</code>.</td></tr>
+    <tr class="fragment"><td>Folders or packages</td><td>Folders now; promote <code>action_graph</code> first, <code>task_planning</code> after the benchmarks.</td></tr>
+    <tr class="fragment"><td>Folder name</td><td><code>task_planning</code>, unless it is too easily confused with the <code>task_planner</code> package.</td></tr>
+    <tr class="fragment"><td>Naming scope</td><td>Rename in <code>scheduler</code> and <code>planner_core</code>; translate <code>common_ros</code> names at the edge.</td></tr>
+    <tr class="fragment"><td>Tickets</td><td>Create an AGV-assignment child ticket for stage F; confirm SW2-769's structure against the branch.</td></tr>
+  </table>
+</section>
+
+<!-- ===================================================================== PART 4 -->
+<section class="part center-v">
+  <div class="num">04</div>
+  <h1>What comes next</h1>
+  <p class="lede">Work the refactor makes possible, outside the current ticket.</p>
+</section>
+
+<section>
+  <div class="kicker">Future · the event graph</div>
+  <h2>Not every edge is a real constraint</h2>
+  <div class="fig h420" data-fig="125_event_dag_edge_kinds" data-crop="header" data-play></div>
+  <aside class="notes">
+    The event DAG hands the motion planner every edge as a hard order. Only the green (causal) ones are true in every
+    plan. Blue depend on routes chosen earlier, amber are arbitrary choices between two valid orders, red come from a
+    conservative rule. Treating them all as hard costs parallelism.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Future · the event graph</div>
+  <h2>A path from today's planner to better plans</h2>
+  <div class="stack" style="max-width:1120px">
+    <div class="card edge-accent fragment fade-up"><h3><span class="mono c-accent">1</span> Store each edge's kind</h3><p>Causal, path-dependent, resource-order or conservative, plus the rule that made it. Nothing else changes; fits the refactor's interfaces.</p></div>
+    <div class="card edge-green fragment fade-up"><h3><span class="mono c-green">2</span> Measure the cost of over-constraint</h3><p>On the benchmark set, compare makespan and retrieve arrival times with all edges against causal edges only. If the gap is small, stop here.</p></div>
+    <div class="card edge-amber fragment fade-up"><h3><span class="mono c-amber">3</span> Let the solver choose the free orders</h3><p>Pass resource-order edges as choices to a priority-based search with precedence constraints (PBS-PC); keep causal edges hard.</p></div>
+    <div class="card edge-violet fragment fade-up"><h3><span class="mono c-violet">4</span> Give the planner an objective</h3><p>Start with bay choice and job order, scored by predicted retrieve waiting time, behind the new solver interfaces.</p></div>
+  </div>
+  <aside class="notes">
+    Open questions before step 3: what the primary objective is (retrieve wait, throughput, a mix), how long a planning
+    call may take, and whether bay and patron action durations can be bounded.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Future · Dispatch</div>
+  <h2>Planning while the fleet is moving</h2>
+  <div class="fig h460" data-fig="118_plan_request_timeline" data-crop="header" data-play></div>
+  <aside class="notes">
+    Today Dispatch calls the planner only when nothing is running, so a new job waits for the whole current schedule.
+    Overlapping planning needs the scheduler to keep the running actions unchanged and plan around them, with
+    time-bounded reservations instead of reserving whole routes. Related Dispatch items: no timeout on a lost plan
+    response, and a CLEAN_GARAGE job that blocks jobs queued behind it.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Future · motion planning</div>
+  <h2>The same interface idea for the motion planner</h2>
+  <div class="fig h500" data-fig="99_motion_solver_interface" data-crop="header"></div>
+  <aside class="notes">
+    Harder than the task-planning interfaces because CHUGG's inputs are tied to event vertex indices and the collision
+    table. A MotionProblem / MotionPlan pair lets other planners (conflict-based search, PBS) be tried, including ones
+    that support only part of the problem.
+  </aside>
+</section>
+
+<section class="center-v">
+  <div class="kicker">Roadmap</div>
+  <h2>From this ticket to better plans</h2>
+  <div class="cols c4">
+    <div class="card edge-accent fragment fade-up"><h3>Now</h3><p class="small"><span class="pill accent">SW2-484</span><br>Baseline, renames, stage folders, tray solver interface (A-E).</p></div>
+    <div class="card edge-pink fragment fade-up"><h3>Next</h3><p class="small"><span class="pill">new ticket</span> <span class="pill green">SW2-487</span><br>AGV solver interface (F), benchmark set (G), cleanup (H).</p></div>
+    <div class="card edge-violet fragment fade-up"><h3>Then</h3><p class="small"><code>planner_core</code> names (I), first stage package (J), naming catalogue, typed event edges.</p></div>
+    <div class="card edge-green fragment fade-up"><h3>Later</h3><p class="small">Smarter tray and AGV solvers, PBS-PC ordering, overlapping planning with Dispatch, swappable motion planners.</p></div>
+  </div>
+  <p class="callout fragment" style="margin-top:30px">Every later item depends on two things this refactor delivers: <strong>seams</strong> to plug a new solver into, and <strong>benchmarks</strong> to prove it is better.</p>
+</section>
+
+<section class="center-v">
+  <div class="kicker">Discussion</div>
+  <h1 style="font-size:56px">Questions, and the decisions to settle</h1>
+  <div class="cols" style="margin-top:34px;max-width:1080px">
+    <ul class="small">
+      <li>Agree on the four principles, above all "same behaviour first"</li>
+      <li>Result-and-apply for tray assignment; in-place first for AGV assignment</li>
+      <li>Folders now, packages when proven</li>
+    </ul>
+    <ul class="small">
+      <li>Naming scope: <code>scheduler</code> and <code>planner_core</code> only</li>
+      <li>An AGV-assignment child ticket for stage F</li>
+      <li>Owners and real-site layouts for the benchmark set</li>
+    </ul>
+  </div>
+  <p class="tiny" style="margin-top:36px">Details, code references and every figure: the Scheduler Refactor Study site (tabs 01-08).</p>
+</section>
