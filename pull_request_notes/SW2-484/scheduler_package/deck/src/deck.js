@@ -29,7 +29,7 @@
     slide.querySelectorAll('[data-figid]').forEach(function (wrap) {
       var id = wrap.getAttribute('data-figid');
       var k = slide.querySelectorAll('.figstep.visible[data-for="' + id + '"]').length;
-      if (wrap._k === k) return;
+      if (wrap._k === k && wrap._capH) return;
       var forward = anim && wrap._k !== undefined && k === wrap._k + 1;
       wrap._k = k;
       var caps = JSON.parse(wrap.getAttribute('data-caps'));
@@ -44,7 +44,16 @@
         place(el, fr[j], forward, mt ? JSON.parse(mt)[j] : null, md ? JSON.parse(md)[j] : null);
       });
       var cap = slide.querySelector('.figcap[data-for="' + id + '"]');
-      if (cap) cap.innerHTML = '<span class="k">' + (k + 1) + ' / ' + caps.length + '</span>' + caps[k].replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      if (!cap) return;
+      var html = function (i) { return '<span class="k">' + (i + 1) + ' / ' + caps.length + '</span>' + caps[i].replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+      // reserve the height of the longest caption once the slide is laid out, so nothing shifts between steps
+      if (!wrap._capH && cap.offsetWidth) {
+        cap.style.boxSizing = 'border-box'; cap.style.minHeight = '0px';
+        var h = 0;
+        for (var i = 0; i < caps.length; i++) { cap.innerHTML = html(i); h = Math.max(h, cap.offsetHeight); }
+        wrap._capH = h; cap.style.minHeight = h + 'px';
+      }
+      cap.innerHTML = html(k);
     });
   }
 

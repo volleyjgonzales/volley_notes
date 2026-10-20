@@ -2875,7 +2875,7 @@ auto [success, message] = ctx->events.Apply(working_state);       // every event
     <tr>
       <td>Job expansion (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 14</a>)</td>
       <td><code>TrayMove</code>, <code>AgvMove</code>, <code>BayTransition</code>, <code>VecsTransition</code>: the intent of each job</td>
-      <td>Rule A (same entity, across jobs), rule B (leaves of the same job), rule C (into a bay or VECS), plus a few direct <code>AddDependency</code> calls in individual job methods</td>
+      <td>Rule A (same garage asset, across jobs), rule B (leaves of the same job), rule C (into a bay or VECS), plus a few direct <code>AddDependency</code> calls in individual job methods</td>
       <td><code>Apply</code> for <code>working_state</code></td>
     </tr>
     <tr>
@@ -3125,7 +3125,7 @@ void PushBackScheduledJob(const SchedulerJobMsg&amp; job) {      // wrap the job
   scheduled_jobs.push_back(scheduled_job);
 }
 
-// Rule A ("Where the edges come from", Task planning tab): chain events that touch the same entity, across jobs.
+// Rule A ("Where the edges come from", Task planning tab): chain events on the same garage asset, across jobs.
 void UpdateLastEntityEvent(const GarageEntityIdMsg&amp; entity_id, ScheduleEventSPtr new_event) {
   if(last_entity_event.find(entity_id) != last_entity_event.end()) {
     events.AddDependency(last_entity_event.at(entity_id), new_event);   // previous event -> new event

@@ -421,13 +421,13 @@ return std::make_pair(true, "");
 <h3 data-num id="bg-where-the-edges-come-from">Where the edges come from</h3>
 <figure id="bg-fig-25_dependency_rules">
   <img src="figures/25_dependency_rules.svg" alt="Edge rules during job expansion">
-  <figcaption>The three edge rules used during job expansion. Step through the five events in the order they are created to see which rule adds each edge, and how <code>last_entity_event</code> and the leaf set change. Rule A (<code>UpdateLastEntityEvent</code>) chains events that touch the same AGV, tray, bay or VECS, even across jobs. Rule B (<code>UpdateLeafDependencies</code>) makes a new event wait for the current leaf events of the <strong>same</strong> job. Rule C (in <code>PlanReparkTrayJob</code>) makes a tray move into a bay or VECS wait for that resource's last event.</figcaption>
+  <figcaption>The three edge rules used during job expansion. Step through the five events in the order they are created to see which rule adds each edge, and how <code>last_entity_event</code> and the leaf set change. Rule A (<code>UpdateLastEntityEvent</code>) chains events on the same garage asset (AGV, tray, bay or VECS), even across jobs. Rule B (<code>UpdateLeafDependencies</code>) makes a new event wait for the current leaf events of the <strong>same</strong> job. Rule C (in <code>PlanReparkTrayJob</code>) makes a tray move into a bay or VECS wait for that resource's last event.</figcaption>
 </figure>
-<p>Precisely (the letters A, B and C are this guide's shorthand; the function names the code uses are <a href="#bg-does-the-code-really-call-them-rule-a-rule-b-and-rule-c">listed below</a>):</p>
+<p>The three rules, in one sentence each, then how the code applies them. A <strong>garage asset</strong> is anything an event acts on and that only one event can use at a time: an AGV, a tray, a bay or a VECS. The letters A, B and C are this guide's shorthand; the function names the code uses are <a href="#bg-does-the-code-really-call-them-rule-a-rule-b-and-rule-c">listed below</a>.</p>
 <ul>
-  <li><strong>Rule A — same entity.</strong> <code>ctx->last_entity_event</code> is a map from <code>GarageEntityIdMsg</code> (which AGV, tray, bay or VECS) to the last event that touched it. <code>UpdateLastEntityEvent(id, e)</code> adds the edge <code>last[id] -> e</code> if there is one, then sets <code>last[id] = e</code>. This is the only rule that links <strong>different jobs</strong>: if job 0 and job 1 both move tray T19, job 1's move waits for job 0's.</li>
-  <li><strong>Rule B — earlier leaves of the same job.</strong> A <em>leaf</em> is an event with no outgoing edge anywhere in the DAG. <code>UpdateLeafDependencies(e, job_index)</code> adds <code>leaf -> e</code> for every leaf whose <code>GetJobIndex() == job_index</code>. Within one job this makes each new event wait for "everything the job has done so far that nothing else waits for". It never links different jobs.</li>
-  <li><strong>Rule C — into a bay or VECS.</strong> Only in <code>PlanReparkTrayJob</code>: if a <code>TrayMove</code>'s destination is a bay (or VECS), it gets an edge from that bay's (or VECS's) last event, so a tray never enters a bay before the bay's transition. Rule C reads <code>last_entity_event</code> but does not update it.</li>
+  <li><strong>Rule A — one asset, one event at a time, across jobs.</strong> Each new event waits for the previous event on the same garage asset, whichever job created it. The code keeps <code>ctx->last_entity_event</code>, a map from each asset (<code>GarageEntityIdMsg</code>) to the last event that used it. <code>UpdateLastEntityEvent(id, e)</code> adds the edge <code>last[id] -> e</code> if there is one, then sets <code>last[id] = e</code>. This is the only rule that links <strong>different jobs</strong>: if job 0 and job 1 both move tray T19, job 1's move waits for job 0's.</li>
+  <li><strong>Rule B — steps of one job in order.</strong> Each new event of a job waits for the job's open ends: its earlier events that nothing else waits for yet. In DAG terms these are the job's <em>leaves</em>, events with no outgoing edge. <code>UpdateLeafDependencies(e, job_index)</code> adds <code>leaf -> e</code> for every leaf whose <code>GetJobIndex() == job_index</code>. It never links different jobs.</li>
+  <li><strong>Rule C — a tray enters a bay or VECS only after that asset's latest event.</strong> When a <code>TrayMove</code>'s destination is a bay or a VECS, it waits for the last event on that bay or VECS, so a tray never enters a bay before the bay's transition. Only <code>PlanReparkTrayJob</code> applies it; it reads <code>last_entity_event</code> but does not update it.</li>
 </ul>
 <p>Not every event goes through every rule:</p>
 <ul>
@@ -435,30 +435,30 @@ return std::make_pair(true, "");
   <li><strong>Without rule B:</strong> the "stop charging" <code>VecsTransition</code>; RETRIEVE's <code>TRANSITION_TO_RETRIEVE</code> (so it does not wait for that stop-charging event); CHARGE_AGV's transition that frees a trapped AGV; and CLEAN_GARAGE's hide <code>AgvMove</code>s. Each of these is either the first event of its job or deliberately independent, but later events of the same job still wait for them through rule B. And none of the rules knows about geometry: whether tray T15 is <em>in the way</em> of T17's path, or whether two AGVs would meet, is discovered and turned into edges by tray and AGV assignment (sections <a class="ref" href="#bg-tray-assignment-dotrayassignments">16</a> and <a class="ref" href="#bg-agv-assignment-doagvassignments">17</a>).</li>
 </ul>
 <h4 id="bg-does-the-code-really-call-them-rule-a-rule-b-and-rule-c">Rule A, rule B and rule C in the code</h4>
-<p>The code does not use these names. The letters are this guide's shorthand, chosen to keep the figures readable. Search the code for these names instead:</p>
+<p>The code does not use these names; the letters keep the figures readable. The functions to search for:</p>
 <table>
   <thead>
     <tr>
       <th>Guide</th>
       <th>In the code</th>
-      <th>Code comment</th>
+      <th>What it does, and why</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>Rule A</td>
-      <td><code>ScheduleContext::UpdateLastEntityEvent(entity_id, new_event)</code> in <code>scheduler.hpp</code>, using the map <code>last_entity_event</code></td>
-      <td>"Add a dependency on the entity's last event, if it had one"</td>
+      <td><code>ScheduleContext::UpdateLastEntityEvent(entity_id, new_event)</code> in <code>scheduler.hpp</code>, with the map <code>last_entity_event</code></td>
+      <td>Adds an edge from the last event on the asset to the new event, then records the new event as the asset's last. An asset can only do one thing at a time, and the next event must start from the state the previous one leaves.</td>
     </tr>
     <tr>
       <td>Rule B</td>
       <td><code>ScheduleContext::UpdateLeafDependencies(child, job_index)</code> in <code>scheduler.hpp</code></td>
-      <td>"Adding a new child event to the leafs in the DAG. Each leaf becomes a parent to the new child event."</td>
+      <td>Adds an edge from every current leaf of the same job to the new event. A job's steps form a recipe (switch the bay, bring the tray, hand over the car) that must run in the order the job method creates them.</td>
     </tr>
     <tr>
       <td>Rule C</td>
       <td>Two inline blocks at the end of <code>Scheduler::PlanReparkTrayJob</code></td>
-      <td>"If reparking into a bay, ensure that we depend already on the last completed event for that bay -- could either be a PROCESS_RETRIEVE or TRANSITION_TO_RETRIEVE" (and the same for a VECS)</td>
+      <td>Adds an edge from the last event on the destination bay or VECS to the tray move. A bay must finish its current transition or retrieve before a tray enters it; rule A does not cover this, because a tray move is chained to its tray, not to the bay it enters.</td>
     </tr>
   </tbody>
 </table>

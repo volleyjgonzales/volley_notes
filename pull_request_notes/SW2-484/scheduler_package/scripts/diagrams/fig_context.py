@@ -415,7 +415,7 @@ def last_entity_event_flow():
             pts = [(a.cx + 8, a.y0), (a.cx + 8, a.y0 - lift), (b.cx - 8, a.y0 - lift), (b.cx - 8, b.y0)]
         connect(d, pts, kind="flow", color=col, size=7, sw=1.8, radius=5)
     note(d, 520, gy0 - 30, 500,
-         "Rule A links events of the same entity across jobs (e -> f). Rule B only links events of one job. "
+         "Rule A links events on the same garage asset across jobs (e -> f). Rule B only links events of one job. "
          "Rule C reads last_entity_event for a bay or VECS but never writes it. After job expansion nothing "
          "updates the map again, so later stages keep their own (last_tray_event, last_agv_event).",
          title="What the map is for", accent=T.green)

@@ -664,6 +664,22 @@
     let k = 0;
     let prevK = 0;
     let timer = null;
+    // Reserve the height of the longest caption, so the figure above does not move between steps.
+    let capW = -1;
+    const fixCaptionHeight = () => {
+      const w = capEl.clientWidth;
+      if (!w || w === capW) return;
+      capW = w;
+      capEl.style.minHeight = '0px';
+      let hMax = 0;
+      for (const c of caps) {
+        capEl.textContent = c;
+        hMax = Math.max(hMax, capEl.offsetHeight);
+      }
+      capEl.textContent = caps[k];
+      capEl.style.minHeight = `${hMax}px`;
+    };
+    if (window.ResizeObserver) new ResizeObserver(fixCaptionHeight).observe(capEl);
     const show = () => {
       const anim = k === prevK + 1;
       prevK = k;

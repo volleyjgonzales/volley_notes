@@ -149,7 +149,7 @@ def working_state():
 @figure("25_dependency_rules", "How job expansion adds DAG edges", DOC1)
 def dependency_rules():
     d = Doc("25_dependency_rules", "Where the edges come from during job expansion",
-            "UpdateLastEntityEvent chains events that touch the same entity; UpdateLeafDependencies orders events "
+            "UpdateLastEntityEvent chains events that touch the same garage asset; UpdateLeafDependencies orders events "
             "within one job; tray moves into a bay depend on that bay's last event.")
     S0 = d.step("Start: job 0 retrieves the payload on T17 into bay B21, which still holds the empty tray T21. "
                 "The DAG is empty and last_entity_event has no entries.")
@@ -174,7 +174,7 @@ def dependency_rules():
         "  // id = one AGV, tray, bay or VECS",
         "  last_entity_event[id] = new_event;",
         "}",
-    ], title="rule A · per-entity chain", size=11.5)
+    ], title="rule A · per-asset chain", size=11.5)
     c2 = code_panel(d, hw + 24, 0, hw, [
         "// ScheduleContext::UpdateLeafDependencies",
         "void UpdateLeafDependencies(const ScheduleEventSPtr& child,",
@@ -232,11 +232,11 @@ def dependency_rules():
     with d.at(S4):
         connect(d, [(B[0].x0 + 90, B[0].y0), (B[0].x0 + 90, yB), (B[3].x0 + 100, yB), (B[3].x0 + 100, B[3].y0)],
                 kind="flow", color=ENT, size=8, sw=1.6)
-        label_pill(d, (B[0].x0 + 90 + B[3].x0 + 100) / 2 + 120, yB, "rule A · entity B21", color=ENT, size=10.5)
+        label_pill(d, (B[0].x0 + 90 + B[3].x0 + 100) / 2 + 120, yB, "rule A · asset B21", color=ENT, size=10.5)
     # rule A: entity chain T21: e1 -> e4 (crosses jobs)
     with d.at(S5):
         connect(d, [(B[1].x0 + 50, B[1].y1), (B[1].x0 + 50, e4.y0)], kind="flow", color=TRAY, size=8, sw=1.6)
-        label_pill(d, B[1].x0 + 56, (B[1].y1 + e4.y0) / 2, "rule A · entity T21", color=TRAY, size=10.5,
+        label_pill(d, B[1].x0 + 56, (B[1].y1 + e4.y0) / 2, "rule A · asset T21", color=TRAY, size=10.5,
                    anchor="start")
         nb = note(d, xs[2], e4.y0 - 6, xs[3] + bw - xs[2],
              "Rule B never links different jobs. Jobs only become ordered through shared entities (rule A) and, "
@@ -257,7 +257,7 @@ def dependency_rules():
                    "PlanReparkTrayJob. The letters A, B, C are this guide's names, not the code's. The result is a "
                    "partial order, not a sequence.",
           badge_key="as-built",
-          legend=[("arrow", ENT, "rule A: same entity (bay)"), ("arrow", TRAY, "rule A: same entity (tray)"),
+          legend=[("arrow", ENT, "rule A: same asset (bay)"), ("arrow", TRAY, "rule A: same asset (tray)"),
                   ("dasharrow", LEAF, "rule B: leaf of the same job"), ("dasharrow", BAYR, "rule C: into a bay")])
     return d
 

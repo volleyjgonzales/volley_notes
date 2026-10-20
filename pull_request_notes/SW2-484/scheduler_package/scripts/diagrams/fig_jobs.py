@@ -5,7 +5,7 @@ Every per-job figure has the same four parts so they can be compared side by sid
            hypothetical occupancy). Arrows are *intent* only: job expansion plans no paths.
   request  the SchedulerJob fields the method reads and the job_index it receives.
   events   the ScheduleEvents appended to ctx->events, in creation order, with every edge the
-           method adds and the rule that added it (A = same entity, B = earlier leaf of the same
+           method adds and the rule that added it (A = same asset, B = earlier leaf of the same
            job, C = tray into a bay/VECS waits for that resource's last event).
   steps    the method body as numbered steps, each with what happens in this example.
 """
@@ -27,6 +27,7 @@ RULE_B = T.fg2
 QA_X, QA_Y = (20.4, 46.4), (15.3, 25.2)
 FULL_X, FULL_Y = (20.4, 46.4), (6.9, 25.2)
 W = 1120
+TABLE_W = 980   # job figures: width of the method table, right of the map
 ENT_COL = {"tray": TRAY, "agv": AGV, "bay": BAYC, "vecs": VECS}
 
 # Animation of the per-job figures: step 0 is the request, step r + 1 is row r of the method table.
@@ -677,16 +678,17 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
                            dash="5 4" if approach else None, layer="over")
     else:
         yr = y2 + 50
-    y = max(yl_, yr) + 46
+    # right column: the method table, then the notes (left column: map, request, events)
+    tx = W + 56
     gens = GENERAL.get(name, [""] * len(steps))
     assert len(gens) == len(steps), (name, len(gens), len(steps))
     steps = [(c, g, sc, t, k) for (c, sc, t, k), g in zip(steps, gens)]
-    y = step_table(d, 0, y, W, steps, animate=True)
+    y = step_table(d, tx, -16, TABLE_W, steps, animate=True)
     _EV_STEP.clear()
     if notes:
-        y = notes_row(d, 0, y + 22, W, notes)
+        y = notes_row(d, tx, y + 22, TABLE_W, notes)
     legend = [("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),
-              ("box", VECS, "VecsTransition"), ("arrow", T.fg2, "rule A: same entity (colour = entity)"),
+              ("box", VECS, "VecsTransition"), ("arrow", T.fg2, "rule A: previous event on the same asset (colour = asset)"),
               ("dasharrow", RULE_B, "rule B: earlier leaf of the same job"),
               ("dasharrow", BAYC, "rule C: into a bay / VECS"), ("ring", T.fg2, "? = left for DoTrayAssignments")]
     if legend_override is not None:
