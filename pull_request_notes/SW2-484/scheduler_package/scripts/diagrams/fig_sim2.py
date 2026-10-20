@@ -38,10 +38,18 @@ def _scenarios() -> dict:
 SCEN = _scenarios()
 
 
-def _box(d, x, y, w, title, sub, col, rows=(), h=None, dashed=False, title_size=13, row_size=11, mono_rows=True):
+def _box(d, x, y, w, title, sub, col, rows=(), h=None, dashed=False, title_size=13, row_size=11, mono_rows=True,
+         kind=None, tag=None, title_col=None):
     h = h or (44 + 18 * len(rows) + (8 if rows else 0))
     d.rect(x, y, w, h, rx=10, fill=T.card, stroke=col, sw=1.6, dash="6 4" if dashed else None)
-    d.text(x + 12, y + 18, title, size=title_size, family="mono", weight=700, fill=col)
+    tx = x + 12
+    if kind:
+        from icons import icon
+        icon(d, kind, x + 20, y + 16, 18, col if col != T.fg2 else T.muted)
+        tx = x + 36
+    if tag:
+        d.text(x + w - 10, y + 16, tag, size=10, fill=T.muted, anchor="end")
+    d.text(tx, y + 18, title, size=title_size, family="mono", weight=700, fill=title_col or col)
     if sub:
         d.text(x + 12, y + 35, sub, size=10.5, fill=T.muted)
     yy = y + 56 if sub else y + 40
@@ -52,80 +60,6 @@ def _box(d, x, y, w, title, sub, col, rows=(), h=None, dashed=False, title_size=
 
 
 # --------------------------------------------------------------------------------------------------------------
-@figure("131_sim_layout_to_site", "From a layout to a simulated site", DOC)
-def sim_layout_to_site():
-    d = Doc("131_sim_layout_to_site", "From a layout to a simulated site",
-            "The layout file is the centre of a simulated site: the launcher derives the bay, VECS and VRC "
-            "nodes from it, the scenario places AGVs and trays on its node ids, and the installation parameter "
-            "file of the same name tunes the site's hardware.")
-    FILE = T.fg2
-    # centre: the layout file
-    lay = _box(d, 400, 0, 360, "layout: <name>.yaml", "the map (Layout file tab)", SIM,
-               ["nodes: id, x, y, floor, type, headings", "  Bay / BLift nodes", "  EvCharge nodes",
-                "  Parking, Waypoint, AgvCharge, Lift", "edges, parking_windows, buffer", "floors, vrcs"],
-               title_size=14, h=186)
-    # left: scenario
-    scn = _box(d, 0, 0, 300, "scenario: <file>.yaml", "scenario package (or a path)", FILE,
-               ["layout: <name>", "initial_conditions:", "  agvs: id, garage_pose", "  trays: id, garage_pose, payload",
-                "  obstructions, vrcs", "params: {node: {...}}", "events: [{time, type, ...}]"], h=186)
-    # right: installation params
-    par = _box(d, 860, 0, 300, "params_<name>.yaml", "launcher/params/installations", FILE,
-               ["bay: io_link masters and ports", "bay: estimator sensor box [m]", "bay: floor_spec (BLift sites)",
-                "bay: load_cells scale", "scheduler: bay_readiness_ratio", "optional in sim; required on site"],
-               h=186)
-    connect(d, [(scn.x1, 60), (lay.x0, 60)], kind="assoc", color=FILE, sw=1.6)
-    d.text((scn.x1 + lay.x0) / 2, 50, "names it", size=10.5, fill=T.muted, anchor="middle")
-    connect(d, [(par.x0, 60), (lay.x1, 60)], kind="dep", color=FILE, sw=1.4)
-    d.text((par.x0 + lay.x1) / 2, 50, "same name", size=10.5, fill=T.muted, anchor="middle")
-    # derived runtime nodes (bottom row)
-    y = 270
-    W, gap = 272, 24
-    xs = [i * (W + gap) for i in range(4)]
-    der = [
-        ("per scenario AGV  a<id>", "container sim/sim_nodes", SIM,
-         ["/agv/a<id>/sim  (agvhito", "  SimAgvComponent)", "initial_node_id, initial_heading",
-          "initial_lifted = lift_fraction == 1"]),
-        ("per Bay node  b<id>", "container sim/b<id>_nodes", MACH,
-         ["/bay/b<id>/bay_state_machine", "  (BLift: BliftStateMachine", "   + vrc_lift_bridge)",
-          "/bay/b<id>/vehicle_estimator", "/bay/b<id>/bay_guidance", "/bay/b<id>/bay_sim   (sim)"]),
-        ("per EvCharge node  v<id>", "standalone processes", MACH,
-         ["/vecs/v<id>/vecs_node", "/vecs/v<id>/vecs_sim_node (sim)"]),
-        ("per vrcs entry  r<id>", "standalone process (sim driver)", MACH,
-         ["/vrc/r<id>/manager", "floors and z from the layout,", "speed and doors from params,",
-          "initial_floor from the scenario"]),
-    ]
-    boxes = [_box(d, x, y, W, t, s_, c, rows, h=176, title_size=12.5, row_size=10.5)
-             for x, (t, s_, c, rows) in zip(xs, der)]
-    connect(d, [(boxes[0].cx, scn.y1), (boxes[0].cx, boxes[0].y0)], kind="assoc", color=SIM, sw=1.5)
-    d.text(boxes[0].cx + 8, (scn.y1 + boxes[0].y0) / 2 + 4, "initial_conditions.agvs", size=10.5, family="mono",
-           fill=SIM)
-    for b in boxes[1:3]:
-        connect(d, [(b.cx, lay.y1), (b.cx, b.y0)], kind="assoc", color=MACH, sw=1.5)
-    b = boxes[3]
-    connect(d, [(lay.x1 - 14, lay.y1), (lay.x1 - 14, lay.y1 + 40), (b.cx, lay.y1 + 40), (b.cx, b.y0)],
-            kind="assoc", color=MACH, sw=1.5)
-    d.text(boxes[1].cx + 8, (lay.y1 + y) / 2 + 4, "one set per node of that type", size=10.5, fill=MACH)
-    # once per run
-    y2 = y + 176 + 30
-    once = _box(d, 0, y2, 4 * W + 3 * gap, "once per run, whatever the layout", None, STACK,
-                ["sim/clock (/clock)   ·   sim/sim_world (Simulator: scenario path)   ·   central container: "
-                 "dispatcher, garage_tracker, monitors, scheduler",
-                 "rest_api   ·   vis/visualizer, foxglove_bridge, rviz2 (vis:=, rviz:=)   ·   recorder "
-                 "(record_artifacts:=true)",
-                 "every node: the merged parameter dict, with layout = <name>, installation_id = 9998, "
-                 "use_sim_time = true"], h=104, row_size=11)
-    frame(d, title="From a layout to a simulated site",
-          subtitle="A simulation runs one layout. The launcher starts one set of bay nodes per Bay or BLift node, "
-                   "one VECS per EvCharge node and one VRC driver per vrcs entry; the scenario puts AGVs and "
-                   "trays on the layout's node ids; params_<layout>.yaml, if it exists, carries the site's hardware "
-                   "settings.",
-          badge_key="as-built",
-          legend=[("box", SIM, "layout, simulated AGVs"), ("box", FILE, "input files"),
-                  ("box", MACH, "machines derived from the layout"), ("box", STACK, "fixed part of the stack"),
-                  ("arrow", T.fg2, "derives or names"), ("dasharrow", T.fg2, "found by name")])
-    return d
-
-
 # --------------------------------------------------------------------------------------------------------------
 SITES = {
     "Bay Area, California": [
@@ -373,70 +307,6 @@ def sim_site_archetypes():
 
 
 # --------------------------------------------------------------------------------------------------------------
-@figure("135_sim_launch_topology", "What sim.launch.py starts", DOC)
-def sim_launch_topology():
-    d = Doc("135_sim_launch_topology", "What sim.launch.py starts",
-            "Deployment view of one simulation: processes and component containers, their namespaces and "
-            "nodes, which part is simulated, and which exits stop the whole launch.")
-    PROC = T.border
-
-    def container(x, y, w, title, sub, nodes, *, h=None, accent=T.fg2, dashed=False, exit_stops=False):
-        h = h or (52 + 20 * len(nodes) + 10)
-        d.rect(x, y, w, h, rx=12, fill=T.bg_deep, stroke=accent, sw=1.4, dash="6 4" if dashed else None)
-        d.text(x + 14, y + 20, title, size=12.5, family="mono", weight=700, fill=T.fg)
-        d.text(x + 14, y + 37, sub, size=10.5, fill=T.muted)
-        if exit_stops:
-            chip(d, x + w - 10, y + 10, "exit = shutdown", T.red, anchor="end", size=10,
-                 fill=T.tint(T.red, 0.18, T.bg_deep), layer="labels")
-        yy = y + 52
-        for name, col in nodes:
-            d.rect(x + 12, yy, w - 24, 17, rx=4, fill=T.tint(col, 0.12, T.bg_deep), stroke=T.tint(col, 0.55,
-                                                                                                  T.bg_deep), sw=1)
-            d.text(x + 20, yy + 9, name, size=10.5, family="mono", fill=col)
-            yy += 20
-        return BBox(x, y, x + w, y + h)
-
-    W = 330
-    c1 = container(0, 0, W, "sim/clock", "process · wall time · publishes /clock",
-                   [("sim_clock_node (SimClockRos)", SIM)], exit_stops=True)
-    c2 = container(0, c1.y1 + 20, W, "sim/sim_nodes", "container · multi-threaded executor",
-                   [("/agv/a1/sim  SimAgvComponent (agvhito)", SIM), ("/agv/a2/sim  ...one per scenario AGV", SIM),
-                    ("/sim/sim_world  SimulatorComponent", SIM)], exit_stops=True)
-    c3 = container(W + 30, 0, W, "sim/b<id>_nodes  (one per bay)", "container · multi-threaded executor",
-                   [("/bay/b<id>/bay_state_machine", MACH), ("/bay/b<id>/vehicle_estimator", MACH),
-                    ("/bay/b<id>/bay_guidance", MACH), ("/bay/b<id>/vrc_lift_bridge  (BLift)", MACH),
-                    ("/bay/b<id>/bay_sim  BaySimComponent", SIM)])
-    c4 = container(2 * W + 60, 0, W, "sim/central_sim_nodes", "container · multi-threaded executor",
-                   [("/central/dispatcher", STACK), ("/central/garage_tracker", STACK),
-                    ("/central/consistency_monitor", STACK), ("/central/agv_monitor", STACK),
-                    ("/central/safety_hardware_monitor", STACK), ("/central/garage_monitor", STACK),
-                    ("/scheduler/scheduler  SchedulerComponent", SCH)])
-    c5 = container(W + 30, c3.y1 + 20, W, "per EvCharge node  /  per VRC", "standalone processes",
-                   [("/vecs/v<id>/vecs_node", MACH), ("/vecs/v<id>/vecs_sim_node", SIM),
-                    ("/vrc/r<id>/manager  (vrc sim driver)", SIM)])
-    c6 = container(2 * W + 60, c4.y1 + 20, W, "standalone and optional", "processes",
-                   [("rest_api (central_api)", STACK), ("/vis/visualizer  vis:=true (default)", VIS),
-                    ("foxglove_bridge  with vis", VIS), ("rviz2  rviz:=true (default)", VIS),
-                    ("/sim/recorder  record_artifacts:=true", T.fg2)], dashed=False)
-    # parameters panel
-    y = max(c2.y1, c5.y1, c6.y1) + 30
-    d.rect(0, y, 3 * W + 60, 64, rx=10, fill=T.card, stroke=T.border_soft, sw=1)
-    d.text(14, y + 22, "Every node gets the same merged parameter dict; the launcher adds is_simulation = true, "
-                       "installation_id = 9998, use_sim_time = true (false only for sim/clock).",
-           size=11.5, fill=T.fg2)
-    d.text(14, y + 44, "Not started in simulation: the agvhito proxy_node that talks to the real AGVs, and the bay "
-                       "and VECS hardware drivers.", size=11.5, fill=T.fg2)
-    frame(d, title="What sim.launch.py starts",
-          subtitle="Three component containers and a handful of processes, all in ROS domain 75 unless "
-                   "ROS_DOMAIN_ID is set. The scheduler runs inside the central container, as on site. If the "
-                   "clock process or the sim_nodes container exits unexpectedly, the launch shuts down.",
-          badge_key="as-built",
-          legend=[("box", SIM, "simulated (sim, agvhito, vecs, vrc sim parts)"), ("box", STACK, "central (real)"),
-                  ("box", SCH, "scheduler (real)"), ("box", MACH, "bay and VECS nodes (real)"),
-                  ("box", VIS, "visualisation")])
-    return d
-
-
 # --------------------------------------------------------------------------------------------------------------
 @figure("136_sim_two_runners", "Two ways to feed events: timed and sequential", DOC)
 def sim_two_runners():
@@ -470,15 +340,15 @@ def sim_two_runners():
                             "anything; clock starts when Dispatch is STOPPED and consistent.", size=11.5, fill=T.fg2)
     # lane B
     yB = axis_y + 100
-    d.text(0, yB, "B · events file", size=13.5, weight=600, fill=SCH)
+    d.text(0, yB, "B · events file", size=13.5, weight=600, fill=SIM)
     d.text(0, yB + 18, "no layout, no initial state", size=11, fill=T.muted)
     d.text(0, yB + 34, "run by exercise_sim_events", size=11, fill=T.muted)
     d.text(0, yB + 50, "(Python, own process)", size=11, fill=T.muted)
     by = yB + 6
     blocks = [("wait", "wait\nfor Dispatch RUNNING", 160, T.border),
-              ("1", "retrieve_request\nwait_for_job_completion", 210, SCH),
-              ("2", "retrieve_request\nwait_for_job_completion", 210, SCH),
-              ("3", "patron_arrival\nwaits for a READY bay", 200, SCH),
+              ("1", "retrieve_request\nwait_for_job_completion", 210, SIM),
+              ("2", "retrieve_request\nwait_for_job_completion", 210, SIM),
+              ("3", "patron_arrival\nwaits for a READY bay", 200, SIM),
               ("end", "jobs done -> CSV,\nSIGINT the stack", 150, T.border)]
     x = X0
     for k, text, w, col in blocks:
@@ -501,7 +371,7 @@ def sim_two_runners():
                    "event at a time by exercise_sim_events, which waits for each job and writes per-event metrics. "
                    "Batch configurations pair one scenario with one or more events files.",
           badge_key="as-built",
-          legend=[("dot", SIM, "timed event (scenario file)"), ("box", SCH, "sequential event (events file)")])
+          legend=[("dot", SIM, "timed event (scenario file)"), ("box", SIM, "sequential event (events file)")])
     return d
 
 
@@ -512,36 +382,38 @@ def sim_scenario_families():
             "The start files and events files every site gets, and how they pair: an empty garage is filled, a "
             "full garage is drained, a single manual AGV visits every node.")
     # start files (left), events files (right), resulting state
-    def start(x, y, name, rows, col=SIM):
-        return _box(d, x, y, 300, name, None, col, rows, h=40 + 18 * len(rows))
+    def start(x, y, name, rows, col=T.fg2):
+        return _box(d, x, y, 340, name, None, col, rows, h=48 + 18 * len(rows), kind="file", tag="start file",
+                    title_col=T.fg, title_size=12)
 
-    def events(x, y, name, rows, col=SCH, dashed=False):
-        return _box(d, x, y, 300, name, None, col, rows, h=40 + 18 * len(rows), dashed=dashed)
+    def events(x, y, name, rows, col=T.fg2, dashed=False):
+        return _box(d, x, y, 340, name, None, col, rows, h=48 + 18 * len(rows), dashed=dashed, kind="file",
+                    tag="events file", title_col=T.fg if col == T.fg2 else col, title_size=12)
 
     s1 = start(0, 0, "<site>_empty_start_in_auto", ["trays without vehicles", "mode 1 (auto) at 0.5 s",
                                                    "bay_readiness_ratio 1.0", "auto planner on at 5 s"])
-    e1 = events(400, 0, "<site>_events_fill_from_empty", ["patron_arrival x stalls", "wait_for_job_completion"])
+    e1 = events(420, 0, "<site>_events_fill_from_empty", ["patron_arrival x stalls", "wait_for_job_completion"])
     s2 = start(0, 150, "<site>_full_start_in_auto", ["trays with vehicles", "mode 1 (auto) at 0.5 s",
                                                     "bay_readiness_ratio 0.0", "auto planner on at 5 s"])
-    e2 = events(400, 150, "<site>_events_drain_from_full", ["retrieve_request x vehicles",
+    e2 = events(420, 150, "<site>_events_drain_from_full", ["retrieve_request x vehicles",
                                                            "wait_for_job_completion"])
     s3 = start(0, 300, "<site>_single_agv_start_in_manual", ["AGV-1 only, no trays", "mode 2 (manual) at 0.5 s",
                                                             "no auto planner"])
-    e3 = events(400, 300, "<site>_events_move_each_node", ["wait_for_any_non_busy_agv,", "move_agv to each node,",
+    e3 = events(420, 300, "<site>_events_move_each_node", ["wait_for_any_non_busy_agv,", "move_agv to each node,",
                                                           "done_events_wait_jobs_end_..."], col=T.red, dashed=True)
-    s4 = start(0, 432, "<site>_empty_no_op  /  _full_no_op", ["events: []", "Dispatch stays STOPPED"], col=T.fg2)
+    s4 = start(0, 440, "<site>_empty_no_op  /  _full_no_op", ["events: []", "Dispatch stays STOPPED"], col=T.fg2)
     for a, b, lab in ((s1, e1, "+"), (s2, e2, "+"), (s3, e3, "+")):
         connect(d, [(a.x1, a.cy), (b.x0, a.cy)], kind="line", color=T.border, sw=1.4)
         d.circle((a.x1 + b.x0) / 2, a.cy, 11, fill=T.bg, stroke=T.border, sw=1.2)
         d.text((a.x1 + b.x0) / 2, a.cy + 1, lab, size=14, weight=600, fill=T.fg2, anchor="middle")
     # results
-    rx = 780
+    rx = 820
     r1 = _box(d, rx, e1.y0, 260, "garage full", "every stall holds a vehicle", T.fg2, h=60)
     r2 = _box(d, rx, e2.y0, 260, "garage empty", "every vehicle retrieved", T.fg2, h=60)
     r3 = _box(d, rx, e3.y0, 260, "not runnable today", "exerciser: Unknown event type", T.red, h=60)
     r4 = _box(d, rx, s4.y0, 260, "for inspection", "RViz / Foxglove; drive by hand", T.fg2, h=60)
     for a, b in ((e1, r1), (e2, r2)):
-        connect(d, [(a.x1, a.y0 + 30), (b.x0, a.y0 + 30)], kind="assoc", color=SCH, sw=1.5)
+        connect(d, [(a.x1, a.y0 + 30), (b.x0, a.y0 + 30)], kind="assoc", color=T.border, sw=1.5)
     connect(d, [(e3.x1, e3.y0 + 30), (r3.x0, e3.y0 + 30)], kind="assoc", color=T.red, sw=1.4, dash="5 4")
     connect(d, [(s4.x1, s4.y0 + 30), (r4.x0, s4.y0 + 30)], kind="assoc", color=T.fg2, sw=1.4)
     # fill <-> drain loop
@@ -549,7 +421,7 @@ def sim_scenario_families():
             label="same vehicles: drain undoes fill", label_at=(r1.cx, (r1.y1 + r2.y0) / 2))
     # batch note
     yb = r4.y1 + 30
-    d.rect(0, yb, 1040, 58, rx=10, fill=T.card, stroke=T.red, sw=1.2, dash="6 4")
+    d.rect(0, yb, 1080, 58, rx=10, fill=T.card, stroke=T.red, sw=1.2, dash="6 4")
     d.text(14, yb + 22, "batch_configs/standardized_tests/pecos_sandbox_qa.yaml: scenario <site>_empty_start_in_auto, "
                         "events 3 x <site>_events_fill_and_drain", size=11.5, family="mono", fill=T.fg2)
     d.text(14, yb + 42, "No *_events_fill_and_drain file is among the scenario files: the standardized test refers "
@@ -559,7 +431,7 @@ def sim_scenario_families():
                    "timed set-up events; events files carry the workload and are fed by exercise_sim_events. "
                    "Pecos sandbox_eng, sandbox_qa and sandbox_combined (and 275_sunrise_b) follow this pattern.",
           badge_key="as-built",
-          legend=[("box", SIM, "start file (scenario: layout + initial state)"), ("box", SCH, "events file"),
+          legend=[("icon:file", T.muted, "file in scenario/scenarios"), ("box", T.fg2, "file or resulting state"),
                   ("dashbox", T.red, "broken or missing")])
     return d
 
@@ -567,41 +439,39 @@ def sim_scenario_families():
 # --------------------------------------------------------------------------------------------------------------
 @figure("138_sim_workflow", "Running a simulation, end to end", DOC)
 def sim_workflow():
+    from icons import icon
     d = Doc("138_sim_workflow", "Running a simulation, end to end",
             "Seven steps from choosing a layout to comparing results, with the command or file for each.")
-    PREP, RUN, EVAL = T.sky, T.violet, T.green
+    N = T.fg2
     steps = [
-        ("Choose the layout", "Layout file tab", PREP,
-         ["ros2 run launcher layout_plotter \\", "  <layout> -o map.png --show", "node ids for poses and events"]),
-        ("Write or pick a scenario", "scenario/scenarios/*.yaml", PREP,
-         ["layout, initial_conditions,", "set-up events, params overrides"]),
-        ("Launch", "launcher/launch/sim.launch.py", RUN,
-         ["ros2 launch launcher sim.launch.py \\", "  scenario:=<name|path>", "  real_time_factor:=4 vis:=false"]),
-        ("Drive it", "second terminal", RUN,
+        ("Choose the layout", "the map; Layout file tab", "file",
+         ["ros2 run launcher layout_plotter \\", "  <layout> -o map.png --show", "-> a picture with every node id"]),
+        ("Write or pick a scenario", "scenario/scenarios/*.yaml", "file",
+         ["layout, AGVs and trays on node ids,", "set-up events, parameter overrides"]),
+        ("Launch", "terminal 1; keeps running", "terminal",
+         ["ros2 launch launcher sim.launch.py \\", "  scenario:=<file>.yaml", "  real_time_factor:=4"]),
+        ("Drive it", "terminal 2; optional", "terminal",
          ["ros2 run scenario exercise_sim_events \\", "  -l <layout> -e <events file>",
-          "or: ros2 service call /sim/enqueue_garage_event"]),
-        ("Watch", "while it runs", RUN,
-         ["RViz, Foxglove (vis:=true)", "ros2 topic echo /sim/report", "ros2 param set /sim/clock real_time_factor 0"]),
-        ("Collect", "artifacts", EVAL,
-         ["record_artifacts:=true -> mcap of all", "  topics in ~/.ros/artifacts/<UTC>/sim",
-          "exerciser CSV: /tmp/sim_results/", "  events_summary.csv"]),
-        ("Compare", "Checking the refactor, below", EVAL,
-         ["replay recorded plan calls", "KPIs against baseline runs", "bagplay.launch.py bagfile:=<dir>"]),
+          "or one event: section Recipes"]),
+        ("Watch", "while it runs", "eye",
+         ["RViz or Foxglove (vis:=true, default)", "ros2 topic echo /sim/report", "pause: real_time_factor 0"]),
+        ("Collect", "after the run", "record",
+         ["record_artifacts:=true -> mcap file of", "  every topic, ~/.ros/artifacts/<UTC>/sim",
+          "exerciser: /tmp/sim_results/", "  events_summary.csv"]),
+        ("Compare", "Checking the refactor", "gear",
+         ["replay the recorded plan calls", "compare KPIs with the baseline runs", "bagplay.launch.py bagfile:=<dir>"]),
     ]
     W, H, gx = 330, 138, 26
-    for i, (t, sub, col, rows) in enumerate(steps):
-        r, c = divmod(i, 3) if i < 6 else (2, 1)
-        if i == 6:
-            r, c = 2, 0
+    for i, (t, sub, ik, rows) in enumerate(steps):
+        r, c = divmod(i, 3) if i < 6 else (2, 0)
         x, y = c * (W + gx), r * (H + 46)
-        d.rect(x, y, W, H, rx=10, fill=T.card, stroke=col, sw=1.5)
-        d.circle(x + 20, y + 20, 12, fill=col)
-        d.text(x + 20, y + 21, str(i + 1), size=12, family="mono", weight=700, fill=T.bg, anchor="middle")
-        d.text(x + 40, y + 21, t, size=13.5, weight=600, fill=T.fg)
-        d.text(x + 40, y + 39, sub, size=10.5, fill=T.muted)
+        d.rect(x, y, W, H, rx=10, fill=T.card, stroke=T.border, sw=1.4)
+        icon(d, ik, x + 22, y + 22, 22, N)
+        d.text(x + 44, y + 21, f"{i + 1} · {t}", size=13.5, weight=600, fill=T.fg)
+        d.text(x + 44, y + 39, sub, size=10.5, fill=T.muted)
         for k, row in enumerate(rows):
-            d.text(x + 16, y + 64 + 18 * k, row, size=10.5, family="mono", fill=T.fg2)
-        # arrow to next
+            d.text(x + 16, y + 64 + 18 * k, row, size=10.5, family="mono" if not row.startswith("->") else "sans",
+                   fill=T.fg2)
         if i < 6:
             nr, nc = divmod(i + 1, 3) if i + 1 < 6 else (2, 0)
             nx, ny = nc * (W + gx), nr * (H + 46)
@@ -610,17 +480,19 @@ def sim_workflow():
             else:
                 connect(d, [(x + W / 2, y + H), (x + W / 2, y + H + 22), (nx + W / 2, y + H + 22), (nx + W / 2, ny)],
                         kind="flow", color=T.border, sw=1.5, size=8)
-    # side note in the free cell
     x, y = 1 * (W + gx) + 20, 2 * (H + 46)
-    notes = ["A batch config (batch_configs/*.yaml) names a layout,",
-             "one start scenario and a list of events files:",
-             "steps 3 and 4 repeated, results grouped by batch_name.",
-             "The runner that reads it is not in the snapshots."]
+    notes = ["Steps 1-2 prepare files; nothing runs yet.",
+             "Steps 3-5 run: the launch starts every node, and",
+             "terminal 2 feeds work into the running simulation.",
+             "Steps 6-7 use what the run left behind.",
+             "A batch configuration repeats steps 3-4 for a list of",
+             "events files; the program that reads it is not in the snapshots."]
     for k, n in enumerate(notes):
-        d.text(x + 340 - 340 + 0, y + 20 + 18 * k, n, size=11, fill=T.muted)
+        d.text(x, y + 20 + 18 * k, n, size=11, fill=T.muted)
     frame(d, title="Running a simulation, end to end",
-          subtitle="The launch file starts the stack on a scenario; a second process feeds the workload; artifacts "
-                   "and metrics come out of both. The same steps serve manual exploration and the refactor checks.",
+          subtitle="Prepare the files, launch the stack in one terminal, optionally feed it work from a second, "
+                   "watch, and keep the recording. The same steps serve exploration by hand and the refactor checks.",
           badge_key="as-built",
-          legend=[("box", PREP, "prepare"), ("box", RUN, "run"), ("box", EVAL, "evaluate")])
+          legend=[("icon:file", N, "file to read or write"), ("icon:terminal", N, "command in a terminal"),
+                  ("icon:eye", N, "watch"), ("icon:record", N, "recording"), ("icon:gear", N, "analysis")])
     return d

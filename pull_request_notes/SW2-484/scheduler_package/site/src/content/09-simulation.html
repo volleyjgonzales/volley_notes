@@ -2,41 +2,74 @@
   09 — source of truth for this document. Edit this file; the site build (site/) renders it.
 
   Conventions: as in the other documents (see 05-action-graph.html). Ids use the prefix "sm-".
-  Sources: sources/repomix-sim.xml (the sim package, tests and scenario files excluded),
-  sources/repomix-vis.xml (the vis package), sources/repomix-launcher.xml (launch files, launcher/*.py,
-  params), sources/repomix-scenario.xml (the scenario package, filtered: the Pecos family, the named behaviour
-  scenarios, the event runner and the batch configurations), sources/5675_pecos_combined.yaml, and the central,
-  scheduler and interfaces snapshots for the services the simulator calls.
+  Sources: sources/repomix-sim.xml (the sim package: Simulator, BaySim, SimClockRos, scripts/; tests, scenario
+  files and 3D models excluded), sources/repomix-vis.xml (the vis package), sources/repomix-launcher.xml (launch
+  files, launcher/*.py, params), sources/repomix-scenario.xml (the scenario package, filtered: the Pecos family,
+  the named behaviour scenarios, the event runner and the batch configurations), sources/5675_pecos_combined.yaml,
+  and the central, scheduler and interfaces snapshots for the services and messages.
+
+  Colour roles in this tab's figures: blue = a simulated stand-in (exists only in simulation); green = the
+  scheduler; grey = everything else (production software, files); red = a problem. Map figures keep the pack's
+  entity colours (AGV green, tray amber, car pink, bay teal, charger violet).
 -->
 <h1>09 — Simulation: running the real stack against a simulated garage</h1>
-<p><em>A simulation runs the whole garage software on one layout file, with simulated patrons, bay hardware, AGVs and time. This tab starts from the layout (the Layout file tab) and builds up: which sites the layouts describe, what the launcher starts for a layout, what a scenario adds, how to run and record a simulation, how to test with it, and how to use it to show that the refactor changed nothing.</em></p>
-<p>The Verification tab checks the scheduler one stage at a time, on hand-built fixtures (<a class="ref" href="#vr-what-the-existing-tests-cover">section 2</a>). A simulation run is the opposite end: every node except the hardware is the production node, the garage state evolves over many plan calls, and the scheduler sees the requests Dispatch really builds. It catches what fixtures miss, and it produces realistic plan calls that can be replayed against the refactored code.</p>
+<p><em>A simulation runs the garage software on a computer with no garage attached: the hardware, the patrons and the clock are replaced by programs that pretend to be them. This tab explains what that means, starting from nothing; which sites the layouts describe; what runs during a simulation; how to write a scenario, start a simulation, park and retrieve cars in it, and record it; and how to use it to show that the refactor changed nothing.</em></p>
 
-<h2 data-num id="sm-from-a-layout-to-a-simulated-site">From a layout to a simulated site</h2>
-<p>The Layout file tab describes the map: nodes, edges, parking windows, floors and VRCs (<a class="ref" href="#ly-the-file-at-a-glance">section 2</a>). A simulation adds three files around it, all found by name:</p>
-<ul>
-  <li><strong>The scenario</strong> (<code>scenario/scenarios/&lt;name&gt;.yaml</code>) names the layout, puts AGVs and trays on its node ids, may override node parameters, and lists timed set-up events.</li>
-  <li><strong>The installation parameters</strong> (<code>launcher/params/installations/params_&lt;layout&gt;.yaml</code>) hold the site's hardware settings: IO-link masters, the bay's sensor box, the load-cell scale, the BLift floor specification. On site the file is required; in simulation it is optional.</li>
-  <li><strong>An events file</strong> (optional, also in <code>scenario/scenarios</code>) holds the workload: retrieves, patrons, moves. It has no layout of its own and is fed into a running simulation by a second process (<a class="ref" href="#sm-events-files-and-the-exerciser">section 4.2</a>).</li>
-</ul>
-<figure id="sm-fig-131_sim_layout_to_site">
-  <img src="figures/131_sim_layout_to_site.svg" alt="From a layout to a simulated site">
-  <figcaption><strong>From a layout to a simulated site.</strong> The launcher reads the layout to decide which machines exist: bay nodes per Bay or BLift node, a VECS per EvCharge node, a VRC driver per <code>vrcs</code> entry. The scenario adds one simulated AGV per entry of <code>initial_conditions.agvs</code>, at its pose. The rest of the stack is the same for every layout.</figcaption>
+<h2 data-num id="sm-simulation-in-brief">Simulation in brief</h2>
+<p>On site, the garage software is a set of programs that talk to each other and to hardware: AGVs, bays with sensors and doors, EV chargers, car lifts, and people using the app. In a simulation, <strong>the same programs run unchanged</strong>, and each piece of hardware, each person and the clock is replaced by a small program written for the purpose, a <strong>stand-in</strong>. The production programs cannot tell the difference: they send the same commands and receive the same kind of reports.</p>
+<figure id="sm-fig-127_sim_architecture">
+  <img src="figures/127_sim_architecture.svg" alt="On site and in simulation">
+  <figcaption><strong>On site and in simulation.</strong> Each row is one thing outside the software (left), the production program that talks to it (middle, unchanged), and the stand-in that replaces it in simulation (right, blue). The scheduler (green) talks only to Dispatch, so a simulation exercises it exactly as the site does.</figcaption>
 </figure>
-<p>The launcher (<code>launcher/sim_nodes.py</code>) takes the layout name from the scenario and uses it everywhere: it loads <code>params_&lt;layout&gt;.yaml</code>, sets the <code>layout</code> parameter of every node, and builds the machine nodes from the layout object:</p>
+<p>That is what makes a simulation useful for this refactor: the scheduler receives realistic requests, many of them, from a garage whose state evolves over hours of simulated operation, and the result of each plan is carried out and checked for collisions. Nothing needs a real garage, and a simulation can run faster than real time.</p>
+<p>The words used in the rest of this tab:</p>
 <table>
-  <thead><tr><th>In the layout</th><th>What the launcher starts</th></tr></thead>
+  <thead><tr><th>Term</th><th>Meaning here</th><th>Example</th></tr></thead>
   <tbody>
-    <tr><td>Each <code>Bay</code> node <span class="math">b</span></td><td>Container <code>sim/b&lt;b&gt;_nodes</code> with <code>/bay/b&lt;b&gt;/bay_state_machine</code>, <code>vehicle_estimator</code>, <code>bay_guidance</code> (the real bay nodes) and <code>bay_sim</code> (the simulated hardware)</td></tr>
-    <tr><td>Each <code>BLift</code> node</td><td>The same, with <code>bay::BliftStateMachineComponent</code> instead of the standard machine, plus <code>vrc_lift_bridge</code>, which maps the VRC's report and move topics to the bay's lift topics. The launcher fails if the BLift is not listed in a <code>vrcs</code> entry</td></tr>
-    <tr><td>Each <code>EvCharge</code> node <span class="math">v</span></td><td><code>/vecs/v&lt;v&gt;/vecs_node</code> (real) and <code>vecs_sim_node</code> (simulated charger)</td></tr>
-    <tr><td>Each <code>vrcs</code> entry <span class="math">r</span></td><td><code>/vrc/r&lt;r&gt;/manager</code>, the VRC's simulated driver: floor ids and heights from the layout's <code>floors</code>, speed and door times from the <code>vrc</code> parameters, the starting floor from the scenario's <code>initial_conditions.vrcs</code></td></tr>
+    <tr><td>ROS 2 node</td><td>A named unit of running software. Nodes exchange messages; the garage software is a few dozen of them</td><td><code>/central/dispatcher</code>, <code>/scheduler/scheduler</code></td></tr>
+    <tr><td>topic</td><td>A named stream of messages: one node publishes, any number listen</td><td><code>/clock</code>, <code>/central/report</code></td></tr>
+    <tr><td>service</td><td>A named request and reply between two nodes</td><td><code>/scheduler/plan</code>, <code>/sim/enqueue_garage_event</code></td></tr>
+    <tr><td>parameter</td><td>A named setting a node reads, mostly at start</td><td><code>real_time_factor</code>, <code>bay_readiness_ratio</code></td></tr>
+    <tr><td>process</td><td>A program the operating system runs. A <em>component container</em> is one process that hosts several nodes</td><td><code>sim/central_sim_nodes</code> hosts Dispatch and the scheduler</td></tr>
+    <tr><td>launch file</td><td>A Python script that reads configuration and starts processes</td><td><code>sim.launch.py</code></td></tr>
+    <tr><td>configuration file</td><td>A text file on disk. It does nothing by itself; a launch file or a node reads it</td><td>layout, scenario, events and parameter files</td></tr>
+    <tr><td>layout file</td><td>The map of one garage: nodes, edges, bays, chargers (Layout file tab)</td><td><code>5675_pecos_sandbox_qa</code></td></tr>
+    <tr><td>scenario file</td><td>The starting state of one simulation: which layout, where the AGVs and trays are, which cars are parked, and a few timed actions</td><td><code>5675_pecos_sandbox_qa_full_start_in_auto.yaml</code></td></tr>
+    <tr><td>events file</td><td>A list of actions (park a car, retrieve a car, move an AGV) fed into a running simulation one after the other</td><td><code>5675_pecos_sandbox_qa_events_drain_from_full.yaml</code></td></tr>
+    <tr><td>stand-in</td><td>A program that exists only in simulation and replaces hardware, people or time</td><td><code>/agv/a1/sim</code> plays AGV-1</td></tr>
+    <tr><td>simulated time</td><td>The time every node sees, published by the simulated clock; it can run faster than real time or pause</td><td><code>/clock</code></td></tr>
+    <tr><td>patron</td><td>A customer who parks (insert) or collects (retrieve) a car</td><td></td></tr>
   </tbody>
 </table>
-<p>Because the launcher takes the layout from the scenario, the simulator, the garage tracker, the scheduler and the visualizer always run on the same file, and the consistency monitor's checksum comparison cannot fail on a layout mismatch.</p>
+<p>What a simulation can show: whether plans can be carried out without collisions, whether jobs succeed, how long they take, and how the system behaves over many jobs. What it cannot show: whether the hardware behaves like its stand-in. The stand-ins use the same timing parameters as the planner (<a class="ref" href="#sm-what-is-real-and-what-is-simulated">section 3.1</a>), so a simulation checks the plans, not the timing model.</p>
+
+<h2 data-num id="sm-from-the-layout-to-a-running-simulation">From the layout to a running simulation</h2>
+<p>A simulation starts from configuration files and ends as a set of running nodes. <a class="ref" href="#sm-fig-131_sim_layout_to_site">Figure 2</a> follows one example, the Pecos QA sandbox, from the files to the processes.</p>
+<figure id="sm-fig-131_sim_layout_to_site">
+  <img src="figures/131_sim_layout_to_site.svg" alt="From files to running processes">
+  <figcaption><strong>From files to running processes.</strong> 1: three kinds of configuration file. 2: the launch file reads them once. 3: the nodes that then run, grouped by why they exist. Two simulated AGVs because the scenario lists two; one set of bay nodes because the layout has one bay; no charger or lift nodes because the layout has none; and a fixed set in every simulation.</figcaption>
+</figure>
+<ul>
+  <li><strong>The scenario file</strong> (<code>scenario/scenarios/&lt;name&gt;.yaml</code>) names the layout, places AGVs and trays on its node ids, says which trays hold cars, may override parameters, and lists timed set-up actions such as "start Dispatch at 1 s".</li>
+  <li><strong>The layout file</strong> is the map of the Layout file tab (<a class="ref" href="#ly-the-file-at-a-glance">section 2</a>). The launch file reads it to decide which hardware exists, and every node receives its name as the <code>layout</code> parameter.</li>
+  <li><strong>The parameter files</strong> (<code>launcher/params/</code>) hold settings: defaults for every site (<code>params.yaml</code>), changes for simulation (<code>params_sim.yaml</code>) and the site's own hardware settings (<code>installations/params_&lt;layout&gt;.yaml</code>, optional in simulation). <a class="ref" href="#sm-parameters">Section 6.2</a> lists the order.</li>
+</ul>
+<p>The rule for which nodes run:</p>
+<table>
+  <thead><tr><th>In the files</th><th>Nodes started</th></tr></thead>
+  <tbody>
+    <tr><td>Each AGV in the scenario's <code>initial_conditions.agvs</code></td><td><code>/agv/a&lt;id&gt;/sim</code>: a simulated AGV that starts at the pose given in the scenario</td></tr>
+    <tr><td>Each <code>Bay</code> node in the layout</td><td>The real bay nodes <code>/bay/b&lt;id&gt;/bay_state_machine</code>, <code>vehicle_estimator</code>, <code>bay_guidance</code>, and the stand-in <code>/bay/b&lt;id&gt;/bay_sim</code> for the bay's sensors and doors</td></tr>
+    <tr><td>Each <code>BLift</code> node (a bay that is also a car-lift stop)</td><td>The same, with the BLift state machine instead of the standard one, plus <code>vrc_lift_bridge</code>; the launch fails if the BLift belongs to no <code>vrcs</code> entry</td></tr>
+    <tr><td>Each <code>EvCharge</code> node</td><td><code>/vecs/v&lt;id&gt;/vecs_node</code> (real) and <code>vecs_sim_node</code> (stand-in charger)</td></tr>
+    <tr><td>Each <code>vrcs</code> entry (a car lift)</td><td><code>/vrc/r&lt;id&gt;/manager</code>, the lift's stand-in: floors and heights from the layout, speed and doors from the parameters, starting floor from the scenario</td></tr>
+    <tr><td>Always</td><td>The simulated clock and the Simulator, the central nodes with the scheduler, the REST API, and (by default) the visualizer</td></tr>
+  </tbody>
+</table>
+<p>Because the launch file takes the layout name from the scenario, every node runs on the same layout, by construction.</p>
 
 <h3 data-num id="sm-where-the-layouts-are">Where the layouts are</h3>
-<p>Layout names start with a street address. The launcher's installation parameters and the scenario files name the following layouts. The locations below are inferred from the names; four addresses are confirmed by public sources, the others are guesses that the team can correct.</p>
+<p>Layout names start with a street address. The parameter files and the scenarios name the following layouts. The locations below are inferred from the names; four addresses are confirmed by public sources, the others are guesses that the team can correct.</p>
 <figure id="sm-fig-132_sim_sites">
   <img src="figures/132_sim_sites.svg" alt="Where the layouts are">
   <figcaption><strong>Where the layouts are.</strong> Grouped by the place the name points to, west to east. Green: the address is named in a public source. Amber: the street and city are inferred. Grey, dashed: a guess.</figcaption>
@@ -45,13 +78,13 @@
   <thead><tr><th>Layout(s)</th><th>Likely place</th><th>Evidence</th><th>In the repository</th></tr></thead>
   <tbody>
     <tr><td><code>1355_fulton</code></td><td>1355 Fulton St, San Francisco, CA</td><td>Named as Volley's operating garage (<a href="https://costar.com/article/2009773374/how-robot-valets-are-set-to-park-cars-in-new-york-luxury-towers">CoStar</a>)</td><td>Installation parameters with IO-link addresses and a 5 kN load-cell scale; a scheduler test plans on it (Verification tab); a comment in <code>events_insert_retrieve.yaml</code> mentions the "Fulton garage"</td></tr>
-    <tr><td><code>5675_pecos_bench</code>, <code>5675_pecos_sandbox_eng</code>, <code>_qa</code>, <code>_combined</code></td><td>5675 N Pecos St, Denver, CO</td><td>Volley's headquarters and robotics test facility (<a href="https://coloradobiz.com/volley-automation-headquarters-denver-robotics-facility/">ColoradoBiz</a>)</td><td>The layout of this pack (<a class="ref" href="#sm-the-pecos-test-facility">section 1.2</a>); the standardized test batches run on the sandboxes</td></tr>
+    <tr><td><code>5675_pecos_bench</code>, <code>5675_pecos_sandbox_eng</code>, <code>_qa</code>, <code>_combined</code></td><td>5675 N Pecos St, Denver, CO</td><td>Volley's headquarters and robotics test facility (<a href="https://coloradobiz.com/volley-automation-headquarters-denver-robotics-facility/">ColoradoBiz</a>)</td><td>The layout of this pack (<a class="ref" href="#sm-the-pecos-test-facility">section 2.2</a>); the standardized test batches run on the sandboxes</td></tr>
     <tr><td><code>38_gramercy</code></td><td>38 Gramercy Park East, New York, NY</td><td>Condominium project with a Volley system (<a href="https://www.mannpublications.com/mannreport/2026/07/08/volley-automation-deploying-robotic-parking-systems-at-two-marquee-new-york-city-residential-developments/">Mann Report</a>)</td><td>A BLift at node 26 and VRC 1: patrons insert on floor 1, the car goes down to floor 0 (comment in <code>params_38_gramercy.yaml</code>)</td></tr>
     <tr><td><code>550_w21st</code></td><td>550 West 21st St, New York, NY</td><td>Second Manhattan project (same source)</td><td>Three batch configurations (14, 15 and 16 cars, one retrieve each) and <code>single_triple_pick_retrieve.yaml</code>; no installation parameter file</td></tr>
     <tr><td><code>576_eccles</code> and six variants (<code>_half</code>, <code>_mini</code>, <code>_no_bay</code>, <code>_under_vcr</code>, <code>_budget_sandbox</code>, <code>_budget_sandbox_mini</code>)</td><td>576 Eccles Ave, South San Francisco, CA (inferred)</td><td>Eccles Avenue is in South San Francisco, Volley's former headquarters city; the many variants suggest a test site</td><td><code>exercise_576_eccles.yaml</code> (2 AGVs, 27 trays, node ids up to 60); <code>try_odp_agv_collide_bay_outbound_node.yaml</code> on <code>_mini</code>; the scheduler tests the name in <code>UseEvChargeHeading</code> (<a class="ref" href="#ly-name-based-behaviour">section 10.5</a>)</td></tr>
     <tr><td><code>415_east_grand_ave</code></td><td>415 East Grand Ave, South San Francisco, CA (inferred)</td><td>East Grand Avenue is also in South San Francisco</td><td><code>params.yaml</code> keeps the default bay sensor box at 4.5 × 2.0 m with the comment "Old east grand ave sizes", which suggests an earlier site</td></tr>
     <tr><td><code>360_w_broadway</code></td><td>360 West Broadway: SoHo, Manhattan, or South Boston (guess)</td><td>None found; both cities have a West Broadway, and Volley names projects in New York and Boston</td><td>Only <code>bay.floor_spec: 360_w_broadway_blift</code>: a BLift site</td></tr>
-    <tr><td><code>vrc_sandbox</code></td><td>Probably a VRC test bed (guess)</td><td>No address in the name</td><td>Installation parameters like the sandboxes'</td></tr>
+    <tr><td><code>vrc_sandbox</code></td><td>Probably a car-lift test bed (guess)</td><td>No address in the name</td><td>Installation parameters like the sandboxes'</td></tr>
     <tr><td><code>275_sunrise_b</code></td><td>Not identified</td><td>No match found for the address</td><td>Seven scenario files (the largest in the package), no installation parameter file</td></tr>
     <tr><td><code>tiny_lot</code>, <code>multisize</code></td><td>Synthetic</td><td></td><td>Test layouts: the scheduler's unit tests use <code>tiny_lot</code>; <code>multisize</code> tests parking-window sizes</td></tr>
   </tbody>
@@ -61,212 +94,209 @@
 <p>The Pecos YAML used throughout this pack (<code>5675_pecos_combined.yaml</code>) has two sections, marked by comments: <code>5675_pecos_sandbox_eng</code> (bay B7, stalls P2, P3, P5, P6, charger C10) and <code>5675_pecos_sandbox_qa</code> (bay B21, six stalls from P15 to P24, chargers C14 and C16). They are joined by the single edge W8–W13 (<a class="ref" href="#ly-edges">section 5</a>). The scenarios use three layouts: each sandbox alone and both together, with the same node ids. The names suggest an engineering area and a QA area on the same test floor.</p>
 <figure id="sm-fig-133_sim_pecos_setups">
   <img src="figures/133_sim_pecos_setups.svg" alt="The Pecos test facility as three layouts">
-  <figcaption><strong>The Pecos test facility as three layouts.</strong> Geometry from the Pecos YAML; occupancy read from the three <code>full_start_in_auto</code> scenario files. In the QA sandbox both AGVs start lowered under trays T15 and T17. The other start files change only the payloads, the AGV positions and the dispatch mode.</figcaption>
+  <figcaption><strong>The Pecos test facility as three layouts.</strong> Geometry from the Pecos YAML; AGVs, trays and cars read from the three <code>full_start_in_auto</code> scenario files. In the QA sandbox both AGVs start lowered under trays T15 and T17. The other start files change only the cars, the AGV positions and the dispatch mode.</figcaption>
 </figure>
 <p>The installation parameters of the three sandboxes differ in the hardware only: the IO-link master addresses are swapped between <code>sandbox_eng</code> (master 1 at .60, master 2 at .62) and the other two, <code>sandbox_eng</code> has a 5 kN load-cell scale (0.001), and all three set the bay's sensor box to 5.791 m × 2.2098 m (the XL parking window's length). <code>5675_pecos_bench</code> has an empty parameter file and no scenario in the snapshot.</p>
 
-<h3 data-num id="sm-two-kinds-of-site">Two kinds of site: a bay at grade, and a bay on a VRC</h3>
-<p>Pecos is a single floor: the customer bay is one node of the parking floor. The New York sites are different. At 38 Gramercy the bay is a <strong>BLift</strong>: its tray carriage is also a VRC stop, so the patron leaves the car at the street-level motor court and the VRC lowers the tray to the parking floor. 360 W Broadway has a BLift floor specification too. The launcher handles both kinds by node type.</p>
+<h3 data-num id="sm-two-kinds-of-site">Two kinds of site: a bay at grade, and a bay on a car lift</h3>
+<p>Pecos is a single floor: the customer bay is one node of the parking floor. The New York sites are different. At 38 Gramercy the bay is a <strong>BLift</strong>: its tray carriage is also a stop of a car lift (VRC), so the patron leaves the car at the street-level motor court and the lift lowers the tray to the parking floor. 360 W Broadway has a BLift floor specification too. The launch file handles both kinds by node type.</p>
 <figure id="sm-fig-134_sim_site_archetypes">
   <img src="figures/134_sim_site_archetypes.svg" alt="Two kinds of site">
-  <figcaption><strong>Two kinds of site.</strong> Schematic side views. A BLift site adds the BLift bay machine, the bridge to its VRC and the VRC's simulated driver. How far the planner supports VRCs is the subject of the Layout file tab (<a class="ref" href="#ly-vrc-support-status">section 8</a>).</figcaption>
+  <figcaption><strong>Two kinds of site.</strong> Schematic side views. A BLift site adds the BLift bay machine, the bridge to its lift and the lift's stand-in. How far the planner supports car lifts is the subject of the Layout file tab (<a class="ref" href="#ly-vrc-support-status">section 8</a>).</figcaption>
 </figure>
-<p>For the refactor this matters in one way: a BLift scenario is the only kind that drives the VRC code paths of the scheduler end to end. Their layouts are not in the snapshots, so no BLift scenario could be read.</p>
+<p>For the refactor this matters in one way: a BLift scenario is the only kind that drives the lift code paths of the scheduler end to end. Their layouts are not in the snapshots, so no BLift scenario could be read.</p>
 
-<h2 data-num id="sm-the-simulation-stack">The simulation stack</h2>
-<p>The <code>sim</code> package builds three executables; <code>agvhito</code> provides the simulated AGV, and the <code>vecs</code> and <code>vrc</code> packages provide simulated drivers. With the visualizer from <code>vis</code>, they replace everything outside the software: the customers, the hardware and the wall clock.</p>
-<figure id="sm-fig-127_sim_architecture">
-  <img src="figures/127_sim_architecture.svg" alt="The simulation stack">
-  <figcaption><strong>The simulation stack.</strong> The simulated nodes (blue) drive the real central nodes, scheduler and bay state machines. The scheduler is unchanged: it answers <code>/scheduler/plan</code> exactly as it does on site. The AGV simulation lives in <code>agvhito</code>, whose code is not in the snapshots (dashed).</figcaption>
+<h2 data-num id="sm-what-runs-during-a-simulation">What runs during a simulation</h2>
+<figure id="sm-fig-135_sim_launch_topology">
+  <img src="figures/135_sim_launch_topology.svg" alt="Processes, and the nodes inside them">
+  <figcaption><strong>Processes, and the nodes inside them.</strong> Each large box is one operating-system process; each row inside is one ROS node with its role. The example is the Pecos QA sandbox (bay B21, AGV-1 and AGV-2). The scheduler is one node of the central container, as on site.</figcaption>
 </figure>
+<p>The stand-ins, and what each one plays:</p>
 <table>
-  <thead>
-    <tr><th>Node (component)</th><th>Package, class</th><th>What it simulates or does</th><th>Parameters read</th></tr>
-  </thead>
+  <thead><tr><th>Stand-in node</th><th>Package</th><th>Plays</th><th>Settings it reads</th></tr></thead>
   <tbody>
-    <tr><td><code>/sim/sim_world</code> (<code>SimulatorComponent</code>)</td><td><code>sim</code>, <code>Simulator</code></td><td>Reads the scenario, seeds the garage tracker, fires the scenario's events as service calls, holds the patrons' insert queue, checks collisions, publishes <code>/sim/report</code></td><td><code>simulator.scenario</code> (set by the launcher to the scenario's path)</td></tr>
-    <tr><td><code>/bay/b&lt;N&gt;/bay_sim</code> (<code>BaySimComponent</code>), one per bay</td><td><code>sim</code>, <code>BaySim</code></td><td>The bay's sensors (load cells, IO-link break beams, vehicle proximity, radar, ODP observer) and doors, so the real bay state machine can boot and run; confirms inserts and retrieves on the patron's behalf</td><td><code>bay_id</code>, <code>bay.door.open_time</code>, <code>bay.door.close_time</code>, <code>bay.floor_spec</code>, <code>simulator.auto_confirm_insert</code> (default true)</td></tr>
-    <tr><td><code>/sim/clock</code> (<code>sim_clock_node</code>)</td><td><code>sim</code>, <code>SimClockRos</code></td><td>Publishes simulated time on <code>/clock</code></td><td><code>real_time_factor</code> (launch argument, default 1.0, changeable at run time), <code>clock_publish_period_ms</code> (5); runs on wall time</td></tr>
-    <tr><td><code>/agv/a&lt;N&gt;/sim</code> (<code>SimAgvComponent</code>), one per scenario AGV</td><td><code>agvhito</code></td><td>The AGV: executes the command lists Dispatch sends and publishes <code>AgvReport</code>. In production the same package's <code>proxy_node</code> talks to the real AGVs; it is not started in simulation</td><td><code>agv_id</code>, <code>initial_node_id</code>, <code>initial_heading</code>, <code>initial_lifted</code> (from the scenario), the <code>agv</code> parameters</td></tr>
-    <tr><td><code>/vecs/v&lt;N&gt;/vecs_sim_node</code>, <code>/vrc/r&lt;N&gt;/manager</code></td><td><code>vecs</code>, <code>vrc</code></td><td>The EV charger and the VRC hardware (<a class="ref" href="#sm-from-a-layout-to-a-simulated-site">section 1</a>)</td><td><code>vecs_id</code>; the VRC's floors, speed, doors and initial floor</td></tr>
-    <tr><td><code>/vis/visualizer</code></td><td><code>vis</code>, <code>VisManager</code></td><td>RViz and Foxglove marker topics for AGVs, trays, payloads, bays, VRCs, the layout, the queues and the schedule</td><td><code>layout</code>, <code>use_remote_meshes</code>, <code>remote_mesh_prefix</code></td></tr>
+    <tr><td><code>/sim/sim_world</code> (the Simulator)</td><td><code>sim</code></td><td>The patrons and the operator: it seeds the garage with the scenario's AGVs, trays and cars, fires the scenario's timed actions, holds the queue of patrons waiting to park, and checks every update that no two bodies overlap</td><td><code>simulator.scenario</code>: the scenario path, set by the launch file</td></tr>
+    <tr><td><code>/bay/b&lt;id&gt;/bay_sim</code>, one per bay</td><td><code>sim</code></td><td>The bay's sensors (load cells, break beams, vehicle proximity, radar) and doors, and the patron's confirmation of an insert or retrieve</td><td><code>bay_id</code>, door open and close times, <code>bay.floor_spec</code>, <code>simulator.auto_confirm_insert</code> (default true)</td></tr>
+    <tr><td><code>/agv/a&lt;id&gt;/sim</code>, one per scenario AGV</td><td><code>agvhito</code></td><td>The AGV: it executes the command lists Dispatch sends and reports its pose, lift and state. On site the same package's <code>proxy_node</code> talks to the real AGVs instead</td><td><code>agv_id</code>, <code>initial_node_id</code>, <code>initial_heading</code>, <code>initial_lifted</code> (from the scenario), the <code>agv</code> parameters</td></tr>
+    <tr><td><code>/vecs/v&lt;id&gt;/vecs_sim_node</code></td><td><code>vecs</code></td><td>An EV charger</td><td><code>vecs_id</code></td></tr>
+    <tr><td><code>/vrc/r&lt;id&gt;/manager</code></td><td><code>vrc</code></td><td>A car lift: floors, travel, gates</td><td>floors from the layout, speed and door times, starting floor</td></tr>
+    <tr><td><code>/sim/clock</code></td><td><code>sim</code></td><td>Time: publishes simulated time on <code>/clock</code></td><td><code>real_time_factor</code> (default 1.0), <code>clock_publish_period_ms</code> (5)</td></tr>
   </tbody>
 </table>
+<p>Two more nodes exist only in simulation but play nothing: the visualizer (<code>/vis/visualizer</code>, with the Foxglove bridge and RViz), which draws the garage from the published state, and the recorder (<code>/sim/recorder</code>), when recording is on.</p>
 
 <h3 data-num id="sm-what-is-real-and-what-is-simulated">What is real and what is simulated</h3>
 <ul>
-  <li><strong>Real:</strong> the dispatcher, the garage tracker and the monitors (<code>central</code>), the scheduler, the bay state machines, vehicle estimators and guidance (<code>bay</code>), the VECS manager, and the REST API. They are the same code as on site; the dispatcher calls <code>/scheduler/plan</code> and executes the response as usual (Dispatch tab, <a class="ref" href="#ds-what-goes-into-a-planrequest">section 3</a>).</li>
-  <li><strong>Simulated:</strong> patrons (arrivals, inserts, pick-ups), the bay, VECS and VRC hardware, the AGVs, the passage of time, and the operator actions written into the scenario or an events file (retrieve requests, tray moves, disabled nodes, ...).</li>
-  <li><strong>Shared timing:</strong> <code>params.yaml</code> gives the lift durations (6 s up, 6 s down) once, as the "shared source of truth between the scheduler's cost model and the AGV sim". Drive speeds and accelerations (<code>agv.performance_limits</code>) are in the same file. If the simulated AGV uses them as the cost model does, simulated job durations match the planner's estimates by construction, so a simulation cannot reveal a wrong cost model, only a wrong plan.</li>
+  <li><strong>Real (production software, unchanged):</strong> the dispatcher, the garage tracker and the monitors (<code>central</code>), the scheduler, the bay state machines, vehicle estimators and guidance (<code>bay</code>), the VECS manager, and the REST API. The dispatcher calls <code>/scheduler/plan</code> and carries out the response as on site (Dispatch tab, <a class="ref" href="#ds-what-goes-into-a-planrequest">section 3</a>).</li>
+  <li><strong>Simulated:</strong> patrons, the bay, charger and lift hardware, the AGVs, time, and the operator actions written in the scenario or an events file.</li>
+  <li><strong>Shared timing:</strong> <code>params.yaml</code> gives the AGV lift durations (6 s up, 6 s down) once, as the "shared source of truth between the scheduler's cost model and the AGV sim"; drive speeds and accelerations are in the same file. If the simulated AGV uses them as the cost model does, simulated job durations match the planner's estimates by construction, so a simulation cannot reveal a wrong cost model, only a wrong plan.</li>
 </ul>
-<p>Because the scheduler is untouched by the simulation, any difference in a simulated run between the old and the refactored scheduler comes from the scheduler, or from timing (<a class="ref" href="#sm-determinism-and-what-to-compare">section 6.3</a>).</p>
+<p>Because the scheduler is untouched by the simulation, any difference in a simulated run between the old and the refactored scheduler comes from the scheduler, or from timing (<a class="ref" href="#sm-determinism-and-what-to-compare">section 8.3</a>).</p>
 
-<h3 data-num id="sm-processes-and-containers">Processes and containers</h3>
-<figure id="sm-fig-135_sim_launch_topology">
-  <img src="figures/135_sim_launch_topology.svg" alt="What sim.launch.py starts">
-  <figcaption><strong>What <code>sim.launch.py</code> starts.</strong> Three kinds of component container, each with a multi-threaded executor, and standalone processes. The scheduler is a component of the central container, as on site.</figcaption>
-</figure>
+<h3 data-num id="sm-processes-and-containers">How the processes are arranged</h3>
 <ul>
-  <li>The clock runs <strong>in its own process</strong>, on wall time, "to minimize lost-wakeup stalls"; every other node has <code>use_sim_time</code> true.</li>
-  <li>If the clock process or the <code>sim_nodes</code> container exits unexpectedly (for example on a collision, <a class="ref" href="#sm-collision-checking">section 3.4</a>), the launch shuts everything down.</li>
-  <li>All <code>/rosout</code> output of the sim nodes, bays and central container is remapped to <code>/sim/rosout</code>, <code>/central/rosout</code> or the node's own namespace.</li>
-  <li><code>ROS_DOMAIN_ID</code> defaults to 75 and <code>GITSHA</code> to <code>unknown</code> (for the consistency monitor) if they are not set.</li>
+  <li><strong>Component containers</strong> group nodes into one process to save resources; it changes nothing about how they communicate. There are three kinds: <code>sim/sim_nodes</code> (the simulated AGVs and the Simulator), one <code>sim/b&lt;id&gt;_nodes</code> per bay, and <code>sim/central_sim_nodes</code> (the central nodes and the scheduler). Each runs a multi-threaded executor.</li>
+  <li><strong>The clock runs in its own process</strong>, on wall time, "to minimize lost-wakeup stalls"; every other node has <code>use_sim_time</code> true and follows it.</li>
+  <li>If the clock process or the <code>sim_nodes</code> container exits unexpectedly (for example after a collision, <a class="ref" href="#sm-collision-checking">section 4.4</a>), the launch shuts everything down.</li>
+  <li><code>ROS_DOMAIN_ID</code> defaults to 75, so a simulation does not see other ROS systems on the network unless they use the same domain.</li>
 </ul>
 
 <h3 data-num id="sm-simulated-time">Simulated time</h3>
-<p><code>SimClockRos</code> keeps a simulated time and, on a wall-clock timer every <code>clock_publish_period_ms</code> (5 ms), advances it by 5 ms × <code>real_time_factor</code> and publishes it on <code>/clock</code>. Every node started with <code>use_sim_time</code> follows it, so all timers in the stack, including the dispatcher's 850 ms planner timer and the simulator's 50 ms update, run in simulated time.</p>
+<p><code>/sim/clock</code> keeps a simulated time and, every 5 ms of wall time, advances it by 5 ms × <code>real_time_factor</code> and publishes it on <code>/clock</code>. Every other node follows it, so all timers in the stack, including the dispatcher's 850 ms planner timer and the Simulator's 50 ms update, run in simulated time.</p>
 <ul>
-  <li><code>real_time_factor:=4</code> on the launch command runs four times faster; 0 pauses the whole stack. It can be changed while running: <code>ros2 param set /sim/clock real_time_factor 0</code>.</li>
-  <li>The scheduler's planning time is wall time. At high factors a plan call takes proportionally more simulated time, so job durations measured in simulated time grow with the factor. Fix the factor when comparing runs.</li>
-  <li>At factors above 10, each <code>/clock</code> message advances time by more than the simulator's 50 ms update period. Check that the timers still fire as often as expected before trusting results at such factors.</li>
-  <li>The event runner of <a class="ref" href="#sm-events-files-and-the-exerciser">section 4.2</a> runs on wall time: its <code>sleep</code> event and its 1 s polling do not scale with the factor.</li>
+  <li><code>real_time_factor:=4</code> on the launch command runs four times faster; 0 pauses everything. It can be changed while running (<a class="ref" href="#sm-pause-speed-up-slow-down">section 7.6</a>).</li>
+  <li>The scheduler's planning takes wall time. At high factors a plan call takes proportionally more simulated time, so job durations measured in simulated time grow with the factor. Fix the factor when comparing runs.</li>
+  <li>At factors above 10, each <code>/clock</code> message advances time by more than the Simulator's 50 ms update period. Check that the timers still fire as often as expected before trusting results at such factors.</li>
+  <li>The event runner of <a class="ref" href="#sm-events-files-and-the-exerciser">section 5.2</a> runs on wall time: its <code>sleep</code> action and its 1 s polling do not scale with the factor.</li>
 </ul>
 
 <h2 data-num id="sm-one-scenario-run">One scenario run</h2>
-<p><a class="ref" href="#sm-fig-128_sim_scenario_run">Figure 6</a> follows a run from start to end. Everything the simulator does happens in <code>Simulator::Update</code>, every 50 ms of simulated time.</p>
+<p><a class="ref" href="#sm-fig-128_sim_scenario_run">Figure 7</a> follows a run from start to end. Everything the Simulator does happens in its update, every 50 ms of simulated time.</p>
 <figure id="sm-fig-128_sim_scenario_run">
   <img src="figures/128_sim_scenario_run.svg" alt="One scenario run">
-  <figcaption><strong>One scenario run.</strong> Seeding, the start of the scenario clock, events turned into service calls, the plan call, a patron's insert through the simulated bay, and the collision check that runs on every update.</figcaption>
+  <figcaption><strong>One scenario run.</strong> Seeding the garage, the start of the scenario clock, timed actions turned into service calls, the plan call, a patron's insert through the simulated bay, and the collision check that runs on every update.</figcaption>
 </figure>
 
-<h3 data-num id="sm-seeding-and-the-scenario-clock">Seeding and the scenario clock</h3>
-<p>The first updates seed the garage tracker. <code>SimClients::ProcessInitialConditions</code> waits until <code>/central/add_agv</code>, <code>add_tray</code> and <code>add_payload</code> are available, then calls them (blocking) for every AGV, tray and payload of the scenario; a failed call throws and stops the simulator. <code>add_agv</code> receives only the id: the AGV's pose comes from its <code>SimAgv</code> node, which the launcher started at the scenario's <code>garage_pose</code>. Until seeding succeeds the update does nothing else.</p>
-<p>The scenario clock starts at the first update in which <code>/central/report</code> says Dispatch is <code>STATUS_STOPPED</code> and <code>consistent</code>. Event times are seconds after that moment, so the same scenario lines up the same way whatever the start-up takes. Dispatch is stopped at that point, so a scenario normally starts with <code>set_dispatch_mode</code> and <code>start_dispatch</code> events.</p>
+<h3 data-num id="sm-seeding-and-the-scenario-clock">Seeding the garage, and the scenario clock</h3>
+<p>The first updates tell the garage tracker what is in the garage. The Simulator waits until <code>/central/add_agv</code>, <code>add_tray</code> and <code>add_payload</code> are available, then calls them for every AGV, tray and car of the scenario; a failed call stops the Simulator. <code>add_agv</code> receives only the id: the AGV's pose comes from its simulated AGV node, which the launch file started at the scenario's pose.</p>
+<p>The <strong>scenario clock</strong> starts at the first update in which <code>/central/report</code> says Dispatch is stopped and consistent. The times in the scenario's <code>events</code> are seconds after that moment, not after the launch, so the same scenario lines up the same way whatever the start-up takes. Because Dispatch is stopped at that moment, a scenario normally starts with <code>set_dispatch_mode</code> and <code>start_dispatch</code> actions.</p>
 
-<h3 data-num id="sm-events-become-service-calls">Events become service calls</h3>
-<p>The <code>ScenarioRunner</code> holds the events in a priority queue by time. On each update, <code>GetNextEvents</code> returns every event due by now, and <code>HandleEvents</code> sends one service call per event. The same events also arrive at run time through <code>/sim/enqueue_garage_event</code> (<a class="ref" href="#sm-events-files-and-the-exerciser">section 4.2</a>).</p>
+<h3 data-num id="sm-events-become-service-calls">Timed actions become service calls</h3>
+<p>The Simulator keeps the scenario's actions ("events") sorted by time. On each update it takes every action that is due and sends one service call for it. The same actions can be added while the simulation runs, through the service <code>/sim/enqueue_garage_event</code> (<a class="ref" href="#sm-recipes">section 7</a>).</p>
 <table>
-  <thead><tr><th>Event <code>type</code></th><th>Fields in the YAML</th><th>Service called</th></tr></thead>
+  <thead><tr><th>Action <code>type</code></th><th>Fields in the scenario file</th><th>What happens</th></tr></thead>
   <tbody>
     <tr><td><code>start_dispatch</code>, <code>stop_dispatch</code>, <code>pause_dispatch</code></td><td>none</td><td><code>/central/start</code>, <code>stop</code>, <code>pause</code></td></tr>
-    <tr><td><code>set_dispatch_mode</code></td><td><code>mode</code> (the files use 1 = automatic, 2 = manual)</td><td><code>/central/set_mode</code></td></tr>
-    <tr><td><code>retrieve_request</code></td><td><code>payload_id</code></td><td><code>/central/retrieve</code></td></tr>
+    <tr><td><code>set_dispatch_mode</code></td><td><code>mode</code>: 1 automatic, 2 manual (as the files use them)</td><td><code>/central/set_mode</code></td></tr>
+    <tr><td><code>patron_arrival</code></td><td><code>payload_id</code>; optional <code>length_m</code> (4.5), <code>width_m</code> (2.0), <code>height_m</code> (1.4), <code>mass</code> (1800 kg), <code>ev_charge_requested</code> (false)</td><td>A patron joins the Simulator's queue and waits for a bay ready to insert (<a class="ref" href="#sm-patrons-and-the-simulated-bay">section 4.3</a>)</td></tr>
+    <tr><td><code>retrieve_request</code></td><td><code>payload_id</code></td><td><code>/central/retrieve</code>: a patron asks for this car</td></tr>
     <tr><td><code>charge_payload</code></td><td><code>payload_id</code></td><td><code>/central/charge_payload</code></td></tr>
-    <tr><td><code>patron_arrival</code></td><td><code>payload_id</code>; optional <code>length_m</code>, <code>width_m</code>, <code>height_m</code>, <code>mass</code>, <code>ev_charge_requested</code></td><td>none: the patron joins the simulator's insert queue (<a class="ref" href="#sm-patrons-and-the-simulated-bay">section 3.3</a>)</td></tr>
     <tr><td><code>repark_tray</code></td><td><code>tray_id</code>, <code>pose</code>, optional <code>allow_reciprocal</code></td><td><code>/central/repark_tray</code></td></tr>
     <tr><td><code>move_agv</code>, <code>move_tray</code></td><td><code>agv_id</code> or <code>tray_id</code>, <code>pose</code></td><td><code>/central/move_agv</code>, <code>move_tray</code></td></tr>
     <tr><td><code>remove_agv</code></td><td><code>agv_id</code></td><td><code>/central/remove_agv</code>; the AGV's collision body is removed too</td></tr>
     <tr><td><code>set_node_disabledness</code>, <code>set_tray_disabledness</code></td><td><code>node_id</code> or <code>tray_id</code>, <code>disable</code></td><td><code>/central/set_node_disabledness</code>, <code>set_tray_disabledness</code></td></tr>
     <tr><td><code>transition_bay_to_insert</code>, <code>transition_bay_to_retrieve</code></td><td><code>bay_id</code></td><td><code>/central/transition_bay_to_insert</code>, <code>_retrieve</code></td></tr>
-    <tr><td><code>set_bay_readiness_ratio</code></td><td><code>bay_readiness_ratio</code></td><td><code>/scheduler/set_bay_readiness_ratio</code>: the only event that talks to the scheduler directly; a change also queues a rebalance job</td></tr>
-    <tr><td><code>set_auto_planner</code></td><td><code>enabled</code></td><td><code>/central/start_auto_planner</code> or <code>stop_auto_planner</code> (blocking): turns the dispatcher's 850 ms planner timer on or off</td></tr>
-    <tr><td><code>call_planner</code></td><td>none</td><td><code>/central/trigger_plan_call</code>: one plan call now, accepted only while the timer is off and <code>ShouldCallPlanner</code> is true</td></tr>
-    <tr><td><code>set_agv_battery_fraction</code></td><td><code>agv_id</code>, <code>battery_fraction</code></td><td>none: parsed, then logged as not implemented</td></tr>
+    <tr><td><code>set_bay_readiness_ratio</code></td><td><code>bay_readiness_ratio</code></td><td><code>/scheduler/set_bay_readiness_ratio</code>: the only action that talks to the scheduler directly; a change also queues a rebalance job</td></tr>
+    <tr><td><code>set_auto_planner</code></td><td><code>enabled</code></td><td>Turns the dispatcher's 850 ms planner timer on or off</td></tr>
+    <tr><td><code>call_planner</code></td><td>none</td><td><code>/central/trigger_plan_call</code>: one plan call now, accepted only while the timer is off</td></tr>
+    <tr><td><code>set_agv_battery_fraction</code></td><td><code>agv_id</code>, <code>battery_fraction</code></td><td>Nothing: logged as not implemented</td></tr>
   </tbody>
 </table>
-<p>Pose fields are <code>{node_id, heading}</code>. Most calls are asynchronous and their return value only says the request was sent: if Dispatch refuses a retrieve, the simulator does not notice. The two planner events are the useful ones for testing the scheduler: <code>set_auto_planner: false</code> followed by <code>call_planner</code> events makes plan calls happen at chosen moments instead of every 850 ms.</p>
+<p>Every action in a scenario file needs a <code>time</code>. A pose is <code>{node_id, heading}</code>. Most calls are asynchronous: the Simulator does not learn whether Dispatch accepted them. For testing the scheduler, <code>set_auto_planner: false</code> followed by <code>call_planner</code> actions makes plan calls happen at chosen moments instead of every 850 ms.</p>
 
 <h3 data-num id="sm-patrons-and-the-simulated-bay">Patrons and the simulated bay</h3>
-<p>A <code>patron_arrival</code> event puts a payload at the back of the simulator's insert queue (a queue without duplicates). Every update, <code>OfferWaitingPayloadsToBays</code> offers the payload at the front to each bay through <code>/bay/b&lt;N&gt;/sim_offer_inserting_payload</code>. A <code>BaySim</code> accepts only when its bay reports <code>READY_TO_INSERT</code> and no insert is in progress; the first bay that accepts takes the patron.</p>
-<p><code>BaySim::Tick</code> (every 50 ms) then plays the patron and the hardware:</p>
+<p>A <code>patron_arrival</code> puts a car at the back of the Simulator's insert queue. Every update, the Simulator offers the car at the front to each bay (<code>/bay/b&lt;id&gt;/sim_offer_inserting_payload</code>). A bay's stand-in accepts only when its bay reports <code>READY_TO_INSERT</code> (an empty tray in the bay, doors ready) and no insert is in progress; the first bay that accepts takes the patron. If no bay is ready, the patron waits, however long that takes (<a class="ref" href="#sm-insert-a-car-automatically">section 7.1</a> says how bays become ready).</p>
+<p>The bay's stand-in then plays the patron and the hardware, every 50 ms:</p>
 <ul>
-  <li><strong>Load cells</strong> show the tray's mass, plus the vehicle's mass in proportion to the axles on the tray while the patron drives on (the tire sensor is briefly "broken" to model the wheels crossing it).</li>
-  <li><strong>Vehicle proximity</strong> sees the patron; the <strong>radar</strong> is always valid and clear; the doors are simulated by <code>GarageDoorSimRt</code> with the configured open and close times.</li>
-  <li><strong>Insert:</strong> with <code>auto_confirm_insert</code> (the default; launch argument <code>auto_confirm_insert:=false</code> turns it off), the sim calls the bay's <code>confirm_insert</code> with the patron's dimensions when the insert machine reaches <code>VEHICLE_INSERTED</code>; otherwise it waits for an external confirmation (the app, the REST API or <code>scripts/confirm_insert.bash</code>). The bay then reports the insert and Dispatch creates the INSERT job.</li>
-  <li><strong>Retrieve:</strong> when the retrieve machine runs and the doors on the current floor are closed, the sim calls <code>confirm_retrieve</code> once; when the patron door opens, the vehicle is assumed to leave at once (its mass disappears from the load cells).</li>
+  <li><strong>Load cells</strong> show the tray's mass, plus the car's mass in proportion to the axles on the tray while the patron drives on (the tire sensor is briefly "broken" to model the wheels crossing it).</li>
+  <li><strong>Vehicle proximity</strong> sees the car; the <strong>radar</strong> is always clear; the doors open and close with the configured times.</li>
+  <li><strong>Insert:</strong> with <code>auto_confirm_insert</code> (the default), the stand-in confirms the insert with the car's dimensions when the bay's machine reaches <code>VEHICLE_INSERTED</code>. Otherwise the bay waits for a confirmation from outside, as from the app on site (<a class="ref" href="#sm-confirm-the-insert-yourself">section 7.3</a>). The bay then reports the car, and Dispatch creates the INSERT job that the scheduler plans.</li>
+  <li><strong>Retrieve:</strong> when the retrieve sequence runs and the doors are closed, the stand-in confirms the retrieve once; when the patron door opens, the car is assumed to leave at once.</li>
 </ul>
 
 <h3 data-num id="sm-collision-checking">Collision checking</h3>
-<p>Every update, <code>RunCollisionCheck</code> rebuilds a 3D box for every AGV, tray, payload and bay from the latest <code>/central/garage_snapshot</code>; chargers and the scenario's obstructions are registered once. <code>CollisionDetector::FindCollisions</code> tests every pair: two boxes collide when the separating-axis test finds no separating face normal and their height bands overlap.</p>
+<p>Every update, the Simulator builds a 3D box for every AGV, tray, car and bay from the latest <code>/central/garage_snapshot</code>; chargers and the scenario's obstructions are registered once. It tests every pair: two boxes collide when no face of either separates them (the separating-axis test) and their height bands overlap.</p>
 <figure id="sm-fig-129_sim_collision_volumes">
   <img src="figures/129_sim_collision_volumes.svg" alt="Collision volumes in the simulator">
   <figcaption><strong>Collision volumes.</strong> The height bands of each body (A) and the separating-axis test in plan view (B). Schematic: the dimensions are constants in <code>common</code>, outside the snapshots.</figcaption>
 </figure>
-<p>An AGV and a tray whose centres are within 0.15 m in x and in y count as "carried" and are not reported. This also covers the QA sandbox's start, where both AGVs stand lowered under trays. Any other overlapping pair ends the run: the simulator logs <code>RCLCPP_FATAL</code> with the pair, for example <code>Collision: a3 collided with t17!</code> (a = AGV, t = tray, p = payload keyed by its tray, b = bay, c = charger, o = obstruction), and calls <code>rclcpp::shutdown()</code>, which stops the launch.</p>
-<p>This check is independent of the planner's own collision model (the collision table and footprints of the Motion planning tab). It sees the poses the machines actually report, so it catches a plan that is unsafe in execution, not only in planning. It sees them only every 50 ms of simulated time, from snapshots, so a brief overlap between two updates can be missed.</p>
+<p>An AGV and a tray whose centres are within 0.15 m in x and in y count as "carried" and are not reported; this also covers the QA sandbox's start, where both AGVs stand lowered under trays. Any other overlap ends the run: the Simulator logs a fatal error with the pair, for example <code>Collision: a3 collided with t17!</code> (a = AGV, t = tray, p = car keyed by its tray, b = bay, c = charger, o = obstruction), and stops, which stops the launch.</p>
+<p>This check is independent of the planner's own collision model (Motion planning tab). It sees the poses the machines actually report, so it catches a plan that is unsafe when carried out, not only when planned. It sees them every 50 ms of simulated time, so a brief overlap between two updates can be missed.</p>
 
-<h3 data-num id="sm-what-the-simulator-reports">What the simulator reports, and how to watch a run</h3>
+<h3 data-num id="sm-what-the-simulator-reports">What the Simulator reports, and how to watch a run</h3>
 <ul>
-  <li><code>/sim/report</code> (<code>SimReport</code>): <code>running</code>, <code>num_remaining_events</code> and the payloads still waiting to be inserted.</li>
-  <li>RViz and Foxglove (both started by default), through the visualizer's marker topics: <code>agvs</code>, <code>agv_commands</code>, <code>trays</code>, <code>payloads</code>, <code>bays</code>, <code>vrcs</code>, the layout topics (<code>nodes</code>, <code>edges</code>, <code>layout_spaces</code>, ...), <code>request_markers</code> (the retrieve and insert queues) and <code>schedule_dag</code>, which draws every AGV command of the latest <code>/central/schedule</code>.</li>
-  <li>The central topics: <code>/central/report</code>, the pending, active and completed job lists, and the plan request and response topics (<a class="ref" href="#sm-recording-a-run">section 5.4</a>). The <code>metrics_recorder</code> node turns the job lists into job pending and active durations.</li>
+  <li><code>/sim/report</code>: whether the scenario clock is running, how many timed actions remain, and the cars waiting to be inserted.</li>
+  <li>RViz and Foxglove (both started by default) show the visualizer's pictures: AGVs, their commands, trays, cars, bays, lifts, the layout, the insert and retrieve queues, and the current schedule.</li>
+  <li>The central topics: <code>/central/report</code> (Dispatch's status, mode, consistency), the pending, active and completed job lists, and the plan request and response topics (<a class="ref" href="#sm-recording-a-run">section 6.3</a>).</li>
 </ul>
 
 <h2 data-num id="sm-scenario-files-and-events-files">Scenario files and events files</h2>
-<p>The <code>scenario</code> package holds two kinds of YAML file in one folder, <code>scenarios/</code>, and installs them all to <code>share/scenario/scenarios</code>:</p>
+<p>The <code>scenario</code> package keeps two kinds of YAML file in one folder, <code>scenarios/</code>, and installs them all to <code>share/scenario/scenarios</code>:</p>
 <ul>
-  <li>A <strong>scenario file</strong> has a <code>layout</code> key. It is what the launch command takes; the simulator fires its <code>events</code> at their times.</li>
-  <li>An <strong>events file</strong> has only <code>events</code>. It is fed into a running simulation, one event at a time, by <code>exercise_sim_events</code>.</li>
+  <li>A <strong>scenario file</strong> has a <code>layout</code> key. It is what the launch command takes; the Simulator fires its <code>events</code> at their times.</li>
+  <li>An <strong>events file</strong> has only <code>events</code>. A separate program, <code>exercise_sim_events</code>, feeds it into a running simulation one action at a time.</li>
 </ul>
 
 <h3 data-num id="sm-the-scenario-file">The scenario file</h3>
-<p>The file is read twice: by the launcher in Python (<code>common_py.scenario.load_scenario</code> and <code>load_initial_conditions</code>), which needs the layout, the AGVs and the parameter overrides, and by the simulator in C++ (<code>ParseScenarioFile</code>), which needs the trays, payloads, obstructions and events. Required fields are read without checks: a missing one throws and the run does not start.</p>
+<p>The file is read twice: by the launch file in Python, which needs the layout, the AGVs and the parameter overrides, and by the Simulator in C++, which needs the trays, cars, obstructions and actions. A required field that is missing stops the start.</p>
 <table>
   <thead><tr><th>Key</th><th>Content</th><th>Read by</th></tr></thead>
   <tbody>
-    <tr><td><code>layout</code></td><td>Layout name, resolved by name (<code>load_layout</code>, <code>GetLayoutPathByName</code>)</td><td>launcher, simulator</td></tr>
-    <tr><td><code>initial_conditions</code></td><td>Either inline, or a name resolved like a layout name and loaded from that file. Lists <code>agvs</code>, <code>trays</code>, <code>obstructions</code> and <code>vrcs</code></td><td>launcher (AGVs, VRCs), simulator (all)</td></tr>
-    <tr><td><code>params</code></td><td>Optional node parameter overrides, <code>{section: {key: value}}</code>, merged over every parameter file</td><td>launcher</td></tr>
-    <tr><td><code>events</code></td><td>A list of <code>{time, type, ...}</code>; the other fields depend on the type (<a class="ref" href="#sm-events-become-service-calls">section 3.2</a>)</td><td>simulator</td></tr>
+    <tr><td><code>layout</code></td><td>Layout name</td><td>launch file, Simulator</td></tr>
+    <tr><td><code>initial_conditions</code></td><td>Either inline, or the name of a file holding them. Lists <code>agvs</code>, <code>trays</code>, <code>obstructions</code> and <code>vrcs</code></td><td>launch file (AGVs, lifts), Simulator (all)</td></tr>
+    <tr><td><code>params</code></td><td>Optional parameter overrides, <code>{section: {key: value}}</code>, applied over every parameter file</td><td>launch file</td></tr>
+    <tr><td><code>events</code></td><td>A list of <code>{time, type, ...}</code> (<a class="ref" href="#sm-events-become-service-calls">section 4.2</a>)</td><td>Simulator</td></tr>
   </tbody>
 </table>
 <table>
   <thead><tr><th>Entry</th><th>Fields (defaults)</th></tr></thead>
   <tbody>
-    <tr><td><code>agvs[]</code></td><td><code>id</code>; <code>garage_pose {node_id, heading}</code> (required by the launcher: it becomes the SimAgv's starting pose); <code>lift_fraction</code> (0; only exactly 1 starts the AGV lifted); <code>battery_fraction</code> (1; parsed, not used)</td></tr>
-    <tr><td><code>trays[]</code></td><td><code>id</code>; <code>garage_pose</code> ({0, 0}); <code>agv_id</code> (0) and <code>reciprocal_to_agv</code> (false) for a tray on an AGV; <code>disabled</code> (false); optional <code>payload</code></td></tr>
+    <tr><td><code>agvs[]</code></td><td><code>id</code>; <code>garage_pose {node_id, heading}</code> (required: the simulated AGV starts there); <code>lift_fraction</code> (0; only exactly 1 starts the AGV lifted); <code>battery_fraction</code> (1; read, not used)</td></tr>
+    <tr><td><code>trays[]</code></td><td><code>id</code>; <code>garage_pose</code> ({0, 0}); <code>agv_id</code> (0) and <code>reciprocal_to_agv</code> (false) for a tray on an AGV; <code>disabled</code> (false); optional <code>payload</code> (the car on it)</td></tr>
     <tr><td><code>trays[].payload</code></td><td><code>id</code> (a GUID string); <code>length_m</code> (4.5), <code>width_m</code> (2.0), <code>height_m</code> (1.4), <code>mass</code> (1800 kg); <code>reciprocal_to_tray</code> (false)</td></tr>
-    <tr><td><code>obstructions[]</code></td><td><code>id</code>, <code>x_loc</code>, <code>y_loc</code>, <code>yaw</code> [rad], <code>x_len</code>, <code>y_len</code> [m]; <code>z_loc</code> (0), <code>z_len</code> (default height + tray height). Collision bodies only: the planner does not know about them</td></tr>
-    <tr><td><code>vrcs[]</code></td><td><code>id</code>, <code>initial_floor</code>: the VRC driver's starting floor (−1 if absent)</td></tr>
+    <tr><td><code>obstructions[]</code></td><td><code>id</code>, <code>x_loc</code>, <code>y_loc</code>, <code>yaw</code> [rad], <code>x_len</code>, <code>y_len</code> [m]; <code>z_loc</code> (0), <code>z_len</code>. Collision bodies only: the planner does not know about them</td></tr>
+    <tr><td><code>vrcs[]</code></td><td><code>id</code>, <code>initial_floor</code>: the lift's starting floor (−1 if absent)</td></tr>
   </tbody>
 </table>
-<p>Conventions in the existing files: tray ids equal the node id of their starting stall (T15 on P15); vehicle lengths are the parking-window lengths (5.182 m STANDARD, 5.791 m XL, 4.877 m, 4.4 m COMPACT); payload GUIDs follow a pattern such as <code>00030017-0000-0000-0000-000000001717</code>. A readme in the package (<code>readme_payload_guid_bytes_to_vehicle_model_color.md</code>, not in the snapshot) explains how the GUID's bytes select the vehicle model and colour drawn by the visualizer.</p>
+<p>Conventions in the existing files: tray ids equal the node id of their starting stall (T15 on P15); car lengths are the parking-window lengths (5.182 m STANDARD, 5.791 m XL, 4.877 m, 4.4 m COMPACT); car GUIDs follow a pattern such as <code>00030017-0000-0000-0000-000000001717</code>. A readme in the package (<code>readme_payload_guid_bytes_to_vehicle_model_color.md</code>, not in the snapshot) explains how the GUID's bytes select the car model and colour the visualizer draws.</p>
 
 <h3 data-num id="sm-events-files-and-the-exerciser">Events files and the exerciser</h3>
-<p><code>ros2 run scenario exercise_sim_events -l &lt;layout&gt; -e &lt;events file&gt; [-o &lt;csv&gt;]</code> starts a node, <code>sim_event_exerciser</code>, next to a running simulation. It waits until <code>/central/report</code> says Dispatch is <code>RUNNING</code>, then runs the file's events in order, each after the previous one is handled, and sends each one to <code>/sim/enqueue_garage_event</code> with time 0, so the simulator fires it on its next update.</p>
+<p><code>exercise_sim_events</code> (the "exerciser") is a separate program, started in a second terminal while a simulation runs:</p>
+<pre><code class="language-bash">ros2 run scenario exercise_sim_events -l &lt;layout&gt; -e &lt;events file&gt; [-o &lt;csv&gt;]</code></pre>
+<p>It waits until Dispatch is running, then runs the file's actions in order, each after the previous one is handled, and sends each one to <code>/sim/enqueue_garage_event</code> with time 0, so the Simulator fires it on its next update.</p>
 <figure id="sm-fig-136_sim_two_runners">
   <img src="figures/136_sim_two_runners.svg" alt="Two ways to feed events">
-  <figcaption><strong>Two ways to feed events.</strong> A: the start file's set-up events, fired by the simulator at their times. B: an events file, fed one event at a time; an event with <code>wait_for_job_completion</code> holds the next one until its job ends.</figcaption>
+  <figcaption><strong>Two ways to feed actions.</strong> A: the scenario file's actions, fired by the Simulator at fixed times. B: an events file, fed one action at a time; an action with <code>wait_for_job_completion</code> holds the next one until its job ends.</figcaption>
 </figure>
 <table>
-  <thead><tr><th>Event <code>type</code></th><th>Fields</th><th>Handled when</th><th>Job tracked</th></tr></thead>
+  <thead><tr><th>Action <code>type</code></th><th>Fields</th><th>Counts as handled when</th><th>Job it follows</th></tr></thead>
   <tbody>
-    <tr><td><code>retrieve_request</code></td><td><code>payload_id</code> (optional: a random vehicle in the garage, never the same one twice)</td><td>the service answers</td><td>RETRIEVE</td></tr>
-    <tr><td><code>patron_arrival</code></td><td><code>payload_id</code> (optional: random GUID), <code>length_m</code>, <code>width_m</code>, <code>height_m</code>, <code>mass</code></td><td>a bay was <code>READY_TO_INSERT</code> when the request was sent and has since left that state</td><td>INSERT</td></tr>
+    <tr><td><code>retrieve_request</code></td><td><code>payload_id</code> (optional: a random car in the garage, never the same one twice)</td><td>the service answers</td><td>RETRIEVE</td></tr>
+    <tr><td><code>patron_arrival</code></td><td><code>payload_id</code> (optional: random GUID), <code>length_m</code>, <code>width_m</code>, <code>height_m</code>, <code>mass</code></td><td>a bay was ready to insert when the request was sent and has since left that state</td><td>INSERT</td></tr>
     <tr><td><code>repark_tray</code></td><td><code>tray_id</code>, <code>pose</code>, <code>allow_reciprocal</code> (required)</td><td>the service answers</td><td>REPARK_TRAY</td></tr>
     <tr><td><code>move_agv</code>, <code>move_tray</code></td><td><code>agv_id</code> or <code>tray_id</code>, <code>pose</code></td><td>the service answers</td><td>MOVE_AGV, MOVE_TRAY</td></tr>
     <tr><td><code>sleep</code></td><td><code>duration</code> [s, wall time]</td><td>the time has passed</td><td>none</td></tr>
   </tbody>
 </table>
 <ul>
-  <li><strong>Optional on every event:</strong> <code>wait_for_job_completion: true</code> makes the event count as handled only when its job is SUCCESS or ERROR.</li>
-  <li><strong>Job attribution:</strong> before each event, a <code>SchedulerJobTracker</code> notes the jobs of the event's type already in the dispatch report; the first new job of that type is taken as the event's job.</li>
-  <li><strong>End:</strong> after the last event, when every tracked job has finished, the exerciser writes one CSV row per event (<code>sim_metrics</code>; default <code>/tmp/sim_results/events_summary.csv</code>), sends SIGINT to the other ROS processes, and exits with status 0, or 1 if any job ended in ERROR or an exception occurred.</li>
+  <li><strong>Optional on every action:</strong> <code>wait_for_job_completion: true</code> makes the action count as handled only when its job has ended (SUCCESS or ERROR).</li>
+  <li><strong>Which job belongs to an action:</strong> before each action, the exerciser notes the jobs of that type already in Dispatch's report; the first new job of that type is taken as the action's job.</li>
+  <li><strong>End:</strong> after the last action, when every followed job has ended, the exerciser writes one CSV row per action (default <code>/tmp/sim_results/events_summary.csv</code>), stops the other ROS processes, and exits with status 0, or 1 if any job ended in ERROR or something failed.</li>
 </ul>
-<p>This is the closest thing to a pass or fail the stack has: an events file run headless gives an exit status and a metrics file per run.</p>
+<p>This is the closest thing to a pass or fail the stack has: an events file gives an exit status and a metrics file per run.</p>
 
 <h3 data-num id="sm-the-scenario-families">The per-site scenario family</h3>
 <p>Each site with standardized tests gets the same set of files: start files and events files that pair up. The Pecos sandboxes follow this pattern, and so does <code>275_sunrise_b</code>.</p>
 <figure id="sm-fig-137_sim_scenario_families">
   <img src="figures/137_sim_scenario_families.svg" alt="The per-site scenario family">
-  <figcaption><strong>The per-site scenario family.</strong> Filling an empty garage and draining a full one use the same vehicle GUIDs, so one undoes the other. The move-each-node files and the standardized batch do not run as they are (<a class="ref" href="#sm-gaps-and-improvements">section 8</a>).</figcaption>
+  <figcaption><strong>The per-site scenario family.</strong> Filling an empty garage and draining a full one use the same car GUIDs, so one undoes the other. The move-each-node files and the standardized batch do not run as they are (<a class="ref" href="#sm-gaps-and-improvements">section 10</a>).</figcaption>
 </figure>
 <p>Two settings in the start files are chosen on purpose. <code>bay_readiness_ratio</code> is 1.0 when the garage starts empty, so that every bay is made ready for a patron, and 0.0 when it starts full, so that the scheduler does not spend AGV time preparing bays for inserts that will not come. The auto planner is switched on at 5 s, after Dispatch has started in automatic mode at 1 s.</p>
-<p>Besides the families, the package has scenarios named after one behaviour. They are the closest existing material to the catalogue of <a class="ref" href="#sm-a-scenario-catalogue-for-the-refactor">section 6.2</a>:</p>
+<p>Besides the families, the package has scenarios named after one behaviour. They are the closest existing material to the catalogue of <a class="ref" href="#sm-a-scenario-catalogue-for-the-refactor">section 8.2</a>:</p>
 <table>
   <thead><tr><th>Scenario</th><th>Layout</th><th>What it sets up</th><th>Runs as is?</th></tr></thead>
   <tbody>
-    <tr><td><code>tiny_lot_retrieve</code></td><td><code>tiny_lot</code></td><td>One AGV, one vehicle on T2; retrieve at 5 s</td><td>yes</td></tr>
-    <tr><td><code>tiny_lot_move_tray</code></td><td><code>tiny_lot</code></td><td>Repark T2 to its own node with heading 180 at 3 s (a turn in place)</td><td>yes</td></tr>
-    <tr><td><code>tiny_lot_idle</code></td><td><code>tiny_lot</code></td><td>Dispatch in automatic mode, nothing to do; tray T9 starts on the AGV's node</td><td>yes</td></tr>
-    <tr><td><code>multisize_inserts_and_retrieves</code></td><td><code>multisize</code></td><td>Patrons of 5.4, 5.0 and 4.4 m (EXTRA_LONG, STANDARD, COMPACT), a retrieve at 180 s, another patron</td><td>yes</td></tr>
-    <tr><td><code>clean_garage_unstashes_waypoint_tray</code></td><td><code>5675_pecos_sandbox_eng</code></td><td>T1 on waypoint W1, T2 in bay B7; no events</td><td>needs <code>start_dispatch</code> (no events; Dispatch stays stopped)</td></tr>
-    <tr><td><code>repark_tray</code>, <code>payload_starts_in_bay</code></td><td><code>5675_pecos_sandbox_eng</code></td><td>A vehicle on a stall, or in bay B7; no events</td><td>same; meant to be driven by hand</td></tr>
-    <tr><td><code>charge_then_repark</code></td><td><code>5675_pecos_sandbox_eng</code></td><td>AGV-2 in bay B7, its battery set to 9 % at 150 s to free the bay, a repark at 190 s</td><td>runs, but the battery events are not implemented, so the case it describes does not happen</td></tr>
-    <tr><td><code>single_triple_pick_retrieve</code></td><td><code>550_w21st</code></td><td>15 vehicles, two AGVs; no events (the batch configurations add one retrieve each)</td><td>with a batch runner</td></tr>
-    <tr><td><code>exercise_576_eccles</code></td><td><code>576_eccles</code></td><td>27 trays (26 with vehicles of 2000 kg and 1.75 m height), node 26 disabled at 1 s, auto planner at 10 s</td><td>yes</td></tr>
-    <tr><td><code>try_odp_agv_collide_bay_outbound_node</code></td><td><code>576_eccles_mini</code></td><td>Two AGVs under two trays, on a bay's outbound node: a collision case for the overdrive plate</td><td>needs <code>start_dispatch</code></td></tr>
-    <tr><td><code>events_insert_retrieve</code>, <code>tiny_lot_events_fill</code></td><td>(events files)</td><td>A long insert and retrieve sequence that "should fill up" the Fulton garage; two patrons on <code>tiny_lot</code></td><td>no: older event types (<a class="ref" href="#sm-gaps-and-improvements">section 8</a>)</td></tr>
+    <tr><td><code>tiny_lot_retrieve</code></td><td><code>tiny_lot</code></td><td>One AGV, one car on T2; retrieve at 5 s</td><td>yes</td></tr>
+    <tr><td><code>tiny_lot_move_tray</code></td><td><code>tiny_lot</code></td><td>Repark T2 on its own node with heading 180 at 3 s (a turn in place)</td><td>yes</td></tr>
+    <tr><td><code>tiny_lot_idle</code></td><td><code>tiny_lot</code></td><td>Dispatch in automatic mode with nothing to do; tray T9 starts on the AGV's node</td><td>yes</td></tr>
+    <tr><td><code>multisize_inserts_and_retrieves</code></td><td><code>multisize</code></td><td>Patrons with cars of 5.4, 5.0 and 4.4 m, a retrieve at 180 s, another patron</td><td>yes</td></tr>
+    <tr><td><code>clean_garage_unstashes_waypoint_tray</code></td><td><code>5675_pecos_sandbox_eng</code></td><td>T1 on waypoint W1, T2 in bay B7</td><td>no actions: Dispatch never starts unless someone starts it</td></tr>
+    <tr><td><code>repark_tray</code>, <code>payload_starts_in_bay</code></td><td><code>5675_pecos_sandbox_eng</code></td><td>A car on a stall, or in bay B7</td><td>same; meant to be driven by hand</td></tr>
+    <tr><td><code>charge_then_repark</code></td><td><code>5675_pecos_sandbox_eng</code></td><td>AGV-2 in bay B7, its battery set to 9 % at 150 s to free the bay, a repark at 190 s</td><td>runs, but the battery actions are not implemented, so the case it describes does not happen</td></tr>
+    <tr><td><code>single_triple_pick_retrieve</code></td><td><code>550_w21st</code></td><td>15 cars, two AGVs; no actions (the batch configurations add one retrieve each)</td><td>with a batch runner</td></tr>
+    <tr><td><code>exercise_576_eccles</code></td><td><code>576_eccles</code></td><td>27 trays (26 with cars of 2000 kg and 1.75 m), node 26 disabled at 1 s, auto planner at 10 s</td><td>yes</td></tr>
+    <tr><td><code>try_odp_agv_collide_bay_outbound_node</code></td><td><code>576_eccles_mini</code></td><td>Two AGVs under two trays on a bay's outbound node: a collision case for the bay's overdrive plate</td><td>needs <code>start_dispatch</code></td></tr>
+    <tr><td><code>events_insert_retrieve</code>, <code>tiny_lot_events_fill</code></td><td>(events files)</td><td>A long insert and retrieve sequence that "should fill up" the Fulton garage; two patrons on <code>tiny_lot</code></td><td>no: older action types (<a class="ref" href="#sm-gaps-and-improvements">section 10</a>)</td></tr>
   </tbody>
 </table>
 
 <h3 data-num id="sm-batch-configurations">Batch configurations</h3>
-<p><code>batch_configs/*.yaml</code> group runs: a <code>batch_name</code> to group results, a <code>layout</code> and <code>layout_version</code>, one start <code>scenario</code>, and a list of <code>events</code> files. The three <code>550_w21st</code> batches start a full garage (14, 15 or 16 vehicles) and retrieve each vehicle in turn, one events file per stall; the two standardized tests run <code>fill_and_drain</code> three times on the engineering and the QA sandbox, with <code>batch_name: release-26.XX</code> to be replaced by the release under test.</p>
-<p>The program that reads these files is not in the snapshots, and <code>setup.py</code> does not install <code>batch_configs/</code>. The launcher is ready for it: <code>get_sim_launch_description</code> accepts a scenario, an artifacts directory and base name, parameter overrides and a real time factor as Python arguments, and returns the layout, the initial conditions and the scenario's events along with the launch entities.</p>
+<p><code>batch_configs/*.yaml</code> group runs: a <code>batch_name</code> to group results, a <code>layout</code> and <code>layout_version</code>, one start <code>scenario</code>, and a list of <code>events</code> files. The three <code>550_w21st</code> batches start a full garage (14, 15 or 16 cars) and retrieve each car in turn, one events file per stall; the two standardized tests run <code>fill_and_drain</code> three times on the engineering and the QA sandbox, with <code>batch_name: release-26.XX</code> to be replaced by the release under test.</p>
+<p>The program that reads these files is not in the snapshots, and the package does not install <code>batch_configs/</code>. The launch code is ready for it: <code>get_sim_launch_description</code> takes a scenario, an artifacts directory and base name, parameter overrides and a real time factor as Python arguments.</p>
 
 <h3 data-num id="sm-a-scenario-for-the-running-example">A scenario for the running example</h3>
 <p>The running example of the deck, written as a start file and an events file on the QA sandbox: a retrieve whose route is blocked by tray T15, with the empty tray T21 still in bay B21, followed by a patron who wants to park. The files are a proposal, not files from the repository; they follow the conventions of the existing files.</p>
-<pre><code class="language-yaml"># PROPOSED: scenarios/5675_pecos_sandbox_qa_retrieve_with_blocker.yaml (start file)
+<pre><code class="language-yaml"># PROPOSED: 5675_pecos_sandbox_qa_retrieve_with_blocker.yaml (start file)
 layout: 5675_pecos_sandbox_qa
 initial_conditions:
   agvs:
@@ -289,7 +319,7 @@ events:
   - {type: start_dispatch, time: 1.0}
   - {type: set_auto_planner, time: 5.0, enabled: true}
 
-# PROPOSED: scenarios/5675_pecos_sandbox_qa_events_retrieve_then_park.yaml (events file)
+# PROPOSED: 5675_pecos_sandbox_qa_events_retrieve_then_park.yaml (events file)
 events:
   - type: retrieve_request
     payload_id: 00030017-0000-0000-0000-000000001717
@@ -299,113 +329,196 @@ events:
     length_m: 4.877
     width_m: 2.21
     wait_for_job_completion: true</code></pre>
-<p>If Dispatch starts in automatic mode it may also queue a clean and a rebalance job of its own (Dispatch tab, <a class="ref" href="#ds-jobs-in-dispatch">section 2</a>), so the first plan call can already contain more than the retrieve.</p>
+<p>Whether the patron can park depends on a bay becoming ready to insert. With <code>bay_readiness_ratio</code> 0.0, Dispatch does not prepare one by itself; whether the empty tray that the retrieve leaves in B21 is enough is for a run to show. If the patron keeps waiting, raise the ratio (<a class="ref" href="#sm-insert-a-car-by-hand">section 7.2</a>). If Dispatch starts in automatic mode it may also queue a clean and a rebalance job of its own (Dispatch tab, <a class="ref" href="#ds-jobs-in-dispatch">section 2</a>), so the first plan call can already contain more than the retrieve.</p>
 
 <h2 data-num id="sm-running-a-simulation">Running a simulation</h2>
 <figure id="sm-fig-138_sim_workflow">
   <img src="figures/138_sim_workflow.svg" alt="Running a simulation, end to end">
-  <figcaption><strong>Running a simulation, end to end.</strong> Prepare (layout and scenario), run (launch, drive, watch), evaluate (collect and compare). The commands are those of the launcher and scenario packages.</figcaption>
+  <figcaption><strong>Running a simulation, end to end.</strong> Prepare the files (1, 2), run (3 to 5), evaluate (6, 7). Terminal 1 holds the launch; terminal 2 is for feeding work and for the commands of <a class="ref" href="#sm-recipes">section 7</a>.</figcaption>
 </figure>
 
 <h3 data-num id="sm-launching">Launching</h3>
-<pre><code class="language-bash">ros2 run launcher layout_plotter 5675_pecos_sandbox_qa -o /tmp/qa.png       # the map, with node ids
+<pre><code class="language-bash">source install/setup.bash                                                   # in every terminal
+ros2 run launcher layout_plotter 5675_pecos_sandbox_qa -o /tmp/qa.png       # optional: the map, with node ids
 ros2 launch launcher sim.launch.py \
   scenario:=5675_pecos_sandbox_qa_full_start_in_auto.yaml \
   real_time_factor:=4 record_artifacts:=true rviz:=false</code></pre>
-<p><code>scenario:=</code> is a path, or a file name in <code>share/scenario/scenarios</code>. The launcher joins the name to that folder unchanged, so the name includes <code>.yaml</code>. The other arguments:</p>
-<table>
+<p>The launch keeps running until Ctrl+C, a collision, or the exerciser stops it. Its arguments:</p>
+<table class="keycol">
   <thead><tr><th>Argument</th><th>Default</th><th>Effect</th></tr></thead>
   <tbody>
-    <tr><td><code>real_time_factor:=</code></td><td>1.0</td><td>Simulated seconds per wall second (<a class="ref" href="#sm-simulated-time">section 2.3</a>)</td></tr>
-    <tr><td><code>vis:=</code>, <code>rviz:=</code></td><td>true, true</td><td>Start the visualizer and Foxglove bridge; start RViz (only with <code>vis</code>)</td></tr>
-    <tr><td><code>record_artifacts:=</code></td><td>false</td><td>Record every topic to mcap (<a class="ref" href="#sm-recording-a-run">section 5.4</a>)</td></tr>
-    <tr><td><code>artifacts_output_dir:=</code>, <code>artifact_basename:=</code></td><td><code>$ARTIFACTS_DIR</code> or <code>~/.ros/artifacts</code>, plus a UTC timestamp; <code>sim</code></td><td>Where the recording goes</td></tr>
-    <tr><td><code>auto_confirm_insert:=</code></td><td>(params: true)</td><td>Whether the simulated bay confirms inserts itself</td></tr>
-    <tr><td><code>garage_dirtiness_threshold_ratio:=</code></td><td>(params: 0.10)</td><td>Dirtiness above which an idle garage queues a clean job</td></tr>
-    <tr><td><code>enable_dispatch_charging_mode:=</code></td><td>true</td><td>Only <code>false</code> has an effect: it sets the parameter to false</td></tr>
-    <tr><td><code>printdags:=</code></td><td>false</td><td>Sets the <code>printdags</code> parameter of every node</td></tr>
-    <tr><td><code>use_remote_meshes:=</code>, <code>remote_mesh_prefix:=</code></td><td>false, (vis default)</td><td>Where the visualizer loads its 3D meshes from</td></tr>
+    <tr><td><code>scenario:=</code></td><td>(required)</td><td>A path to a scenario file, or a file name in <code>share/scenario/scenarios</code>. The name is joined to that folder unchanged, so it includes <code>.yaml</code>. A path needs no rebuild after editing the file</td></tr>
+    <tr><td><code>real_time_factor:=</code></td><td><code>1.0</code></td><td>Simulated seconds per wall second (<a class="ref" href="#sm-simulated-time">section 3.3</a>)</td></tr>
+    <tr><td><code>vis:=</code></td><td><code>true</code></td><td>Start the visualizer and the Foxglove bridge</td></tr>
+    <tr><td><code>rviz:=</code></td><td><code>true</code></td><td>Start RViz; only has an effect when <code>vis</code> is true</td></tr>
+    <tr><td><code>record_artifacts:=</code></td><td><code>false</code></td><td>Record every topic to an mcap file (<a class="ref" href="#sm-recording-a-run">section 6.3</a>)</td></tr>
+    <tr><td><code>artifacts_output_dir:=</code></td><td><code>$ARTIFACTS_DIR/&lt;UTC timestamp&gt;</code>; if <code>ARTIFACTS_DIR</code> is unset, <code>$ROS_HOME/artifacts/&lt;UTC timestamp&gt;</code>, that is <code>~/.ros/artifacts/&lt;UTC timestamp&gt;</code></td><td>Folder for the recording; the timestamp looks like <code>20261020T120000Z</code></td></tr>
+    <tr><td><code>artifact_basename:=</code></td><td><code>sim</code></td><td>Subfolder and file prefix of the recording</td></tr>
+    <tr><td><code>auto_confirm_insert:=</code></td><td><code>true</code> (from <code>params.yaml</code>)</td><td>Whether the bay's stand-in confirms inserts itself (<a class="ref" href="#sm-confirm-the-insert-yourself">section 7.3</a>)</td></tr>
+    <tr><td><code>garage_dirtiness_threshold_ratio:=</code></td><td><code>0.10</code> (from <code>params.yaml</code>)</td><td>How untidy an idle garage may get before Dispatch queues a clean-garage job</td></tr>
+    <tr><td><code>enable_dispatch_charging_mode:=</code></td><td><code>true</code></td><td>Only <code>false</code> has an effect: it sets the parameter to false. Otherwise the node keeps its own default, which is not in the snapshots</td></tr>
+    <tr><td><code>printdags:=</code></td><td><code>false</code></td><td>Sets the <code>printdags</code> parameter of every node</td></tr>
+    <tr><td><code>use_remote_meshes:=</code></td><td><code>false</code></td><td>Where the visualizer loads its 3D models from: <code>false</code> uses the local <code>package://sim/3d/</code>; <code>true</code> uses <code>remote_mesh_prefix</code></td></tr>
+    <tr><td><code>remote_mesh_prefix:=</code></td><td><code>https://aws-mesh-proxy.tailfadbb4.ts.net/model/</code> (the visualizer's built-in value)</td><td>Base URL of the 3D models; used only with <code>use_remote_meshes:=true</code></td></tr>
   </tbody>
 </table>
 <p>These are not declared launch arguments: the launch file reads them from the command line with regular expressions. <code>ros2 launch ... --show-args</code> does not list them, and a misspelled one is ignored without a warning.</p>
 
 <h3 data-num id="sm-parameters">Parameters, from defaults to the scenario</h3>
-<p>Every node gets one merged parameter dictionary. Later layers win:</p>
+<p>Every node gets one merged set of parameters. Later layers win:</p>
 <table>
   <thead><tr><th>Layer</th><th>File or source</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>params/params.yaml</code></td><td>All defaults: AGV speeds, accelerations and lift times; bay doors and hardware addresses; <code>scheduler.bay_readiness_ratio</code> 0.5, <code>scheduler.cost_audit</code> false; <code>simulator.auto_confirm_insert</code> true; VECS and VRC timings</td></tr>
-    <tr><td>2</td><td><code>params/params_sim.yaml</code></td><td>No MySQL for the garage tracker; bay guidance web socket port 0</td></tr>
-    <tr><td>3</td><td><code>params_&lt;layout&gt;.yaml</code></td><td>The installation file (<a class="ref" href="#sm-where-the-layouts-are">section 1.1</a>), if it exists. Without one, the bay's sensor box stays 4.5 m × 2.0 m</td></tr>
-    <tr><td>4</td><td><code>params_s&lt;DEVICE_ID&gt;.yaml</code></td><td>Optional, <code>DEVICE_ID</code> defaults to 0</td></tr>
+    <tr><td>1</td><td><code>params/params.yaml</code></td><td>Defaults: AGV speeds, accelerations and lift times; bay doors and hardware addresses; <code>scheduler.bay_readiness_ratio</code> 0.5, <code>scheduler.cost_audit</code> false; <code>simulator.auto_confirm_insert</code> true; charger and lift timings</td></tr>
+    <tr><td>2</td><td><code>params/params_sim.yaml</code></td><td>No MySQL database for the garage tracker; the bay guidance web socket off (port 0)</td></tr>
+    <tr><td>3</td><td><code>params_&lt;layout&gt;.yaml</code></td><td>The site's installation file (<a class="ref" href="#sm-where-the-layouts-are">section 2.1</a>), if it exists. Without one, the bay's sensor box stays 4.5 m × 2.0 m</td></tr>
+    <tr><td>4</td><td><code>params_s&lt;DEVICE_ID&gt;.yaml</code></td><td>Optional; <code>DEVICE_ID</code> defaults to 0</td></tr>
     <tr><td>5</td><td>common values</td><td><code>layout</code>, <code>installation_id</code> 9998, <code>use_sim_time</code> true, in every section</td></tr>
     <tr><td>6</td><td>the scenario's <code>params:</code></td><td>Per-scenario overrides</td></tr>
-    <tr><td>7</td><td>launch arguments</td><td><code>is_simulation</code> true and the arguments above</td></tr>
+    <tr><td>7</td><td>launch arguments</td><td><code>is_simulation</code> true, and the arguments above</td></tr>
   </tbody>
 </table>
 <p>Layer 6 is the clean way to vary a scheduler setting in a test, for example <code>params: {scheduler: {bay_readiness_ratio: 0.0}}</code>, without editing a shared file.</p>
 
-<h3 data-num id="sm-driving-a-run">Driving a run</h3>
-<pre><code class="language-bash">ros2 run scenario exercise_sim_events -l 5675_pecos_sandbox_qa \
-  -e 5675_pecos_sandbox_qa_events_drain_from_full -o runs/qa_drain.csv   # the workload; exits 0 or 1
-ros2 service call /sim/enqueue_garage_event interfaces/srv/SimEvent \
-  "{type: 'retrieve_request', time: 0.0, payload: {id: {bytes: [...16 bytes...]}}}"   # one event by hand
-scripts/trigger_patron_arrival.bash             # a patron with a random GUID
-ros2 param set /sim/clock real_time_factor 0    # pause; 1 resumes
-ros2 topic echo /sim/report                     # remaining events, waiting patrons
-ros2 topic echo /central/report                 # dispatch status, mode, consistency</code></pre>
-<p>A run ends when the launch is stopped, when the exerciser finishes (it stops the other ROS processes), or by itself on a collision.</p>
+<h3 data-num id="sm-recording-a-run">Recording a run, and looking at it again</h3>
+<p><code>record_artifacts:=true</code> adds a recorder (<code>/sim/recorder</code>, on simulated time) that writes every topic into one mcap file set, compressed and not split, in <code>&lt;artifacts_output_dir&gt;/&lt;artifact_basename&gt;</code>. Topics that appear later are recorded as well.</p>
+<p>The recording therefore holds what a replay of the scheduler needs: Dispatch publishes every request it sends to <code>/scheduler/plan</code> and every response it receives on two topics, explicitly "to be bagged", next to the job lists, the reports, the scheduler's report (with the current <code>bay_readiness_ratio</code>) and <code>/clock</code>. To look at a recording again, with the visualizer and Foxglove:</p>
+<pre><code class="language-bash">ros2 launch launcher bagplay.launch.py bagfile:=~/.ros/artifacts/20261020T120000Z/sim   # plays it in a loop</code></pre>
 
-<h3 data-num id="sm-recording-a-run">Recording a run</h3>
-<p><code>record_artifacts:=true</code> adds a recorder (<code>rosbag2_transport</code>, node <code>/sim/recorder</code>, on simulated time) that records every topic (<code>regex: .*</code>) into one mcap file set, compressed with the <code>zstd_fast</code> preset and not split, in <code>&lt;artifacts dir&gt;/&lt;UTC timestamp&gt;/sim</code>. Topics that appear later are picked up as well.</p>
-<p>The recording therefore includes what a replay of the scheduler needs: Dispatch publishes every request it sends to <code>/scheduler/plan</code> and every response it receives on two topics, explicitly "to be bagged" (<code>DispatchRos::CallPlanner</code>), alongside the job lists, the reports, the scheduler's report (which carries the current <code>bay_readiness_ratio</code>) and <code>/clock</code>. To look at a recording again:</p>
-<pre><code class="language-bash">ros2 launch launcher bagplay.launch.py bagfile:=~/.ros/artifacts/20261013T120000Z/sim
-# plays the bag in a loop with the visualizer and the Foxglove bridge</code></pre>
+<h2 data-num id="sm-recipes">Recipes: parking, retrieving and steering a running simulation</h2>
+<p>The commands below assume a launched simulation in terminal 1 and are typed in terminal 2, after <code>source install/setup.bash</code> and with the same <code>ROS_DOMAIN_ID</code> (75 unless set). Bay and node ids are those of the Pecos QA sandbox.</p>
+<figure id="sm-fig-139_sim_insert_paths">
+  <img src="figures/139_sim_insert_paths.svg" alt="How a car gets parked in simulation">
+  <figcaption><strong>How a car gets parked in simulation.</strong> Three ways to make a patron arrive (A, B, C), one queue, the wait for a bay ready to insert, the simulated drive-on, the confirmation (automatic or by hand), and the production software parking the car.</figcaption>
+</figure>
 
-<h2 data-num id="sm-testing-scenarios">Testing scenarios</h2>
+<h3 data-num id="sm-insert-a-car-automatically">Insert a car automatically, from the scenario</h3>
+<p>A patron can park only when a bay is <strong>ready to insert</strong>: an empty tray stands in the bay and its doors are ready. In automatic mode Dispatch prepares bays by itself when <code>bay_readiness_ratio</code> is above 0 and an empty tray is free; in manual mode nobody prepares a bay unless asked. So the start file must give the garage at least one empty tray, run Dispatch in automatic mode, and set a readiness ratio above 0. The QA sandbox's <code>empty_start_in_auto</code> file does all three; copy it and add one action:</p>
+<pre><code class="language-yaml"># my_qa_one_insert.yaml: a copy of 5675_pecos_sandbox_qa_empty_start_in_auto.yaml, plus the last action
+layout: 5675_pecos_sandbox_qa
+initial_conditions:
+  agvs:
+    - {id: 1, garage_pose: {node_id: 15, heading: 90}}
+    - {id: 2, garage_pose: {node_id: 17, heading: 90}}
+  trays:                                         # six empty trays
+    - {id: 15, garage_pose: {node_id: 15, heading: 90}}
+    - {id: 17, garage_pose: {node_id: 17, heading: 90}}
+    - {id: 19, garage_pose: {node_id: 19, heading: 90}}
+    - {id: 20, garage_pose: {node_id: 20, heading: 90}}
+    - {id: 23, garage_pose: {node_id: 23, heading: 90}}
+    - {id: 24, garage_pose: {node_id: 24, heading: 90}}
+events:
+  - {type: set_dispatch_mode, time: 0.5, mode: 1}                    # automatic
+  - {type: set_bay_readiness_ratio, time: 0.5, bay_readiness_ratio: 1.0}
+  - {type: start_dispatch, time: 1.0}
+  - {type: set_auto_planner, time: 5.0, enabled: true}
+  - type: patron_arrival                                             # the car to park
+    time: 60.0
+    payload_id: 00000000-0000-0000-0000-000000000099
+    length_m: 5.182
+    width_m: 2.21</code></pre>
+<pre><code class="language-bash">ros2 launch launcher sim.launch.py scenario:=$PWD/my_qa_one_insert.yaml real_time_factor:=4</code></pre>
+<p>What happens: an AGV brings an empty tray into B21 and the bay becomes ready; at 60 s of scenario time the patron arrives, the bay's stand-in plays the drive-on and confirms, Dispatch creates an INSERT job, the scheduler plans it and an AGV parks the car. <code>ros2 topic echo /sim/report</code> shows the car in the waiting list until a bay takes it. A time before the bay is ready does no harm: the patron waits in the queue.</p>
+<p>The same with an events file, which also gives an exit status: write the <code>patron_arrival</code> (without <code>time</code>, with <code>wait_for_job_completion: true</code>) into an events file and run <code>ros2 run scenario exercise_sim_events -l 5675_pecos_sandbox_qa -e &lt;file&gt;</code>. The exerciser itself waits for a ready bay before it sends the patron.</p>
+
+<h3 data-num id="sm-insert-a-car-by-hand">Insert a car by hand, while the simulation runs</h3>
+<p>The quickest way is the script in the <code>sim</code> package's <code>scripts/</code> folder:</p>
+<pre><code class="language-bash">scripts/trigger_patron_arrival.bash      # a patron with a random id: 1500 kg, 5.0 m x 2.0 m x 3.0 m</code></pre>
+<p>It prints a "Generated UUID" and a "UUID byte array". Only the byte array is the car's id; the printed UUID is generated separately and is not used (<a class="ref" href="#sm-gaps-and-improvements">section 10</a>). To choose the id and the size, call the service yourself:</p>
+<pre><code class="language-bash">ros2 service call /sim/enqueue_garage_event interfaces/srv/SimEvent "{type: patron_arrival, time: 0.0,
+  payload: {id: {bytes: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,153]},
+            mass: 1500.0, length_m: 5.182, width_m: 2.21, height_m: 1.5}}"</code></pre>
+<ul>
+  <li><code>time</code> is in seconds of scenario time: 0, or any time already past, fires on the next update; a later time schedules the action.</li>
+  <li><code>id</code> is the 16 bytes of the car's GUID. The bytes above are meant as <code>00000000-0000-0000-0000-000000000099</code> (0x99 = 153), assuming the bytes are in the order of the written GUID; the conversion is in <code>common</code>, outside the snapshots.</li>
+  <li>Through the service there are no defaults: a size left out is 0. Give mass, length, width and height.</li>
+  <li>The reply says <code>success: true</code> when the action was queued; an unknown <code>type</code> gives <code>success: false</code> with the reason.</li>
+</ul>
+<p>If no bay becomes ready, give the garage one: in automatic mode, raise the ratio with <code>"{type: set_bay_readiness_ratio, time: 0.0, float_value: 1.0}"</code>; in manual mode, with an empty tray already in the bay, ask for the transition with <code>"{type: transition_bay_to_insert, time: 0.0, resource_id: 21}"</code>.</p>
+
+<h3 data-num id="sm-confirm-the-insert-yourself">Confirm the insert yourself</h3>
+<p>On site, a patron who has left the car confirms the insert in the app. The simulation does this automatically unless launched with <code>auto_confirm_insert:=false</code>; the bay then waits after the drive-on until someone confirms through the REST API, as the app would:</p>
+<pre><code class="language-bash">curl -X POST http://localhost:5000/api/bay/b21/confirm-insert -H "Content-Type: application/json" \
+  -d '{"payload_id":"&lt;uuid&gt;","payload_id_claim":"&lt;uuid&gt;","patron_name":"","patron_identity":"","payload_type":"auto"}'</code></pre>
+<p><code>scripts/confirm_insert.bash</code> sends this request with a new random UUID, for bay B39 of the Eccles layout; change the bay number for another layout (B21 or B7 on Pecos). Use this to test what happens when a patron is slow to confirm, or to drive the bay by hand.</p>
+
+<h3 data-num id="sm-retrieve-a-car">Retrieve a car</h3>
+<p>A retrieve needs the car's GUID: one from the scenario's <code>initial_conditions</code>, or one given at its <code>patron_arrival</code>. No ready bay is needed: the retrieve job prepares one. The bay's stand-in always confirms the retrieve itself, and the car leaves as soon as the patron door opens.</p>
+<ul>
+  <li><strong>From the scenario file:</strong> <code>- {type: retrieve_request, time: 120.0, payload_id: 00030017-0000-0000-0000-000000001717}</code>.</li>
+  <li><strong>From an events file:</strong> a <code>retrieve_request</code> without <code>payload_id</code> picks a random car still in the garage.</li>
+  <li><strong>By hand:</strong> <code>ros2 service call /sim/enqueue_garage_event interfaces/srv/SimEvent "{type: retrieve_request, time: 0.0, payload: {id: {bytes: [...]}}}"</code>.</li>
+</ul>
+
+<h3 data-num id="sm-other-actions-by-hand">Other operator actions by hand</h3>
+<p>Every action of <a class="ref" href="#sm-events-become-service-calls">section 4.2</a> can be sent through <code>/sim/enqueue_garage_event</code>. The service has one set of generic fields, so each action uses some of them:</p>
+<table>
+  <thead><tr><th>Action <code>type</code></th><th>Service fields used</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>start_dispatch</code>, <code>stop_dispatch</code>, <code>pause_dispatch</code>, <code>call_planner</code></td><td>none</td><td><code>{type: stop_dispatch, time: 0.0}</code></td></tr>
+    <tr><td><code>set_dispatch_mode</code></td><td><code>uint_value</code> = mode</td><td><code>{type: set_dispatch_mode, time: 0.0, uint_value: 2}</code></td></tr>
+    <tr><td><code>set_auto_planner</code></td><td><code>bool_value</code> = enabled</td><td><code>{type: set_auto_planner, time: 0.0, bool_value: false}</code></td></tr>
+    <tr><td><code>set_bay_readiness_ratio</code></td><td><code>float_value</code></td><td><code>{type: set_bay_readiness_ratio, time: 0.0, float_value: 0.5}</code></td></tr>
+    <tr><td><code>move_agv</code>, <code>move_tray</code></td><td><code>resource_id</code> = AGV or tray id, <code>pose</code></td><td><code>{type: move_agv, time: 0.0, resource_id: 1, pose: {node_id: 26, heading: 90}}</code></td></tr>
+    <tr><td><code>repark_tray</code></td><td><code>resource_id</code> = tray id, <code>pose</code>, <code>bool_value</code> = allow_reciprocal</td><td><code>{type: repark_tray, time: 0.0, resource_id: 20, pose: {node_id: 23, heading: 90}, bool_value: true}</code></td></tr>
+    <tr><td><code>remove_agv</code></td><td><code>resource_id</code> = AGV id</td><td><code>{type: remove_agv, time: 0.0, resource_id: 2}</code></td></tr>
+    <tr><td><code>set_node_disabledness</code>, <code>set_tray_disabledness</code></td><td><code>resource_id</code> = node or tray id, <code>bool_value</code> = disable</td><td><code>{type: set_node_disabledness, time: 0.0, resource_id: 22, bool_value: true}</code></td></tr>
+    <tr><td><code>transition_bay_to_insert</code>, <code>transition_bay_to_retrieve</code></td><td><code>resource_id</code> = bay id</td><td><code>{type: transition_bay_to_insert, time: 0.0, resource_id: 21}</code></td></tr>
+    <tr><td><code>charge_payload</code>, <code>retrieve_request</code>, <code>patron_arrival</code></td><td><code>payload</code></td><td>see the sections above</td></tr>
+  </tbody>
+</table>
+<p>The type is matched without regard to case. Wrap the whole request in double quotes after <code>interfaces/srv/SimEvent</code>, as in the examples above.</p>
+
+<h3 data-num id="sm-pause-speed-up-slow-down">Pause, speed up, slow down, watch</h3>
+<pre><code class="language-bash">ros2 param set /sim/clock real_time_factor 0     # pause everything
+ros2 param set /sim/clock real_time_factor 1     # real time again; 4 = four times faster
+ros2 topic echo /sim/report                      # scenario clock running? actions left? cars waiting?
+ros2 topic echo /central/report                  # Dispatch: status, mode, consistent or not</code></pre>
+
+<h2 data-num id="sm-testing-scenarios">Testing with scenarios</h2>
 <h3 data-num id="sm-what-a-run-can-tell-you">What a run can tell you</h3>
-<p>The simulator itself only fails on a collision; the exerciser adds an exit status for the jobs it tracked. The other signals are in the topics, and a test has to read them:</p>
+<p>The Simulator itself only fails on a collision; the exerciser adds an exit status for the jobs it followed. The other signals are in the topics, and a test has to read them:</p>
 <table>
   <thead><tr><th>Signal</th><th>Where</th><th>Meaning for the scheduler</th></tr></thead>
   <tbody>
-    <tr><td>Collision</td><td>FATAL log line, launch shutdown</td><td>The plan, as executed, put two bodies in the same place: a motion-planning or action-graph defect, or an execution problem</td></tr>
-    <tr><td>Exerciser exit status</td><td>0, or 1 if a tracked job ended in ERROR</td><td>A job of the workload failed</td></tr>
+    <tr><td>Collision</td><td>fatal log line; the launch stops</td><td>The plan, as carried out, put two bodies in the same place: a motion-planning or action-graph defect, or an execution problem</td></tr>
+    <tr><td>Exerciser exit status</td><td>0, or 1 if a followed job ended in ERROR</td><td>A job of the workload failed</td></tr>
     <tr><td>Job outcome</td><td>completed job list: SUCCESS or ERROR, with notes; the exerciser's CSV</td><td>An ERROR from planning means the scheduler failed the job (its message is the scheduler's error text)</td></tr>
     <tr><td>Rejected plan</td><td>Dispatch log (<code>RejectPlanResponse</code>), no new schedule</td><td>The response broke Dispatch's checks: base schedule changed, id mismatch, every job failed</td></tr>
-    <tr><td>Stuck run</td><td>the exerciser does not finish; or <code>num_remaining_events = 0</code> but pending or active jobs do not decrease for a set time</td><td>A plan that cannot complete, a job planned again and again, or a deadlock in execution</td></tr>
-    <tr><td>Divergence or inconsistency</td><td><code>/central/report</code></td><td>Execution no longer matches the plan; Dispatch stops</td></tr>
-    <tr><td>Durations</td><td>the exerciser's CSV; job lists (time planned, completed); <code>metrics_recorder</code></td><td>Plan quality as the customer sees it: how long a retrieve takes</td></tr>
+    <tr><td>Stuck run</td><td>the exerciser does not finish; or no actions remain but pending or active jobs do not decrease for a set time</td><td>A plan that cannot complete, a job planned again and again, or a deadlock</td></tr>
+    <tr><td>Divergence or inconsistency</td><td><code>/central/report</code></td><td>What the machines did no longer matches the plan; Dispatch stops</td></tr>
+    <tr><td>Durations</td><td>the exerciser's CSV; the job lists</td><td>Plan quality as the patron sees it: how long a retrieve takes</td></tr>
   </tbody>
 </table>
 
 <h3 data-num id="sm-a-scenario-catalogue-for-the-refactor">A scenario catalogue for the refactor</h3>
-<p>The benchmark matrix of the Verification tab (<a class="ref" href="#vr-proposed-benchmark-dataset-requirements-not-completed-scenarios">section 3</a>) lists what each solver must be exercised on. The same cases as runs, on real-site layouts, make each row run through the whole stack. The last column says which existing files already cover the case:</p>
+<p>The benchmark matrix of the Verification tab (<a class="ref" href="#vr-proposed-benchmark-dataset-requirements-not-completed-scenarios">section 3</a>) lists what each solver must be exercised on. The same cases as simulation runs, on real-site layouts, make each row run through the whole stack. The last column says which existing files already cover the case:</p>
 <table>
-  <thead><tr><th>Case</th><th>Key events</th><th>Exercises</th><th>Expected</th><th>Existing files</th></tr></thead>
+  <thead><tr><th>Case</th><th>Key actions</th><th>Exercises</th><th>Expected</th><th>Existing files</th></tr></thead>
   <tbody>
     <tr><td>Retrieve, free route</td><td><code>retrieve_request</code></td><td>Tray: empty-tray choice for the bay. AGV: one nearby AGV</td><td>Job SUCCESS, one plan call</td><td><code>tiny_lot_retrieve</code></td></tr>
-    <tr><td>Retrieve behind a blocker</td><td>retrieve of a vehicle enclosed by trays</td><td>Tray: blocker resolution, free-stall choice, freeing-move edges</td><td>SUCCESS; blocker moved before the root</td><td>none (<a class="ref" href="#sm-a-scenario-for-the-running-example">section 4.5</a>)</td></tr>
-    <tr><td>Drain a full garage</td><td>one <code>retrieve_request</code> per vehicle, each waiting for completion</td><td>Tray: recursive resolution, deep vehicles; AGV: every stall reached</td><td>All SUCCESS</td><td><code>*_full_start_in_auto</code> + <code>*_events_drain_from_full</code> (three Pecos layouts); the <code>550_w21st</code> batches</td></tr>
-    <tr><td>Back-to-back retrieves</td><td>several <code>retrieve_request</code> without waiting</td><td>Tray and AGV across jobs in one call; bottleneck matching over many roots</td><td>All SUCCESS; no AGV double-booked</td><td>none for retrieves; the first two patrons of <code>5675_pecos_sandbox_combined_events_fill_from_empty</code> overlap</td></tr>
-    <tr><td>Fill an empty garage</td><td>one <code>patron_arrival</code> per stall</td><td>INSERT jobs from bay events, parking-spot choice, bay readiness</td><td>Queue drains; all inserts parked</td><td><code>*_empty_start_in_auto</code> + <code>*_events_fill_from_empty</code></td></tr>
-    <tr><td>Mixed sizes</td><td>patrons of several lengths</td><td>Parking-window fit</td><td>Each vehicle on a stall of its size</td><td><code>multisize_inserts_and_retrieves</code></td></tr>
-    <tr><td>Clean garage</td><td>trays on waypoints in <code>initial_conditions</code>, <code>start_dispatch</code> in auto mode</td><td>Tray: stash and unstash moves; AGV: several moves of one tray</td><td>Waypoints cleared</td><td><code>clean_garage_unstashes_waypoint_tray</code> (needs set-up events)</td></tr>
-    <tr><td>Disabled node</td><td><code>set_node_disabledness</code> during a retrieve</td><td>Reservation and keep-out filters, route repair</td><td>SUCCESS on another route, or a clear ERROR</td><td><code>exercise_576_eccles</code> (disabled from the start)</td></tr>
+    <tr><td>Retrieve behind a blocker</td><td>retrieve of a car enclosed by trays</td><td>Tray: blocker resolution, free-stall choice, freeing-move edges</td><td>SUCCESS; blocker moved before the root</td><td>none (<a class="ref" href="#sm-a-scenario-for-the-running-example">section 5.5</a>)</td></tr>
+    <tr><td>Drain a full garage</td><td>one <code>retrieve_request</code> per car, each waiting for completion</td><td>Tray: recursive resolution, deep cars; AGV: every stall reached</td><td>All SUCCESS</td><td><code>*_full_start_in_auto</code> + <code>*_events_drain_from_full</code> (three Pecos layouts); the <code>550_w21st</code> batches</td></tr>
+    <tr><td>Back-to-back requests</td><td>several requests without waiting</td><td>Tray and AGV across jobs in one call; bottleneck matching over many roots</td><td>All SUCCESS; no AGV double-booked</td><td>none for retrieves; the first two patrons of <code>5675_pecos_sandbox_combined_events_fill_from_empty</code> overlap</td></tr>
+    <tr><td>Fill an empty garage</td><td>one <code>patron_arrival</code> per stall</td><td>INSERT jobs, parking-spot choice, bay readiness</td><td>Queue drains; all cars parked</td><td><code>*_empty_start_in_auto</code> + <code>*_events_fill_from_empty</code></td></tr>
+    <tr><td>Mixed sizes</td><td>patrons with cars of several lengths</td><td>Parking-window fit</td><td>Each car on a stall of its size</td><td><code>multisize_inserts_and_retrieves</code></td></tr>
+    <tr><td>Clean garage</td><td>trays on waypoints at the start, Dispatch in automatic mode</td><td>Tray: stash and unstash moves; AGV: several moves of one tray</td><td>Waypoints cleared</td><td><code>clean_garage_unstashes_waypoint_tray</code> (needs set-up actions)</td></tr>
+    <tr><td>Disabled node</td><td><code>set_node_disabledness</code></td><td>Reservation and keep-out filters, route repair</td><td>SUCCESS on another route, or a clear ERROR</td><td><code>exercise_576_eccles</code> (disabled from the start)</td></tr>
     <tr><td>AGV lost</td><td><code>remove_agv</code> mid-run</td><td>AGV assignment with fewer candidates</td><td>Jobs complete with the remaining AGVs</td><td>none</td></tr>
     <tr><td>Readiness change</td><td><code>set_bay_readiness_ratio</code></td><td>Rebalance job: bay transitions and tray moves</td><td>Bays end in the requested ratio</td><td>the start files set it once</td></tr>
-    <tr><td>Planner on demand</td><td><code>set_auto_planner: false</code>, then <code>call_planner</code> after each burst of requests</td><td>Large plan calls with many pending jobs</td><td>Deterministic call contents for replay</td><td>none</td></tr>
-    <tr><td>VRC ride</td><td>an insert or retrieve on a BLift site</td><td>VRC edges, BLift bay, VRC commands in the action graph</td><td>SUCCESS</td><td>none in the snapshot (the New York layouts are not included)</td></tr>
+    <tr><td>Planner on demand</td><td><code>set_auto_planner: false</code>, then <code>call_planner</code> after each burst of requests</td><td>Large plan calls with many pending jobs</td><td>Repeatable call contents for replay</td><td>none</td></tr>
+    <tr><td>Car-lift ride</td><td>an insert or retrieve on a BLift site</td><td>Lift edges, BLift bay, lift commands in the action graph</td><td>SUCCESS</td><td>none in the snapshot (the New York layouts are not included)</td></tr>
   </tbody>
 </table>
 
 <h3 data-num id="sm-determinism-and-what-to-compare">Determinism, and what to compare</h3>
-<p>Two runs of the same scenario do not produce the same plan calls. Timers in different nodes fire in different orders, service calls are asynchronous, the real time factor stretches planning time differently, the exerciser polls on wall time, and AGVs finish actions at slightly different simulated times. A job that arrives 50 ms later may land in the next plan call. Comparing two closed-loop runs request by request therefore shows differences even when the scheduler is unchanged.</p>
-<p>So the comparison is split. The <strong>scheduler</strong> is compared on identical inputs: the plan calls recorded in one run, replayed offline (<a class="ref" href="#sm-replay-recorded-plan-calls">section 7.1</a>). The <strong>system</strong> is compared statistically: outcomes and durations over repeated runs (<a class="ref" href="#sm-closed-loop-runs">section 7.2</a>).</p>
+<p>Two runs of the same scenario do not produce the same plan calls. Timers in different nodes fire in different orders, service calls are asynchronous, the real time factor stretches planning time differently, the exerciser polls on wall time, and AGVs finish actions at slightly different simulated times. A job that arrives 50 ms later may land in the next plan call. Comparing two runs request by request therefore shows differences even when the scheduler is unchanged.</p>
+<p>So the comparison is split. The <strong>scheduler</strong> is compared on identical inputs: the plan calls recorded in one run, replayed offline (<a class="ref" href="#sm-replay-recorded-plan-calls">section 9.1</a>). The <strong>system</strong> is compared statistically: outcomes and durations over repeated runs (<a class="ref" href="#sm-closed-loop-runs">section 9.2</a>).</p>
 
 <h2 data-num id="sm-checking-the-refactor">Checking the refactor with the simulator</h2>
 <figure id="sm-fig-130_sim_verification_loop">
   <img src="figures/130_sim_verification_loop.svg" alt="Using the simulator to verify the refactor">
-  <figcaption><strong>Using the simulator to verify the refactor.</strong> Record realistic plan calls once on the baseline; replay them through the old and the new scheduler on every pull request; run the scenarios closed loop on the candidate before a stage is merged.</figcaption>
+  <figcaption><strong>Using the simulator to verify the refactor.</strong> Record realistic plan calls once on the baseline; replay them through the old and the new scheduler on every pull request; run the scenarios on the candidate before a stage is merged.</figcaption>
 </figure>
 <p>The existing families give a ready-made baseline set: for each Pecos layout, fill from empty and drain from full, run with <code>record_artifacts:=true</code> and the exerciser, at a fixed <code>real_time_factor</code>. Together with the <code>550_w21st</code> batches and <code>exercise_576_eccles</code>, that covers three sites, both directions of traffic and garages up to 27 trays.</p>
 
@@ -423,25 +536,25 @@ for(const auto&amp; [stamp, request, recorded] : ReadPlanCalls(bag_path)) {   //
 }</code></pre>
 <p>Notes for the test:</p>
 <ul>
-  <li><strong>The old scheduler must run in the same test,</strong> or its canonical outputs must be stored. Both binaries are the same package at two commits; the simplest route is to compare <code>new</code> against <code>recorded</code> (the old responses are in the recording already), keeping the old-replay check for the baseline commit only.</li>
+  <li><strong>The old scheduler must run in the same test,</strong> or its canonical outputs must be stored. The simplest route is to compare <code>new</code> against <code>recorded</code> (the old responses are in the recording already), keeping the old-replay check for the baseline commit only.</li>
   <li><strong>Time:</strong> <code>Plan</code> takes <code>now</code>; use the recording's receive stamp of the request in simulated time, the same for both schedulers.</li>
   <li><strong>Parameters:</strong> <code>set_bay_readiness_ratio</code> changes the scheduler between calls, and a scenario's <code>params:</code> block may change others. Record the scheduler report, keep the scenario file with the recording, and set the ratio before each replayed call.</li>
-  <li><strong>Canonical form:</strong> compare the action DAGs by content and reduced edge sets, and the <code>ScheduledJobData</code> list by job, never by GUID or index (Verification tab, <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>).</li>
+  <li><strong>Canonical form:</strong> compare the action graphs by content and reduced edge sets, and the scheduled jobs by job, never by GUID or index (Verification tab, <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>).</li>
   <li><strong>Gate:</strong> the pass ratio <span class="math">p</span> over all recorded calls must be 1, exactly as for the fixtures.</li>
 </ul>
-<p>Replay is deterministic and needs no ROS graph, so it can run in CI on every pull request. The recordings become part of the benchmark set: their requests can be timed with the method of the Verification tab (<a class="ref" href="#vr-benchmark-method">section 5</a>).</p>
+<p>Replay is repeatable and needs no running simulation, so it can run in CI on every pull request. The recordings become part of the benchmark set: their requests can be timed with the method of the Verification tab (<a class="ref" href="#vr-benchmark-method">section 5</a>).</p>
 
 <h3 data-num id="sm-closed-loop-runs">Closed-loop runs</h3>
-<p>Replay checks the scheduler on the baseline's requests only. If the refactor changed a decision, later requests in a live run would differ, and replay alone would not show the consequence. Closed-loop runs on the candidate check that the system still behaves. For scenario <span class="math">s</span> and run <span class="math">r\in\{1,\ldots,R\}</span>, where <span class="math">R\in\mathbb N</span> is the number of runs, record:</p>
+<p>Replay checks the scheduler on the baseline's requests only. If the refactor changed a decision, later requests in a live run would differ, and replay alone would not show the consequence. Full simulation runs on the candidate (closed loop: each plan's outcome shapes the next request) check that the system still behaves. For scenario <span class="math">s</span> and run <span class="math">r\in\{1,\ldots,R\}</span>, where <span class="math">R\in\mathbb N</span> is the number of runs, record:</p>
 <ul>
   <li>whether any collision occurred (must be never);</li>
   <li>the exerciser's exit status and the outcome of every job, SUCCESS or ERROR with its error class (must match the baseline runs);</li>
   <li>the makespan <span class="math">M_{s,r}\in\mathbb R_{\ge0}</span> [s]: simulated time from the scenario start until no job is pending or active;</li>
-  <li>for each retrieve, the time from request to hand-over [s], and its median <span class="math">W_{s,r}</span> over the run (the exerciser's CSV has one row per event).</li>
+  <li>for each retrieve, the time from request to hand-over [s], and its median <span class="math">W_{s,r}</span> over the run (the exerciser's CSV has one row per action).</li>
 </ul>
 <p>Let <span class="math">\widetilde M_s</span> and <span class="math">\widetilde M_s^{(0)}</span> be the medians of the makespan over the runs of the candidate and of the baseline. The relative change <span class="math">\Delta_s\in\mathbb R</span> is:</p>
 <div class="math">\Delta_s=\frac{\widetilde M_s-\widetilde M_s^{(0)}}{\widetilde M_s^{(0)}}.</div>
-<p>For a parity refactor the expected value of <span class="math">\Delta_s</span> is 0; accept it when <span class="math">|\Delta_s|</span> stays within the spread of the baseline's own runs, measured beforehand with the same real time factor. The same rule applies to <span class="math">W</span>. A change outside that spread, with the replay passing, points at timing rather than decisions: investigate before merging.</p>
+<p>For a refactor that should not change behaviour, the expected value of <span class="math">\Delta_s</span> is 0; accept it when <span class="math">|\Delta_s|</span> stays within the spread of the baseline's own runs, measured beforehand with the same real time factor. The same rule applies to <span class="math">W</span>. A change outside that spread, with the replay passing, points at timing rather than decisions: investigate before merging.</p>
 
 <h3 data-num id="sm-when-to-run-what">When to run what</h3>
 <table>
@@ -449,7 +562,7 @@ for(const auto&amp; [stamp, request, recorded] : ReadPlanCalls(bag_path)) {   //
   <tbody>
     <tr><td>A (baseline)</td><td>Run the Pecos families, the <code>550_w21st</code> batches and <code>exercise_576_eccles</code> on the pinned commit; keep the recordings, CSVs and baseline KPIs with the code SHA</td></tr>
     <tr><td>B2, C0, C1 (renames, folders, pure helpers)</td><td>Replay on every pull request</td></tr>
-    <tr><td>C2, D, E (tray module, migration, cleanup)</td><td>Replay on every pull request; closed loop before merging D and E</td></tr>
+    <tr><td>C2, D, E (tray module, migration, cleanup)</td><td>Replay on every pull request; closed-loop runs before merging D and E</td></tr>
     <tr><td>F (AGV module)</td><td>Same as D and E</td></tr>
     <tr><td>G (benchmarks)</td><td>Add the recorded requests to the benchmark set; time them</td></tr>
     <tr><td>H, I (cleanup, <code>planner_core</code> names)</td><td>Replay and one closed-loop pass of the whole set</td></tr>
@@ -460,32 +573,36 @@ for(const auto&amp; [stamp, request, recorded] : ReadPlanCalls(bag_path)) {   //
 <h2 data-num id="sm-gaps-and-improvements">Gaps and proposed improvements</h2>
 <p>Found while reading the packages. None blocks the refactor; the first four matter most for using the simulator as a test.</p>
 <ul>
-  <li><strong>The simulator has no pass or fail.</strong> A run ends on a collision or when it is stopped; only the exerciser gives an exit status, and only for the jobs it tracked. Proposed: an optional <code>expect</code> block in the scenario (jobs that must succeed, a time limit, allowed errors) checked by the simulator, which then exits with a status code.</li>
-  <li><strong>Some events files use event types the exerciser does not know.</strong> All <code>*_events_move_each_node</code> files, <code>tiny_lot_events_fill</code> and <code>events_insert_retrieve</code> use <code>wait_for_any_non_busy_agv</code>, <code>wait_until_previous_completed</code>, <code>wait_for_next_bay_ready_to_insert</code> or <code>done_events_wait_jobs_end_simulation</code>, and fields <code>sleep</code> and <code>time</code> it ignores. The exerciser raises "Unknown event type" and exits with status 1. Proposed: convert them (most map to <code>wait_for_job_completion</code> and <code>sleep</code> events), or delete them, and add a test that loads every events file through the exerciser's registry.</li>
+  <li><strong>The Simulator has no pass or fail.</strong> A run ends on a collision or when it is stopped; only the exerciser gives an exit status, and only for the jobs it followed. Proposed: an optional <code>expect</code> block in the scenario (jobs that must succeed, a time limit, allowed errors) checked by the Simulator, which then exits with a status code.</li>
+  <li><strong>Some events files use action types the exerciser does not know.</strong> All <code>*_events_move_each_node</code> files, <code>tiny_lot_events_fill</code> and <code>events_insert_retrieve</code> use <code>wait_for_any_non_busy_agv</code>, <code>wait_until_previous_completed</code>, <code>wait_for_next_bay_ready_to_insert</code> or <code>done_events_wait_jobs_end_simulation</code>, and fields <code>sleep</code> and <code>time</code> it ignores. The exerciser stops with "Unknown event type" and status 1. Proposed: convert them (most map to <code>wait_for_job_completion</code> and <code>sleep</code>), or delete them, and add a test that loads every events file.</li>
   <li><strong>The standardized batches refer to a missing file.</strong> <code>pecos_sandbox_eng.yaml</code> and <code>pecos_sandbox_qa.yaml</code> list <code>*_events_fill_and_drain</code> three times; no such file is among the scenario files. Proposed: add the file (fill then drain), and a test that every name in a batch configuration resolves.</li>
-  <li><strong>Events due in the same update run in reverse order.</strong> <code>GetNextEvents</code> returns the due events oldest first, and <code>HandleEvents</code> takes them from the back, so the newest runs first. The start files hit this: <code>set_dispatch_mode</code> and <code>set_bay_readiness_ratio</code> both at 0.5 s fall in the same update. Events with equal times have no defined order at all (a <code>std::priority_queue</code> is not stable). Proposed: process in time order, then in file order.</li>
-  <li><strong>Service results are not checked by the simulator.</strong> Most events use <code>CallAsync</code>, which reports only that the request was sent. A refused retrieve leaves no trace in the simulator (the exerciser does check the <code>SimEvent</code> answer). Proposed: log or count failed responses in <code>/sim/report</code>.</li>
-  <li><strong>Battery state is not simulated from the scenario.</strong> <code>battery_fraction</code> in <code>agvs[]</code> is parsed but neither the launcher nor the simulator passes it on, and <code>set_agv_battery_fraction</code> is logged as not implemented. <code>charge_then_repark.yaml</code> depends on both, so it does not test what its comments describe.</li>
-  <li><strong>The exerciser stops every ROS process on the machine.</strong> <code>end_simulation</code> sends SIGINT to every process whose command line contains <code>ros-args</code>, not only to the simulation it ran against. Proposed: stop the launch it belongs to (a process group or the launch's PID).</li>
+  <li><strong>Actions due in the same update run in reverse order.</strong> The Simulator takes the due actions from the back of the list, so the newest runs first. The start files hit this: <code>set_dispatch_mode</code> and <code>set_bay_readiness_ratio</code> both at 0.5 s fall in the same update. Actions with equal times have no defined order at all. Proposed: process in time order, then in file order.</li>
+  <li><strong>The patron script prints the wrong id.</strong> <code>trigger_patron_arrival.bash</code> prints a UUID from <code>uuidgen</code> but sends 16 unrelated random bytes, so the printed UUID cannot be used to retrieve the car. It also uses a height of 3.0 m, above the bay's height-check lidars (1.97 m in <code>params.yaml</code>). Proposed: send the printed UUID's bytes, and a realistic height.</li>
+  <li><strong>Service results are not checked by the Simulator.</strong> Most actions are sent without waiting for the answer, so a refused retrieve leaves no trace in the Simulator (the exerciser does check its own requests). Proposed: count failed answers in <code>/sim/report</code>.</li>
+  <li><strong>Battery state is not simulated from the scenario.</strong> <code>battery_fraction</code> in <code>agvs[]</code> is read but not passed on, and <code>set_agv_battery_fraction</code> is logged as not implemented. <code>charge_then_repark.yaml</code> depends on both, so it does not test what its comments describe.</li>
+  <li><strong>The exerciser stops every ROS process on the machine.</strong> At the end it sends SIGINT to every process whose command line contains <code>ros-args</code>, not only to the simulation it ran against. Proposed: stop only the launch it belongs to.</li>
   <li><strong>Launch arguments are parsed by hand.</strong> A misspelled argument (<code>realtime_factor:=4</code>) is ignored without a warning, and <code>--show-args</code> lists nothing. Proposed: declare them as launch arguments.</li>
-  <li><strong>One scenario file, two parsers.</strong> The launcher (Python) and the simulator (C++) each read part of the file; a field one adds can be ignored by the other, as <code>agvs[].garage_pose</code> is by the simulator. Proposed: one schema, checked by a test against every file in <code>scenarios/</code>.</li>
-  <li>In <code>YamlToEvent</code>, the <code>SET_AUTO_PLANNER</code> case has no <code>break</code> and falls into the cases without parameters. Harmless today; add the <code>break</code>.</li>
-  <li><strong>A collision leaves only a log line</strong> and shuts the process down (<code>TODO(SW2-306)</code>). Proposed: publish the colliding pair, the time and the last snapshot before shutting down; with <code>record_artifacts</code> the recording then shows the moment.</li>
-  <li><strong>Collision bodies are not published.</strong> <code>CollisionDetector::ConstructBodyMessages</code> exists and the visualizer defines a <code>collision_bodies</code> topic name, but nothing publishes it. Publishing it would show the boxes in RViz and Foxglove.</li>
-  <li><strong>Start files without set-up events.</strong> <code>clean_garage_unstashes_waypoint_tray</code>, <code>repark_tray</code>, <code>payload_starts_in_bay</code> and <code>try_odp_agv_collide_bay_outbound_node</code> have <code>events: []</code>, so Dispatch never starts unless someone starts it. If they are meant for automatic runs, add the four set-up events of the families.</li>
+  <li><strong>One scenario file, two readers.</strong> The launch file (Python) and the Simulator (C++) each read part of the file; a field one adds can be ignored by the other, as <code>agvs[].garage_pose</code> is by the Simulator. Proposed: one schema, checked by a test against every file in <code>scenarios/</code>.</li>
+  <li>In the Simulator's YAML reader, the <code>set_auto_planner</code> case has no <code>break</code> and falls into the cases without fields. Harmless today; add the <code>break</code>.</li>
+  <li><strong>A collision leaves only a log line</strong> and stops the process (<code>TODO(SW2-306)</code>). Proposed: publish the colliding pair, the time and the last snapshot first; with <code>record_artifacts</code> the recording then shows the moment.</li>
+  <li><strong>Collision bodies are not published.</strong> The code to build them as messages exists and the visualizer defines a <code>collision_bodies</code> topic name, but nothing publishes it. Publishing it would show the boxes in RViz and Foxglove.</li>
+  <li><strong>Start files without set-up actions.</strong> <code>clean_garage_unstashes_waypoint_tray</code>, <code>repark_tray</code>, <code>payload_starts_in_bay</code> and <code>try_odp_agv_collide_bay_outbound_node</code> have <code>events: []</code>, so Dispatch never starts unless someone starts it. If they are meant for automatic runs, add the four set-up actions of the families.</li>
 </ul>
 
 <h2 data-num id="sm-open-questions">Open questions</h2>
 <p>Answering these needs code or knowledge that is not in the snapshots:</p>
 <ul>
-  <li><strong>Site locations:</strong> are the inferred places of <a class="ref" href="#sm-where-the-layouts-are">section 1.1</a> right, and where are <code>360_w_broadway</code> and <code>275_sunrise_b</code>?</li>
+  <li><strong>Site locations:</strong> are the inferred places of <a class="ref" href="#sm-where-the-layouts-are">section 2.1</a> right, and where are <code>360_w_broadway</code> and <code>275_sunrise_b</code>?</li>
   <li><strong>The Pecos file name:</strong> this pack's layout file is <code>5675_pecos_combined.yaml</code>; the scenarios use <code>5675_pecos_sandbox_combined</code>. Are they the same file, renamed?</li>
   <li><strong>Batch runner:</strong> which program reads <code>batch_configs/</code>, and where are its results stored?</li>
-  <li><strong>Older events files:</strong> does another tool (for example <code>system_tests</code>, a dependency of <code>sim</code>) still read the event types the exerciser rejects?</li>
-  <li><strong>Sensor box on layouts without installation parameters:</strong> <code>550_w21st</code>, <code>275_sunrise_b</code>, <code>tiny_lot</code> and <code>multisize</code> run with the default 4.5 m × 2.0 m box. Does the vehicle estimator reject a longer simulated patron, and does it matter for those scenarios?</li>
-  <li><strong>The AGV simulation:</strong> does <code>SimAgvComponent</code> use the <code>agv.performance_limits</code>, lift and wheel-turn times of <code>params.yaml</code> as the cost model does, and does it model battery drain?</li>
-  <li><strong>Topic names:</strong> the exact names of the plan request and response topics (<code>common/topics_central.hpp</code>), needed by the replay test.</li>
+  <li><strong>Older events files:</strong> does another tool (for example <code>system_tests</code>, a dependency of <code>sim</code>) still read the action types the exerciser rejects?</li>
+  <li><strong>Manual confirmation:</strong> when an insert is confirmed through the REST API with its own <code>payload_id</code>, which id does the parked car get: the patron's or the confirmation's?</li>
+  <li><strong>Bay readiness after a retrieve:</strong> with <code>bay_readiness_ratio</code> 0.0, does the empty tray a retrieve leaves in the bay make the bay ready to insert?</li>
+  <li><strong>Sensor box on layouts without installation parameters:</strong> <code>550_w21st</code>, <code>275_sunrise_b</code>, <code>tiny_lot</code> and <code>multisize</code> run with the default 4.5 m × 2.0 m box. Does the vehicle estimator reject a longer simulated car, and does it matter for those scenarios?</li>
+  <li><strong>The simulated AGV:</strong> does it use the speeds, lift and wheel-turn times of <code>params.yaml</code> as the cost model does, and does it model battery drain?</li>
+  <li><strong>GUID bytes:</strong> the order in which a GUID string maps to its 16 bytes (<code>ParseGuid</code> in <code>common</code>), needed to type ids by hand.</li>
+  <li><strong>Topic names:</strong> the exact names of the plan request and response topics, needed by the replay test.</li>
 </ul>
 
 <h2 data-num id="sm-evidence-limits">Evidence limits</h2>
-<p>This tab is based on <code>sources/repomix-sim.xml</code> (the <code>sim</code> package without its tests, scenario files and 3D models), <code>sources/repomix-vis.xml</code>, <code>sources/repomix-launcher.xml</code> (launch files, <code>launcher/*.py</code>, all parameter files), <code>sources/repomix-scenario.xml</code> (the <code>scenario</code> package filtered to the Pecos files, the named behaviour scenarios, the event runner and the batch configurations; the <code>275_sunrise_b</code> files, the other per-site files and the payload readme were left out), and <code>sources/5675_pecos_combined.yaml</code>, with the <code>central</code>, <code>scheduler</code> and <code>interfaces</code> snapshots for the services and messages. The <code>agvhito</code>, <code>bay</code>, <code>vecs</code>, <code>vrc</code>, <code>sim_metrics</code>, <code>common</code> and <code>system_tests</code> packages, and the layout files other than Pecos, are not included; statements about them come from call sites. The site locations are inferences from the layout names, checked against the public sources linked in <a class="ref" href="#sm-where-the-layouts-are">section 1.1</a>. The scenario and events files of <a class="ref" href="#sm-a-scenario-for-the-running-example">section 4.5</a>, the replay test, the KPI rule and the improvements are proposals. No run of the simulator was observed.</p>
+<p>This tab is based on <code>sources/repomix-sim.xml</code> (the <code>sim</code> package without its tests, scenario files and 3D models), <code>sources/repomix-vis.xml</code>, <code>sources/repomix-launcher.xml</code> (launch files, <code>launcher/*.py</code>, all parameter files), <code>sources/repomix-scenario.xml</code> (the <code>scenario</code> package filtered to the Pecos files, the named behaviour scenarios, the event runner and the batch configurations; the <code>275_sunrise_b</code> files, the other per-site files and the GUID readme were left out), and <code>sources/5675_pecos_combined.yaml</code>, with the <code>central</code>, <code>scheduler</code> and <code>interfaces</code> snapshots for the services and messages. The <code>agvhito</code>, <code>bay</code>, <code>vecs</code>, <code>vrc</code>, <code>central_api</code>, <code>sim_metrics</code>, <code>common</code> and <code>system_tests</code> packages, and the layout files other than Pecos, are not included; statements about them come from call sites and scripts. The site locations are inferences from the layout names, checked against the public sources linked in <a class="ref" href="#sm-where-the-layouts-are">section 2.1</a>. The recipes are built from the code and scripts and were not run. The scenario and events files of <a class="ref" href="#sm-a-scenario-for-the-running-example">section 5.5</a> and of the recipes, the replay test, the KPI rule and the improvements are proposals.</p>

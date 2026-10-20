@@ -38,75 +38,14 @@ def _box(d, x, y, w, title, sub, col, rows=(), h=None, dashed=False):
 
 
 # --------------------------------------------------------------------------------------------------------------
-@figure("127_sim_architecture", "The simulation stack", DOC)
-def sim_architecture():
-    d = Doc("127_sim_architecture", "The simulation stack",
-            "Component diagram: the sim package replaces patrons, bay hardware and time; the real central, "
-            "scheduler and bay state machines run unchanged.")
-    # sim side (left)
-    scen = _box(d, 0, 0, 300, "scenario.yaml", "layout, initial_conditions, events", SIM,
-                ["layout: <name>", "initial_conditions: trays, agvs,", "  obstructions (or a file name)",
-                 "events: [{time, type, ...}]"])
-    simw = _box(d, 0, 170, 300, "sim_world", "Simulator, node /sim/sim_world", SIM,
-                ["ScenarioRunner: events by time", "Patrons: insert queue", "CollisionDetector: 3D OBBs",
-                 "SimClients: /central/* calls", "update every 50 ms (sim time)"])
-    bays = _box(d, 0, 410, 300, "bay_sim  x N", "BaySim, node /bay/b<N>/bay_sim", SIM,
-                ["load cells, IO-link, prox, radar,", "ODP observer, simulated doors", "auto confirm_insert / retrieve"])
-    clock = _box(d, 0, 590, 300, "clock", "SimClockRos, node /sim/clock", SIM,
-                 ["/clock every 5 ms (wall)", "real_time_factor (0 = pause)"])
-    # real stack (middle)
-    cen = _box(d, 420, 170, 330, "central", "dispatcher + garage_tracker (real)", STACK,
-               ["/central/start, retrieve, add_tray, ...", "/central/garage_snapshot", "/central/report",
-                "plan_request / plan_response topics"])
-    sch = _box(d, 860, 170, 260, "scheduler", "real; the code being refactored", SCH,
-               ["/scheduler/plan", "/scheduler/set_bay_readiness_ratio"])
-    baysm = _box(d, 420, 410, 330, "bay state machine x N", "bay package (real)", MACH,
-                 ["reads the simulated sensors", "/bay/b<N>/confirm_insert, report"])
-    agv = _box(d, 860, 410, 260, "SimAgv  x N", "agvhito, node /agv/a<N>/sim", SIM,
-               ["starts at the scenario's pose", "/agv/a<N>/commandlist", "AgvReport -> garage_tracker"],
-               dashed=True)
-    vis = _box(d, 860, 590, 260, "vis + RViz", "VisManager: marker topics", VIS,
-               ["subscribes to garage_snapshot,", "schedule, report, /sim/report"])
-    connect(d, [(scen.cx, scen.y1), (simw.cx, simw.y0)], kind="assoc", color=SIM, sw=1.6, label="ParseScenarioFile")
-    connect(d, [(simw.x1, simw.cy - 30), (cen.x0, simw.cy - 30)], kind="assoc", color=SIM, sw=1.6,
-            label="events")
-    connect(d, [(cen.x0, simw.cy + 30), (simw.x1, simw.cy + 30)], kind="assoc", color=STACK, sw=1.4, dash="5 4",
-            label="snapshot, report")
-    connect(d, [(simw.cx, simw.y1), (bays.cx, bays.y0)], kind="assoc", color=SIM, sw=1.6,
-            label="sim_offer_inserting_payload")
-    connect(d, [(bays.x1, bays.cy - 12), (baysm.x0, bays.cy - 12)], kind="assoc", color=SIM, sw=1.6,
-            label="sensors, doors")
-    connect(d, [(baysm.x0, bays.cy + 22), (bays.x1, bays.cy + 22)], kind="assoc", color=MACH, sw=1.4,
-            dash="5 4", label="report; confirm_*")
-    connect(d, [(cen.x1, cen.cy - 14), (sch.x0, cen.cy - 14)], kind="assoc", color=SCH, sw=1.8, label="Plan")
-    connect(d, [(baysm.cx, baysm.y0), (baysm.cx, cen.y1)], kind="assoc", color=MACH, sw=1.4, dash="5 4",
-            label="bay events")
-    connect(d, [(cen.x1 - 40, cen.y1), (cen.x1 - 40, agv.cy), (agv.x0, agv.cy)], kind="assoc", color=STACK, sw=1.6,
-            label="commands")
-    connect(d, [(agv.cx, agv.y0), (agv.cx, sch.y1 + 40), (cen.x1 - 10, sch.y1 + 40), (cen.x1 - 10, cen.y1)],
-            kind="assoc", color=MACH, sw=1.4, dash="5 4", label="AgvReport")
-    d.text(clock.x1 + 16, clock.cy - 8, "/clock  ->  every node with use_sim_time", size=11.5, family="mono",
-           fill=SIM)
-    d.text(clock.x1 + 16, clock.cy + 12, "all timers above run in simulated time", size=11, fill=T.muted)
-    frame(d, title="The simulation stack",
-          subtitle="The sim package stands in for patrons, bay hardware and time, and agvhito's SimAgv for the "
-                   "AGVs. Dispatch, the garage tracker, the bay state machines and the scheduler are the real nodes, "
-                   "so a scenario exercises the scheduler exactly as it runs on site.",
-          badge_key="as-built",
-          legend=[("box", SIM, "simulated"), ("box", STACK, "central (real)"), ("box", SCH, "scheduler (real)"),
-                  ("box", MACH, "bay state machines (real)"), ("dashbox", SIM, "simulated; code not in the snapshots"),
-                  ("arrow", T.fg2, "call or data"), ("dasharrow", T.fg2, "report or reply")])
-    return d
-
-
 # --------------------------------------------------------------------------------------------------------------
 @figure("128_sim_scenario_run", "One scenario run, step by step (animated)", DOC)
 def sim_scenario_run():
     d = Doc("128_sim_scenario_run", "One scenario run",
             "UML sequence diagram, animated: seeding, the scenario clock, events becoming service calls, the plan "
             "call, patrons and the simulated bay, and the collision check.")
-    parts = [("sim", "Simulator", SIM), ("cen", "central", STACK), ("sch", "scheduler", SCH),
-             ("bay", "BaySim + bay SM", MACH), ("agv", "SimAgv x N", SIM)]
+    parts = [("sim", "Simulator", SIM), ("cen", "central", T.fg2), ("sch", "scheduler", SCH),
+             ("bay", "bay_sim + bay nodes", SIM), ("agv", "SimAgv x N", SIM)]
     sub = {"sim": "/sim/sim_world", "cen": "dispatcher, tracker", "sch": "/scheduler/plan",
            "bay": "bay_sim, bay", "agv": "agvhito, /agv/a<N>/sim"}
     xs, x = {}, 80
@@ -179,7 +118,7 @@ def sim_scenario_run():
          "request and response on the plan_request / plan_response topics, and sends commands.")
     msg("cen", "sch", "Plan(PlanRequest)")
     msg("sch", "cen", "PlanResponse", ret=True)
-    msg("cen", "agv", "/agv/a<N>/commandlist", color=STACK)
+    msg("cen", "agv", "/agv/a<N>/commandlist", color=T.fg2)
     msg("agv", "cen", "AgvReport -> garage_snapshot", ret=True)
     step("Patrons: a patron_arrival event enters the insert queue. Each update offers the front of the queue to "
          "every bay; a BaySim accepts only when its bay is READY_TO_INSERT. It then fakes the vehicle driving on "
@@ -209,7 +148,9 @@ def sim_scenario_run():
           subtitle="From seeding the garage to the last event. Messages stay on screen; the highlighted band is the "
                    "current step. All times are simulated time from /clock.",
           badge_key="as-built",
-          legend=[("arrow", T.fg2, "call or command"), ("dep", T.muted, "reply, report or event")])
+          legend=[("box", SIM, "simulated stand-in"), ("box", T.fg2, "production software"),
+                  ("box", SCH, "the scheduler"), ("arrow", T.fg2, "call or command"),
+                  ("dep", T.muted, "reply, report or event")])
     return d
 
 
@@ -303,7 +244,7 @@ def sim_verification_loop():
     d = Doc("130_sim_verification_loop", "Using the simulator to verify the refactor",
             "Three checks: record realistic plan calls on the baseline, replay them offline through both "
             "schedulers, and rerun the scenarios closed loop on the candidate.")
-    BASE, CAND, CHK = T.muted, T.sky, T.green
+    BASE, CAND, CHK = T.muted, T.green, T.fg2
     # row 1: record
     s1 = _box(d, 0, 0, 230, "scenario set", "YAML, real-site layouts", T.fg2,
               ["retrieve with blockers,", "insert queue, clean, ..."])
@@ -342,6 +283,6 @@ def sim_verification_loop():
                    "checks that the whole stack still behaves, and is not. Dispatch already publishes every plan "
                    "request and response for bagging.",
           badge_key="proposed",
-          legend=[("box", BASE, "baseline (pinned commit)"), ("box", CAND, "candidate (refactor branch)"),
-                  ("box", CHK, "check")])
+          legend=[("box", BASE, "baseline scheduler (pinned commit)"),
+                  ("box", CAND, "candidate scheduler (refactor branch)"), ("box", CHK, "comparison")])
     return d

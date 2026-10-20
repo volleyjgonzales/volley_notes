@@ -97,6 +97,10 @@ def frame(doc: Doc, *, title: str, subtitle: str | None = None, badge_key: str |
 def legend_glyph(doc: Doc, kind: str, color: str, x: float, cy: float) -> float:
     """Draw a legend glyph whose left edge is x, centred on cy. Returns glyph width."""
     L = "labels"
+    if kind.startswith("icon:"):
+        from icons import icon
+        icon(doc, kind[5:], x + 11, cy, 16, color)
+        return 22
     if kind == "box":
         doc.rect(x, cy - 7, 22, 14, rx=3, fill=T.tint(color, 0.18, T.bg), stroke=color, sw=1.4, layer=L)
         return 22
@@ -153,7 +157,7 @@ def legend_block(doc: Doc, x0: float, y0: float, width: float, items: Sequence, 
     for kind, color, label in items:
         gw = {"box": 22, "fill": 22, "dashbox": 22, "dot": 12, "ring": 16, "hollow": 14, "line": 28, "dash": 28, "arrow": 32,
               "dasharrow": 32, "route": 32, "assoc": 32, "dep": 32, "comp": 36, "agg": 36, "inh": 34,
-              "real": 34}[kind]
+              "real": 34}.get(kind, 22)
         entries.append((kind, color, label, gw + 9 + text_width(label, size, "sans", 400)))
     inner_w = width - 2 * pad
     title_w = (text_width(title.upper(), 10.5, "mono", 600) + 0.8 * len(title) + 18) if title else 0
