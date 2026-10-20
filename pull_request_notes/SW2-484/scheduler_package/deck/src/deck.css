@@ -245,3 +245,29 @@ ul.tight li { margin-bottom: 12px; }
 .steptabs:has(.tab-b.visible) .tab-a { background: var(--card); border-color: var(--line-strong); color: var(--muted); }
 .steptabs .tab-b.visible { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .tree .d.c-red { color: var(--red); } .tree .d.c-accent { color: var(--accent); }
+.steplab { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 8px; }
+table.mini { font-size: 16px; }
+table.mini td, table.mini th { padding: 6px 10px; }
+table.timesteps { font-size: 13.5px; width: 100%; table-layout: fixed; }
+table.timesteps th, table.timesteps td { padding: 5px 4px; text-align: center; font-family: var(--font-mono); }
+table.timesteps th:first-child { text-align: left; width: 80px; }
+table.timesteps td.wait { color: var(--faint); }
+table.timesteps td.act { color: var(--violet); font-weight: 700; }
+/* pipeline slide: highlight the stages whose output the current step shows */
+section.design .pipe .st, section.design .band > div { transition: opacity .3s, box-shadow .3s, background-color .3s; }
+section.design:has(.p2.current-fragment) .pipe .st:not(.tp),
+section.design:has(.p3.current-fragment) .pipe .st:not(.mp),
+section.design:has(.p3a.current-fragment) .pipe .st:not(.mp),
+section.design:has(.p4.visible) .pipe .st:not(.ag) { opacity: .38; }
+section.design:has(.p2.current-fragment) .pipe .st.tp,
+section.design:has(.p3.current-fragment) .pipe .st.mp,
+section.design:has(.p3a.current-fragment) .pipe .st.mp,
+section.design:has(.p4.visible) .pipe .st.ag { box-shadow: 0 0 0 3px var(--c); background: color-mix(in srgb, var(--c) 10%, var(--card)); }
+section.design:has(.p2.current-fragment) .band > div:not(.ev),
+section.design:has(.p3.current-fragment) .band > div:not(.mo),
+section.design:has(.p3a.current-fragment) .band > div:not(.mo),
+section.design:has(.p4.visible) .band > div:not(.ad) { opacity: .38; }
+section.design:has(.p2.current-fragment) .band .ev { background: color-mix(in srgb, var(--accent) 18%, transparent); border-style: solid; font-weight: 700; }
+section.design:has(.p3a.current-fragment) .band .mo, section.design:has(.p3.current-fragment) .band .mo { background: color-mix(in srgb, var(--violet) 18%, transparent); border-style: solid; font-weight: 700; }
+section.design:has(.p4.visible) .band .ad { background: color-mix(in srgb, var(--pink) 18%, transparent); border-style: solid; font-weight: 700; }
+.fig.h220 { height: 220px; }

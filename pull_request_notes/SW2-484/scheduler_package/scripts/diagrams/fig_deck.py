@@ -621,7 +621,57 @@ def d05_agvs():
     save(d)
 
 
-ALL = [d01_scenario, d02_actions, d03_event_dag, d04_trays, d05_agvs]
+
+# --------------------------------------------------------------------------------------------------------------
+# d06  the pipeline slide's scenario (static): one retrieve, two AGVs, what has to move
+# --------------------------------------------------------------------------------------------------------------
+def _scenario_base(name, title):
+    d = Doc(name, title, "Static map for the pipeline slide.")
+    m = base_map(d, 27)
+    p = Play(m)
+    p.tray("T21", 21, chip_pos="tr")
+    p.tray("T17", 19, payload=True, emphasis=True, chip_pos="tr")
+    p.agv("AGV-1", 26, label_side="below")
+    p.agv("AGV-2", 13, label_side="below")
+    p.draw()
+    bay_pill(d, m, "B21 holds empty tray T21")
+    return d, m
+
+
+def _route_to_bay(m, ids, dy):
+    """Points along ids (offset dy), ending at the right edge of bay B21 so the arrow tip stays visible."""
+    pts = [(m.P(i)[0], m.P(i)[1] + dy) for i in ids[:-1]]
+    bx, by = m.P(21)
+    pts.append((bx + (STALL_L / 2) * m.s + 14, by + dy))
+    return pts
+
+
+def d06_pipeline_scenario():
+    d, m = _scenario_base("d06_pipeline_scenario", "One retrieve job")
+    pts = _route_to_bay(m, [19, 18, 22, 41, 21], 14)
+    d.path(pts_to_path(pts, 8), stroke=T.bg_deep, sw=7, layer="over", opacity=0.85)
+    arrow(d, pts, T.pink, sw=3.2, size=13, layer="over")
+    save(d)
+
+
+def d07_pipeline_motion():
+    d, m = _scenario_base("d07_pipeline_motion", "The motion plan in space")
+    A1, A2 = T.green, T.violet
+
+    def leg(ids, color, *, loaded, dy, to_bay=False):
+        pts = _route_to_bay(m, ids, dy) if to_bay else [(m.P(i)[0], m.P(i)[1] + dy) for i in ids]
+        d.path(pts_to_path(pts, 8), stroke=T.bg_deep, sw=7 if loaded else 5, layer="over", opacity=0.85)
+        arrow(d, pts, color, sw=3.2 if loaded else 2, dash=None if loaded else "5 4", size=12 if loaded else 10,
+              layer="over")
+    leg([26, 25, 22, 41, 21], A1, loaded=False, dy=-16, to_bay=True)    # AGV-1 to the bay, empty
+    leg([21, 41, 22, 23], A1, loaded=True, dy=-5)                       # AGV-1 carries T21 out
+    leg([13, 18, 19], A2, loaded=False, dy=-12)                         # AGV-2 to P19, empty
+    leg([19, 18, 22, 41, 21], A2, loaded=True, dy=12, to_bay=True)      # AGV-2 carries T17 in
+    x, y = m.P(18)
+    label_pill(d, x - 46, y + 2, "AGV-2 waits", color=A2, bg=T.bg_deep, border=A2, size=11)
+    save(d)
+
+ALL = [d01_scenario, d02_actions, d03_event_dag, d04_trays, d05_agvs, d06_pipeline_scenario, d07_pipeline_motion]
 
 if __name__ == "__main__":
     for f in ALL:

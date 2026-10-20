@@ -148,6 +148,85 @@
   </aside>
 </section>
 
+<section class="design">
+  <div class="kicker">Design</div>
+  <h2>The planning pipeline: from jobs to an executable action graph</h2>
+  <div class="pipe">
+    <div class="st tp" style="--c:var(--accent)"><div class="n">1 · task planning</div><h3>Job expansion</h3><div class="q">What must happen?</div><div class="w">Converts each job into events, for example a bay transition and a tray move, with destinations not yet assigned.</div></div>
+    <div class="st tp" style="--c:var(--accent)"><div class="n">2 · task planning</div><h3>Tray assignment</h3><div class="q">Which tray moves where, and which trays obstruct it?</div><div class="w">Assigns trays and destinations, and adds moves for blocking trays.</div></div>
+    <div class="st tp" style="--c:var(--accent)"><div class="n">3 · task planning</div><h3>AGV assignment</h3><div class="q">Which AGV performs each tray move?</div><div class="w">Assigns an AGV to each tray move and adds the drive, lift and lower events.</div></div>
+    <div class="st mp" style="--c:var(--violet)"><div class="n">4 · motion planning</div><h3>Motion planning</h3><div class="q">Which paths and timings avoid collisions?</div><div class="w">CHUGG computes collision-free timed paths, one event at a time.</div></div>
+    <div class="st ag" style="--c:var(--pink)"><div class="n">5 · action graph</div><h3>Action graph</h3><div class="q">Which ordering must execution respect?</div><div class="w">Converts the timed paths into the dependency graph executed by Dispatch.</div></div>
+  </div>
+  <div class="band">
+    <div class="ev">task planning builds the event DAG</div>
+    <div class="mo">timed motions</div>
+    <div class="ad">action DAG</div>
+  </div>
+  <div class="swap" style="margin-top:18px">
+    <div class="fragment fade-out" data-fragment-index="0">
+      <p class="callout" style="margin:0">Task planning (stages 1-3) accounts for <strong>78% of the <code>scheduler</code> package</strong>. Motion planning is a separate library (<code>motion_planner</code>). The refactor addresses stages 2 and 3.</p>
+    </div>
+    <div class="p1 fragment fade-in-then-out" data-fragment-index="0">
+      <div class="steplab">The example used in the next steps: one retrieve job, two AGVs</div>
+      <div class="cols" style="grid-template-columns:1.25fr 1fr;gap:28px;align-items:start">
+        <div class="fig h220" data-fig="d06_pipeline_scenario"></div>
+        <div class="small" style="font-size:17px;line-height:1.4">
+          <p style="margin:0 0 8px"><strong>Job:</strong> retrieve the vehicle on tray T17 (stall P19) at bay B21. Bay B21 still holds the empty tray T21.</p>
+          <p style="margin:0;color:var(--muted)">The following steps show how the planner turns this request into a plan.</p>
+        </div>
+      </div>
+    </div>
+    <div class="p2 fragment fade-in-then-out" data-fragment-index="1">
+      <div class="steplab">Stages 1-3 hand over an event DAG; stage 4 reads it as a motion problem</div>
+      <p style="margin:0 0 8px;font-size:16px"><strong>Job:</strong> retrieve the vehicle on tray T17 (stall P19) at bay B21.</p>
+      <div class="cols" style="grid-template-columns:1fr 1fr;gap:48px;align-items:start">
+        <div><svg class="dg" viewBox="0 0 560 190" style="width:100%"><defs><marker id="ahE" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#38bdf8"/></marker></defs><rect class="box" x="0" y="10" width="125" height="78" rx="8" style="stroke:var(--accent)"/><text x="10" y="32" class="mono" style="font-size:13px;fill:var(--accent)">e1</text><text x="10" y="54" style="font-size:15px;font-weight:600">bay B21</text><text x="10" y="74" class="sub" style="font-size:13.5px">retrieve mode</text><rect class="box" x="140" y="10" width="125" height="78" rx="8" style="stroke:var(--accent)"/><text x="150" y="32" class="mono" style="font-size:13px;fill:var(--accent)">e2</text><text x="150" y="54" style="font-size:15px;font-weight:600">tray T21</text><text x="150" y="74" class="sub" style="font-size:13.5px">B21 → P23</text><text x="255" y="32" text-anchor="end" class="mono" style="font-size:12px;fill:var(--fg-2)">AGV-1</text><rect class="box" x="280" y="10" width="125" height="78" rx="8" style="stroke:var(--accent)"/><text x="290" y="32" class="mono" style="font-size:13px;fill:var(--accent)">e3</text><text x="290" y="54" style="font-size:15px;font-weight:600">tray T17</text><text x="290" y="74" class="sub" style="font-size:13.5px">P19 → B21</text><text x="395" y="32" text-anchor="end" class="mono" style="font-size:12px;fill:var(--fg-2)">AGV-2</text><rect class="box" x="420" y="10" width="125" height="78" rx="8" style="stroke:var(--accent)"/><text x="430" y="32" class="mono" style="font-size:13px;fill:var(--accent)">e4</text><text x="430" y="54" style="font-size:15px;font-weight:600">bay B21</text><text x="430" y="74" class="sub" style="font-size:13.5px">hand over car</text><path d="M125 49H136" class="arrow" style="stroke:var(--accent)" marker-end="url(#ahE)"/><path d="M265 49H276" class="arrow" style="stroke:var(--accent)" marker-end="url(#ahE)"/><path d="M405 49H416" class="arrow" style="stroke:var(--accent)" marker-end="url(#ahE)"/><text x="0" y="122" class="sub" style="font-size:14px">e2 → e3: bay B21 must be empty before tray T17 enters it.</text><text x="0" y="146" class="sub" style="font-size:14px">The order is known; the times are not.</text></svg></div>
+        <table class="mini">
+          <tr><th>Agent</th><th>Start</th><th>Goals, in order</th><th>Not before</th></tr>
+          <tr><td>AGV-1</td><td>W26</td><td>lift T21 at B21, lower it at P23</td><td>e1</td></tr>
+          <tr><td>AGV-2</td><td>W13</td><td>lift T17 at P19, lower it at B21</td><td>e2 done</td></tr>
+          <tr><td>Bay B21</td><td>ready to insert</td><td>retrieve mode; hand over after e3</td><td>&ndash;</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="p3a fragment fade-in-then-out" data-fragment-index="2">
+      <div class="steplab">Stage 4 plans the motions: the routes, in space</div>
+      <div class="cols" style="grid-template-columns:1.25fr 1fr;gap:28px;align-items:start">
+        <div class="fig h220" data-fig="d07_pipeline_motion"></div>
+        <div class="small" style="font-size:17px;line-height:1.45">
+          <p style="margin:0 0 8px"><strong style="color:var(--green)">AGV-1</strong> drives to bay B21, lifts the empty tray T21 and carries it to stall P23.</p>
+          <p style="margin:0 0 8px"><strong style="color:var(--violet)">AGV-2</strong> drives to stall P19 and lifts T17, then waits at W18 until AGV-1 has passed W41 and W22, and carries T17 into B21.</p>
+          <p style="margin:0;color:var(--muted)">Dashed: driving empty; solid: carrying a tray. The next step adds the timing.</p>
+        </div>
+      </div>
+    </div>
+    <div class="p3 fragment fade-in-then-out" data-fragment-index="3">
+      <div class="steplab">Stage 4 returns timed motions: where each agent is at every step</div>
+      <table class="timesteps">
+        <tr><th>t</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th><th>13</th></tr>
+        <tr><th>AGV-1</th><td>W26</td><td>W25</td><td>W22</td><td>W41</td><td>B21</td><td class="act">B21 ↑T21</td><td>W41</td><td>W22</td><td>P23</td><td class="act">P23 ↓T21</td><td>P23</td><td class="wait">P23</td><td class="wait">P23</td><td class="wait">P23</td></tr>
+        <tr><th>AGV-2</th><td>W13</td><td>W18</td><td>P19</td><td class="act">P19 ↑T17</td><td>W18</td><td class="wait">W18</td><td class="wait">W18</td><td class="wait">W18</td><td class="wait">W18</td><td>W22</td><td>W41</td><td>B21</td><td class="act">B21 ↓T17</td><td>B21</td></tr>
+        <tr><th>Bay B21</th><td>retrieve</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>hand over</td></tr>
+      </table>
+      <p class="tiny" style="margin-top:8px">One column per time step (illustrative: one edge or one lift per step). ↑ lift, ↓ lower; grey = waiting. AGV-2 waits at W18 from step 4 to 8 until AGV-1 has passed W41 and W22 and left W22 for P23.</p>
+    </div>
+    <div class="p4 fragment fade-in" data-fragment-index="4">
+      <div class="steplab">Stage 5 returns an action DAG: no times, only the order Dispatch must respect</div>
+      <svg class="dg" viewBox="0 0 1150 200" style="width:100%"><defs><marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker><marker id="ahP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ec4899"/></marker></defs><text x="0" y="35" class="mono" style="font-size:14px;font-weight:600">Bay</text><rect class="box" x="95" y="13" width="100" height="34" rx="7"/><text x="145.0" y="35" text-anchor="middle" class="mono" style="font-size:12.5px">retrieve mode</text><rect class="box" x="991" y="13" width="100" height="34" rx="7"/><text x="1041.0" y="35" text-anchor="middle" class="mono" style="font-size:12.5px">hand over</text><text x="0" y="100" class="mono" style="font-size:14px;font-weight:600">AGV-1</text><rect class="box" x="95" y="78" width="100" height="34" rx="7"/><text x="145.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W26→B21 (4)</text><rect class="box" x="207" y="78" width="100" height="34" rx="7"/><text x="257.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">lift T21</text><path d="M195 95H204" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="319" y="78" width="100" height="34" rx="7"/><text x="369.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">B21→W41</text><path d="M307 95H316" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="431" y="78" width="100" height="34" rx="7"/><text x="481.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W41→W22</text><path d="M419 95H428" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="543" y="78" width="100" height="34" rx="7"/><text x="593.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W22→P23</text><path d="M531 95H540" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="655" y="78" width="100" height="34" rx="7"/><text x="705.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">lower T21</text><path d="M643 95H652" class="arrow" marker-end="url(#ahA)"/><text x="0" y="165" class="mono" style="font-size:14px;font-weight:600">AGV-2</text><rect class="box" x="95" y="143" width="100" height="34" rx="7"/><text x="145.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W13→P19 (2)</text><rect class="box" x="207" y="143" width="100" height="34" rx="7"/><text x="257.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">lift T17</text><path d="M195 160H204" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="319" y="143" width="100" height="34" rx="7"/><text x="369.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">P19→W18</text><path d="M307 160H316" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="655" y="143" width="100" height="34" rx="7"/><text x="705.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W18→W22</text><path d="M419 160H652" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="767" y="143" width="100" height="34" rx="7"/><text x="817.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W22→W41</text><path d="M755 160H764" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="879" y="143" width="100" height="34" rx="7"/><text x="929.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W41→B21</text><path d="M867 160H876" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="991" y="143" width="100" height="34" rx="7"/><text x="1041.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">lower T17</text><path d="M979 160H988" class="arrow" marker-end="url(#ahA)"/><path d="M145.0 47.0V62.5H257.0V75.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><path d="M593.0 112.0V127.5H705.0V140.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><text x="616" y="121" style="font-size:12.5px;fill:#ec4899">W22 free</text><path d="M1041.0 143.0V50.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><text x="0" y="196" class="sub" style="font-size:13px">Boxes: actions; grey arrows: each agent's own order; pink: an agent waits for another. AGV-2 also needs W41 and B21 after AGV-1: those edges are implied by the W22 edge, so Reduce() removes them.</text></svg>
+    </div>
+  </div>
+  <aside class="notes">
+    The event DAG is the central data structure: a graph of planned events (tray moves, AGV moves, bay transitions)
+    with must-happen-before edges. Each task-planning stage reads it and modifies it in place. This in-place
+    modification is the principal source of the coupling the refactor addresses.
+    Step 2 introduces one small retrieve on the map. Steps 3 to 6 follow it: the event DAG read as a motion
+    problem; the routes in space; the timed motions; and the action DAG. In short: the event DAG (order, no times) read as a
+    motion problem; the timed motions CHUGG returns (AGV-2 waits at W18 for AGV-1); and the action DAG, where that
+    wait becomes one edge, "W22 free". Times are illustrative steps, not seconds.
+  </aside>
+</section>
+
 <section>
   <div class="kicker">Inputs and outputs</div>
   <h2>From a job to an ordered graph of actions</h2>
@@ -164,29 +243,6 @@
     colour) are what make the plan safe without a clock: the tray enters the bay only once the bay is in retrieve mode,
     and the hand-over happens only once the tray is lowered. Dispatch releases each action as soon as its
     predecessors have completed.
-  </aside>
-</section>
-
-<section>
-  <div class="kicker">Design</div>
-  <h2>Three phases, five stages, in one <code style="font-size:.8em">Plan()</code> call</h2>
-  <div class="pipe">
-    <div class="st" style="--c:var(--accent)"><div class="n">1 · task planning</div><h3>Job expansion</h3><div class="q">What must happen?</div><div class="w">Converts each job into events, for example a bay transition and a tray move, with destinations not yet assigned.</div></div>
-    <div class="st" style="--c:var(--accent)"><div class="n">2 · task planning</div><h3>Tray assignment</h3><div class="q">Which tray moves where, and which trays obstruct it?</div><div class="w">Assigns trays and destinations, and adds moves for blocking trays.</div></div>
-    <div class="st" style="--c:var(--accent)"><div class="n">3 · task planning</div><h3>AGV assignment</h3><div class="q">Which AGV performs each tray move?</div><div class="w">Assigns an AGV to each tray move and adds the drive, lift and lower events.</div></div>
-    <div class="st" style="--c:var(--violet)"><div class="n">4 · motion planning</div><h3>Motion planning</h3><div class="q">Which paths and timings avoid collisions?</div><div class="w">CHUGG computes collision-free timed paths, one event at a time.</div></div>
-    <div class="st" style="--c:var(--pink)"><div class="n">5 · action graph</div><h3>Action graph</h3><div class="q">Which ordering must execution respect?</div><div class="w">Converts the timed paths into the dependency graph executed by Dispatch.</div></div>
-  </div>
-  <div class="band">
-    <div class="ev">task planning builds the event DAG</div>
-    <div class="mo">timed motions</div>
-    <div class="ad">action DAG</div>
-  </div>
-  <p class="callout" style="margin-top:22px">Task planning (stages 1-3) accounts for <strong>78% of the <code>scheduler</code> package</strong>. Motion planning is a separate library (<code>motion_planner</code>). The refactor addresses stages 2 and 3.</p>
-  <aside class="notes">
-    The event DAG is the central data structure: a graph of planned events (tray moves, AGV moves, bay transitions)
-    with must-happen-before edges. Each task-planning stage reads it and modifies it in place. This in-place
-    modification is the principal source of the coupling the refactor addresses.
   </aside>
 </section>
 
@@ -446,6 +502,45 @@
 </section>
 
 <section>
+  <div class="kicker">Architecture · current</div>
+  <h2>Scheduler today: one class, six responsibilities</h2>
+  <svg class="dg" viewBox="0 0 1180 470">
+    <rect class="box" x="10" y="10" width="760" height="450" rx="14" style="fill:none"/>
+    <text x="34" y="44" class="mono sub" style="font-size:18px">class Scheduler · 55 methods · 8 members · scheduler.cpp</text>
+    <g>
+      <rect class="box" x="34" y="66" width="712" height="54" rx="8"/><text x="52" y="91" class="lbl" style="font-size:17px">Job expansion</text><text x="52" y="111" class="sub mono" style="font-size:13px">Plan&lt;Type&gt;Job ×11, PlanOpenBayDoor, PlanUnstashWaypointTraysJob</text><rect x="600" y="80" width="130" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="112" class="sub" text-anchor="end">13</text>
+      <rect class="box focus-line" x="34" y="128" width="712" height="54" rx="8"/><text x="52" y="153" class="lbl" style="font-size:17px">Tray assignment</text><text x="52" y="173" class="sub mono" style="font-size:13px">DoTrayAssignments, ResolveBlockingTrays, Assign…, heading helpers</text><rect x="630" y="142" width="100" height="14" rx="3" style="fill:var(--accent)"/><text x="740" y="174" class="sub" text-anchor="end">10</text>
+      <rect class="box focus-line" x="34" y="190" width="712" height="54" rx="8"/><text x="52" y="215" class="lbl" style="font-size:17px">AGV assignment</text><text x="52" y="235" class="sub mono" style="font-size:13px">DoAgvAssignments, cost estimates, path repair, AMIGA dependencies</text><rect x="580" y="204" width="150" height="14" rx="3" style="fill:var(--accent)"/><text x="740" y="236" class="sub" text-anchor="end">15</text>
+      <rect class="box" x="34" y="252" width="712" height="54" rx="8"/><text x="52" y="277" class="lbl" style="font-size:17px">Orchestration and checks</text><text x="52" y="297" class="sub mono" style="font-size:13px">Plan, SanityCheckEvents, FailJob, GetEventDag, DagToVec, PrintDags</text><rect x="670" y="266" width="60" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="298" class="sub" text-anchor="end">6</text>
+      <rect class="box" x="34" y="314" width="712" height="54" rx="8"/><text x="52" y="339" class="lbl" style="font-size:17px">Motion planning and response</text><text x="52" y="359" class="sub mono" style="font-size:13px">PlanMotions, ResponseFromTrajectories</text><rect x="710" y="328" width="20" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="360" class="sub" text-anchor="end">2</text>
+      <rect class="box" x="34" y="376" width="712" height="54" rx="8"/><text x="52" y="401" class="lbl" style="font-size:17px">Services, configuration, accessors</text><text x="52" y="421" class="sub mono" style="font-size:13px">constructor, InitRetrievalHeadings, report, ratio callback, getters</text><rect x="640" y="390" width="90" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="422" class="sub" text-anchor="end">9</text>
+    </g>
+    <rect x="800" y="10" width="370" height="450" rx="12" class="box"/>
+    <text x="822" y="46" style="font-size:18px;font-weight:600">Members, by lifetime</text>
+    <text x="822" y="80" class="sub" style="font-size:15px">fixed per site, built once</text>
+    <text x="836" y="106" class="mono" style="font-size:15px">layout_, pg_, gg_, table_,</text>
+    <text x="836" y="128" class="mono" style="font-size:15px">cost_model_</text>
+    <text x="822" y="164" class="sub" style="font-size:15px">runtime configuration</text>
+    <text x="836" y="190" class="mono" style="font-size:15px">bay_readiness_ratio_</text>
+    <text x="836" y="212" class="sub" style="font-size:13px">set by a ROS service callback</text>
+    <text x="836" y="238" class="mono" style="font-size:15px">costaudit_</text>
+    <text x="822" y="274" class="sub" style="font-size:15px">infrastructure</text>
+    <text x="836" y="300" class="mono" style="font-size:15px">logger_</text>
+    <text x="822" y="346" style="font-size:16px;font-weight:600">Per-call state is not a member:</text>
+    <text x="822" y="372" class="sub" style="font-size:15px">one ScheduleContext per Plan(),</text>
+    <text x="822" y="394" class="sub" style="font-size:15px">passed to every method as a</text>
+    <text x="822" y="416" class="sub" style="font-size:15px">shared_ptr and modified in place.</text>
+  </svg>
+  <p class="tiny" style="margin-top:4px">Method counts from <code>scheduler.hpp</code>; the grouping into responsibilities is this review's. Accent: the two responsibilities this ticket extracts.</p>
+  <aside class="notes">
+    The class is cohesive in data, not in purpose: every method can reach the layout, the graphs, the collision table
+    and the shared context, so every method can call every other. That is what makes the assignment stages hard to
+    test or replace on their own. The good news for the refactor is that per-call state is already separated from
+    the long-lived members: Plan() is const and builds a fresh context each call.
+  </aside>
+</section>
+
+<section>
   <div class="kicker">Target architecture</div>
   <h2><code style="font-size:.8em">Plan()</code> as an orchestrator of replaceable stages</h2>
   <svg class="dg" viewBox="0 0 1180 500">
@@ -479,6 +574,48 @@
     become an explicit GarageServices object passed as an argument.
   </aside>
 </section>
+
+<section>
+  <div class="kicker">Architecture · proposed</div>
+  <h2>Scheduler after the refactor: a thin orchestrator</h2>
+  <div class="cols w40" style="align-items:start">
+<pre data-lang="cpp"><code>class Scheduler {                     // sketch
+ public:
+  Scheduler(GarageServices services, SolverSet solvers);
+  PlanResponse Plan(const PlanRequest&amp; req) const;
+ private:
+  GarageServices services_;   // layout, graphs, cost model
+  std::unique_ptr&lt;tray_assignment::Solver&gt; tray_solver_;
+  std::unique_ptr&lt;agv_assignment::Solver&gt;  agv_solver_;
+  SchedulerConfig config_;    // bay readiness ratio, audit
+};
+
+PlanResponse Scheduler::Plan(const PlanRequest&amp; req) const {
+  PlanContext ctx = MakePlanContext(req, services_);
+  ExpandJobs(ctx, req.pending_jobs);         // job_expansion/
+  auto trays = tray_solver_-&gt;Solve({ctx.initial_state, ctx.event_dag});
+  if(!trays) return FailAll(ctx, trays.error());
+  ApplyTrayAssignment(ctx, *trays);
+  if(auto r = agv_solver_-&gt;SolveInPlace(
+         {ctx.initial_state, ctx.first_event_by_tray}, ctx.event_dag); !r)
+    return FailAll(ctx, r.error());
+  auto motions = PlanMotions(ctx, services_); // motion_planning/
+  return BuildResponse(ctx, BuildActionDag(ctx, motions));
+}</code></pre>
+    <div class="stack">
+      <div class="card"><h3>One responsibility left</h3><p>The class sequences the stages and owns the solver objects. The stage logic moves to stage folders; the 55 methods become a handful.</p></div>
+      <div class="card"><h3>Dependencies passed in</h3><p>Services and solvers arrive through the constructor. A test builds a <code>Scheduler</code> with a fake or candidate solver, or calls a solver with no <code>Scheduler</code> at all.</p></div>
+      <div class="card"><h3>Lifetimes made explicit</h3><p>Immutable site services, runtime configuration and per-call <code>PlanContext</code> become three separate types instead of members and a shared pointer.</p></div>
+    </div>
+  </div>
+  <aside class="notes">
+    SolverSet is a small struct of the two solver pointers; the default set holds the DefaultSolvers that reproduce
+    today's behaviour. The code is a sketch: names follow the proposal, error handling uses stdx::Expected, and the
+    stages run in the same order as today. Motion planning and the action graph keep their current functions; their
+    interfaces are Part 4.
+  </aside>
+</section>
+
 
 <section>
   <div class="kicker">Tray assignment interface</div>
@@ -606,6 +743,80 @@ struct Result {
   <aside class="notes">
     SW2-769 has already reorganized the package; its structure should first be checked against this layout. The test
     tree mirrors the folders, so each stage's tests link only that stage.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Architecture · dependency rules</div>
+  <h2>Dependencies point one way</h2>
+  <div class="cols w60" style="align-items:center">
+  <svg class="dg" viewBox="0 0 760 480">
+    <defs><marker id="ahD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker></defs>
+    <rect class="box" x="10" y="10" width="740" height="64" rx="10"/><text x="30" y="40" class="mono lbl" style="font-size:17px">ros/</text><text x="30" y="62" class="sub" style="font-size:14px">ROS node and service; messages ↔ internal types</text>
+    <rect class="box focus-line" x="10" y="104" width="740" height="64" rx="10"/><text x="30" y="134" class="mono lbl" style="font-size:17px">Scheduler::Plan()</text><text x="30" y="156" class="sub" style="font-size:14px">the orchestrator: sequences stages, owns solvers</text>
+    <rect class="box" x="10" y="198" width="140" height="50" rx="8"/><text x="80" y="230" text-anchor="middle" class="mono" style="font-size:13px">job_expansion</text>
+    <rect class="box focus-line" x="160" y="198" width="140" height="50" rx="8"/><text x="230" y="230" text-anchor="middle" class="mono" style="font-size:13px">tray_assignment</text>
+    <rect class="box focus-line" x="310" y="198" width="140" height="50" rx="8"/><text x="380" y="230" text-anchor="middle" class="mono" style="font-size:13px">agv_assignment</text>
+    <rect class="box" x="460" y="198" width="140" height="50" rx="8"/><text x="530" y="230" text-anchor="middle" class="mono" style="font-size:13px">motion_planning</text>
+    <rect class="box" x="610" y="198" width="140" height="50" rx="8"/><text x="680" y="230" text-anchor="middle" class="mono" style="font-size:13px">action_graph</text>
+    <text x="380" y="190" text-anchor="middle" class="sub" style="font-size:13px"></text>
+    <rect class="box" x="10" y="310" width="740" height="64" rx="10"/><text x="30" y="340" class="mono lbl" style="font-size:17px">core/</text><text x="30" y="362" class="sub" style="font-size:14px">GarageServices, shared types, vocabulary.hpp (common_ros names translated)</text>
+    <rect class="box" x="10" y="404" width="740" height="64" rx="10" style="stroke-dasharray:6 4"/><text x="30" y="434" class="mono lbl" style="font-size:16px">planner_core · motion_planner · common_ros · interfaces</text><text x="30" y="456" class="sub" style="font-size:14px">external packages, unchanged except planner_core renames</text>
+    <path d="M380 74V100" class="arrow" marker-end="url(#ahD)"/>
+    <path d="M380 168V194" class="arrow" marker-end="url(#ahD)"/><text x="400" y="186" class="sub" style="font-size:13px">stages: no stage includes another stage's headers</text>
+    <path d="M80 248V306" class="arrow" marker-end="url(#ahD)"/><path d="M230 248V306" class="arrow" marker-end="url(#ahD)"/><path d="M380 248V306" class="arrow" marker-end="url(#ahD)"/><path d="M530 248V306" class="arrow" marker-end="url(#ahD)"/><path d="M680 248V306" class="arrow" marker-end="url(#ahD)"/>
+    <path d="M380 374V400" class="arrow" marker-end="url(#ahD)"/>
+  </svg>
+    <div class="stack">
+      <div class="card"><h3>Rules</h3><p>A layer may use the layers below it, never above. Stages meet only through <code>core/</code> types and the orchestrator. ROS messages stop at <code>ros/</code>.</p></div>
+      <div class="card"><h3>Enforced, not documented</h3><p>One CMake library target per stage, linking only <code>core</code>; a CI check rejects an include of another stage's private headers.</p></div>
+      <div class="card"><h3>What it buys</h3><p>A stage can be built, tested and later promoted to its own package without untangling the others.</p></div>
+    </div>
+  </div>
+  <aside class="notes">
+    This is a layered (ports-and-adapters style) arrangement: ros/ is the adapter to the outside world, the stages
+    are the domain logic, core/ holds what they share. The current code has no such boundaries: everything is one
+    target and one translation unit. Stages may call the external libraries directly (the tray solver uses the
+    motion_planner searches), which is allowed because those sit at the bottom.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Architecture · data ownership</div>
+  <h2>Who reads and writes the plan, stage by stage</h2>
+  <table style="font-size:17px">
+    <tr><th>Stage</th><th>Reads</th><th>Writes today, through the shared context</th><th>Proposed contract</th></tr>
+    <tr><td>Job expansion</td><td>jobs, <code>initial_state</code></td><td>events, <code>last_entity_event</code>, <code>scheduled_jobs</code></td><td>Unchanged in this ticket; <code>ExpandJob</code> functions later</td></tr>
+    <tr><td>Tray assignment</td><td>event DAG, <code>initial_state</code></td><td>tray ids and destinations, blocker moves, edges, <code>first_tray_event</code></td><td><code>Solve(Input)</code> returns a <code>Result</code>; <code>ApplyTrayAssignment</code> is the only writer</td></tr>
+    <tr><td>AGV assignment</td><td>event DAG, <code>first_tray_event</code></td><td>AGV ids, approach, lift and lower events, edges</td><td><code>SolveInPlace(Input, EventDag&amp;)</code>: the one mutable argument is in the signature</td></tr>
+    <tr><td>Motion planning</td><td>event DAG, <code>initial_state</code>, base schedule</td><td>trajectories</td><td><code>PlanMotions</code> unchanged; a solver interface is future work</td></tr>
+    <tr><td>Action graph</td><td>trajectories, event DAG, <code>scheduled_jobs</code></td><td>the response</td><td><code>BuildActionDag</code> as a function of its inputs</td></tr>
+  </table>
+  <p class="callout" style="margin-top:20px">Today every stage can write everything in the context. After the refactor, each write is visible in a signature: a returned result, an apply function, or a named mutable argument.</p>
+  <aside class="notes">
+    The direction is from implicit shared state to explicit data flow, one stage at a time. Tray assignment goes all
+    the way (pure solver plus apply); AGV assignment goes halfway for now, because its loop reads back what it
+    writes. The other stages keep their shape in this ticket.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Architecture · extension points</div>
+  <h2>Where new behaviour plugs in</h2>
+  <table style="font-size:17px">
+    <tr><th>Extension point</th><th>Mechanism</th><th>Today</th><th>After this refactor</th></tr>
+    <tr><td>Tray assignment rule</td><td>Strategy: <code>tray_assignment::Solver</code></td><td>Edit <code>DoTrayAssignments</code></td><td>A new solver class, chosen at construction</td></tr>
+    <tr><td>AGV assignment rule</td><td>Strategy: <code>agv_assignment::Solver</code></td><td>Edit <code>DoAgvAssignments</code></td><td>A new solver class, chosen at construction</td></tr>
+    <tr><td>Cost estimates</td><td>Pure functions</td><td><code>Scheduler</code> member functions</td><td>Free functions, tested and benchmarked alone</td></tr>
+    <tr><td>Job types</td><td>One function per job type</td><td>One <code>Scheduler</code> method per type, chosen by a switch in <code>Plan()</code></td><td>Functions in <code>job_expansion/</code>; a registry by job type is possible later</td></tr>
+    <tr><td>Search problems</td><td>Strategy: <code>SearchEnvironment</code> subclass</td><td>Already in place in <code>motion_planner</code></td><td>Unchanged</td></tr>
+    <tr><td>Motion planner</td><td>Interface: <code>MotionProblem</code> / <code>MotionPlan</code></td><td>CHUGG called directly</td><td>Future work (Part 4)</td></tr>
+  </table>
+  <p class="small muted" style="margin-top:16px">The pattern is the same in each row: the variable part sits behind a narrow interface, and the default implementation reproduces current behaviour.</p>
+  <aside class="notes">
+    The search environments are the precedent inside the codebase: one generic A* engine, with the problem supplied
+    by a subclass. The tray and AGV solver interfaces apply the same idea one level up. Virtual dispatch costs one
+    indirect call per Plan() stage, which is negligible next to the work each stage does.
   </aside>
 </section>
 
