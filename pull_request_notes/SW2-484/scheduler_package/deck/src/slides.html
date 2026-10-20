@@ -35,7 +35,7 @@
     <div class="card edge-accent"><h3><span class="mono c-accent">01</span> Problem statement</h3><p>The function of the scheduler, its design, and the construction of a plan.</p></div>
     <div class="card edge-accent"><h3><span class="mono c-accent">02</span> Current issues</h3><p>The structural limitations of the code and the scope of the Jira initiative.</p></div>
     <div class="card edge-accent"><h3><span class="mono c-accent">03</span> Proposed changes</h3><p>Solver interfaces, module layout, naming, and a staged plan that preserves behaviour.</p></div>
-    <div class="card edge-accent"><h3><span class="mono c-accent">04</span> Future work</h3><p>Improved solvers, a typed event graph, concurrent planning, and replaceable motion planners.</p></div>
+    <div class="card edge-accent"><h3><span class="mono c-accent">04</span> Future work</h3><p>Improved solvers, a typed event graph, concurrent planning, replaceable motion planners and performance measurement.</p></div>
   </div>
   <p class="muted small" style="margin-top:40px">Animated figures advance one step at a time with the standard navigation key. Speaker notes are available with <code>S</code>; <code>T</code> switches between the light and dark themes.</p>
   <aside class="notes">Approximately ten minutes per part, followed by discussion. Part 1 is the longest, as the remaining parts build on it.</aside>
@@ -738,13 +738,29 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   </aside>
 </section>
 
+<section>
+  <div class="kicker">Future · performance</div>
+  <h2>Measuring planning time: an initial proposal</h2>
+  <div class="cols c3" style="margin-top:18px">
+    <div class="card edge-accent"><h3>1 · Stage timers and counters</h3><p>A per-call record of each stage's duration, with the work behind it: searches run, nodes expanded, blocking trays resolved. Always on, and stored in every simulation recording.</p></div>
+    <div class="card edge-accent"><h3>2 · Profiling on demand</h3><p>A sampling profiler on the replay tests for call-level detail, without code changes; an instrumenting profiler where finer timelines are needed.</p></div>
+    <div class="card edge-accent"><h3>3 · Fleet monitoring later</h3><p>OpenTelemetry and Grafana once planning time must be followed across sites. One scope macro in the code keeps the backend replaceable.</p></div>
+  </div>
+  <p class="small" style="margin-top:22px"><strong>Evaluation.</strong> An agreed time budget per call; growth measured against each size parameter (jobs, trays, AGVs, graph size, blockers); a catalogue of stress cases; slow plans in the field saved as replayable fixtures; runtime and work-counter gates in CI, with plan quality measured separately.</p>
+  <aside class="notes">
+    Known candidates for steep growth: the tray-search step checks every tray, the blocking-tray loop searches again per
+    blocker, every job method replays the event DAG, HideAgvs backtracks, and CHUGG's heuristic table is cubic in the
+    number of poses. The study site lists them under Future work.
+  </aside>
+</section>
+
 <section class="center-v">
   <div class="kicker">Roadmap</div>
   <h2>Roadmap</h2>
   <div class="cols c4">
     <div class="card edge-accent"><h3>Current</h3><p class="small"><span class="pill">SW2-484</span><br>Baseline, renames, stage folders and tray solver interface (A-E).</p></div>
     <div class="card"><h3>Next</h3><p class="small"><span class="pill">new ticket</span> <span class="pill">SW2-487</span><br>AGV solver interface (F), benchmark set (G) and cleanup (H).</p></div>
-    <div class="card"><h3>Subsequent</h3><p class="small"><code>planner_core</code> renames (I), first stage package (J), naming catalogue and typed event edges.</p></div>
+    <div class="card"><h3>Subsequent</h3><p class="small"><code>planner_core</code> renames (I), first stage package (J), naming catalogue, typed event edges and performance instrumentation.</p></div>
     <div class="card"><h3>Longer term</h3><p class="small">Improved tray and AGV solvers, PBS-PC ordering, concurrent planning with Dispatch and replaceable motion planners.</p></div>
   </div>
   <p class="callout" style="margin-top:30px">Each later item depends on two outcomes of this refactor: <strong>interfaces</strong> through which new solvers can be introduced, and <strong>benchmarks</strong> by which they can be evaluated.</p>

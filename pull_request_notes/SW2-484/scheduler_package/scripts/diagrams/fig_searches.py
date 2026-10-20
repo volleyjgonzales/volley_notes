@@ -1012,3 +1012,97 @@ def uml_static_filters():
           badge_key="as-built",
           legend=[("dep", FN, "calls / creates / reads"), ("assoc", RES, "holds")])
     return d
+
+
+# ======================================================================================
+# 147 — what State and Cost are, per environment
+# ======================================================================================
+
+@figure("147_state_and_cost", "State and Cost: what each environment plugs into the template (static)", DOC)
+def state_and_cost():
+    d = Doc("147_state_and_cost", "State and Cost, environment by environment",
+            "Static: for each environment, the State type bound into SearchEnvironment<State, Cost>, one example "
+            "state, one GetNeighbors entry (next state, step cost) and what makes two states equal. Cost is the "
+            "same everywhere.")
+    W = 1600
+    # header: the template call
+    d.rect(0, 0, W, 92, rx=10, fill=T.card, stroke=T.teal, sw=1.4)
+    d.text(16, 26, "SingleSourceSearch<State, Cost, Env>(source: State, init_cost: Cost, env: Env&)", size=14,
+           family="mono", weight=600, fill=T.teal)
+    d.text(16, 52, "Cost = Interval::Duration = std::chrono::system_clock::duration   (an integer tick count; "
+                   "nanoseconds with GCC on Linux)", size=12.5, family="mono", fill=T.fg)
+    d.text(16, 75, "g(state) = init_cost (0) + sum of step costs along the path;  f = g + GetHeuristic(state) = g, "
+                   "because every heuristic here is 0", size=12.5, family="mono", fill=T.fg2)
+    cols = [0, 330, 830, 1270]
+    heads = ["Environment and picture", "State: type and one example", "One GetNeighbors entry: (next, cost)",
+             "Two states are the same if"]
+    y = 126
+    for x, h in zip(cols, heads):
+        d.text(x + 4, y, h, size=12, family="mono", weight=600, fill=T.muted)
+    rows = [
+        ("GarageGraphEnvironment", "GetPosePath",
+         ["State = GarageGraph::Vertex", "  (size_t index of one pose in the", "   Boost graph; a node with headings",
+          "   0 and 90 has two vertices)", "example: the vertex of pose W22@90"],
+         ["(vertex of P23@90, 2.9 s)", "cost = trapezoid time of the edge"],
+         ["the indices are equal"], "plain"),
+        ("BlockingTraySearchEnvironment", "and OpenSpace / EmptyTray",
+         ["State = BlockingTrayState", "{ vert: vertex of P15@90,", "  blocking_trays: {K} }"],
+         ["({ vert: W13@90, blocking_trays: {K} }, 6 s)", "cost = trapezoid time", "     + 30 s per tray newly crossed",
+          "(Figure 143, 1 m/s: 36 s at P15,", " 42 s at W13)"],
+         ["vert is equal", "(blocking_trays is ignored by", " operator== and by the hash)"], "trays"),
+        ("AgvSearchEnvironment", "HideAgvs",
+         ["State = GaragePoseMsg (ROS message)", "{ node_id: 23, heading: 90 }"],
+         ["({ node_id: 19, heading: 90 }, 1 s)", "cost = 1 s for every edge"],
+         ["node_id and heading are equal"], "pose"),
+        ("SippEnvironment", "CHUGG, through SippAgv",
+         ["State = SippState", "{ source: W22@90, target: P23@90,", "  interval: [t0 + 12.0 s, t0 + 14.9 s),",
+          "  goal_idx: 0, num_predecessors: 4 }", "(source == target means a wait)"],
+         ["(next move or wait, 2.9 s + 12 s)", "cost = move time + wheel turn", "     + 3 s x steps so far",
+          "(a search cost, not travel time)"],
+         ["all five fields are equal", "(the hash leaves out", " num_predecessors)"], "time"),
+    ]
+    y += 18
+    for name, sub, state, neigh, same, pic in rows:
+        h = 40 + 19 * max(len(state), len(neigh), len(same), 4)
+        d.rect(0, y, W, h, rx=9, fill=T.card, stroke=T.border, sw=1.1)
+        d.text(14, y + 22, name, size=13, family="mono", weight=600, fill=T.sky)
+        d.text(14, y + 41, sub, size=11.5, fill=T.muted)
+        # picture
+        px, py = 24, y + 84
+        nodes = [("W22", px + 20), ("P23", px + 140), ("P19", px + 260)]
+        if pic == "time":
+            nodes = [("W22", px + 20), ("P23", px + 140)]
+        if pic == "trays":
+            nodes = [("P17", px + 20), ("P15", px + 140), ("W13", px + 260)]
+        for i in range(len(nodes) - 1):
+            d.line(nodes[i][1], py, nodes[i + 1][1], py, stroke=T.border, sw=1.6)
+        for lab, x in nodes:
+            d.circle(x, py, 6, fill=T.fg2)
+            d.text(x, py + 20, lab, size=10.5, family="mono", fill=T.fg2, anchor="middle")
+        if pic == "plain":
+            d.circle(px + 20, py, 13, fill="none", stroke=T.amber, sw=2.4)
+            label_pill(d, px + 80, py - 20, "state", color=T.amber, size=10, bg=T.bg)
+        elif pic == "trays":
+            d.rect(px + 120, py - 14, 40, 28, rx=4, fill=T.tint(T.amber, 0.25, T.bg), stroke=T.amber, sw=1.4)
+            d.text(px + 140, py - 22, "K", size=10.5, family="mono", fill=T.amber, anchor="middle")
+            d.circle(px + 140, py, 15, fill="none", stroke=T.amber, sw=2.4)
+            label_pill(d, px + 230, py - 26, "{K} carried along", color=T.amber, size=10, bg=T.bg)
+        elif pic == "pose":
+            d.circle(px + 140, py, 13, fill="none", stroke=T.amber, sw=2.4)
+            d.line(px + 140, py, px + 140, py - 22, stroke=T.amber, sw=2)
+            d.arrowhead((px + 140, py - 26), (px + 140, py), kind="filled", color=T.amber, size=8)
+            d.text(px + 160, py - 18, "heading 90", size=10.5, fill=T.amber)
+        else:
+            d.line(px + 20, py, px + 140, py, stroke=T.amber, sw=3)
+            d.rect(px + 170, py - 10, 110, 20, rx=4, fill=T.tint(T.amber, 0.25, T.bg), stroke=T.amber, sw=1.2)
+            d.text(px + 225, py + 4, "[12.0, 14.9) s", size=10, family="mono", fill=T.amber, anchor="middle")
+        for col, lines, colr in ((cols[1], state, T.fg), (cols[2], neigh, T.fg), (cols[3], same, T.fg2)):
+            for i, ln in enumerate(lines):
+                d.text(col + 4, y + 22 + i * 19, ln, size=12, family="mono", fill=colr if i == 0 else T.fg2)
+        y += h + 10
+    frame(d, title="State and Cost, environment by environment",
+          subtitle="The engine is the same for all four. What changes is the State it stores in its open set and "
+                   "predecessor map, and how the environment prices a step. Values are examples on the Pecos layout.",
+          badge_key="as-built",
+          legend=[("ring", T.amber, "the state in the picture")])
+    return d
