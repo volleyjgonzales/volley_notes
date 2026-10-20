@@ -15,7 +15,9 @@ TEMPLATE = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scheduler Core Refactor — Figures</title>
 <style>
-:root{--bg:#020617;--panel:#0F172A;--card:#1B2336;--muted-bg:#272F42;--fg:#F8FAFC;--fg2:#CBD5E1;--muted:#94A3B8;--faint:#64748B;--border:#334155;--accent:#22C55E}
+:root{--bg:#020617;--panel:#0F172A;--card:#1B2336;--muted-bg:#272F42;--fg:#F8FAFC;--fg2:#CBD5E1;--muted:#94A3B8;--faint:#64748B;--border:#334155;--accent:#22C55E;--stage:radial-gradient(circle at 50% 40%,#0B1222 0,#020617 70%);--tools:rgba(15,23,42,.88);color-scheme:dark}
+@media (prefers-color-scheme:light){:root:not([data-theme]){--bg:#F6F8FB;--panel:#FFFFFF;--card:#EEF2F7;--muted-bg:#E2E8F0;--fg:#0F172A;--fg2:#1E293B;--muted:#475569;--faint:#64748B;--border:#CBD5E1;--accent:#15803D;--stage:#F8FAFC;--tools:rgba(255,255,255,.9);color-scheme:light}}
+:root[data-theme='light']{--bg:#F6F8FB;--panel:#FFFFFF;--card:#EEF2F7;--muted-bg:#E2E8F0;--fg:#0F172A;--fg2:#1E293B;--muted:#475569;--faint:#64748B;--border:#CBD5E1;--accent:#15803D;--stage:#F8FAFC;--tools:rgba(255,255,255,.9);color-scheme:light}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:'IBM Plex Sans','Segoe UI',Roboto,Helvetica,Arial,sans-serif}
 .app{display:grid;grid-template-columns:300px 1fr;height:100vh}
@@ -28,11 +30,11 @@ aside button small{display:block;color:var(--faint);font:11px ui-monospace,SFMon
 aside button:hover{background:var(--card)}
 aside button[aria-current="true"]{background:var(--card);border-color:var(--border);color:var(--fg)}
 aside button:focus-visible,.tools button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-main{position:relative;overflow:hidden;background:radial-gradient(circle at 50% 40%,#0B1222 0,#020617 70%)}
+main{position:relative;overflow:hidden;background:var(--stage)}
 #stage{position:absolute;inset:0;touch-action:none;cursor:grab}
 #stage.drag{cursor:grabbing}
 #stage svg{width:100%;height:100%;display:block}
-.tools{position:absolute;top:14px;right:14px;display:flex;gap:6px;align-items:center;background:rgba(15,23,42,.88);border:1px solid var(--border);border-radius:12px;padding:6px;backdrop-filter:blur(6px)}
+.tools{position:absolute;top:14px;right:14px;display:flex;gap:6px;align-items:center;background:var(--tools);border:1px solid var(--border);border-radius:12px;padding:6px;backdrop-filter:blur(6px)}
 .tools button,.tools a{min-width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);font:500 14px/1 inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;text-decoration:none;font-family:inherit}
 .tools button:hover,.tools a:hover{background:var(--muted-bg)}
 .tools .zoom{color:var(--muted);font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-width:48px;text-align:right;padding-right:4px}
@@ -46,7 +48,9 @@ main{position:relative;overflow:hidden;background:radial-gradient(circle at 50% 
   .hint{display:none}
 }
 @media (prefers-reduced-motion:reduce){aside{transition:none}}
+__LIGHTCSS__
 </style>
+<script>try{const t=localStorage.getItem('study-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
 <body>
 <div class="app">
@@ -63,9 +67,10 @@ main{position:relative;overflow:hidden;background:radial-gradient(circle at 50% 
       <button id="out" aria-label="Zoom out" title="Zoom out (-)">−</button>
       <button id="in" aria-label="Zoom in" title="Zoom in (+)">+</button>
       <button id="fit" aria-label="Fit to screen" title="Fit (0)">Fit</button>
+      <button id="theme" aria-label="Switch colour theme" title="Light / dark (T)">Theme</button>
       <a id="raw" href="#" target="_blank" rel="noopener" title="Open the SVG file">SVG ↗</a>
     </div>
-    <div class="hint">double-click to fit · keys: + − 0 ← →</div>
+    <div class="hint">double-click to fit · keys: + − 0 ← → · T theme</div>
   </main>
 </div>
 <script>
@@ -88,10 +93,16 @@ function show(i){
   const pad=Math.max(vb0[2],vb0[3])*0.03; vb0=[vb0[0]-pad,vb0[1]-pad,vb0[2]+2*pad,vb0[3]+2*pad]; vb=vb0.slice(); setVB();
   stage.setAttribute('aria-label',f.title);
   nav.querySelectorAll('button').forEach(b=>b.setAttribute('aria-current',String(+b.dataset.i===cur)));
-  document.getElementById('raw').href=f.name+'.svg';
+  setRaw();
   if(location.hash!=='#'+f.name) history.replaceState(null,'','#'+f.name);
   document.title=f.title+' — Scheduler Core Refactor';
 }
+const lightMq=matchMedia('(prefers-color-scheme: light)');
+function theme(){return document.documentElement.dataset.theme||(lightMq.matches?'light':'dark')}
+function setRaw(){if(cur>=0) document.getElementById('raw').href=(theme()==='light'?'light/':'')+FIGS[cur].name+'.svg';}
+function toggleTheme(){const t=theme()==='dark'?'light':'dark'; document.documentElement.dataset.theme=t; try{localStorage.setItem('study-theme',t)}catch(e){} setRaw();}
+document.getElementById('theme').onclick=toggleTheme;
+lightMq.addEventListener&&lightMq.addEventListener('change',setRaw);
 function toUser(cx,cy){const p=svg.createSVGPoint(); p.x=cx; p.y=cy; return p.matrixTransform(svg.getScreenCTM().inverse());}
 function zoomAt(ux,uy,f){
   const nw=Math.min(vb0[2]*4,Math.max(vb0[2]/16,vb[2]/f)); f=vb[2]/nw; const nh=vb[3]/f;
@@ -115,7 +126,7 @@ document.getElementById('fit').onclick=()=>{vb=vb0.slice(); setVB();};
 document.getElementById('menu').onclick=()=>document.getElementById('side').classList.toggle('open');
 document.addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT') return;
   if(e.key==='+'||e.key==='=') zoomAt(...center(),1.25); else if(e.key==='-') zoomAt(...center(),0.8);
-  else if(e.key==='0'){vb=vb0.slice(); setVB();} else if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault(); show(cur+1);} else if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault(); show(cur-1);} });
+  else if(e.key==='0'){vb=vb0.slice(); setVB();} else if(e.key==='t'||e.key==='T'){toggleTheme();} else if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault(); show(cur+1);} else if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault(); show(cur-1);} });
 window.addEventListener('hashchange',()=>{const i=FIGS.findIndex(f=>'#'+f.name===location.hash); if(i>=0&&i!==cur) show(i);});
 const start=FIGS.findIndex(f=>'#'+f.name===location.hash); show(start>=0?start:0);
 </script>
@@ -158,5 +169,7 @@ def build(out: Path, figures):
         svg = re.sub(r"<script>.*?</script>", "", svg, flags=re.S)   # viewer supplies its own pan/zoom
         title = f"{label[f.name]} · {f.title}" if f.name in label else f.title
         items.append({"name": f.name, "title": title, "doc": FIRST_DOC.get(f.name, ""), "svg": svg})
-    html = TEMPLATE.replace("__FIGS__", json.dumps(items).replace("</", "<\\/"))
+    light_css = (out.parent / "site" / "src" / "styles" / "figures-light.css")
+    light_css = light_css.read_text(encoding="utf-8") if light_css.exists() else ""
+    html = TEMPLATE.replace("__LIGHTCSS__", light_css).replace("__FIGS__", json.dumps(items).replace("</", "<\\/"))
     (out / "viewer.html").write_text(html, encoding="utf-8")

@@ -15,4 +15,14 @@ for (const f of fs.readdirSync(src)) {
   fs.copyFileSync(path.join(src, f), path.join(dst, f));
   n++;
 }
+// light-theme copies (built by ../scripts/diagrams/lightmode.py)
+const lsrc = path.join(src, 'light');
+if (fs.existsSync(lsrc)) {
+  fs.mkdirSync(path.join(dst, 'light'));
+  for (const f of fs.readdirSync(lsrc)) {
+    if (!f.endsWith('.svg')) continue;
+    fs.copyFileSync(path.join(lsrc, f), path.join(dst, 'light', f));
+    n++;
+  }
+}
 console.log(`sync-figures: ${n} files -> public/figures`);

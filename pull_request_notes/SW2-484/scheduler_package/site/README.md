@@ -32,7 +32,7 @@ host or from disk. Web fonts load from Google Fonts and fall back to system font
     with a hover card showing the definition.
 - **Search** (`Ctrl K`, `⌘K` or `/`): headings and glossary terms across all three documents.
 - **Figures**: click to open a pan/zoom viewer; "Pan / zoom viewer" opens the full figure gallery.
-- Keys `1`, `2`, `3` switch documents. Light and dark themes follow the system, with a toggle.
+- Keys `1`, `2`, `3` switch documents. Light and dark themes follow the system, with a toggle; figures follow the theme too (`<img>` figures switch to `figures/light/`, inlined animated figures are recoloured by the generated `src/styles/figures-light.css`).
 
 ## How it is built
 

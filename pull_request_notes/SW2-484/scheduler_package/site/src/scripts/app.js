@@ -249,11 +249,30 @@
   $('#scrim').addEventListener('click', closeNav);
 
   // ---------------------------------------------------------------- theme
+  // Figures: inlined (animated) SVGs are recoloured by figures-light.css; <img> figures and the SVG links switch
+  // between figures/NAME.svg (dark) and figures/light/NAME.svg (light).
+  const lightMq = matchMedia('(prefers-color-scheme: light)');
+  const effectiveTheme = () => document.documentElement.dataset.theme || (lightMq.matches ? 'light' : 'dark');
+  const themedFig = (url, t) => url.replace(/^figures\/(light\/)?(?=[^/]+\.svg$)/, t === 'light' ? 'figures/light/' : 'figures/');
+  const applyFigureTheme = () => {
+    const t = effectiveTheme();
+    for (const im of document.querySelectorAll('.fig-media img, #lb-img')) {
+      const s = im.getAttribute('src');
+      if (s && /^figures\//.test(s) && themedFig(s, t) !== s) im.setAttribute('src', themedFig(s, t));
+    }
+    for (const a of document.querySelectorAll('a[href^="figures/"][href$=".svg"]')) {
+      const h = a.getAttribute('href');
+      if (themedFig(h, t) !== h) a.setAttribute('href', themedFig(h, t));
+    }
+  };
+  applyFigureTheme();
+  lightMq.addEventListener?.('change', applyFigureTheme);
   $('#theme-btn').addEventListener('click', () => {
     const root = document.documentElement;
-    const isDark = root.dataset.theme ? root.dataset.theme === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
+    const isDark = effectiveTheme() === 'dark';
     root.dataset.theme = isDark ? 'light' : 'dark';
     store.set('study-theme', root.dataset.theme);
+    applyFigureTheme();
   });
 
   // ---------------------------------------------------------------- keyword tooltip
