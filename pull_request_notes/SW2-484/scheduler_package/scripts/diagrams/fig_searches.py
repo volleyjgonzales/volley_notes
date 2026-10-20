@@ -813,3 +813,202 @@ def _path_bfs(src, dst, blocked):
     while out[-1] != src:
         out.append(prev[out[-1]])
     return out[::-1]
+
+
+# ======================================================================================
+# 145 — UML: engine, environments, states
+# ======================================================================================
+
+UM = 12   # member font size
+
+
+@figure("145_uml_search_environments", "The search environments as a class hierarchy (UML)", DOC)
+def uml_search_environments():
+    from components import connect, note, uml_class
+    d = Doc("145_uml_search_environments", "Engine, environments and states",
+            "UML class diagram: one abstract SearchEnvironment template, five concrete environments, the state "
+            "type each one binds, the SingleSourceSearch function template that runs any of them, and the "
+            "filter they hold.")
+    GEN, TRY, OTH, DAT = T.teal, T.sky, T.fg2, T.violet
+    base = uml_class(d, 560, 0, "SearchEnvironment<State, Cost>", accent=GEN, abstract=True,
+                     stereo="abstract class template · path_search.hpp", size=UM,
+                     methods=["+ OnExpansion(state, g, meta): bool = 0", "    // true = stop: the goal test",
+                              "+ GetNeighbors(state): vector<pair<State, Cost>> = 0",
+                              "+ GetHeuristic(state): Cost = 0",
+                              "+ OnDiscovery(state, g)            // no-op",
+                              "+ OnUpdate(state, old_g, new_g)    // no-op",
+                              "+ OnTermination()                  // no-op"])
+    sss = uml_class(d, base.x1 + 120, 0, "SingleSourceSearch<State, Cost, Env, Hash>", accent=GEN,
+                    stereo="function template · path_search.hpp", size=UM,
+                    methods=["(source: State, init_cost: Cost, env: Env&)", "    : SearchSolution<State, Cost, Hash>",
+                             "  // static_assert: Env derives from", "  //   SearchEnvironment<State, Cost>"])
+    sol = uml_class(d, sss.x0, sss.y1 + 40, "SearchSolution<State, Cost, Hash>", accent=GEN,
+                    stereo="path_search.hpp", size=UM,
+                    attrs=["- source_: State", "- predecessors_: unordered_map<State,",
+                           "    tuple<State, Cost, bool closed>, Hash>", "- meta_data_: SearchMetaData",
+                           "- target_: optional<State>   // set if OnExpansion stopped"],
+                    methods=["+ GetPath(goal): optional<vector<pair<State, Cost>>>", "+ GetTarget(), GetMetaData()"])
+    ry = max(base.y1, sol.y1) + 120
+    gge = uml_class(d, 0, ry, "GarageGraphEnvironment", accent=OTH,
+                    stereo="garage_graph_pathing.hpp · built by GetPosePath", size=UM,
+                    attrs=["- graph_: const GarageGraph&", "- cost_model_: const MotionCostModel&",
+                           "- target_: optional<Vertex>", "- filters_: optional<GraphFilterProperties>"],
+                    methods=["+ OnExpansion: state == target_", "+ GetNeighbors: edge and target vertex enabled;",
+                             "    cost = trapezoid time of the edge", "+ GetHeuristic: zero"])
+    bts = uml_class(d, gge.x1 + 50, ry, "BlockingTraySearchEnvironment", accent=TRY,
+                    stereo="blocking_tray_search.hpp · built by scheduler methods", size=UM,
+                    attrs=["- tray_id_: uint16_t            // the moving tray", "- collision_id_: size_t",
+                           "- graph_, table_, base_state_, cost_model_: const&",
+                           "- target_: optional<Vertex>", "- filters_: optional<GraphFilterProperties>",
+                           "- max_blocking_trays_: optional<size_t>"],
+                    methods=["+ OnExpansion: state.vert == target_", "+ GetNeighbors: edge enabled;",
+                             "    cost = trapezoid + 30 s per new tray crossed", "+ GetHeuristic: zero (TODO)",
+                             "# GetGraph(), GetTable(), GetBaseState(), ...", "  copy and move deleted"])
+    agv = uml_class(d, bts.x1 + 50, ry, "AgvSearchEnvironment", accent=OTH,
+                    stereo="agv_hiding_search.hpp · built by HideOneAgv", size=UM,
+                    attrs=["- base_state_: const DiscreteGarageState&", "- graph_: const GarageGraph&",
+                           "- filters_: const GraphFilterProperties   // a copy",
+                           "- valid_destinations_: vector<GaragePoseMsg>"],
+                    methods=["+ OnExpansion: record a tray pose; always false", "+ GetNeighbors: 1 s per edge",
+                             "+ GetSortedDestinations(): const vector&", "  copy and move deleted"])
+    sip = uml_class(d, agv.x1 + 50, ry, "SippEnvironment", accent=OTH,
+                    stereo="safe_interval_path_planning.hpp · built by SippAgv", size=UM,
+                    attrs=["- goals_, safe_intervals_, heuristics_,", "  constraints_: const refs",
+                           "  (details: SIPP class diagram)"],
+                    methods=["+ OnExpansion: all goals complete", "+ GetNeighbors: moves and waits",
+                             "+ GetHeuristic: all-pairs table"])
+    sy = max(b.y1 for b in (gge, bts, agv, sip)) + 120
+    osp = uml_class(d, bts.x0 - 120, sy, "OpenSpaceSearchEnvironment", accent=TRY,
+                    stereo="blocking_tray_search.hpp", size=UM,
+                    attrs=["- illegal_poses_: VertexCollisionIdMap", "- ev_charge_payload_: bool",
+                           "- enforce_retrieval_heading_: bool", "- payload_reciprocal_to_tray_: bool",
+                           "- payload_height_m_: float", "- allow_waypoint_stash_: bool"],
+                    methods=["+ OnExpansion: free parking / EV-charge node", "    that fits (or a waypoint stash)",
+                             "  ctor reads the tray's payload flags"])
+    emp = uml_class(d, osp.x1 + 40, sy, "EmptyTraySearchEnvironment", accent=TRY,
+                    stereo="blocking_tray_search.hpp", size=UM,
+                    attrs=["  (no members; tray_id_ = 0, TRAY footprint)"],
+                    methods=["+ OnExpansion: node holds a tray", "    without a payload"])
+    # state types
+    st_y = sy
+    bst = uml_class(d, emp.x1 + 60, st_y, "BlockingTrayState", accent=DAT, stereo="struct · search node", size=UM,
+                    attrs=["+ vert: GarageGraph::Vertex", "+ blocking_trays: std::set<uint16_t>"],
+                    methods=["+ operator==: vert only", "  std::hash<BlockingTrayState>: vert only"])
+    gfp = uml_class(d, bst.x1 + 50, st_y, "GraphFilterProperties", accent=T.red,
+                    stereo="static_graph_filtering.hpp", size=UM,
+                    attrs=["- vertex_filter_: VertexVectorPropertyMap<bool>",
+                           "- edge_filter_: EdgeVectorPropertyMap<bool>"],
+                    methods=["+ IsEnabled(vertex | edge): bool  // unchecked", "+ AddProperty(vertex | edge, bool)"])
+    # ---- relations
+    bind = [(gge, "<Vertex, Duration>"), (bts, "<BlockingTrayState, Duration>"), (agv, "<GaragePoseMsg, Duration>"),
+            (sip, "<SippState, Duration>")]
+    yb = ry - 60
+    for b, lab in bind:
+        connect(d, [(b.cx, b.y0), (b.cx, yb), (base.cx, yb), (base.cx, base.y1)], kind="real", color=GEN)
+        label_pill(d, b.cx, b.y0 - 24, lab, color=GEN, size=10.5, bg=T.bg)
+    yi = osp.y0 - 50
+    for b in (osp, emp):
+        connect(d, [(b.cx, b.y0), (b.cx, yi), (bts.cx, yi), (bts.cx, bts.y1)], kind="inh", color=TRY)
+    label_pill(d, bts.cx + 10, yi - 14, "inherits GetNeighbors and the cost; overrides OnExpansion, GetHeuristic",
+               color=TRY, size=10.5, bg=T.bg, anchor="start")
+    connect(d, [(sss.x0, sss.y0 + 50), (base.x1, sss.y0 + 50)], kind="dep", color=GEN, label="calls back",
+            label_at=((sss.x0 + base.x1) / 2, sss.y0 + 36))
+    connect(d, [(sss.cx, sss.y1), (sss.cx, sol.y0)], kind="dep", color=GEN, label="«return»",
+            label_at=(sss.cx + 40, (sss.y1 + sol.y0) / 2))
+    connect(d, [(bst.cx, bst.y0), (bst.cx, bts.y1 - 30), (bts.x1, bts.y1 - 30)], kind="dep", color=DAT,
+            label="State", label_at=(bst.cx + 30, bts.y1 - 44))
+    connect(d, [(gfp.cx, gfp.y0), (gfp.cx, agv.y1 + 18), (agv.cx + 40, agv.y1 + 18), (agv.cx + 40, agv.y1)],
+            kind="assoc", color=T.red, label="filters_: held by value in every environment",
+            label_at=(gfp.cx - 10, agv.y1 + 4), label_anchor="end")
+    note(d, 0, gge.y1 + 30, gge.w,
+         "Every environment holds const references to the graph, the collision table, the garage state and "
+         "the cost model, so building one is cheap, and those objects must outlive the search. The filter is "
+         "copied in. The tray environments delete copy and move: one object per search.",
+         title="Lifetime")
+    frame(d, title="Engine, environments and states",
+          subtitle="A strategy design: SingleSourceSearch is the fixed algorithm; each environment supplies the problem "
+                   "(state, neighbors with step costs, goal test, heuristic). Cost is Interval::Duration throughout.",
+          badge_key="as-built",
+          legend=[("real", GEN, "realises the template, with its <State, Cost> binding"),
+                  ("inh", TRY, "inherits"), ("dep", GEN, "uses / returns"), ("assoc", T.red, "holds")])
+    return d
+
+
+# ======================================================================================
+# 146 — UML: the filter functions
+# ======================================================================================
+
+@figure("146_uml_static_filters", "The static filter functions and their consumers (UML)", DOC)
+def uml_static_filters():
+    from components import connect, note, uml_class
+    d = Doc("146_uml_static_filters", "Static filters: functions, data and consumers",
+            "UML class diagram: the three filter functions, the inputs they read, the GraphFilterProperties they "
+            "build, and where each kind of filter ends up.")
+    FN, INP, RES, USE = T.red, T.fg2, T.red, T.teal
+    gde = uml_class(d, 440, 0, "GetDisabledEntitiesFilters", accent=FN, stereo="function · static_graph_filtering",
+                    size=UM, methods=["(gg, dgs, ctable)", "    : unordered_map<CollisionEntityId_t, Filter>",
+                                      "  ignore every tray, AGV and bay that is", "  not disabled and not on a disabled node"])
+    gas = uml_class(d, gde.x1 + 70, 0, "GetAllStaticFilters", accent=FN, stereo="function · static_graph_filtering",
+                    size=UM, methods=["(gg, dgs, ctable, ignored_trays, ignored_agvs,", "    ignored_bays)",
+                                      "    : unordered_map<CollisionEntityId_t, Filter>",
+                                      "  AGV, TRAY, and each payload size in dgs"])
+    gsf = uml_class(d, gas.x1 + 70, 0, "GetStaticFilter", accent=FN, stereo="function · static_graph_filtering",
+                    size=UM, methods=["(collision_id, gg, dgs, ctable,", "    ignore_trays, ignore_agvs, ignore_bays)",
+                                      "    : GraphFilterProperties",
+                                      "  1 trays  2 AGVs  3 bays  4 disabled nodes", "  5 node size (payload ids)"])
+    gfp = uml_class(d, gsf.x0, gsf.y1 + 90, "GraphFilterProperties", accent=RES, stereo="static_graph_filtering.hpp",
+                    size=UM, attrs=["- vertex_filter_: VertexVectorPropertyMap<bool>",
+                                    "- edge_filter_: EdgeVectorPropertyMap<bool>"],
+                    methods=["+ GraphFilterProperties(graph, disabled_poses,", "      disabled_edges)  // all true, listed false",
+                             "+ IsEnabled(vertex | edge): bool  // unchecked", "+ AddProperty(vertex | edge, bool)"])
+    iy = gde.y1 + 60
+    gg = uml_class(d, 0, iy, "GarageGraph", accent=INP, stereo="common_ros", size=UM, compact=True,
+                   methods=["+ vertices = poses, edges = transitions", "+ MakeVertex/EdgeVectorPropertyMap<T>(init)"])
+    dgs = uml_class(d, 0, gg.y1 + 24, "DiscreteGarageState", accent=INP, stereo="common_ros", size=UM, compact=True,
+                    methods=["+ GetTrays(), GetAgvs(), GetBays()", "+ GetDisabledNodes()"])
+    ct = uml_class(d, 0, dgs.y1 + 24, "CollisionTable", accent=INP, stereo="common_ros", size=UM, compact=True,
+                   methods=["+ Query(other_id, collision_id, pose)", "    : {poses, edges} in conflict",
+                            "+ GetGraph(): layout MD5 must match gg"])
+    uy = max(ct.y1, gfp.y1) + 90
+    ctx = uml_class(d, gde.x0, uy, "ScheduleContext", accent=USE, stereo="scheduler · per Plan() call", size=UM,
+                    compact=True, attrs=["+ disabledness_filters: unordered_map<", "    CollisionEntityId_t, Filter>"])
+    chg = uml_class(d, ctx.x1 + 40, uy, "Chugg", accent=USE, stereo="motion_planner", size=UM, compact=True,
+                    attrs=["- constraints_: GraphConstraints", "  (same map type)"])
+    sip = uml_class(d, chg.x1 + 40, uy, "SippEnvironment", accent=USE, stereo="motion_planner", size=UM, compact=True,
+                    attrs=["- constraints_: const GraphConstraints&"])
+    env = uml_class(d, sip.x1 + 40, uy, "Tray, GarageGraph and Agv environments", accent=USE,
+                    stereo="motion_planner", size=UM, compact=True,
+                    attrs=["- filters_: optional<GraphFilterProperties>", "  (Agv: a const copy)"])
+    # relations
+    connect(d, [(gde.x1, gde.y0 + 50), (gas.x0, gde.y0 + 50)], kind="dep", color=FN, label="calls",
+            label_at=((gde.x1 + gas.x0) / 2, gde.y0 + 36))
+    connect(d, [(gas.x1, gas.y0 + 50), (gsf.x0, gas.y0 + 50)], kind="dep", color=FN, label="calls per id",
+            label_at=((gas.x1 + gsf.x0) / 2, gas.y0 + 36))
+    connect(d, [(gsf.cx, gsf.y1), (gsf.cx, gfp.y0)], kind="dep", color=FN, label="«create»",
+            label_at=(gsf.cx + 40, (gsf.y1 + gfp.y0) / 2))
+    bus = gde.x0 - 30
+    for b in (gg, dgs, ct):
+        d.line(b.x1, b.cy, bus, b.cy, stroke=INP, sw=1.4, dash="6 4")
+    connect(d, [(bus, ct.cy), (bus, gde.y1 + 30), (gsf.x0 + 30, gde.y1 + 30), (gsf.x0 + 30, gsf.y1)], kind="dep",
+            color=INP)
+    label_pill(d, gas.x0 + 40, gde.y1 + 16, "GetStaticFilter reads the graph, the state and the table", color=INP,
+               size=10.5, bg=T.bg, anchor="start")
+    connect(d, [(gde.cx, gde.y1), (gde.cx, ctx.y0)], kind="dep", color=USE, label="fills (in Plan)",
+            label_at=(gde.cx + 10, ctx.y0 - 30), label_anchor="start")
+    connect(d, [(gas.cx, gas.y1), (gas.cx, chg.y0 - 40), (chg.cx, chg.y0 - 40), (chg.cx, chg.y0)], kind="dep",
+            color=USE, label="fills", label_at=(chg.cx + 10, chg.y0 - 54), label_anchor="start")
+    connect(d, [(sip.cx, sip.y0), (sip.cx, chg.y0 - 20), (chg.x1 - 20, chg.y0 - 20), (chg.x1 - 20, chg.y0)],
+            kind="dep", color=USE, label="reads Chugg's map", label_at=(sip.cx + 10, chg.y0 - 6),
+            label_anchor="start")
+    connect(d, [(gfp.cx, gfp.y1), (gfp.cx, env.y0)], kind="assoc", color=RES, label="copied in",
+            label_at=(gfp.cx + 10, (gfp.y1 + env.y0) / 2), label_anchor="start")
+    note(d, gfp.x1 + 50, gfp.y0, 380,
+         "A filter is data, not behaviour: two boolean masks over the graph, built once from one state and read by "
+         "every search step. The graph is never edited. One filter per footprint type, because a bare AGV, an "
+         "empty tray and a loaded tray collide with different places.", title="Design intent")
+    frame(d, title="Static filters: functions, data and consumers",
+          subtitle="Three free functions build GraphFilterProperties from the graph, the garage state and the collision "
+                   "table; the scheduler, CHUGG and every search read them.",
+          badge_key="as-built",
+          legend=[("dep", FN, "calls / creates / reads"), ("assoc", RES, "holds")])
+    return d
