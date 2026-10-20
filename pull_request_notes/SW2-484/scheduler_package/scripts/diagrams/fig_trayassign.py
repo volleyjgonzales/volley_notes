@@ -154,7 +154,7 @@ def assign_tray_id():
              "found P23", "ok"),
             ("if(!solution.GetTarget()) return {false, \"Failed to find empty tray ...\"}", "A tray was found.",
              "skipped", "skip"),
-            ("tray_to_use = working_state.GetTrayOnNode(\n  GetPoseFromVertex(target.vert)->node_id).value();\n"
+            ("tray_to_use = working_state.GetTrayOnNode(\n  GetPoseFromVertex(target.vert)\n    ->node_id).value();\n"
              "move.SetTrayId(tray_to_use.id)", "The event now reads T23: P23 -> B21.", "tray = 23", "event"),
             ("if IsAngleOrReciprocal(tray.heading, dest.heading)\n  && tray.heading != dest.heading:\n"
              "  dest.heading = tray.heading; UseEvChargeHeading(dest);\n  move.SetDest(dest)",

@@ -546,13 +546,13 @@ def closing_a_node():
                 d.rect(bb.x0 - 4, bb.y0 - 4, bb.w + 8, bb.h + 8, rx=12, fill="none", stroke=T.sky, sw=2.2,
                        layer="under")
     # vertex mask strip
-    vy = max(mb.y1, y) + 26
+    vy = mb.y1 + 26     # the mask strip sits under the map; the code goes in a third column
     verts = [25, 26, 27, 22, 23, 24, 19, 20]
     d.text(0, vy, "vertex_filter_[AGV] for the poses on this map (all headings are 90 here)", size=12, weight=600,
            fill=T.fg)
-    cw = 82
+    cw = (mb.x1 - mb.x0 - 7 * 6) / 8      # eight cells across the width of the map
     for i, nid in enumerate(verts):
-        x0 = i * (cw + 6)
+        x0 = mb.x0 + i * (cw + 6)
         lbl = NODES[nid].label + "@90"
         d.rect(x0, vy + 14, cw, 46, rx=7, fill=T.card, stroke=T.border, sw=1)
         d.text(x0 + cw / 2, vy + 28, lbl, size=11, family="mono", fill=T.fg2, anchor="middle")
@@ -566,7 +566,7 @@ def closing_a_node():
         with d.only(S6):
             d.text(x0 + cw / 2, vy + 47, "true" if on6 else "false", size=11.5, family="mono", weight=700,
                    fill=(T.amber if nid == 26 else FREE) if on6 else KEEP, anchor="middle")
-    cp = code_panel(d, 0, vy + 80, tx + tw, [
+    cp = code_panel(d, tx + tw + 34, mb.y0, 820, [
         "// motion_planner/src/static_graph_filtering.cpp, GetStaticFilter (abridged)",
         "std::set<uint32_t> all_disabled_nodes(disabled_nodes.begin(), disabled_nodes.end());",
         "for(const auto& [agv_id, agv] : dgs.GetAgvs()) if(agv.disabled) all_disabled_nodes.insert(agv.pose.node_id);",

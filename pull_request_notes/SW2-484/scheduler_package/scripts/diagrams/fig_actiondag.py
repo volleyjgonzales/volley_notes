@@ -236,7 +236,7 @@ def action_dag_construction():
         d.text(0, ay + 108, "scheduled_jobs: job A node_indices = [1, 2, 3, 4, 5, 6], bay_arrival_node_guid = guid "
                             "of [6];  job B node_indices = [0]", size=11, family="mono", fill=T.fg2)
     # ---- code panel
-    cp = code_panel(d, 0, ay + 130, rx + rw, [
+    cp = code_panel(d, rx + rw + 34, 0, 820, [     # third column, beside the map and the state panels
         "for(const auto& motion : all_motions) {                       // start time, event vertex, hash",
         "  auto action_node = ToActionNode(motion, job_guid, event);    // fresh guid, job_id, command",
         "  event_start_end[event] = {first or unchanged, action_node};",

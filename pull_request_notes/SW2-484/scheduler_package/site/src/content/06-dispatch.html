@@ -42,6 +42,7 @@
 <p>Jobs come from the dispatcher's services (retrieve, move AGV, move or repark a tray, charge a payload, transition a bay, clean, rebalance), from bay events (a car driven into a bay creates an INSERT), and from Dispatch itself: a clean and a rebalance when it starts in automatic mode or when the last active job finishes, charge jobs for idle AGVs, and a periodic clean while idle. <code>READY_FOR_INSERT</code> and <code>READY_FOR_RETRIEVE</code> jobs exist as classes but are never created by Dispatch.</p>
 
 <h2 data-num id="ds-what-goes-into-a-planrequest">The plan loop and what goes into a <code>PlanRequest</code></h2>
+<p>Dispatch does not call the scheduler for each new job; it plans from a timer, under a set of conditions, and assembles each request from its own job lists and garage state. This section covers when a plan call is made, what each field of the <code>PlanRequest</code> contains, and how the request is reduced when a response fails; the figure shows the whole call as Dispatch sees it.</p>
 <figure id="ds-fig-124_plan_call_sequence">
   <img src="figures/124_plan_call_sequence.svg" alt="One plan call seen from Dispatch">
   <figcaption><strong>One plan call seen from Dispatch.</strong> Step through it: the timer decides to plan, the request is built and sent, the scheduler answers, Dispatch checks the answer, builds a new execution state, updates the jobs, sends ready commands and completes jobs as the machines report.</figcaption>

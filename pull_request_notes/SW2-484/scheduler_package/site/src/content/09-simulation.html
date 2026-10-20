@@ -107,6 +107,7 @@
 <p>For the refactor this matters in one way: a BLift scenario is the only kind that drives the lift code paths of the scheduler end to end. Their layouts are not in the snapshots, so no BLift scenario could be read.</p>
 
 <h2 data-num id="sm-what-runs-during-a-simulation">What runs during a simulation</h2>
+<p>A simulation runs the production software of the garage unchanged and replaces only the patrons, the operator, the hardware and time with stand-in nodes. Knowing which nodes are stand-ins shows which parts of a simulated run reflect the scheduler. The figure shows the processes for the Pecos QA sandbox; the table that follows lists each stand-in and what it plays.</p>
 <figure id="sm-fig-135_sim_launch_topology">
   <img src="figures/135_sim_launch_topology.svg" alt="Processes, and the nodes inside them">
   <figcaption><strong>Processes, and the nodes inside them.</strong> Each large box is one operating-system process; each row inside is one ROS node with its role. The example is the Pecos QA sandbox (bay B21, AGV-1 and AGV-2). The scheduler is one node of the central container, as on site.</figcaption>
@@ -126,6 +127,7 @@
 <p>Two more nodes exist only in simulation but play nothing: the visualizer (<code>/vis/visualizer</code>, with the Foxglove bridge and RViz), which draws the garage from the published state, and the recorder (<code>/sim/recorder</code>), when recording is on.</p>
 
 <h3 data-num id="sm-what-is-real-and-what-is-simulated">What is real and what is simulated</h3>
+<p>For the refactor, the boundary between production code and stand-ins determines what a simulated run can reveal. The list below separates the two and notes the timing values they share, which limit what a simulation can show about the cost model.</p>
 <ul>
   <li><strong>Real (production software, unchanged):</strong> the dispatcher, the garage tracker and the monitors (<code>central</code>), the scheduler, the bay state machines, vehicle estimators and guidance (<code>bay</code>), the VECS manager, and the REST API. The dispatcher calls <code>/scheduler/plan</code> and carries out the response as on site (Dispatch tab, <a class="ref" href="#ds-what-goes-into-a-planrequest">section 3</a>).</li>
   <li><strong>Simulated:</strong> patrons, the bay, charger and lift hardware, the AGVs, time, and the operator actions written in the scenario or an events file.</li>
@@ -134,6 +136,7 @@
 <p>Because the scheduler is untouched by the simulation, any difference in a simulated run between the old and the refactored scheduler comes from the scheduler, or from timing (<a class="ref" href="#sm-determinism-and-what-to-compare">section 8.3</a>).</p>
 
 <h3 data-num id="sm-processes-and-containers">How the processes are arranged</h3>
+<p>The nodes listed above run in a small number of operating-system processes. The grouping affects resource use, shutdown and network isolation, not how the nodes communicate; the points below cover the containers, the separate clock process, shutdown on failure and the ROS domain.</p>
 <ul>
   <li><strong>Component containers</strong> group nodes into one process to save resources; it changes nothing about how they communicate. There are three kinds: <code>sim/sim_nodes</code> (the simulated AGVs and the Simulator), one <code>sim/b&lt;id&gt;_nodes</code> per bay, and <code>sim/central_sim_nodes</code> (the central nodes and the scheduler). Each runs a multi-threaded executor.</li>
   <li><strong>The clock runs in its own process</strong>, on wall time, "to minimize lost-wakeup stalls"; every other node has <code>use_sim_time</code> true and follows it.</li>
@@ -204,6 +207,7 @@
 <p>This check is independent of the planner's own collision model (Motion planning tab). It sees the poses the machines actually report, so it catches a plan that is unsafe when carried out, not only when planned. It sees them every 50 ms of simulated time, so a brief overlap between two updates can be missed.</p>
 
 <h3 data-num id="sm-what-the-simulator-reports">What the Simulator reports, and how to watch a run</h3>
+<p>While a scenario runs, its progress can be followed through a Simulator topic, the visualizer and the central topics of Dispatch. The list below names these sources, which are the ones to watch when checking whether a run proceeds as expected.</p>
 <ul>
   <li><code>/sim/report</code>: whether the scenario clock is running, how many timed actions remain, and the cars waiting to be inserted.</li>
   <li>RViz and Foxglove (both started by default) show the visualizer's pictures: AGVs, their commands, trays, cars, bays, lifts, the layout, the insert and retrieve queues, and the current schedule.</li>
@@ -332,12 +336,14 @@ events:
 <p>Whether the patron can park depends on a bay becoming ready to insert. With <code>bay_readiness_ratio</code> 0.0, Dispatch does not prepare one by itself; whether the empty tray that the retrieve leaves in B21 is enough is for a run to show. If the patron keeps waiting, raise the ratio (<a class="ref" href="#sm-insert-a-car-by-hand">section 7.2</a>). If Dispatch starts in automatic mode it may also queue a clean and a rebalance job of its own (Dispatch tab, <a class="ref" href="#ds-jobs-in-dispatch">section 2</a>), so the first plan call can already contain more than the retrieve.</p>
 
 <h2 data-num id="sm-running-a-simulation">Running a simulation</h2>
+<p>This section covers the practical side: preparing the files, launching the stack, feeding it work and evaluating the result. The figure shows the whole workflow in seven steps across two terminals; the subsections that follow cover the launch command, parameters, recording, and the risk of pairing a simulation with the wrong layout or events file.</p>
 <figure id="sm-fig-138_sim_workflow">
   <img src="figures/138_sim_workflow.svg" alt="Running a simulation, end to end">
   <figcaption><strong>Running a simulation, end to end.</strong> Prepare the files (1, 2), run (3 to 5), evaluate (6, 7). Terminal 1 holds the launch; terminal 2 is for feeding work and for the commands of <a class="ref" href="#sm-recipes">section 7</a>. Nothing checks that step 4 matches the simulation started in step 3 (<a class="ref" href="#sm-mismatch-protection">section 6.4</a>).</figcaption>
 </figure>
 
 <h3 data-num id="sm-launching">Launching</h3>
+<p>A simulation is started with one <code>ros2 launch</code> command that names a scenario file; an optional earlier command draws the layout map with its node ids. The example below starts a Pecos QA sandbox scenario at four times real time with recording on, and the table after it lists every argument the launch file reads, with its default.</p>
 <pre><code class="language-bash">source install/setup.bash                                                   # in every terminal
 ros2 run launcher layout_plotter 5675_pecos_sandbox_qa -o /tmp/qa.png       # optional: the map, with node ids
 ros2 launch launcher sim.launch.py \
@@ -494,12 +500,14 @@ events:
 <p>The type is matched without regard to case. Wrap the whole request in double quotes after <code>interfaces/srv/SimEvent</code>, as in the examples above.</p>
 
 <h3 data-num id="sm-pause-speed-up-slow-down">Pause, speed up, slow down, watch</h3>
+<p>The speed of a running simulation is set by the <code>real_time_factor</code> parameter of <code>/sim/clock</code> (<a class="ref" href="#sm-simulated-time">section 3.3</a>), which can be changed without restarting the launch. The commands below pause and resume the simulation, change its speed, and show the Simulator and Dispatch reports while it runs.</p>
 <pre><code class="language-bash">ros2 param set /sim/clock real_time_factor 0     # pause everything
 ros2 param set /sim/clock real_time_factor 1     # real time again; 4 = four times faster
 ros2 topic echo /sim/report                      # scenario clock running? actions left? cars waiting?
 ros2 topic echo /central/report                  # Dispatch: status, mode, consistent or not</code></pre>
 
 <h2 data-num id="sm-testing-scenarios">Testing with scenarios</h2>
+<p>A scenario run exercises the scheduler on realistic, changing garage states, but the Simulator by itself fails only on a collision. This section sets out which signals a run provides, a catalogue of scenarios covering the cases the refactor must preserve, and why two runs of the same scenario cannot be compared request by request.</p>
 <h3 data-num id="sm-what-a-run-can-tell-you">What a run can tell you</h3>
 <p>The Simulator itself only fails on a collision; the exerciser adds an exit status for the jobs it followed. The other signals are in the topics, and a test has to read them:</p>
 <table>
@@ -540,6 +548,7 @@ ros2 topic echo /central/report                  # Dispatch: status, mode, consi
 <p>So the comparison is split. The <strong>scheduler</strong> is compared on identical inputs: the plan calls recorded in one run, replayed offline (<a class="ref" href="#sm-replay-recorded-plan-calls">section 9.1</a>). The <strong>system</strong> is compared statistically: outcomes and durations over repeated runs (<a class="ref" href="#sm-closed-loop-runs">section 9.2</a>).</p>
 
 <h2 data-num id="sm-checking-the-refactor">Checking the refactor with the simulator</h2>
+<p>The simulator supports two checks of the refactor: replaying recorded plan calls through the old and the new scheduler, and running complete scenarios on the candidate. The figure shows how the two fit together, from a one-time recording on the baseline to the checks on each pull request and before each stage is merged.</p>
 <figure id="sm-fig-130_sim_verification_loop">
   <img src="figures/130_sim_verification_loop.svg" alt="Using the simulator to verify the refactor">
   <figcaption><strong>Using the simulator to verify the refactor.</strong> Record realistic plan calls once on the baseline; replay them through the old and the new scheduler on every pull request; run the scenarios on the candidate before a stage is merged.</figcaption>
@@ -581,6 +590,7 @@ for(const auto&amp; [stamp, request, recorded] : ReadPlanCalls(bag_path)) {   //
 <p>For a refactor that should not change behaviour, the expected value of <span class="math">\Delta_s</span> is 0; accept it when <span class="math">|\Delta_s|</span> stays within the spread of the baseline's own runs, measured beforehand with the same real time factor. The same rule applies to <span class="math">W</span>. A change outside that spread, with the replay passing, points at timing rather than decisions: investigate before merging.</p>
 
 <h3 data-num id="sm-when-to-run-what">When to run what</h3>
+<p>Replay needs no running simulation and can run on every pull request, whereas closed-loop runs need full simulations and are reserved for fewer points. The table assigns the simulation work to each stage of the staged plan, from recording the baseline in stage A to a final closed-loop pass in stages H and I.</p>
 <table>
   <thead><tr><th>Staged plan stage</th><th>Simulation work</th></tr></thead>
   <tbody>

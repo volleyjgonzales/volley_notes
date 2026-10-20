@@ -283,6 +283,7 @@
   <figcaption><strong>Where the code is, by pipeline stage.</strong> Solid segments are in the <code>scheduler</code> package, pale segments with a dashed outline are in library packages, and the empty dotted segment is <code>motion_planner</code> code the scheduler never calls. Task planning dominates the scheduler; motion planning's size is in <code>motion_planner</code>, most of which runs; the action graph is small. Counts are lines of C++ without tests, measured on the snapshots; <code>common_ros</code> and <code>task_planner</code> are not counted.</figcaption>
 </figure>
 <h3 id="bg-a-map-of-this-guide-by-stage">A map of the study pack by stage</h3>
+<p>The table below connects each pipeline stage to the code that implements it and to the parts of this study pack that explain it. Use it as an index: find the stage under study, note its entry point in the source, and follow the links to the relevant sections and figures.</p>
 <table>
   <thead>
     <tr>
@@ -551,6 +552,7 @@ table_(gg_, logger),                                  // volley::CollisionTable,
 <p>Most code does not call <code>Query</code> directly. It asks <code>volley::GetStaticFilter(id, gg_, working_state, table_, ...)</code>, which uses the table to mark which graph vertices and edges a given footprint cannot use given everything in <code>working_state</code>, and then tests <code>filters.IsEnabled(vertex)</code> or <code>IsEnabled(edge)</code> (<a class="ref" href="#bg-the-motion-planner-toolbox">section 22</a> lists every filter rule). <code>ctx->disabledness_filters</code>, built once per <code>Plan()</code>, works the same way for disabled nodes and entities. The direct <code>Query</code> calls are in <code>DoTrayAssignments</code> (is another tray in the way of the root tray's next pose?) and <code>AgvMatchingEventDeps</code> (would two AGVs conflict?).</p>
 <p>The fourth structure is the one that changes: <code>DiscreteGarageState</code> (<a class="ref" href="#bg-discretegaragestate-the-bridge-between-the-garage-and-the-planner">section 5</a>) records <strong>who is where right now</strong>. Layout, graph and table never change after start-up; the state is different in every plan request. <a class="ref" href="#bg-the-garage-model-in-code">Section 6</a> opens up the first three: their containers, their lookups and what each costs.</p>
 <h2 data-num id="bg-vocabulary">Vocabulary</h2>
+<p>The scheduler code and this study pack use a small set of terms with precise, and sometimes easily confused, meanings. The table gives each term, its meaning and the distinction most likely to cause a misreading; consult it whenever a later section uses a word in an unfamiliar way.</p>
 <table>
   <thead>
     <tr>
@@ -1198,6 +1200,7 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
   </li>
 </ul>
 <h3 data-num id="bg-which-structure-answers-which-question">Which structure answers which question</h3>
+<p>Each of the structures described above answers a different kind of question about the garage. The table lists common questions, the call that answers each one, the member that holds the answer and the cost of asking, so that a reader can tell at a glance which structure a given piece of code depends on.</p>
 <table>
   <thead>
     <tr>
@@ -1256,6 +1259,7 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
 <p>The <code>interfaces</code> package defines the wire contracts under <code>msg/</code> and <code>srv/</code>. <code>rosidl_generate_interfaces</code> turns them into C++ structs. <code>scheduler_msgs.hpp</code> gives every one of them a short alias ending in <code>Msg</code> (<code>PlanRequestMsg = interfaces::msg::PlanRequest</code>, <code>GaragePoseMsg = interfaces::msg::GaragePose</code>, …), so when you see <code>...Msg</code> in the scheduler you are looking at a generated ROS struct. When one message appears inside another, the relationship is <strong>composition</strong>, not inheritance.</p>
 <p>Read the interfaces from the outside in: <code>srv/Plan.srv</code>, then <code>PlanRequest</code> and <code>PlanResponse</code>, then <code>DiscreteGarageState</code>, <code>Schedule</code>, <code>ActionNode</code> and <code>SchedulerJob</code>, and only then the utility types. The subsections below follow that order: an overview, then the request field by field, the garage snapshot, the job message, the schedule and its commands, the response, and the small shared types. Every field table says whether the scheduler actually reads or writes the field, because several are only Dispatch's bookkeeping. The full <code>.msg</code> text of any type is one hover away: type names in code blocks open a popup with the definition.</p>
 <h3 data-num id="bg-the-plan-call-at-a-glance">The <code>Plan</code> call at a glance</h3>
+<p>The <code>Plan</code> service is the single boundary between the scheduler and the rest of the system. The table lists the interfaces involved, from <code>srv/Plan.srv</code> inward, with what each contains and why it matters; the subsections that follow examine each of them in turn.</p>
 <table>
   <thead>
     <tr>
@@ -1840,6 +1844,7 @@ boost::vector_property_map&lt;double, decltype(index_map)> per_edge(boost::num_e
   <figcaption>Two lifetimes. The node keeps one <code>Scheduler</code> whose members are built in a fixed order, each from the one before it. Every plan request gets a fresh <code>ScheduleContext</code> that holds all mutable planning data and is released when <code>Plan()</code> returns.</figcaption>
 </figure>
 <h3 data-num id="bg-constructing-the-scheduler">Constructing the Scheduler</h3>
+<p>The <code>Scheduler</code> is built once, when the node starts, and its constructor creates the static garage model in a fixed chain: layout, pose graph, garage graph, collision table. In the code below, note that each member is built from the one initialised before it, which is why declaration order matters.</p>
 <pre><code class="language-cpp">// Where: Scheduler::Scheduler(std::string layout_filepath, rclcpp::Logger logger,
 //                             const SchedulerParams&amp; params) in src/scheduler.cpp.
 // Called once, from SchedulerRos's constructor: std::make_shared&lt;Scheduler>(layout_filepath, logger, params).
@@ -1900,6 +1905,7 @@ plan_ctx->disabledness_filters =
 <p>The loop and the filters are explained in <a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 14</a>. <a class="ref" href="#bg-schedulecontext-the-per-call-workspace">Section 7</a> describes each field of the new <code>ScheduleContext</code> and which stage reads or changes it.</p>
 <p>Why can a <code>const</code> method change anything at all? <code>Plan()</code> cannot modify <code>*this</code>, but <code>plan_ctx</code> is a local <code>shared_ptr</code> to a <strong>non-const</strong> <code>ScheduleContext</code>. The same holds for <code>DoTrayAssignments(ScheduleContextSPtr ctx) const</code> and friends: the Scheduler's graphs and tables stay fixed, and all planning state lives in <code>*ctx</code>. Do not read <code>const</code> as “thread-safe”, though: <code>costaudit_</code> and <code>printdags_</code> are <code>mutable</code>, and <code>CreateActionGuid()</code> uses a plain static counter. The <code>plan</code> service runs in the node's default callback group, so plan calls are handled one at a time today.</p>
 <h2 data-num id="bg-one-plan-call-step-by-step">One <code>Plan()</code> call, step by step</h2>
+<p>This section follows a single <code>Plan()</code> call from request to response. The figure shows the control flow with every early return; the numbered list then summarises the nine steps, and the code that follows shows the job loop that expands each pending job into events.</p>
 <figure id="bg-fig-22_plan_control_flow">
   <img src="figures/22_plan_control_flow.svg" alt="Plan control flow">
   <figcaption><code>Scheduler::Plan()</code> step by step with every early return. Job expansion fails jobs one at a time. Any failure after expansion fails <strong>every</strong> pending job at once and returns no schedule, but <code>PlanResponse.success</code> stays <code>true</code>; only an invalid base state returns <code>false</code>. Not drawn: CHUGG can also <em>throw</em> (<a class="ref" href="#bg-chugg-the-motion-planner">section 21</a>), and nothing in the scheduler catches it.</figcaption>
@@ -1993,6 +1999,7 @@ for(const SchedulerJobMsg&amp; job : request_data.pending_jobs) {
   <figcaption><strong>Reserving what the running schedule uses.</strong> Step through one request. AGV-2 has two moves and bay B21 one command in <code>base_schedule</code>. The loop marks AGV-2 and B21 disabled and adds every source and destination node to <code>disabled_nodes_</code>; the keep-out filters follow. A pending MOVE_AGV for AGV-2 then fails, a repark of T24 succeeds, AGV assignment skips AGV-2, and in the last two steps both schedules run side by side without sharing an asset.</figcaption>
 </figure>
 <h3 data-num id="bg-what-the-reservation-loop-marks">What the loop marks</h3>
+<p>The reservation loop walks every <code>ActionNode</code> in <code>base_schedule</code> and, depending on its type, marks an AGV, bay, VECS or node as disabled in <code>initial_state</code>. The table lists, for each action type, the setter that is called and the field it changes; note that VRC commands reserve nothing.</p>
 <table>
   <thead>
     <tr>
@@ -2244,6 +2251,7 @@ if(!move->GetTrayId()) { /* std::optional&lt;uint16_t> is empty: no tray chosen 
 </figure>
 <p>Two confusions to avoid: inheritance says nothing about execution order, and the subclasses are siblings, not phases. A <code>TrayMove</code> never “turns into” an <code>AgvMove</code>; AGV assignment adds separate <code>AgvMove</code> events around it.</p>
 <h3 id="bg-the-base-class">The base class</h3>
+<p>Every event type derives from the abstract class <code>ScheduleEvent</code>, which defines the interface that the rest of the scheduler relies on when it replays events. The abridged declaration below shows that interface; the points that follow it explain the details later tabs depend on.</p>
 <pre><code class="language-cpp">// planner_core/schedule_events.hpp (abridged)
 enum class ScheduleEventType : uint8_t {
   UNDEFINED = 0, AGV_MOVE = 1, BAY_TRANSITION = 2, TRAY_MOVE = 3, VECS_TRANSITION = 4, VRC_TRANSITION = 5,
@@ -2276,6 +2284,7 @@ using ScheduleEventSPtr = std::shared_ptr&lt;ScheduleEvent>;
   <li><strong><code>GetGarageEntityId()</code> drives rule A</strong> (an event waits for the previous event on the same AGV, tray, bay or VECS). It returns the entity whose last event a new event must wait for. A <code>TrayMove</code> with no tray yet returns <code>std::nullopt</code>, which is why such moves skip rule A (<a class="ref" href="#bg-where-the-edges-come-from">section 14.5</a>).</li>
 </ul>
 <h3 id="bg-the-subclasses-and-what-apply-does">The subclasses, and what <code>Apply</code> does</h3>
+<p>The five subclasses of <code>ScheduleEvent</code> differ in the data they carry and in what their <code>Apply</code> method does to a <code>DiscreteGarageState</code>. The table summarises each subclass; pay particular attention to <code>TrayMove</code>, whose behaviour depends on which of its optional fields are set, as the figure and list after the table explain.</p>
 <table>
   <thead>
     <tr>
@@ -2590,6 +2599,7 @@ public:
   <li><strong>A side map <code>ptr_to_vertex_</code>.</strong> Boost only maps vertex → value. <code>DagBase</code> keeps the reverse map itself, so “where is this event?” is a hash lookup. Every pointer-taking method goes through it, and it is why the same event cannot be added twice: <code>Add(ptr)</code> returns <code>std::nullopt</code> if <code>ptr</code> is already a key.</li>
 </ul>
 <h3 data-num id="bg-what-is-stored-vertices-edges-and-shared-events">What is stored: vertices, edges and shared events</h3>
+<p>A <code>ScheduleEventDag</code> stores events as vertices of a Boost graph, keeps a reverse map from event pointer to vertex, and shares the event objects with every other structure that refers to them. The figure shows this layout in memory; the table after it sets out the different ways the code refers to one event and how to convert between them.</p>
 <figure id="bg-fig-64_event_dag_storage">
   <img src="figures/64_event_dag_storage.svg" alt="ScheduleEventDag storage and event identity">
   <figcaption>The example DAG from the topological-ordering figure, as it sits in memory. <code>dag_</code> stores one vertex per event (an index holding a <code>shared_ptr</code>) and the edges between indices; <code>ptr_to_vertex_</code> maps each pointer back to its index. The bookkeeping maps in <code>ScheduleContext</code> and the AGV-assignment copy point at the same event objects. Bottom: the three ways the code names an event, and the calls that convert between them.</figcaption>
@@ -2631,6 +2641,7 @@ public:
 </table>
 <p>The vertex is the fragile one. It is only meaningful for one DAG object, and the comment above <code>RemoveVertex</code> says plainly what happens on removal: “If you remove a vertex, all vertex IDs larger than the removed vertex will decrement by 1.” The helper keeps <code>ptr_to_vertex_</code> correct, but any <code>Vertex</code> you saved elsewhere is now wrong. <code>ctx->events</code> never has a vertex removed, and the code depends on that: CHUGG reports each motion with the vertex index of the event it came from, and <code>BuildActionDagFromMotions</code> maps it back with <code>GetEventFromVertex</code>.</p>
 <h3 data-num id="bg-the-operations">The operations</h3>
+<p>The scheduler builds, queries, orders, replays and rewrites the event DAG through a fixed set of public methods. The figure applies the main operations to a small example DAG, and the table that follows lists every method by group (build, look up, structure, order and replay, rewrite, debug) with its exact behaviour and where the scheduler calls it.</p>
 <figure id="bg-fig-65_event_dag_operations">
   <img src="figures/65_event_dag_operations.svg" alt="ScheduleEventDag operations">
   <figcaption>Each panel applies one operation to the same six-event DAG. (1) <code>AddEvent</code> adds an unconnected vertex. (2) <code>AddDependency(d, g)</code> adds the edge d → g. (3) Roots are events with no incoming edge (returned sorted by job index), leaves events with no outgoing edge. (4) A topological ordering is a list of vertex indices, lower job indices first. (5) <code>Apply</code> replays all events in that order onto a garage state. (6) <code>WouldCreateCycle(d, a)</code> is true because a already reaches d. (7) <code>Reduce()</code> removes edges implied by longer paths. (8) <code>Remove</code> is only ever called on a copy.</figcaption>
@@ -2923,6 +2934,7 @@ auto [success, message] = ctx->events.Apply(working_state);       // every event
 </ul>
 <p>Both calls discard the returned <code>BoolStringPair</code>, so a cyclic DAG at that point is not reported by <code>Reduce()</code>; the next <code>GetTopologicalOrdering()</code> catches it. Why the placement of each call matters is discussed with the final checks in <a class="ref" href="#bg-reduce-and-sanitycheckevents">section 18</a>.</p>
 <h3 data-num id="bg-gotchas">Gotchas</h3>
+<p>The behaviours described above lead to several mistakes that are easy to make when changing code that uses the event DAG. The list below collects them, each with the reason it occurs.</p>
 <ul>
   <li><strong>Never remove a vertex from <code>ctx->events</code>.</strong> Vertex indices are how CHUGG's motions find their events again, and removal shifts every later index. Removing from a copy is fine; that is what the copy is for.</li>
   <li><strong>A copy is not a snapshot of the events.</strong> <code>auto copy(ctx->events)</code> shares every event object. To compare “before” and “after” a stage (as the parity tests in the <a href="#doc-verification">Verification</a> tab must), build two contexts independently.</li>
@@ -2946,6 +2958,7 @@ auto [success, message] = ctx->events.Apply(working_state);       // every event
   <figcaption><code>ScheduleContext</code>, field by field. Left: <code>Plan()</code> owns the <code>shared_ptr</code> and hands the same pointer to every stage. Centre: the nine fields in four groups, and the three helper methods. Right: the types the fields hold. <code>initial_state</code>, <code>events</code> and <code>scheduled_jobs</code> are held by value; the two bookkeeping maps hold <code>shared_ptr</code>s to events that also live in <code>events</code>, so a map entry and the DAG vertex are the same object.</figcaption>
 </figure>
 <h3 id="bg-the-definition-annotated">The definition, annotated</h3>
+<p>The class definition is short, and reading it field by field is the quickest way to understand what a planning attempt carries. The abridged declaration below groups the fields as the figure does, with a comment on each; the table that follows records who sets and who reads every field.</p>
 <pre><code class="language-cpp">// include/scheduler/scheduler.hpp:57 (abridged; the three helper methods are shown further below)
 class ScheduleContext {
 public:
@@ -3117,6 +3130,7 @@ public:
   <li><strong>The correspondence ends at the very end.</strong> <code>BuildScheduledActionsArray</code> copies the vector into an <code>unordered_map</code> keyed by job guid, appends each action's position to its job's <code>node_indices</code>, then clears the vector and refills it from the map. After that, entry k is no longer the job with index k. Nothing reads it by index any more, but the order reaches the response: <code>result.scheduled_jobs</code> lists the failed jobs first (pushed during the loop) and then the planned ones in hash-map order, not request order.</li>
 </ul>
 <h3 id="bg-the-three-helper-methods">The three helper methods</h3>
+<p><code>ScheduleContext</code> has only three methods, and two of them add dependency edges to <code>events</code> while jobs are expanded. The code below shows all three; note which edge rule each of <code>UpdateLastEntityEvent</code> and <code>UpdateLeafDependencies</code> implements.</p>
 <pre><code class="language-cpp">// include/scheduler/scheduler.hpp, inside ScheduleContext
 
 void PushBackScheduledJob(const SchedulerJobMsg&amp; job) {      // wrap the job; node_indices filled at the end
@@ -3196,6 +3210,7 @@ for(size_t i = 1; i &lt; nav_path.size(); ++i) {
   <li><strong>The cycle check uses the root event.</strong> <code>move_to_tray</code> has no children yet when the edge is added, so <code>WouldCreateCycle(first, move_to_tray)</code> would always say “safe”. The code asks about <code>root_event</code> (the tray move this approach leads to) instead, because <code>move_to_tray</code> will reach it through the task-chain edges added next (the lift, then the tray move itself).</li>
 </ul>
 <h3 id="bg-life-cycle-across-one-plan-call">Life cycle across one <code>Plan()</code> call</h3>
+<p>Each field of the context is created, changed and read at particular steps of <code>Plan()</code>, and knowing which step touches which field makes the later tabs easier to follow. The figure maps fields against steps, and the numbered list then describes what each step does with the context.</p>
 <figure id="bg-fig-62_schedule_context_lifecycle">
   <img src="figures/62_schedule_context_lifecycle.svg" alt="ScheduleContext lifecycle">
   <figcaption>Which step of <code>Plan()</code> touches which field, from <code>scheduler.cpp</code>. Read along a row for one field's life, down a column for what one step reads and changes. <code>events</code> is the only field that every step from job expansion to the response touches. <code>last_entity_event</code> is used only during job expansion, <code>first_tray_event</code> connects tray and AGV assignment, and <code>scheduled_jobs</code> is written during job expansion, rebuilt when the response is built and copied into the result at the end.</figcaption>
@@ -3213,6 +3228,7 @@ for(size_t i = 1; i &lt; nav_path.size(); ++i) {
   <li><strong>Fill result.</strong> <code>Plan()</code> copies each <code>scheduled_jobs</code> entry into <code>result.scheduled_jobs</code> with state <code>STATE_EXECUTING</code>. Then <code>plan_ctx</code> goes out of scope and the context is freed.</li>
 </ol>
 <h3 id="bg-gotchas-1">Gotchas</h3>
+<p>Because <code>ScheduleContext</code> enforces no invariants, its correct use depends on conventions that the compiler does not check. The list below records the pitfalls that follow from this, including fields that are valid only during certain stages.</p>
 <ul>
   <li><strong><code>last_entity_event</code> is stale after job expansion.</strong> Tray and AGV assignment add many events (blocker moves, AGV moves, lifts) without updating it. Code in those stages that needs “the last event of X” keeps its own local map instead (<code>last_tray_event</code> in tray assignment, <code>last_agv_event</code> in AGV assignment). Do not read <code>ctx->last_entity_event</code> after job expansion.</li>
   <li><strong><code>first_tray_event</code> is empty until tray assignment.</strong> A job method that read it would always find nothing.</li>
@@ -3221,6 +3237,7 @@ for(size_t i = 1; i &lt; nav_path.size(); ++i) {
   <li><strong>A failure inside a stage leaves partial changes.</strong> Job methods that fail after adding events, and tray or AGV assignment failing halfway, leave <code>events</code> partly edited. <code>Plan()</code> handles the second case by failing every job and returning, so the half-edited context is simply discarded; the first case is gotcha 1 in <a class="ref" href="#bg-gotchas-2">section 14.18</a>.</li>
 </ul>
 <h2 data-num id="bg-packages-build-system-and-dependencies">Packages, build system and dependencies</h2>
+<p>The <code>scheduler</code> package builds a shared library, a ROS component with its executable, and a set of test binaries. The table lists each target and the sources it is built from; the dependencies declared in <code>package.xml</code> follow it.</p>
 <table>
   <thead>
     <tr>
@@ -3249,6 +3266,7 @@ for(size_t i = 1; i &lt; nav_path.size(); ++i) {
 </table>
 <p><code>package.xml</code> lists these dependencies: <code>common</code>, <code>common_ros</code>, <code>cost_functions</code>, <code>interfaces</code>, <code>motion_planner</code>, <code>planner_core</code>, <code>task_planner</code>, <code>vrc_interfaces</code>, <code>rclcpp</code>, <code>rclcpp_components</code>, <code>rclcppx</code>, <code>std_srvs</code>, <code>stdx</code>, <code>backward_ros</code> and Boost. The build uses ROS 2 <code>ament_cmake</code> with the repository's <code>volley_cmake</code> macros (<code>volley_package</code>, <code>volley_add_library</code>, <code>volley_add_component</code>, <code>volley_add_gtest</code>, <code>volley_ament_auto_package</code>). The dependency direction is <code>scheduler → planner_core, motion_planner, task_planner, cost_functions, common_ros</code>; nothing in the snapshots depends on <code>scheduler</code>. Of these, <code>planner_core</code>, <code>common_ros</code>, <code>motion_planner</code>, <code>cost_functions</code> and the interface packages are in the snapshots; <code>task_planner</code> (<code>BottleneckAssignment</code>), <code>common</code> and <code>stdx</code> are not.</p>
 <h3 id="bg-source-index">Source index</h3>
+<p>The list below indexes the source files of the <code>scheduler</code> package and the source snapshots under <code>sources/</code> from which the code in this study pack was read. Use it to locate the file that holds a class or function named elsewhere in the guide.</p>
 <ul>
   <li><code>include/scheduler/scheduler.hpp</code>: <code>SchedulerParams</code>, <code>ScheduleContext</code>, <code>Scheduler</code> declarations with comments</li>
   <li><code>src/scheduler.cpp</code>: everything in <code>Scheduler</code>, plus the response-building helpers</li>
@@ -3265,6 +3283,7 @@ for(size_t i = 1; i &lt; nav_path.size(); ++i) {
   <li><code>sources/5675_pecos_combined.yaml</code>: coordinates, node metadata and edges for the Pecos figures</li>
 </ul>
 <h2 data-num id="bg-debugging-and-testing">Debugging and testing</h2>
+<p>Several tools help when a plan is wrong or a change needs checking: logging, DAG dumps, the cost audit and the GoogleTest suites. The list below describes each, and the commands that follow build the package and run its tests.</p>
 <ul>
   <li><strong>Logs.</strong> <code>Plan()</code> logs the initial DGS, each job as it is planned, the topological order after tray and after AGV assignment, and why things fail. Set the logger to DEBUG to also get every planned trajectory.</li>
   <li><strong>DAG pictures.</strong> Call the <code>debug/printdags</code> service (or set the <code>printdags</code> parameter) to log the event DAG after each stage and the action DAG after each <code>Reduce()</code>; it needs <code>libgraph-easy-perl</code>.</li>
@@ -3277,6 +3296,7 @@ colcon test-result --verbose
 </code></pre>
 <p>A good first exercise: run <code>SchedulerJobs.RetrieveJob</code> under a debugger, break in <code>Scheduler::DoTrayAssignments</code> and <code>Scheduler::DoAgvAssignments</code>, and print <code>ctx->events</code> at each stop.</p>
 <h2 data-num id="bg-c-concepts-and-idioms-in-context">C++ concepts and idioms in context</h2>
+<p>The scheduler relies on a small number of modern C++ idioms, and misreading one of them is a common source of confusion for readers new to the code. The table names each idiom, its meaning, where it appears in the scheduler and the pitfall to watch for.</p>
 <table>
   <thead>
     <tr>
@@ -3370,6 +3390,7 @@ colcon test-result --verbose
 <h2 data-num id="bg-reading-the-c-code-a-call-trace-and-a-route-through-the-source">Reading the C++ code: a call trace and a route through the source</h2>
 <p>This section is for the moment you open the code. It shows <strong>who calls whom, in what order</strong>, with the signature and the file and line of every function, so you can jump straight to it.</p>
 <h3 id="bg-how-to-read-the-call-trace-figures">How to read the call-trace figures</h3>
+<p>The two call-trace figures in this section show, row by row, which functions run during start-up and one <code>Plan()</code> call. The conventions listed below explain how time, call depth, location and loops are drawn, and should be read before the figures themselves.</p>
 <ul>
   <li><strong>Time runs downwards.</strong> Row 12 happens after row 11.</li>
   <li><strong>Indentation is call depth.</strong> A row indented under another is called <em>from</em> it. The grey line under a call runs down past all the calls it makes, like the bars in a flame chart turned on their side.</li>
@@ -3524,6 +3545,7 @@ colcon test-result --verbose
   </tbody>
 </table>
 <h3 id="bg-following-the-calls-yourself">Following the calls yourself</h3>
+<p>The figures and the reading route give a static view of the calls; tracing them in a running program confirms that view and shows the data at each step. The list below describes four practical ways to do this: a debugger on a test, editor navigation, text search and the DAG dumps.</p>
 <ul>
   <li><strong>Use a debugger on a test.</strong> <code>TEST(SchedulerJobs, RetrieveJob)</code> (<code>scheduler_jobs_tests.cpp:769</code>) runs the same kind of request as <a class="ref" href="#bg-fig-39_call_trace_plan">Figure 59</a>, through <code>Plan()</code>. <code>TEST(Scheduler, TrayAndAgvAssignments)</code> (<code>scheduler_tests.cpp:324</code>) calls the two assignment stages directly. Put breakpoints on the rows of the figures and step.</li>
   <li><strong>Let the editor jump for you.</strong> Build with <code>--cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code> and point clangd (or your IDE) at <code>build/compile_commands.json</code>; "go to definition" then also works into <code>planner_core</code> and <code>motion_planner</code>.</li>

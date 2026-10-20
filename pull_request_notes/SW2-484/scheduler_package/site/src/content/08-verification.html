@@ -83,6 +83,7 @@ EXPECT_FALSE(ctx->events.HasDependency(tray_move_1, tray_move_2));  // direct ed
 </code></pre>
 <p>Note the last line: the test checks that <code>Reduce()</code> <em>removed</em> an edge it added itself, which is exactly the kind of detail a parity check must preserve. The test keeps its own <code>shared_ptr</code> to each event, so it can inspect the event after the algorithm has changed it. A parity harness can use the same trick on both the old and the new path.</p>
 <h3 id="vr-tests-most-relevant-to-the-two-solvers">Tests most relevant to the two solvers</h3>
+<p>Of the 72 active tests, the ones below exercise tray assignment and AGV assignment, the two stages that the refactor moves into separate solvers. For each test the table gives the layout and what it asserts; note how many assert only that the stage succeeded, a weakness taken up under the gaps that follow.</p>
 <table>
   <thead>
     <tr>
@@ -155,6 +156,7 @@ EXPECT_FALSE(ctx->events.HasDependency(tray_move_1, tray_move_2));  // direct ed
   </tbody>
 </table>
 <h3 id="vr-gaps">Gaps</h3>
+<p>The existing tests leave several weaknesses that limit how far they can serve as evidence that the refactor preserves behaviour. Each item below names one and, where relevant, what the parity work must add to cover it.</p>
 <ol>
   <li><strong>Assertions are mostly success flags.</strong> Four of the five tray tests do not check which tray moved where. They will not catch a behaviour change; the parity harness in <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a> must.</li>
   <li><strong>No direct tests</strong> for <code>EnsureAgvMovePathsClear</code>, <code>AddDepsAfterAmiga</code> or <code>InsertVrcActionsIntoDag</code>. They run only inside larger tests, so a regression there shows up (if at all) as a downstream failure.</li>
@@ -305,6 +307,7 @@ colcon test-result --verbose
 <p>Benchmarks (<a class="ref" href="#vr-benchmark-method">section 5</a>) reuse the inputs of layers 2 and 3 and time them; they do not need the simulator either.</p>
 
 <h3 data-num id="vr-computing-a-baseline">Computing a baseline</h3>
+<p>A baseline is the canonical result of each fixture as produced by the code before the refactor, stored so that every later commit can be compared with it. The steps below produce it once, at a pinned commit, without changing the scheduler sources in <code>src/</code>.</p>
 <ol>
   <li><strong>Pin the baseline commit</strong> and tag it, for example <code>scheduler-parity-baseline</code>. Every golden file records this commit.</li>
   <li><strong>Add the capture code first, as test-only code.</strong> The current code has no canonical output, so the first pull request adds <code>Canonicalize</code>, a fixture loader and a capture test under <code>test/parity/</code>, on top of the pinned commit, without touching <code>src/</code>. Its only effect is to write files.</li>
@@ -313,6 +316,7 @@ colcon test-result --verbose
 </ol>
 
 <h3 data-num id="vr-where-results-are-stored">Where fixtures and results are stored</h3>
+<p>Each fixture keeps its input and its golden file together in one folder of the scheduler package, so that a reviewer sees an input and its expected result side by side. The tree below shows the proposed layout; it is followed by an example golden file and a summary of what is kept inside and outside the repository.</p>
 <pre><code>scheduler/test/parity/
 ├── fixtures/
 │   ├── tray_empty_bay_pecos_qa/
@@ -352,6 +356,7 @@ colcon test-result --verbose
 <p class="small">The build commands of <a class="ref" href="#vr-build-and-run-commands">section 6</a> also name a <code>scheduler_advanced_tests</code> package. It is not in the snapshots, so its contents are unknown; it should be inspected before the baseline is pinned.</p>
 
 <h2 data-num id="vr-acceptance-checklist">Acceptance checklist</h2>
+<p>The refactor is accepted when every item below holds. The list gathers the conditions set out in the preceding sections: a captured baseline, parity of both default solvers, ported tests, real-site benchmark scenarios with stored baselines, and the simulation checks of <a class="ref" href="#vr-system-level-checks-in-simulation">section 7</a>.</p>
 <ul class="contains-task-list">
   <li class="task-list-item"><input type="checkbox" disabled> Baseline captured: all 72 active tests pass on the pinned commit; canonical outputs saved for every fixture.</li>
   <li class="task-list-item"><input type="checkbox" disabled> Default tray solver gives the same canonical result as <code>DoTrayAssignments</code> on every fixture.</li>

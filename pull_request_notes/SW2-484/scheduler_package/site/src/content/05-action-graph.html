@@ -152,10 +152,12 @@
 <p>The ADG has one vertex per action, <span class="math">V = \{a^i_k\}</span>, and two kinds of edge.</p>
 
 <h3 data-num id="ad-type-1-edges">Type 1 edges: each robot's own order</h3>
+<p>The first kind of edge records the order in which each robot carries out its own plan, independently of every other robot.</p>
 <div class="math">E_1 = \{ (a^i_k, \, a^i_{k+1}) : 1 \le k \lt n_i \}</div>
 <p>A robot does its actions in order. These edges form one chain per robot.</p>
 
 <h3 data-num id="ad-type-2-edges">Type 2 edges: handing a location over</h3>
+<p>The second kind of edge coordinates robots: it orders two actions of different robots that use the same location. The definition below is followed by its meaning in words, a worked example in the figure, and a table that checks the rule pair by pair.</p>
 <div class="math">E_2 = \{ (a^i_k, \, a^j_l) : i \ne j, \;\; s^i_k = g^j_l, \;\; t^i_k \le t^j_l \}</div>
 <p>Robot <span class="math">i</span>'s action <span class="math">a^i_k</span> <em>leaves</em> location <span class="math">s^i_k</span>. Robot <span class="math">j</span>'s action <span class="math">a^j_l</span> <em>enters</em> the same location, later in the plan. The edge says that the leaving action must finish before the entering action may start: a robot moves into a location only after the previous robot has completely moved out.</p>
 <figure id="ad-fig-85_adg_construction">
@@ -458,6 +460,7 @@ Rotation: not a DAG (the plan needs synchronous moves)
 <p>Suppose three robots rotate around a triangle at the same instant: <span class="math">\mathrm{X} \to \mathrm{Y}</span>, <span class="math">\mathrm{Y} \to \mathrm{Z}</span>, <span class="math">\mathrm{Z} \to \mathrm{X}</span>, all at <span class="math">t = 0</span>. Each action leaves a location another one enters at the same time, and <span class="math">t \le t</span> holds, so the rule adds three edges that form a cycle. Each robot waits for another to leave. The plan is only safe if all three move in perfect lockstep, which real robots cannot guarantee. Hönig et al. call such transitions unsafe, and point out that they show up as cycles in the ADG. A planner whose output must run on an ADG must therefore avoid them. In the scheduler, a cycle in the action DAG makes <code>GetTopologicalOrdering()</code> fail, and the response reports "Failed to get final ordering for action DAG!".</p>
 
 <h2 data-num id="ad-executing-an-adg">Executing an ADG</h2>
+<p>An ADG states which actions must precede which, but not when each action is sent to its robot. This section gives the rule a dispatcher uses to release actions, shows why that rule keeps robots apart and always finishes, and derives the timing quantities (earliest start, critical path and slack) and the parallelism that the graph implies.</p>
 
 <h3 data-num id="ad-statuses-and-the-dispatch-rule">Statuses and the dispatch rule</h3>
 <p>Each vertex has a status: <strong>staged</strong> (not yet sent), <strong>enqueued</strong> (sent to the robot's command queue) or <strong>finished</strong> (the robot reported completion). Hönig et al. enqueue an action <span class="math">a^j_l</span> when two conditions hold:</p>
@@ -541,6 +544,7 @@ Rotation: not a DAG (the plan needs synchronous moves)
 <p>A refactor that leaves assignments unchanged should leave all three unchanged. A solver change that improves <span class="math">W / L</span> is one that genuinely lets more robots move at once.</p>
 
 <h2 data-num id="ad-beyond-the-basic-adg">Beyond the basic ADG</h2>
+<p>The ADG described so far has been extended in several directions since it was introduced. The list below summarises the main variants and notes the scheduler's closest counterpart where one exists.</p>
 <ul>
   <li><strong>Temporal plan graph</strong> (Hönig, Kumar, Cohen, Ma, Xu, Ayanian and Koenig, ICAPS 2016). The same two edge types, used to post-process a multi-agent path-finding (MAPF) plan into one that respects velocity limits and safety distances. The ADG is its execution-time use.</li>
   <li><strong>Persistent execution</strong> (Hönig et al., 2019). New plans are appended to a running ADG, so a warehouse can keep planning while robots move. The scheduler's <code>base_schedule</code> plays a similar role (<a class="ref" href="#ad-persistent-planning-base-schedule-and-the-split">section 7.4</a>).</li>
@@ -553,6 +557,7 @@ Rotation: not a DAG (the plan needs synchronous moves)
 <p>Of the two DAGs in the pipeline (<a class="ref" href="#bg-motion-planning-and-the-response">section 1</a>), only the action DAG is an ADG. <code>ResponseFromTrajectories(ctx, final_state)</code> builds it, as stage 5 of the pipeline, from the <code>ContinuousState</code> CHUGG returns (<a class="ref" href="#bg-continuousstate-the-timeline">section 4</a>).</p>
 
 <h3 data-num id="ad-two-dags-two-jobs">Two DAGs, two jobs</h3>
+<p>The scheduler's pipeline holds two DAGs, both built on <code>DagBase</code>, and only one of them is an ADG. The table compares the event DAG and the action DAG row by row: what a vertex is, what an edge means, which times each carries, and which stage builds and consumes each graph.</p>
 <table>
   <thead>
     <tr>
@@ -596,6 +601,7 @@ Rotation: not a DAG (the plan needs synchronous moves)
 </table>
 
 <h3 data-num id="ad-how-the-action-dag-is-built">How the action DAG is built</h3>
+<p><code>ResponseFromTrajectories</code> turns CHUGG's timed trajectories into the action DAG through a fixed sequence of calls. The abridged code shows that sequence; the numbered list after it explains each step and identifies which of the scheduler's edges correspond to Type 1 and Type 2 edges.</p>
 <pre><code class="language-cpp">// src/scheduler.cpp — Scheduler::ResponseFromTrajectories (abridged)
 std::set&lt;Motion, MotionScheduleOrder> all_motions;              // by start time, then event, then hash
 CollectAndCollapseTrajectoryMotions(final_state, *layout_, all_motions);  // drop waits, merge floor runs
@@ -667,6 +673,7 @@ if(delta->type == "AgvPoseChanged") {
 <p>The loop body is short. For each motion in order, <code>ToActionNode</code> creates the action with a fresh guid and the job's id, and <code>event_start_end</code> records it as the first action of its event if the event has none yet, and as its last action in any case. The action then gets an edge from <code>last_entity_action[entity]</code>, which keeps each machine's commands in order. Next, <code>GetBlockers(location, collision_id, lifted)</code> returns every earlier action that occupies a location conflicting with this motion's footprint, and each becomes a predecessor. In the example that is how the hand-over of W22 from AGV-2 to AGV-1 appears: a0 → a2. Finally <code>AddOccupant</code> records the new action on every location its footprint conflicts with. <code>lifted</code> is true for every motion whose collision id is not the bare AGV, because a tray or car can only move on a lifted AGV. A tray standing on the ground is checked against an AGV through its legs only, so an empty AGV can still pass under it.</p>
 <p>Because occupancy is never cleared, a motion depends on <em>every</em> earlier user of its space, not just the last one. W22 is blocked for a3 by both a0 and a2. The first <code>Reduce()</code> removes the edges that such chains imply (a0 → a3 here). Geometry cannot express some orders, though: the bay's hand-over never shares space with the car's arrival in a way the code checks (bay transitions carry a TODO in this loop). <code>TransferEventDagDepsToActionDag</code> therefore adds, for every event edge <span class="math">e \to e'</span>, an edge from the last action of <span class="math">e</span> to the first action of <span class="math">e'</span>, which gives a5 → a6. A second <code>Reduce()</code> follows, then VRC insertion (nothing to insert in Pecos) and a third <code>Reduce()</code>. <code>BuildScheduledActionsArray</code> takes one topological order and writes each action's in-edges as indices of earlier array entries. It re-adds the edge from the same entity's previous action if <code>Reduce()</code> removed it, and appends each action's index to its job's <code>node_indices</code>.</p>
 <h3 data-num id="bg-vrcs-lifts-between-floors">VRC commands: lifts between floors</h3>
+<p>VRC commands are not planned by CHUGG; they are added to the action DAG after motion planning, in step 7 of the construction above. The figure shows the concept on two floors, and the paragraph after it describes how <code>InsertVrcActionsIntoDag</code> decides where to insert them.</p>
 <figure id="bg-fig-14_vrc_floors">
   <img src="figures/14_vrc_floors.svg" alt="VRC conceptual transfer">
   <figcaption>Conceptual VRC connecting two floors, as a side elevation. The Pecos YAML has no VRC; this shows general code-supported behaviour.</figcaption>
@@ -789,6 +796,7 @@ for(const auto&amp; node : request_data.base_schedule.nodes) {
 <p>So the new ADG cannot conflict with the committed one, because they share no AGV, bay, VECS or start and goal node. The cost is that a busy AGV is unavailable for the whole new plan, even if it would be free a few seconds in. The Background tab traces every place the reservation is read and what could replace it (<a class="ref" href="#bg-the-base-schedule-reserved-assets-and-keep-out-filters">section 14</a>). VRC commands in the base schedule are not handled in this loop. Dispatch, for its part, expects the response to contain every base node unchanged and rebuilds its schedule from the response alone; the Dispatch tab describes that check (<a class="ref" href="#ds-what-dispatch-does-with-the-response">section 4</a>).</p>
 
 <h3 data-num id="ad-what-this-means-for-the-refactor">What this means for the refactor</h3>
+<p>The action DAG is the last stage before the response, so it reflects every change made upstream. The points below state what the refactor should expect to see change here, how to compare two responses for parity, and which invariants can be checked on every response.</p>
 <ul>
   <li><strong>The action DAG is downstream of everything the refactor touches.</strong> Tray and AGV assignment change the event DAG, CHUGG plans from it, and the action DAG is built from both. A change in assignment shows up here.</li>
   <li><strong>Compare reduced graphs, not arrays.</strong> GUIDs are fresh on every call, and the array is one of many topological orders. A parity test should match actions by content (entity, command, poses), then compare the reduced edge sets. Because the transitive reduction is unique (<a class="ref" href="#ad-transitive-reduction">section 2.4</a>), equal reduced sets mean an identical order. The <a href="#doc-verification">Verification</a> tab describes the parity harness.</li>
@@ -798,6 +806,7 @@ for(const auto&amp; node : request_data.base_schedule.nodes) {
 </ul>
 
 <h2 data-num id="ad-check-your-understanding">Check your understanding</h2>
+<p>The questions below test the main ideas of this chapter; expand each one to see the answer.</p>
 <details>
   <summary>1. Why does a Type 1 predecessor only need to be enqueued, while a Type 2 predecessor must be finished?</summary>
   <p>The Type 1 predecessor is on the same robot, which runs its queue in order, so it cannot start the next action before finishing the previous one. A Type 2 predecessor is on another robot; only its completion report proves the location is clear.</p>
@@ -825,6 +834,7 @@ for(const auto&amp; node : request_data.base_schedule.nodes) {
 </details>
 
 <h2 data-num id="ad-references">References</h2>
+<p>The sources below are cited in this chapter.</p>
 <ul>
   <li>W. Hönig, S. Kiesel, A. Tinka, J. W. Durham, N. Ayanian. "Persistent and Robust Execution of MAPF Schedules in Warehouses." <em>IEEE Robotics and Automation Letters</em>, 2019. <a href="https://act.usc.edu/publications/Hoenig_RAL2019.pdf">PDF</a>. The ADG, its construction (Algorithm 1) and the enqueue rule.</li>
   <li>W. Hönig, T. K. S. Kumar, L. Cohen, H. Ma, H. Xu, N. Ayanian, S. Koenig. "Multi-Agent Path Finding with Kinematic Constraints." <em>ICAPS</em>, 2016. The temporal plan graph.</li>

@@ -200,6 +200,7 @@ table_(gg_, logger),                                   // CollisionTable: which 
 <p>Every node becomes one <code>GarageNodeMsg</code> in <code>Layout::nodes_</code>, sorted by id. Its fields, in file order:</p>
 
 <h3 data-num id="ly-node-identity-and-position">Identity and position: <code>id</code>, <code>x</code>, <code>y</code>, <code>floor</code></h3>
+<p>These four fields name a node and place it in the site. Edges, poses and collision footprints all refer to a node through its <code>id</code> and are measured from its <code>x</code> and <code>y</code>, so these fields are the ones to understand first.</p>
 <ul>
   <li><strong><code>id</code></strong> (required, <code>uint32</code>) is the node's name everywhere: in edges, in <code>GaragePose.node_id</code>, in events and messages. A bay's id is also its bay id (read a second time as <code>uint16</code>), so bay ids and node ids share one number space. Ids need not be contiguous: Pecos has 1–11, 13–27, 31 and 41 (no 12). Code that needs a dense index uses the position in the sorted vector, never the id (<a class="ref" href="#ly-edgemsg-carries-indices">section 9.4</a> shows where that distinction leaks).</li>
   <li><strong><code>x</code>, <code>y</code></strong> (required, metres, read as <code>float</code>) place the node in the site frame. They decide what an edge <em>is</em> (its bearing makes it a locomote or a strafe), how long it takes (its length feeds the trapezoid cost model), and every footprint polygon in the collision table. Pecos's measurement datum is recorded only in a comment on node 22: <code># Offset "origin" (take any future measurements from here)</code>.</li>
@@ -488,6 +489,7 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
 <h3 data-num id="ly-name-based-behaviour">One behaviour depends on the layout's name</h3>
 <p><code>Scheduler::UseEvChargeHeading</code> tests <code>strstr(name, "576_eccles")</code>. Site behaviour should be layout data (for example a per-node preferred heading), not a name match.</p>
 <h3 data-num id="ly-unused-and-dead-fields">Fields that are stored but have no effect</h3>
+<p>Some keys in the layout file are parsed and stored but have no effect in the snapshots, or have an effect that does not reach the published messages. They are listed here so that a reader editing a layout does not expect behaviour the code does not provide.</p>
 <ul>
   <li><code>parking_window_buffer</code>: applied only to footprints that nothing in the snapshots reads (<a class="ref" href="#ly-parking-windows-and-the-buffer">section 5</a>).</li>
   <li><code>insert_floor</code>, <code>vrcs[].root_node</code>: stored, never read in the snapshots.</li>
@@ -498,6 +500,7 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
 <h2 data-num id="ly-improvements">Improvements</h2>
 <p>The layout format and its parser live in <code>common_ros</code>, <code>interfaces</code> and the site configuration, which the refactor does not rename (<a class="ref" href="#nm-how-to-read-this-list">section 16.1</a>). The items below are therefore split by where they would land: the scheduler-side items fit the refactor; the rest are a separate proposal for the owners of those packages.</p>
 <h3 data-num id="ly-improvements-in-the-scheduler">Inside the scheduler (fits the refactor)</h3>
+<p>Each item below changes only scheduler code and leaves the layout file and its parser untouched, so it can be made within the refactor. The items follow from the issues in <a class="ref" href="#ly-issues-found">section</a> and the field descriptions in <a class="ref" href="#ly-nodes">section</a>.</p>
 <ul>
   <li>Wrap every inbound heading the scheduler compares (the charger test above, and <code>ApplyTransitionToFreeingMoves</code> for VECS), or call one helper that returns a wrapped pose.</li>
   <li>Replace the <code>576_eccles</code> name test with a layout-driven rule once the field exists; until then, keep it in one named function with a comment.</li>
@@ -505,6 +508,7 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
   <li>Use window <em>names</em> in logs and messages, never indices.</li>
 </ul>
 <h3 data-num id="ly-improvements-in-the-format">In the format and parser (common_ros, interfaces, site configuration)</h3>
+<p>The remaining proposals change the file format or its parser, which belong to <code>common_ros</code>, <code>interfaces</code> and the site configuration rather than to the scheduler. The table pairs each current convention with a proposed replacement and the reason for it; the schema and linter described after the table would catch most of the cases that <a class="ref" href="#ly-validation">section</a> shows the parser accepts silently.</p>
 <table>
   <thead>
     <tr>
