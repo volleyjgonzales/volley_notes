@@ -84,6 +84,10 @@ class ThemeName(StrEnum):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Palette:
+    """Colour roles. Categorical hues: parking sky, bay violet, charger yellow, lift teal, tray orange,
+    AGV green, payload pink - checked for separation in both themes (EV chargers reuse the charger
+    yellow with a payload-pink ring; Lift and BLift share teal and differ by label)."""
+
     scheme: Literal["dark", "light"]
     bg: str
     floor: str
@@ -108,6 +112,8 @@ class Palette:
     tray: str
     payload: str
     danger: str
+    axis_x: str  # map frame arrows, ROS colours: x red, y green
+    axis_y: str
 
 
 DARK: Final = Palette(
@@ -115,8 +121,8 @@ DARK: Final = Palette(
     bg="#0F172A",
     floor="#0B1222",
     card="#1B2336",
-    grid_minor="#1E293B",
-    grid_major="#253247",
+    grid_minor="#1F2B3F",
+    grid_major="#2C3B54",
     corridor="#18233A",
     fg="#F8FAFC",
     fg2="#CBD5E1",
@@ -126,15 +132,17 @@ DARK: Final = Palette(
     border_soft="#334155",
     edge="#55657F",
     parking="#38BDF8",
-    bay="#2DD4BF",
-    charger="#A78BFA",
+    bay="#A78BFA",
+    charger="#FACC15",
     ev="#F472B6",
-    lift="#F59E0B",
-    blift="#22C55E",
+    lift="#5EEAD4",
+    blift="#5EEAD4",
     agv="#22C55E",
-    tray="#F59E0B",
+    tray="#F97316",
     payload="#F472B6",
     danger="#EF4444",
+    axis_x="#F87171",
+    axis_y="#4ADE80",
 )
 
 LIGHT: Final = Palette(
@@ -142,8 +150,8 @@ LIGHT: Final = Palette(
     bg="#FFFFFF",
     floor="#F8FAFC",
     card="#FFFFFF",
-    grid_minor="#EEF2F7",
-    grid_major="#E2E8F0",
+    grid_minor="#E5EAF1",
+    grid_major="#D2DBE6",
     corridor="#E8EDF4",
     fg="#0F172A",
     fg2="#334155",
@@ -153,15 +161,17 @@ LIGHT: Final = Palette(
     border_soft="#CBD5E1",
     edge="#94A3B8",
     parking="#0369A1",
-    bay="#0F766E",
-    charger="#6D28D9",
-    ev="#BE185D",
-    lift="#B45309",
-    blift="#15803D",
+    bay="#7C3AED",
+    charger="#CA8A04",
+    ev="#DB2777",
+    lift="#0D9488",
+    blift="#0D9488",
     agv="#15803D",
-    tray="#B45309",
-    payload="#BE185D",
+    tray="#C2410C",
+    payload="#DB2777",
     danger="#B91C1C",
+    axis_x="#DC2626",
+    axis_y="#16A34A",
 )
 
 PALETTES: Final[Mapping[ThemeName, Palette]] = {ThemeName.DARK: DARK, ThemeName.LIGHT: LIGHT}
@@ -598,6 +608,7 @@ class Ctx:
 type Traces = tuple[go.Scatter, ...]
 type LayerFn = Callable[[Sequence[PlotNode], Ctx], Traces]
 
+MAP_FRAME: Final = "Map frame"
 LEGEND_ORDER: Final = (
     "Parking stall",
     "Customer bay",
@@ -608,6 +619,7 @@ LEGEND_ORDER: Final = (
     "BLift",
     "Other node",
     "Rotation allowed",
+    "Map frame",
 )
 
 
@@ -644,7 +656,7 @@ LEGEND_NAME: Final[Mapping[str, str]] = {
 
 def legend_names(scene: Scene) -> frozenset[str]:
     rotation = {"Rotation allowed"} if any(n.rotation_allowed for n in scene.nodes) else set()
-    return frozenset({LEGEND_NAME.get(n.kind, "Other node") for n in scene.nodes} | rotation)
+    return frozenset({LEGEND_NAME.get(n.kind, "Other node") for n in scene.nodes} | rotation | {MAP_FRAME})
 
 
 def corridors(scene: Scene, ctx: Ctx) -> Traces:
@@ -776,19 +788,22 @@ def side_labels(nodes: Sequence[PlotNode], offset: float, color: str, ctx: Ctx, 
     )
 
 
-def charger_layer(name: str, color: Callable[[Palette], str]) -> LayerFn:
-    """Charger: tinted disc with a lightning bolt (facility.Map.nodes, AgvCharge)."""
+def charger_layer(name: str, ring: Callable[[Palette], str]) -> LayerFn:
+    """Charger: tinted disc with a yellow lightning bolt (facility.Map.nodes, AgvCharge).
+
+    Every charger's bolt is the charger yellow; the ring says what it charges (yellow for AGVs, the
+    payload pink for EVs)."""
 
     def layer(nodes: Sequence[PlotNode], ctx: Ctx) -> Traces:
-        p, c, r = ctx.p, color(ctx.p), 0.42
+        p, c, edge, r = ctx.p, ctx.p.charger, ring(ctx.p), 0.42
         return (
-            *legend(name, ctx, symbol="circle", fill=tint(c, 0.3, p.floor), line=c, size=14),
+            *legend(name, ctx, symbol="circle", fill=tint(c, 0.35, p.floor), line=edge, size=14, width=2),
             shapes(
-                [circle(n.xy, r) for n in nodes], fill=tint(c, 0.25, p.floor), line=c, width=1.6, group=name
+                [circle(n.xy, r) for n in nodes], fill=tint(c, 0.22, p.floor), line=edge, width=2, group=name
             ),
             shapes([bolt(n.xy, r) for n in nodes], fill=c, line=c, width=0.5, group=name),
-            *side_labels(nodes, r + 0.1, c, ctx, name),
-            hover_targets(nodes, accent=c, group=name, p=p),
+            *side_labels(nodes, r + 0.1, edge, ctx, name),
+            hover_targets(nodes, accent=edge, group=name, p=p),
         )
 
     return layer
@@ -846,7 +861,7 @@ OVER: Final[Mapping[str, LayerFn]] = {
     "Lift": lift_layer("Lift", lambda p: p.lift),
     "BLift": lift_layer("BLift", lambda p: p.blift),
     "AgvCharge": charger_layer("AGV charger", lambda p: p.charger),
-    "EvCharge": charger_layer("EV charger", lambda p: p.ev),
+    "EvCharge": charger_layer("EV charger", lambda p: p.payload),
     "Waypoint": waypoint_layer,
 }
 
@@ -928,6 +943,90 @@ def subtitle(scene: Scene) -> str:
     return "  ·  ".join(parts)
 
 
+FRAME_HOVER: Final = (
+    "<b>map frame</b>  origin (0, 0)<br>"
+    "x → right (red), y → up (green), metres<br>"
+    "heading 0° = +y, counter-clockwise:<br>"
+    "90° = −x · 180° = −y · −90° = +x<extra></extra>"
+)
+
+
+def arrow(tail: Point, direction: Point, length: float, width: float) -> Polygon:
+    """A filled arrow (shaft + head) from `tail` along unit `direction`, in metres."""
+    u = unit(direction)
+    v = (-u[1], u[0])
+    head_l, head_w = 0.28 * length, 2.6 * width
+    neck = add(tail, u, length - head_l)
+    tip = add(tail, u, length)
+    hw = width / 2
+    return (
+        add(tail, v, hw),
+        add(neck, v, hw),
+        add(neck, v, head_w / 2),
+        tip,
+        add(neck, v, -head_w / 2),
+        add(neck, v, -hw),
+        add(tail, v, -hw),
+    )
+
+
+def frame_traces(scene: Scene, ctx: Ctx) -> Traces:
+    """The map coordinate frame at (0, 0): x and y arrows sized to the layout. Drawn wherever the
+    origin is; it does not move the default view to include it."""
+    x0, x1, y0, y1 = footprint(scene) if scene.nodes else (0.0, 10.0, 0.0, 10.0)
+    length = min(6.0, max(1.5, 0.07 * max(x1 - x0, y1 - y0)))
+    width = length * 0.045
+    p, name = ctx.p, MAP_FRAME
+    halo = f"0 0 3px {p.floor}, 0 0 2px {p.floor}"
+    tips = ((length + 0.18 * length, 0.0), (0.0, length + 0.18 * length))
+    return (
+        *legend(name, ctx, symbol="cross-thin", fill=p.axis_x, line=p.axis_x, size=12, width=2.5),
+        shapes([arrow((0.0, 0.0), (1.0, 0.0), length, width)], fill=p.axis_x, line=None, group=name),
+        shapes([arrow((0.0, 0.0), (0.0, 1.0), length, width)], fill=p.axis_y, line=None, group=name),
+        go.Scatter(
+            x=[0.0],
+            y=[0.0],
+            mode="markers",
+            marker={"symbol": "circle", "size": 8, "color": p.fg, "line": {"color": p.floor, "width": 2}},
+            **grouped(name),
+        ),
+        go.Scatter(
+            x=[t[0] for t in tips],
+            y=[t[1] for t in tips],
+            mode="text",
+            text=["x", "y"],
+            textposition="middle center",
+            textfont={
+                "family": FONT_MONO,
+                "size": 13,
+                "weight": 700,
+                "color": [p.axis_x, p.axis_y],
+                "shadow": halo,
+            },
+            **grouped(name),
+        ),
+        go.Scatter(
+            x=[0.0],
+            y=[0.0],
+            mode="text",
+            text=["(0, 0)"],
+            textposition="bottom left",
+            textfont={"family": FONT_MONO, "size": 10.5, "color": p.muted, "shadow": halo},
+            **grouped(name),
+        ),
+        go.Scatter(
+            x=[0.0],
+            y=[0.0],
+            mode="markers",
+            marker={"size": 14, "color": "rgba(0,0,0,0)"},
+            hovertemplate=FRAME_HOVER,
+            hoverlabel={"bordercolor": p.fg2, "bgcolor": p.card},
+            showlegend=False,
+            legendgroup=name,
+        ),
+    )
+
+
 def build_floor_figure(
     scene: Scene, floor: int, *, title: str, palette: Palette, show_labels: bool
 ) -> go.Figure:
@@ -942,7 +1041,8 @@ def build_floor_figure(
         labels=show_labels,
         legend_here=legend_names(floor_scene),
     )
-    fig = go.Figure(list(floor_traces(floor_scene, ctx)))
+    # The frame is drawn last so stalls or bays at the origin do not cover it.
+    fig = go.Figure([*floor_traces(floor_scene, ctx), *frame_traces(scene, ctx)])
     fig.update_xaxes(axis(palette, title="x [m]", rng=(x0, x1), steps=steps), uirevision="floorplan")
     fig.update_yaxes(
         axis(palette, title="y [m]", rng=(y0, y1), steps=steps),

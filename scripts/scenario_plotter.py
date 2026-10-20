@@ -405,7 +405,9 @@ def hover(
         x=[q[0] for q in points],
         y=[q[1] for q in points],
         mode="markers",
-        marker={"size": 22, "color": "rgba(0,0,0,0)"},
+        # Plotly scores a marker hover as max(d - r, 1 - 3/r): at the centre the smaller marker wins, so
+        # these stay smaller than the layout's 18 px node targets and an AGV on a node shows the AGV.
+        marker={"size": 16, "color": "rgba(0,0,0,0)"},
         customdata=list(texts),
         hovertemplate=ENTITY_HOVER,
         hoverlabel={"bordercolor": accent, "bgcolor": p.card},
@@ -608,6 +610,9 @@ def highlight_trace(p: lp.Palette) -> go.Scatter:
         hoverinfo="skip",
         showlegend=False,
     )
+
+
+OBJECT_GROUPS: Final = ("AGV", "Tray", "Payload", "Disabled node")  # what the Show/Dim/Hide control fades
 
 
 def scenario_traces(s: Scenario, scene: lp.Scene, floor: int, p: lp.Palette, *, labels: bool) -> Traces:
@@ -815,6 +820,15 @@ def sidebar_html(s: Scenario, scene: lp.Scene, layout_path: Path, warnings: Sequ
     <h1>{esc(s.name)}</h1>
     <div class="layout">layout <span class="mono">{esc(layout_path.stem)}</span></div>
     <div class="stats">{summary}{end}</div>
+    <div class="controls">
+      <div class="seg" role="radiogroup" aria-label="AGVs, trays and payloads" title="AGVs, trays and payloads (D)">
+        <span class="seg-label">objects</span>
+        <button type="button" role="radio" data-objects="show" aria-checked="true">Show</button>
+        <button type="button" role="radio" data-objects="dim" aria-checked="false">Dim</button>
+        <button type="button" role="radio" data-objects="hide" aria-checked="false">Hide</button>
+      </div>
+      <button type="button" id="clear-selection" hidden>Clear selection ✕</button>
+    </div>
   </header>
   {warn}
   {notes}
@@ -823,7 +837,8 @@ def sidebar_html(s: Scenario, scene: lp.Scene, layout_path: Path, warnings: Sequ
   <details open><summary>Events <span class="count">{len(s.events)}</span></summary>
     <div class="timeline">{event_rows}</div>
   </details>
-  <footer>hover a row to find it on the map · click to jump there · <kbd>Esc</kbd> clears</footer>
+  <footer>hover a row to find it on the map · click to jump there · click it again, empty map or
+  <kbd>Esc</kbd> to clear · <kbd>D</kbd> dims AGVs, trays and payloads · legend entries toggle each kind</footer>
 </aside>
 """
 
@@ -890,6 +905,19 @@ SIDEBAR_CSS: Final = """
   #side .warnings { margin-top: 12px; padding: 8px 10px; border-radius: 8px; color: var(--danger);
     background: var(--danger-bg); border: 1px solid var(--danger); font-size: 12px; }
   #side footer { margin-top: 18px; font-size: 11.5px; color: var(--faint); }
+  #side .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+  #side .seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px;
+    border: 1px solid var(--border-soft); background: var(--floor); }
+  #side .seg-label { font: 600 10.5px 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--faint); padding: 0 6px 0 6px; }
+  #side .seg button, #side #clear-selection { all: unset; cursor: pointer; font-size: 12px; padding: 3px 9px;
+    border-radius: 6px; color: var(--muted); }
+  #side .seg button:hover, #side #clear-selection:hover { color: var(--fg); }
+  #side .seg button[aria-checked="true"] { background: var(--card); color: var(--fg); font-weight: 600;
+    box-shadow: 0 0 0 1px var(--border-soft); }
+  #side .seg button:focus-visible, #side #clear-selection:focus-visible { outline: 2px solid var(--parking); }
+  #side #clear-selection { border: 1px solid var(--border-soft); }
+  #side #clear-selection[hidden] { display: none; }
   #side kbd { font: 11px 'JetBrains Mono', monospace; padding: 0 4px; border: 1px solid var(--border-soft);
     border-radius: 4px; }
   @media (max-width: 760px) {
@@ -904,8 +932,11 @@ SIDEBAR_JS: Final = """
   const page = window.layoutPage;
   const gd = page.gd;
   const nodes = PAGE.extra.nodes;  // id -> [x, y, floor]
+  const OBJECTS = new Set(PAGE.extra.objectGroups);  // legend groups drawn by the scenario
   const side = document.getElementById("side");
-  let selected = null;  // the clicked row: its highlight stays until Esc or another click
+  const clearBtn = document.getElementById("clear-selection");
+  let selected = null;  // the clicked row: its ring stays until cleared
+  let objects = "show";  // show | dim | hide
 
   const idsOf = (row) => (row && row.dataset.nodes ? row.dataset.nodes.split(" ").filter((i) => i in nodes) : []);
   const ringIndex = () => gd.data.findIndex((t) => t.meta === "highlight");
@@ -915,6 +946,33 @@ SIDEBAR_JS: Final = """
     if (i < 0) return;
     const here = ids.filter((id) => String(nodes[id][2]) === page.state.floor);
     Plotly.restyle(gd, { x: [here.map((id) => nodes[id][0])], y: [here.map((id) => nodes[id][1])] }, [i]);
+  }
+
+  // ---- show / dim / hide the scenario's objects (AGVs, trays, payloads, disabled-node marks) --------
+  // Legend swatches (data-less traces) are left alone so the legend keeps its colours.
+  function applyObjects() {
+    const idx = gd.data.flatMap((t, i) =>
+      OBJECTS.has(t.legendgroup) && !(t.x && t.x.length === 1 && t.x[0] === null) ? [i] : []);
+    if (!idx.length) return;
+    Plotly.restyle(gd, { opacity: { show: 1, dim: 0.18, hide: 0 }[objects] }, idx);
+    // Tooltip traces (invisible markers with a hovertemplate) are switched off when hidden: plotly
+    // ignores hoverinfo "skip" once a hovertemplate is set. Groups hidden from the legend stay hidden.
+    const tips = idx.filter((i) => gd.data[i].hovertemplate);
+    const off = tips.filter((i) => gd.data[i].visible !== "legendonly" && gd.data[i].visible !== false);
+    const back = tips.filter((i) => gd.data[i].visible === false);
+    if (objects === "hide" && off.length) Plotly.restyle(gd, { visible: false }, off);
+    if (objects !== "hide" && back.length) Plotly.restyle(gd, { visible: true }, back);
+    for (const b of side.querySelectorAll("[data-objects]")) b.setAttribute("aria-checked", String(b.dataset.objects === objects));
+  }
+  function setObjects(mode) { objects = mode; applyObjects(); }
+  side.querySelectorAll("[data-objects]").forEach((b) => b.addEventListener("click", () => setObjects(b.dataset.objects)));
+
+  // ---- selection ---------------------------------------------------------------------------------
+  function clearSelection() {
+    side.querySelectorAll(".row.selected").forEach((r) => r.classList.remove("selected"));
+    selected = null;
+    clearBtn.hidden = true;
+    ring([]);
   }
 
   function centre(ids) {
@@ -930,11 +988,13 @@ SIDEBAR_JS: Final = """
   }
 
   async function jump(row) {
+    if (row === selected) { clearSelection(); return; }  // clicking the selected row again deselects
     const ids = idsOf(row);
     if (!ids.length) return;
     side.querySelectorAll(".row.selected").forEach((r) => r.classList.remove("selected"));
     selected = row;
     row.classList.add("selected");
+    clearBtn.hidden = false;
     const floorsHit = [...new Set(ids.map((id) => String(nodes[id][2])))];
     if (!floorsHit.includes(page.state.floor)) await page.show({ floor: floorsHit[0] });
     const here = ids.filter((id) => String(nodes[id][2]) === page.state.floor);
@@ -955,22 +1015,36 @@ SIDEBAR_JS: Final = """
     ring(idsOf(selected));
   });
   side.addEventListener("click", (e) => {
-    if (e.target.closest("a, summary")) return;
+    if (e.target.closest("a, summary, button")) return;
     const row = e.target.closest(".row[data-nodes]");
     if (row) jump(row);
+    else if (selected) clearSelection();  // empty sidebar space
   });
   side.addEventListener("keydown", (e) => {
     const row = e.target.closest(".row[data-nodes]");
     if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); jump(row); }
   });
+  clearBtn.addEventListener("click", clearSelection);
+
+  // A click on the map that is not a drag (pan / zoom box) clears the selection. Plotly covers the
+  // page with a drag layer while the button is down, so the release is caught on the document.
+  let down = null;
+  gd.addEventListener("pointerdown", (e) => {
+    down = e.target.closest(".modebar, .legend") ? null : [e.clientX, e.clientY];
+  }, true);
+  document.addEventListener("pointerup", (e) => {
+    if (down && selected && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 4) clearSelection();
+    down = null;
+  }, true);
+
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    side.querySelectorAll(".row.selected").forEach((r) => r.classList.remove("selected"));
-    selected = null;
-    ring([]);
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input, textarea")) return;
+    if (e.key === "Escape") clearSelection();
+    if (e.key.toLowerCase() === "d") setObjects({ show: "dim", dim: "hide", hide: "show" }[objects]);
   });
-  // Redraws (floor / theme switches) bring a fresh, empty ring trace: put the selection back.
-  document.addEventListener("layout:shown", () => ring(idsOf(selected)));
+  // Redraws (floor / theme switches) bring fresh traces: reapply the objects mode and the selection.
+  document.addEventListener("layout:shown", () => { applyObjects(); ring(idsOf(selected)); });
+  applyObjects();
 })();
 """
 
@@ -1266,7 +1340,10 @@ def render(opts: RenderOptions, console: Console) -> int:
             sidebar=sidebar_html(s, scene, layout_path, warnings),
             extra_css=SIDEBAR_CSS,
             extra_js=SIDEBAR_JS,
-            extra={"nodes": {str(n.id): [n.x, n.y, n.floor] for n in scene.nodes}},
+            extra={
+                "nodes": {str(n.id): [n.x, n.y, n.floor] for n in scene.nodes},
+                "objectGroups": list(OBJECT_GROUPS),
+            },
         )
         output = (opts.output or Path(f"{s.name}.html")).with_suffix(".html")
         output.parent.mkdir(parents=True, exist_ok=True)
