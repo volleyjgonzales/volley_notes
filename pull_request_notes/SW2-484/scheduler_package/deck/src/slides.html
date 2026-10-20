@@ -51,7 +51,7 @@
 <section>
   <div class="kicker">Domain</div>
   <h2>An automated parking garage</h2>
-  <p class="lede small" style="margin-bottom:18px">Vehicles are stored on <strong>trays</strong>. Every tray movement is performed by an <strong>AGV</strong>, which drives beneath the tray, lifts it, carries it and lowers it. The colours below are the ones used on every map in this deck.</p>
+  <p class="lede small" style="margin-bottom:18px">Vehicles are stored on <strong>trays</strong>. Every tray movement is performed by an <strong>AGV</strong>, which drives beneath the tray, lifts it, carries it and lowers it. The colours below are used consistently on every map in this deck.</p>
   <div class="cols c3">
     <div class="card asset">
       <svg viewBox="0 0 64 64"><rect x="6" y="24" width="52" height="20" rx="5" fill="none" stroke="#22c55e" stroke-width="2.5"/><circle cx="16" cy="48" r="5" fill="#22c55e"/><circle cx="48" cy="48" r="5" fill="#22c55e"/><path d="M40 34h10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"/><path d="M46 30l4 4-4 4" stroke="#22c55e" stroke-width="2.5" fill="none"/></svg>
@@ -87,9 +87,9 @@
 
 <section>
   <div class="kicker">The running example</div>
-  <h2>One section of a real garage, as a graph</h2>
+  <h2>A section of an operational garage, represented as a graph</h2>
   <div class="fig h420" data-fig="d01_scenario"></div>
-  <p class="small" style="margin-top:12px">The example used on the following slides: a customer has asked for the vehicle on <strong>tray T17</strong> (stall P17) at <strong>bay B21</strong>. Bay B21 still holds the empty tray T21, and trays T15 and T20 enclose tray T17. Tray T27 is stranded in the aisle on waypoint W27. AGV-1 and AGV-2 are free. AGVs drive only along the edges, and each node holds at most one tray.</p>
+  <p class="small" style="margin-top:12px">The example used on the following slides: a customer has requested the vehicle on <strong>tray T17</strong> (stall P17) at <strong>bay B21</strong>. Bay B21 still holds the empty tray T21, and trays T15 and T20 enclose tray T17. Tray T27 is stranded in the aisle on waypoint W27. AGV-1 and AGV-2 are free. AGVs drive only along the edges, and each node holds at most one tray.</p>
   <aside class="notes">
     The geometry is the Pecos site layout (QA section) with hypothetical occupancy. This scenario is used on every
     following slide up to AGV assignment. The point to retain: a single request generates additional moves, and which
@@ -156,7 +156,7 @@
     <div class="side">
       <p class="small"><strong>Input: goals.</strong> A job states an outcome, such as "the vehicle on tray T17 is handed over at bay B21", not the moves. The planner chooses the bay, trays, AGVs and routes.</p>
       <p class="small"><strong>Output: a partial order.</strong> Each action names one machine and the actions that must complete before it. No times are given; the order alone keeps execution safe.</p>
-      <p class="tiny">Simplified to one job and no other trays; the next slides add them.</p>
+      <p class="tiny">Simplified to one job and no other trays; subsequent slides introduce them.</p>
     </div>
   </div>
   <aside class="notes">
@@ -193,22 +193,22 @@
 <section>
   <div class="stagebar" aria-label="Position in the pipeline"><span class="on">1 Job expansion</span><span class="on">2 Tray assignment</span><span class="on">3 AGV assignment</span><span>4 Motion planning</span><span>5 Action graph</span></div>
   <div class="kicker">Task planning · stages 1-3</div>
-  <h2>Two jobs become one event DAG</h2>
+  <h2>Two jobs are combined into one event DAG</h2>
   <div class="figside">
     <div class="fig" data-fig="d03_event_dag" data-play></div>
     <div class="side">
       <p class="small">The scheduler has received <strong>two jobs</strong>: retrieve the vehicle on tray T17 at bay B21, and move tray T27 off waypoint W27.</p>
       <ul class="small tight">
         <li>Task planning turns two jobs into <strong>six events</strong>; one, the move of tray T15, appears only because of the chosen route.</li>
-        <li>The <strong>edges</strong> record what must happen before what. Everything else may run in parallel.</li>
+        <li>The <strong>edges</strong> record the required order. Events not connected by a path may execute in parallel.</li>
         <li>All three stages <strong>edit the same event DAG</strong>; the refactor separates stages 2 and 3 from it.</li>
       </ul>
     </div>
   </div>
   <aside class="notes">
     Steps 1 to 3 build the event DAG: expansion, tray assignment, AGV assignment. Steps 4 to 6 execute it, in the
-    order the DAG allows: the two jobs proceed in parallel on different AGVs. The text inside each box does not need to
-    be read; what matters is that the event set grows at each stage and that every stage writes into the same graph.
+    order the DAG allows: the two jobs proceed in parallel on different AGVs. The detailed text in each box is secondary;
+    the relevant points are that the event set grows at each stage and that every stage writes into the same graph.
   </aside>
 </section>
 
@@ -220,9 +220,9 @@
     <div class="fig" data-fig="d04_trays" data-play></div>
     <div class="side">
       <ul class="small tight">
-        <li>The job asks for <strong>an</strong> empty tray, not a particular one. Choosing it is tray assignment's decision, and it has consequences: some choices make other trays move first.</li>
-        <li>Today's rule: search outward from the bay; cost = travel time + <strong>30 s per tray in the way</strong>; take the cheapest.</li>
-        <li>Other rules are possible, for example keeping the stalls nearest the bay for vehicles. Today the rule is buried in the 560-line <code>DoTrayAssignments</code>; behind an interface, rules can be compared on the benchmark set.</li>
+        <li>The job requests <strong>an</strong> empty tray, not a specific one. The choice belongs to tray assignment and affects the plan: some choices require other trays to be moved first.</li>
+        <li>Current rule: search outward from the bay, with cost = travel time + <strong>30 s per obstructing tray</strong>, and select the lowest cost.</li>
+        <li>Other rules are possible, for example keeping the stalls nearest the bay for vehicles. The rule currently resides in the 560-line <code>DoTrayAssignments</code>; behind an interface, alternative rules can be compared on the benchmark set.</li>
       </ul>
     </div>
   </div>
@@ -244,7 +244,7 @@
       <ul class="small tight">
         <li>A <strong>cost</strong> for each pair of AGV and tray move: the time to reach and lift the tray.</li>
         <li>A <strong>bottleneck matching</strong> minimises the largest chosen cost, not the total.</li>
-        <li>Both the cost and the matching rule are <strong>policies</strong>. Today they live in the 365-line method <code>DoAgvAssignments</code>; the second interface of the ticket replaces it.</li>
+        <li>Both the cost and the matching rule are <strong>policies</strong>. Both currently reside in the 365-line <code>DoAgvAssignments</code>, which the second interface of the ticket replaces.</li>
       </ul>
     </div>
   </div>
@@ -258,14 +258,14 @@
 <section>
   <div class="stagebar" aria-label="Position in the pipeline"><span>1 Job expansion</span><span>2 Tray assignment</span><span>3 AGV assignment</span><span class="on">4 Motion planning</span><span>5 Action graph</span></div>
   <div class="kicker">Motion planning · stage 4</div>
-  <h2>CHUGG turns the event DAG into timed, collision-free paths</h2>
+  <h2>CHUGG converts the event DAG into timed, collision-free paths</h2>
   <div class="cols c3" style="margin-bottom:14px">
     <div class="card"><h3>Input</h3><p>The event DAG with an AGV for every move, the garage graph, and the collision table (which positions overlap).</p></div>
     <div class="card"><h3>Output</h3><p>A timed trajectory for every AGV: where each one is at every moment, with no two in conflict.</p></div>
     <div class="card"><h3>Method</h3><p>Events are planned one at a time, in DAG order. Each new path avoids the paths already planned, which never change.</p></div>
   </div>
   <div class="fig h300" data-fig="97_prioritized_planning" data-crop="header"></div>
-  <p class="tiny" style="margin-top:4px">Example: AGV-1's event is planned first; AGV-2 must wait at vertex 6 until vertex 3 is free. The order of events therefore decides who waits. Motion planning is outside the scope of this ticket.</p>
+  <p class="tiny" style="margin-top:4px">Example: AGV-1's event is planned first; AGV-2 must wait at vertex 6 until vertex 3 is free. The order of events therefore determines which AGV waits. Motion planning is outside the scope of this ticket.</p>
   <aside class="notes">
     CHUGG (Constrained Huge Unknown Graph alGorithm) receives a multi-agent path-finding problem with precedence
     constraints. Its method is prioritized planning, with a single-agent search (SIPP, safe-interval path planning)
@@ -277,11 +277,13 @@
 <section>
   <div class="stagebar" aria-label="Position in the pipeline"><span>1 Job expansion</span><span>2 Tray assignment</span><span>3 AGV assignment</span><span>4 Motion planning</span><span class="on">5 Action graph</span></div>
   <div class="kicker">Action graph · stage 5</div>
-  <h2>The action graph: the plan that Dispatch executes</h2>
+  <h2>Action graph: an execution order robust to timing variation</h2>
   <div class="cols w40" style="align-items:start">
     <div class="stack small">
-      <p><strong>Solution: an action graph.</strong> One box per action, one arrow per "must complete before". Each AGV's actions follow its route; between AGVs, an arrow appears wherever both use the same cell.</p>
-      <svg class="dg" viewBox="0 0 560 200" style="margin:2px 0 6px">
+      <p><strong>Objective.</strong> Dispatch must execute the plan safely when actual action durations differ from the planned ones.</p>
+      <p><strong>Issue.</strong> A timetable fixes when each action starts. A late AGV-1 is still in cell B when AGV-2 enters on schedule (figure, middle).</p>
+      <p><strong>Solution.</strong> Stage 5 converts the timed paths into an action graph: one box per action, one arrow per "must complete before", added between AGVs wherever both use the same cell. AGV-2 waits for the arrow, not for a clock time (figure, bottom).</p>
+      <svg class="dg" viewBox="0 0 560 200" style="margin:2px 0 0;max-width:440px">
         <defs><marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker>
           <marker id="ahga" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#38bdf8"/></marker></defs>
         <text x="0" y="48" class="mono" style="font-size:16px;font-weight:600">AGV-1</text>
@@ -295,7 +297,6 @@
         <path d="M315 66V122" class="arrow" style="stroke:var(--accent);stroke-width:2.4" marker-end="url(#ahga)"/>
         <text x="325" y="100" class="sub" style="fill:var(--accent);font-size:14px">AGV-1 has left cell B</text>
       </svg>
-      <p><strong>Problem it solves.</strong> Execution times vary. With a timetable (right, middle), a late AGV-1 is still in cell B when AGV-2 drives in. With the action graph (right, bottom), AGV-2 waits for the arrow instead of colliding.</p>
     </div>
     <div class="fig h500" data-fig="84_adg_delay" data-crop="header"></div>
   </div>
@@ -318,7 +319,7 @@
   <h2>Objective and scope</h2>
   <div class="cols w60">
     <div class="stack">
-      <div class="callout"><strong>Objective.</strong> Move tray-move planning and AGV assignment out of large <code>Scheduler</code> methods and behind generic, swappable interfaces. Default implementations must reproduce current behaviour.</div>
+      <div class="callout"><strong>Objective.</strong> Move tray-move planning and AGV assignment out of large <code>Scheduler</code> methods and behind generic, replaceable interfaces. Default implementations must reproduce current behaviour.</div>
       <div class="card">
         <h3>Definition of Done</h3>
         <ul class="small" style="margin-top:6px">
@@ -523,28 +524,32 @@ ApplyTrayAssignment(plan_ctx, result);</code></pre>
 
 <section>
   <div class="kicker">AGV assignment interface</div>
-  <h2>AGV assignment: the same layout, edits in place, and named so</h2>
+  <h2>AGV assignment: same module layout, in-place edits</h2>
   <div class="cols w40" style="align-items:center">
 <pre data-lang="cpp"><code>namespace volley::task_planning::agv_assignment {
 struct Input {          // read-only part
   const DiscreteGarageState&amp; initial_state;
   const FirstEventByTray&amp; first_event_by_tray;
-};                      // ^ handed over by tray assignment
-class Solver {
+};
+class Solver {          // first version
  public:
   virtual ~Solver() = default;
-  // edits event_dag; the name says so
   [[nodiscard]] virtual stdx::Result
   SolveInPlace(const Input&amp; input,
                EventDag&amp; event_dag) const = 0;
 };
-}  // namespace
-// Plan(), right after ApplyTrayAssignment
-agv_solver_-&gt;SolveInPlace(input, plan_ctx.event_dag);</code></pre>
+// later version, same shape as tray assignment
+struct Result {
+  std::vector&lt;AgvFill&gt; fills;   // AGV per tray move
+  std::vector&lt;DagEdit&gt; edits;   // events, edges
+};
+//   stdx::Expected&lt;Result&gt; Solve(const Input&amp;) const;
+//   ApplyAgvAssignment(plan_ctx, result);
+}  // namespace</code></pre>
     <div class="stack">
-      <div class="card"><h3>Why in place, for now</h3><p>The AGV loop reads the graph it is building: it removes matched moves from a work copy, reads back the AGV it set on earlier moves, and repairs paths over edges it added itself.</p></div>
-      <div class="card"><h3>What it shares with tray assignment</h3><p>Folder, build target, <code>stdx</code> errors, <code>GarageServices</code>, and pure cost functions (travel time, assignment cost) that can be tested alone.</p></div>
-      <div class="card"><h3>A returned result later</h3><p>Once the benchmarks can prove parity: an <code>AgvFill</code> per tray move and an ordered edit log, the same shape as tray assignment.</p></div>
+      <div class="card"><h3>No Result struct in the first version</h3><p>The AGV loop reads the graph it builds: matched moves, AGVs already assigned, and edges added for path repair. Returning an edit log would require replicating that state inside the solver, a parity risk before benchmarks exist.</p></div>
+      <div class="card"><h3>Path forward</h3><p>With parity tests and benchmarks in place, the solver works on a private copy of the event DAG and returns <code>AgvFill</code> entries and an ordered edit log, applied by <code>ApplyAgvAssignment</code>.</p></div>
+      <div class="card"><h3>Shared with tray assignment now</h3><p>Folder, build target, <code>stdx</code> errors, <code>GarageServices</code> and pure, separately testable cost functions.</p></div>
     </div>
   </div>
   <aside class="notes">
@@ -556,8 +561,35 @@ agv_solver_-&gt;SolveInPlace(input, plan_ctx.event_dag);</code></pre>
 
 <section>
   <div class="kicker">Module layout</div>
-  <h2>One folder per pipeline stage</h2>
-  <div class="cols w60">
+  <h2>From one source file to one folder per pipeline stage</h2>
+  <div class="steptabs"><span class="tab-a">Current</span><span class="tab-b fragment" data-fragment-index="0">Proposed</span></div>
+  <div class="swap">
+    <div class="cols w60 fragment fade-out" data-fragment-index="0">
+<div class="tree"><span class="d">scheduler/</span>
+├── CMakeLists.txt         <span class="cm"># one library target</span>
+├── include/scheduler/
+│   ├── scheduler.hpp      <span class="cm"># class Scheduler: all state</span>
+│   ├── scheduler_ros.hpp  <span class="cm"># ROS node wrapper</span>
+│   ├── scheduler_msgs.hpp <span class="cm"># message conversions</span>
+│   └── utils.hpp          <span class="cm"># shared helpers</span>
+├── src/
+│   ├── <span class="d c-red">scheduler.cpp</span>      <span class="cm"># Plan(), job expansion,</span>
+│   │                      <span class="cm">#   tray and AGV assignment</span>
+│   ├── scheduler_ros.cpp
+│   ├── scheduler_component.cpp
+│   └── utils.cpp          <span class="cm"># shared helpers</span>
+└── test/
+    ├── scheduler_tests.cpp      <span class="cm"># each test builds</span>
+    ├── scheduler_jobs_tests.cpp <span class="cm">#   a full Scheduler</span>
+    ├── scheduler_insert_orientation_tests.cpp
+    └── utils_tests.cpp</div>
+      <div class="stack">
+        <div class="card"><h3>One source file for all planning stages</h3><p><code>Plan()</code>, the ten job expansions and both assignment stages share <code>scheduler.cpp</code> and the private state of <code>Scheduler</code>. No boundary separates one stage from another.</p></div>
+        <div class="card"><h3>One target, one kind of test</h3><p>Every test constructs a complete <code>Scheduler</code>. A change to any stage rebuilds and retests the whole package.</p></div>
+        <p class="tiny">Layout of the package snapshot studied. SW2-769 has since reorganized the package; its structure is to be compared with the proposal.</p>
+      </div>
+    </div>
+    <div class="cols w60 fragment fade-in" data-fragment-index="0">
 <div class="tree"><span class="d">scheduler/</span>                 <span class="cm"># package name unchanged</span>
 ├── CMakeLists.txt         <span class="cm"># one target per stage</span>
 ├── include/scheduler/
@@ -576,7 +608,8 @@ agv_solver_-&gt;SolveInPlace(input, plan_ctx.event_dag);</code></pre>
 └── test/                  <span class="cm"># mirrors include/</span></div>
     <div class="stack">
       <div class="card"><h3>Enforced boundaries</h3><p>Each stage is a separate library target. A CI include check prevents a stage from using another stage's private headers.</p></div>
-      <div class="card"><h3>Why not separate packages yet</h3><p>Packages add release and ownership overhead before the APIs are stable. A folder can be promoted later at low cost; <code>action_graph</code> is the first candidate.</p></div>
+      <div class="card"><h3>Separate packages deferred</h3><p>Packages add release and ownership overhead before the APIs are stable. A folder can be promoted later at low cost; <code>action_graph</code> is the first candidate.</p></div>
+      </div>
     </div>
   </div>
   <aside class="notes">
@@ -626,11 +659,11 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   <div class="kicker">Staged plan</div>
   <h2>Five phases, each ending with unchanged behaviour</h2>
   <div class="phases">
-    <div class="card edge-accent"><div class="ph-n">1 · Baseline</div><h3>Record today</h3><p>Build, 72 tests and DAG snapshots on fixed inputs; map the dependencies.</p><span class="pill">SW2-484</span></div>
-    <div class="card edge-accent"><div class="ph-n">2 · Prepare</div><h3>Make room</h3><p>Names, stage folders, pure helpers and one error type. Nothing moves yet.</p><span class="pill">SW2-484</span></div>
-    <div class="card edge-accent"><div class="ph-n">3 · Tray interface</div><h3>Tray assignment as a solver</h3><p>Solver, default solver and apply function replace <code>DoTrayAssignments</code>.</p><span class="pill">SW2-484</span></div>
-    <div class="card edge-accent"><div class="ph-n">4 · AGV interface</div><h3>AGV assignment as a solver</h3><p>The same layout replaces <code>DoAgvAssignments</code>.</p><span class="pill">new ticket</span></div>
-    <div class="card edge-accent"><div class="ph-n">5 · Measure</div><h3>Benchmarks and cleanup</h3><p>≥10 real-site scenarios per solver; naming check in CI.</p><span class="pill">SW2-487</span></div>
+    <div class="card edge-accent"><div class="ph-n">1 · Baseline</div><p>Record the build, the 72 tests and event DAG snapshots on fixed inputs; document the dependencies.</p><span class="pill">SW2-484</span></div>
+    <div class="card edge-accent"><div class="ph-n">2 · Prepare</div><p>Names, stage folders, pure helpers and a single error type. No planning logic is relocated.</p><span class="pill">SW2-484</span></div>
+    <div class="card edge-accent"><div class="ph-n">3 · Tray interface</div><p>Solver, default solver and apply function replace <code>DoTrayAssignments</code>.</p><span class="pill">SW2-484</span></div>
+    <div class="card edge-accent"><div class="ph-n">4 · AGV interface</div><p>Solver and default solver, with the same module layout, replace <code>DoAgvAssignments</code>.</p><span class="pill">new ticket</span></div>
+    <div class="card edge-accent"><div class="ph-n">5 · Measure</div><p>At least ten real-site scenarios per solver, and a naming check in CI.</p><span class="pill">SW2-487</span></div>
   </div>
   <p class="small muted" style="margin-top:14px">Afterwards: <code>planner_core</code> renames and a first stage package. The study site breaks the phases into thirteen reviewable steps.</p>
   <p class="callout green" style="margin-top:14px">Exit criterion for every phase: all tests and DAG snapshots identical, and response messages byte-identical on the baseline fixtures.</p>
@@ -652,7 +685,7 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
     <rect class="box focus-line" x="330" y="190" width="260" height="80" rx="10"/><text x="460" y="225" text-anchor="middle" class="mono" style="font-size:16px">refactored branch</text><text x="460" y="250" text-anchor="middle" class="sub">Plan() through the interfaces</text>
     <path d="M590 70C640 70 650 150 692 150M590 230C640 230 650 150 692 150" class="arrow" marker-end="url(#ah4)"/>
     <rect x="700" y="80" width="470" height="140" rx="10" class="box"/>
-    <text x="722" y="114" style="font-size:18px;font-weight:600">must be identical</text>
+    <text x="722" y="114" style="font-size:18px;font-weight:600">Must be identical</text>
     <text x="722" y="144" class="sub">• tray and AGV assignments</text>
     <text x="722" y="170" class="sub">• event DAG edges after Reduce, final state, errors</text>
     <text x="722" y="196" class="sub">• response messages, byte for byte</text>
@@ -672,11 +705,10 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   <h2>Decisions requested</h2>
   <table>
     <tr><th>Decision</th><th>Recommendation</th></tr>
+    <tr><td>File layout</td><td>One folder per pipeline stage under <code>include/</code>, <code>src/</code> and <code>test/</code>, each a separate build target; shared types and services in <code>core/</code>.</td></tr>
     <tr><td>Input and output style</td><td>Tray: read-only input, returned result, a single apply function. AGV: in-place modification for the first version.</td></tr>
     <tr><td>Interface mechanism</td><td>Virtual <code>Solve</code>, solver owned by <code>Scheduler</code> through <code>std::unique_ptr</code>.</td></tr>
-    <tr><td>Folders or packages</td><td>Stage folders initially; promote <code>action_graph</code> first, <code>task_planning</code> after the benchmarks.</td></tr>
-    <tr><td>Folder name</td><td><code>task_planning</code>, unless it is likely to be confused with the <code>task_planner</code> package.</td></tr>
-    <tr><td>Naming scope</td><td>Rename in <code>scheduler</code> and <code>planner_core</code>; translate <code>common_ros</code> names at the edge.</td></tr>
+    <tr><td>Renaming scope</td><td>Rename in <code>scheduler</code> and <code>planner_core</code>; translate <code>common_ros</code> names at the edge.</td></tr>
     <tr><td>Tickets</td><td>Create a child ticket for AGV assignment (stage F); verify the SW2-769 structure against the current branch.</td></tr>
   </table>
 </section>
@@ -734,7 +766,7 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
     <ul class="small">
       <li>Agreement on the guiding principles, in particular behavioural parity</li>
       <li>Returned result and apply function for tray assignment; in-place modification first for AGV assignment</li>
-      <li>Stage folders first, packages when justified</li>
+      <li>File layout: one folder per pipeline stage</li>
     </ul>
     <ul class="small">
       <li>Renaming limited to <code>scheduler</code> and <code>planner_core</code></li>

@@ -505,7 +505,7 @@ def d03_event_dag():
 # --------------------------------------------------------------------------------------------------------------
 def d04_trays():
     d = Doc("d04_trays", "Tray assignment", "An empty bay needs an empty tray: which one?")
-    S0 = d.step("Bay B21 is empty and a customer is about to park. The job asks for 'any empty tray into bay B21': "
+    S0 = d.step("Bay B21 is empty and a customer is waiting to park. The job asks for 'any empty tray into bay B21': "
                 "the tray is left blank for tray assignment to choose.")
     S1 = d.step("The candidates are the three empty trays: tray T15, tray T20 and tray T24. The search starts at the "
                 "bay and works outward.")
@@ -561,7 +561,7 @@ def d04_trays():
     with d.at(S4):
         check(d, e, done_delay(p, S4))
     cx = bw + 40
-    rows = [("tray T15", "26 s", "nothing in the way"), ("tray T24", "33 s", "longer route, along the aisle"),
+    rows = [("tray T15", "26 s", "no obstructing tray"), ("tray T24", "33 s", "longer route, along the aisle"),
             ("tray T20", "59 s", "29 s, plus 30 s for crossing tray T19")]
     with d.at(S2):
         d.text(cx, y0 - 16, "Cost of each candidate", size=12.5, weight=600, fill=T.fg)
