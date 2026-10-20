@@ -20,7 +20,7 @@ YAML = ROOT / "sources" / "5675_pecos_combined.yaml"
 
 WP_LABEL_BELOW = {9}   # W9 sits right under charger C10
 PREFIX = {"Parking": "P", "Waypoint": "W", "Bay": "B", "AgvCharge": "C"}
-C_PARK, C_BAY, C_CHG, C_WP = T.sky, T.teal, T.violet, T.fg2
+C_PARK, C_BAY, C_CHG, C_WP = T.sky, T.blue, T.yellow, T.fg2
 
 
 @dataclass

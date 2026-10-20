@@ -206,7 +206,7 @@ def sim_pecos_setups():
                    "simulated as three layouts: each sandbox alone, or both together. Node ids are shared, so a "
                    "scenario for one sandbox uses the same P, W and B numbers as the combined layout.",
           badge_key="yaml+scenario",
-          legend=[("box", T.sky, "stall (Parking)"), ("box", T.teal, "customer bay"), ("box", T.amber, "tray"),
+          legend=[("box", T.sky, "stall (Parking)"), ("box", T.blue, "customer bay"), ("box", T.amber, "tray"),
                   ("box", T.pink, "vehicle on a tray"), ("box", T.green, "AGV (heading 90 = facing -x)")],
           footnote="An AGV and a tray on the same stall: the AGV is lowered under the tray (initial_lifted is "
                    "false unless lift_fraction is 1).")
@@ -242,7 +242,7 @@ def sim_site_archetypes():
     floor_slab(0, 520, G, "floor 0")
     # bay
     d.rect(10, G - 120, 170, 120, fill=T.tint(T.teal, 0.08, T.bg), stroke=T.teal, sw=1.4, dash="6 4")
-    d.text(18, G - 104, "bay B21", size=12, family="mono", weight=700, fill=T.teal)
+    d.text(18, G - 104, "bay B21", size=12, family="mono", weight=700, fill=T.blue)
     d.text(18, G - 88, "patron and garage doors", size=10.5, fill=T.muted)
     tray(25, G - 2)
     car(37, G - 9)
@@ -274,7 +274,7 @@ def sim_site_archetypes():
     d.rect(X + 6, top - 4, 98, 6, fill=T.violet)
     tray(X + 6, top - 4, 98)
     car(X + 12, top - 11, w=80)
-    d.text(X + 124, top - 44, "BLift node 26: the bay is the VRC carriage", size=11, family="mono", weight=700, fill=T.teal)
+    d.text(X + 124, top - 44, "BLift node 26: the bay is the VRC carriage", size=11, family="mono", weight=700, fill=T.blue)
     d.text(X + 124, top - 28, "the patron drives onto the tray at floor 1", size=10.5, fill=T.muted)
     d.rect(X + 6, bot - 4, 98, 6, fill=T.tint(T.violet, 0.45, T.bg))
     d.line(X + 55, top + 10, X + 55, bot - 14, stroke=T.violet, sw=1.8, dash="5 4")
@@ -298,7 +298,7 @@ def sim_site_archetypes():
                    "machine; a BLift node gets the BLift machine, a bridge to its VRC, and the VRC's simulated "
                    "driver. The planner's VRC support is described in the Layout file tab.",
           badge_key="schematic",
-          legend=[("box", T.teal, "bay"), ("box", T.violet, "VRC"), ("box", T.amber, "tray"),
+          legend=[("box", T.blue, "bay"), ("box", T.violet, "VRC"), ("box", T.amber, "tray"),
                   ("box", T.pink, "vehicle"), ("box", T.green, "AGV")],
           footnote="38 Gramercy: per the comment in params_38_gramercy.yaml, the BLift is node 26 and VRC 1 takes "
                    "the vehicle from floor 1 to floor 0. The layouts of the New York sites are not in the "

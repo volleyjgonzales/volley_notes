@@ -126,7 +126,7 @@ def sim_scenario_run():
     selfmsg("sim", "patron_arrival -> Patrons insert queue")
     msg("sim", "bay", "/bay/b<N>/sim_offer_inserting_payload")
     msg("bay", "cen", "confirm_insert -> bay event -> INSERT job", ret=True)
-    step("Every update: the Simulator rebuilds a 3D box for every AGV, tray, payload, bay overdrive plate, charger "
+    step("Every update: the Simulator rebuilds a 3D box for every AGV, tray, payload, overdrive-plate area at each bay, charger "
          "and obstruction from the latest snapshot, and tests every pair. A carried tray is exempt.")
     msg("cen", "sim", "/central/garage_snapshot", ret=True)
     selfmsg("sim", "RunCollisionCheck(): FindCollisions()", "O(n^2) pairs; AGV + tray within 0.15 m = carried")
@@ -180,20 +180,20 @@ def sim_collision_volumes():
     d.text(X0 + 256, G - 0.38 * sc + 4, "tray", size=11.5, family="mono", weight=600, fill=T.amber)
     # bay overdrive plate beside a tray in a bay
     bx = X0 + 320
-    band(bx, 110, 0, 0.33, T.teal, "ODP")
+    band(bx, 110, 0, 0.33, T.blue, "ODP")
     band(bx + 120, 130, 0.34, 0.42, T.amber)
     d.text(bx + 120, G - 0.42 * sc - 8, "tray in the bay", size=10.5, fill=T.amber)
-    d.rect(bx, G + 10, 110, 10, rx=3, fill="none", stroke=T.teal, sw=1.4, dash="4 3")
+    d.rect(bx, G + 10, 110, 10, rx=3, fill="none", stroke=T.blue, sw=1.4, dash="4 3")
     # charger
-    band(X0 + 600, 60, 0, 0.9, T.violet, "chg")
+    band(X0 + 600, 60, 0, 0.9, T.yellow, "chg")
     # band descriptions
     rows = [(T.green, "AGV: floor .. lowered + (raised - lowered) x max lift fraction;"),
             (T.green, "   dashed: lifted, it reaches into the tray band (carried-tray exemption)"),
             (T.amber, "tray: (kTrayHeight - kTrayThickness) .. kTrayHeight"),
             (T.pink, "payload: tray top .. + payload.height_m, on the tray's pose"),
-            (T.teal, "bay overdrive plate: floor .. tray top - 6 mm; when the system"),
-            (T.teal, "   doors are open it moves to -0.2 .. -0.1 m and never collides"),
-            (T.violet, "charger, obstruction: static, registered once")]
+            (T.blue, "overdrive-plate area at the bay: floor .. tray top - 6 mm; when the system"),
+            (T.blue, "   doors are open it moves to -0.2 .. -0.1 m and never collides"),
+            (T.yellow, "charger, obstruction: static, registered once")]
     for i, (c, r) in enumerate(rows):
         d.text(X0, G + 44 + i * 19, r, size=11.5, fill=c if not r.startswith("   ") else T.muted)
     # ---- panel B: separating axis test (top view)
@@ -234,7 +234,7 @@ def sim_collision_volumes():
                    "...) live in common, outside the snapshots.",
           badge_key="schematic",
           legend=[("box", T.green, "AGV"), ("box", T.amber, "tray"), ("box", T.pink, "payload"),
-                  ("box", T.teal, "bay overdrive plate"), ("box", T.violet, "charger")])
+                  ("box", T.blue, "overdrive-plate area at the bay"), ("box", T.yellow, "charger")])
     return d
 
 

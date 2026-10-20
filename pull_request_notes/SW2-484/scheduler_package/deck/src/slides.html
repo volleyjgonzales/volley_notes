@@ -55,14 +55,14 @@
   <div class="cols c3">
     <div class="card asset">
       <svg viewBox="0 0 64 64"><rect x="6" y="24" width="52" height="20" rx="5" fill="none" stroke="#22c55e" stroke-width="2.5"/><circle cx="16" cy="48" r="5" fill="#22c55e"/><circle cx="48" cy="48" r="5" fill="#22c55e"/><path d="M40 34h10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"/><path d="M46 30l4 4-4 4" stroke="#22c55e" stroke-width="2.5" fill="none"/></svg>
-      <div><h3>AGV</h3><p>Automated guided vehicle. A low-profile robot that lifts and transports one tray at a time. Named AGV-1, AGV-2, …</p></div>
+      <div><h3>AGV</h3><p>Automated guided vehicle. A low-profile robot that lifts and transports one tray at a time; it carries a retractable overdrive plate (ODP). Named AGV-1, AGV-2, …</p></div>
     </div>
     <div class="card asset">
       <svg viewBox="0 0 64 64"><rect x="6" y="26" width="52" height="8" rx="2" fill="none" stroke="#f59e0b" stroke-width="2.5"/><path d="M12 34v14M52 34v14" stroke="#f59e0b" stroke-width="3"/><path d="M14 26c2-8 8-10 18-10s16 2 18 10" fill="none" stroke="#f472b6" stroke-width="2"/></svg>
-      <div><h3>Tray</h3><p>A legged platform that holds one vehicle or is empty. Named tray T15, tray T17, …; its front overdrive plate (ODP) is retractable.</p></div>
+      <div><h3>Tray</h3><p>A legged platform that holds one vehicle or is empty. Named tray T15, tray T17, …</p></div>
     </div>
     <div class="card asset">
-      <svg viewBox="0 0 64 64"><rect x="8" y="10" width="48" height="44" rx="4" fill="none" stroke="#2dd4bf" stroke-width="2.5"/><path d="M8 40h48" stroke="#2dd4bf" stroke-width="2" stroke-dasharray="4 3"/><text x="32" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#2dd4bf" font-family="JetBrains Mono">B</text></svg>
+      <svg viewBox="0 0 64 64"><rect x="8" y="10" width="48" height="44" rx="4" fill="none" stroke="#60a5fa" stroke-width="2.5"/><path d="M8 40h48" stroke="#60a5fa" stroke-width="2" stroke-dasharray="4 3"/><text x="32" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#60a5fa" font-family="JetBrains Mono">B</text></svg>
       <div><h3>Bay</h3><p>The customer interface for vehicle drop-off and pick-up, for example bay B21. Operates in insert and retrieve modes.</p></div>
     </div>
     <div class="card asset">
@@ -70,7 +70,7 @@
       <div><h3>Stalls and waypoints</h3><p>Parking stalls (stall P17) store trays; waypoints (waypoint W22) are aisle positions traversed by AGVs.</p></div>
     </div>
     <div class="card asset">
-      <svg viewBox="0 0 64 64"><rect x="14" y="8" width="36" height="48" rx="6" fill="none" stroke="#a78bfa" stroke-width="2.5"/><path d="M35 16l-10 18h9l-5 14 12-20h-9z" fill="#a78bfa"/></svg>
+      <svg viewBox="0 0 64 64"><rect x="14" y="8" width="36" height="48" rx="6" fill="none" stroke="#facc15" stroke-width="2.5"/><path d="M35 16l-10 18h9l-5 14 12-20h-9z" fill="#facc15"/></svg>
       <div><h3>Chargers (VECS)</h3><p>Volley EV charging stations, which charge AGVs and vehicles parked on trays.</p></div>
     </div>
     <div class="card asset">
@@ -225,6 +225,14 @@
     motion problem; the timed motions CHUGG returns (AGV-2 waits at W18 for AGV-1); and the action DAG, where that
     wait becomes one edge, "W22 free". Times are illustrative steps, not seconds.
   </aside>
+</section>
+
+<section class="center-v">
+  <div class="kicker">In depth</div>
+  <h2>The pipeline, stage by stage</h2>
+  <p class="lede" style="max-width:1000px">The following slides take the stages in order and follow one running example through them: what each stage receives, what it decides, and what it hands to the next.</p>
+  <div class="stagebar" style="position:static;margin-top:34px;font-size:15px"><span>Inputs and outputs</span><span>1 Job expansion</span><span>2 Tray assignment</span><span>3 AGV assignment</span><span>4 Motion planning</span><span>5 Action graph</span></div>
+  <aside class="notes">A short orientation: the overview slide gave the shape of the pipeline; these slides show the content of each stage on the Pecos example.</aside>
 </section>
 
 <section>
@@ -541,33 +549,41 @@
 </section>
 
 <section>
-  <div class="kicker">Target architecture</div>
+  <div class="kicker">Architecture · target</div>
   <h2><code style="font-size:.8em">Plan()</code> as an orchestrator of replaceable stages</h2>
-  <svg class="dg" viewBox="0 0 1180 500">
+  <svg class="dg" viewBox="0 0 1180 470">
     <defs>
       <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker>
+      <marker id="tri3" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L12 6L0 12z" fill="var(--card)" stroke="#94a3b8" stroke-width="1.4"/></marker>
     </defs>
-    <rect class="box" x="400" y="6" width="380" height="64" rx="10"/>
-    <text x="590" y="36" text-anchor="middle" class="mono" style="font-size:18px">Scheduler::Plan()</text>
-    <text x="590" y="58" text-anchor="middle" class="sub" style="font-size:14px">executes the stages and owns the solvers</text>
-    <path d="M590 70V96M120 96H1060M120 96V120M355 96V120M590 96V120M825 96V120M1060 96V120" class="arrow" style="stroke:#475569"/>
-    <rect class="box" x="20" y="124" width="200" height="80" rx="10"/><text x="120" y="158" text-anchor="middle" class="mono" style="font-size:15px">job_expansion/</text><text x="120" y="182" text-anchor="middle" class="sub" style="font-size:13px">ExpandJob (later)</text>
-    <rect class="box focus-line" x="255" y="124" width="200" height="80" rx="10"/><text x="355" y="158" text-anchor="middle" class="mono" style="font-size:15px">tray_assignment/</text><text x="355" y="182" text-anchor="middle" class="sub accent-text" style="font-size:13px">Solver interface</text>
-    <rect class="box focus-line" x="490" y="124" width="200" height="80" rx="10"/><text x="590" y="158" text-anchor="middle" class="mono" style="font-size:15px">agv_assignment/</text><text x="590" y="182" text-anchor="middle" class="sub accent-text" style="font-size:13px">Solver interface</text>
-    <rect class="box" x="725" y="124" width="200" height="80" rx="10"/><text x="825" y="158" text-anchor="middle" class="mono" style="font-size:15px">motion_planning/</text><text x="825" y="182" text-anchor="middle" class="sub" style="font-size:13px">PlanMotions</text>
-    <rect class="box" x="960" y="124" width="200" height="80" rx="10"/><text x="1060" y="158" text-anchor="middle" class="mono" style="font-size:15px">action_graph/</text><text x="1060" y="182" text-anchor="middle" class="sub" style="font-size:13px">BuildActionDag</text>
-    <path d="M355 204V250" class="arrow" marker-end="url(#ah3)" style="stroke-dasharray:5 4"/><path d="M590 204V250" class="arrow" marker-end="url(#ah3)" style="stroke-dasharray:5 4"/>
-    <rect class="box focus-line" x="265" y="254" width="180" height="62" rx="8"/><text x="355" y="282" text-anchor="middle" class="mono" style="font-size:14px">DefaultSolver</text><text x="355" y="302" text-anchor="middle" class="sub" style="font-size:12px">current algorithm</text>
-    <rect class="box focus-line" x="500" y="254" width="180" height="62" rx="8"/><text x="590" y="282" text-anchor="middle" class="mono" style="font-size:14px">DefaultSolver</text><text x="590" y="302" text-anchor="middle" class="sub" style="font-size:12px">current algorithm</text>
-    <rect class="box" x="265" y="334" width="180" height="62" rx="8" style="stroke-dasharray:6 4"/><text x="355" y="362" text-anchor="middle" class="mono sub" style="font-size:14px">CandidateSolver</text><text x="355" y="382" text-anchor="middle" class="sub" style="font-size:12px">future, same Input / Result</text>
-    <rect class="box" x="500" y="334" width="180" height="62" rx="8" style="stroke-dasharray:6 4"/><text x="590" y="362" text-anchor="middle" class="mono sub" style="font-size:14px">CandidateSolver</text><text x="590" y="382" text-anchor="middle" class="sub" style="font-size:12px">future, same Input / Result</text>
-    <text x="700" y="372" class="sub">substitute, run the benchmark set, compare</text>
-    <rect x="20" y="420" width="1140" height="70" rx="10" class="box"/>
-    <text x="40" y="452" class="mono" style="font-size:16px">core/</text>
-    <text x="110" y="452" class="sub" style="font-size:16px">GarageServices: motion graph, collision table, headings · shared types · translated common_ros names</text>
-    <text x="110" y="476" class="sub" style="font-size:14px">all stages depend on core/; no stage includes the private headers of another (enforced in CI)</text>
+    <rect class="box focus-line" x="400" y="6" width="380" height="70" rx="10"/>
+    <text x="590" y="34" text-anchor="middle" class="mono" style="font-size:18px">Scheduler</text>
+    <text x="590" y="58" text-anchor="middle" class="sub" style="font-size:14px">Plan(): runs the stages in order; owns the solvers</text>
+    <path d="M590 76V96M120 96H1060M120 96V122M355 96V122M590 96V122M825 96V122M1060 96V122" class="arrow" style="stroke:#64748b"/>
+    <text x="620" y="91" class="sub" style="font-size:12.5px">calls</text>
+    <rect class="box" x="20" y="126" width="200" height="78" rx="10"/><text x="120" y="150" text-anchor="middle" class="sub" style="font-size:12px">«function» · stage 1</text><text x="120" y="176" text-anchor="middle" class="mono" style="font-size:14px">ExpandJobs(ctx, jobs)</text><text x="120" y="196" text-anchor="middle" class="sub" style="font-size:12px">unchanged logic, moved later</text>
+    <rect class="box focus-line" x="255" y="126" width="200" height="78" rx="10"/><text x="355" y="150" text-anchor="middle" class="sub accent-text" style="font-size:12px">«interface» · stage 2</text><text x="355" y="176" text-anchor="middle" class="mono" style="font-size:14px">tray_assignment::</text><text x="355" y="194" text-anchor="middle" class="mono" style="font-size:14px">Solver</text>
+    <rect class="box focus-line" x="490" y="126" width="200" height="78" rx="10"/><text x="590" y="150" text-anchor="middle" class="sub accent-text" style="font-size:12px">«interface» · stage 3</text><text x="590" y="176" text-anchor="middle" class="mono" style="font-size:14px">agv_assignment::</text><text x="590" y="194" text-anchor="middle" class="mono" style="font-size:14px">Solver</text>
+    <rect class="box" x="725" y="126" width="200" height="78" rx="10"/><text x="825" y="150" text-anchor="middle" class="sub" style="font-size:12px">«function» · stage 4</text><text x="825" y="176" text-anchor="middle" class="mono" style="font-size:14px">PlanMotions(ctx)</text><text x="825" y="196" text-anchor="middle" class="sub" style="font-size:12px">calls CHUGG</text>
+    <rect class="box" x="960" y="126" width="200" height="78" rx="10"/><text x="1060" y="150" text-anchor="middle" class="sub" style="font-size:12px">«function» · stage 5</text><text x="1060" y="176" text-anchor="middle" class="mono" style="font-size:14px">BuildActionDag(ctx,</text><text x="1060" y="194" text-anchor="middle" class="mono" style="font-size:14px">motions)</text>
+    <rect class="box focus-line" x="265" y="250" width="180" height="58" rx="8"/><text x="355" y="275" text-anchor="middle" class="mono" style="font-size:14px">DefaultSolver</text><text x="355" y="296" text-anchor="middle" class="sub" style="font-size:12px">today's algorithm</text>
+    <rect class="box focus-line" x="500" y="250" width="180" height="58" rx="8"/><text x="590" y="275" text-anchor="middle" class="mono" style="font-size:14px">DefaultSolver</text><text x="590" y="296" text-anchor="middle" class="sub" style="font-size:12px">today's algorithm</text>
+    <rect class="box" x="265" y="326" width="180" height="58" rx="8" style="stroke-dasharray:6 4"/><text x="355" y="351" text-anchor="middle" class="mono sub" style="font-size:14px">CandidateSolver</text><text x="355" y="372" text-anchor="middle" class="sub" style="font-size:12px">later, same interface</text>
+    <rect class="box" x="500" y="326" width="180" height="58" rx="8" style="stroke-dasharray:6 4"/><text x="590" y="351" text-anchor="middle" class="mono sub" style="font-size:14px">CandidateSolver</text><text x="590" y="372" text-anchor="middle" class="sub" style="font-size:12px">later, same interface</text>
+    <path d="M355 250V210" class="arrow" style="stroke:#94a3b8;stroke-dasharray:6 4" marker-end="url(#tri3)"/>
+    <path d="M590 250V210" class="arrow" style="stroke:#94a3b8;stroke-dasharray:6 4" marker-end="url(#tri3)"/>
+    <path d="M455 355H470V279H445" class="arrow" style="stroke:#94a3b8;stroke-dasharray:6 4"/>
+    <path d="M690 355H705V279H680" class="arrow" style="stroke:#94a3b8;stroke-dasharray:6 4"/>
+    <text x="712" y="262" class="sub" style="font-size:13px">implements</text>
+    <text x="712" y="352" class="sub" style="font-size:13px">substitute, run the benchmark set, compare</text>
+    <rect x="20" y="408" width="560" height="56" rx="10" class="box"/>
+    <text x="40" y="432" class="mono" style="font-size:15px">GarageServices</text><text x="190" y="432" class="sub" style="font-size:13.5px">layout, motion graph, collision table, cost model</text>
+    <text x="40" y="454" class="sub" style="font-size:13px">long-lived, read-only; passed to every stage</text>
+    <rect x="600" y="408" width="560" height="56" rx="10" class="box"/>
+    <text x="620" y="432" class="mono" style="font-size:15px">PlanContext</text><text x="740" y="432" class="sub" style="font-size:13.5px">initial state, event DAG, scheduled jobs</text>
+    <text x="620" y="454" class="sub" style="font-size:13px">one per Plan() call; written only where a signature says so</text>
   </svg>
-  <p class="small" style="margin-top:6px"><span class="key" style="--c:var(--accent)"></span> delivered by this ticket &nbsp;&nbsp; <span class="key dashed"></span> enabled for later</p>
+  <p class="small" style="margin-top:6px"><span class="key" style="--c:var(--accent)"></span> delivered by this ticket &nbsp;&nbsp; <span class="key dashed"></span> enabled for later &nbsp;&nbsp; Component view; the folders that hold these parts are on the module layout slide.</p>
   <aside class="notes">
     The orchestrator defines the order of the stages and owns the solver objects. Each assignment stage exposes a
     minimal interface with a single entry point. Shared services that are currently Scheduler members (gg_, table_)
@@ -576,43 +592,66 @@
 </section>
 
 <section>
-  <div class="kicker">Architecture · proposed</div>
-  <h2>Scheduler after the refactor: a thin orchestrator</h2>
-  <div class="cols w40" style="align-items:start">
-<pre data-lang="cpp"><code>class Scheduler {                     // sketch
+  <div class="kicker">Architecture · target</div>
+  <h2>A thin <code style="font-size:.8em">Scheduler</code>: what the class keeps</h2>
+  <div class="cols w40" style="align-items:center">
+<pre data-lang="cpp"><code>class Scheduler {                       // sketch
  public:
-  Scheduler(GarageServices services, SolverSet solvers);
+  Scheduler(GarageServices services,
+            SolverSet solvers,
+            SchedulerConfig config);
+
   PlanResponse Plan(const PlanRequest&amp; req) const;
+
  private:
   GarageServices services_;   // layout, graphs, cost model
   std::unique_ptr&lt;tray_assignment::Solver&gt; tray_solver_;
   std::unique_ptr&lt;agv_assignment::Solver&gt;  agv_solver_;
   SchedulerConfig config_;    // bay readiness ratio, audit
-};
-
-PlanResponse Scheduler::Plan(const PlanRequest&amp; req) const {
-  PlanContext ctx = MakePlanContext(req, services_);
-  ExpandJobs(ctx, req.pending_jobs);         // job_expansion/
-  auto trays = tray_solver_-&gt;Solve({ctx.initial_state, ctx.event_dag});
-  if(!trays) return FailAll(ctx, trays.error());
-  ApplyTrayAssignment(ctx, *trays);
-  if(auto r = agv_solver_-&gt;SolveInPlace(
-         {ctx.initial_state, ctx.first_event_by_tray}, ctx.event_dag); !r)
-    return FailAll(ctx, r.error());
-  auto motions = PlanMotions(ctx, services_); // motion_planning/
-  return BuildResponse(ctx, BuildActionDag(ctx, motions));
-}</code></pre>
+};</code></pre>
     <div class="stack">
-      <div class="card"><h3>One responsibility left</h3><p>The class sequences the stages and owns the solver objects. The stage logic moves to stage folders; the 55 methods become a handful.</p></div>
-      <div class="card"><h3>Dependencies passed in</h3><p>Services and solvers arrive through the constructor. A test builds a <code>Scheduler</code> with a fake or candidate solver, or calls a solver with no <code>Scheduler</code> at all.</p></div>
-      <div class="card"><h3>Lifetimes made explicit</h3><p>Immutable site services, runtime configuration and per-call <code>PlanContext</code> become three separate types instead of members and a shared pointer.</p></div>
+      <div class="card"><h3>One responsibility left</h3><p>The class sequences the stages and owns the solver objects. The stage logic moves out; 55 methods become a handful.</p></div>
+      <div class="card"><h3>Dependencies passed in</h3><p>Services, solvers and configuration arrive through the constructor. A test builds a <code>Scheduler</code> with a fake or candidate solver, or calls a solver with no <code>Scheduler</code> at all.</p></div>
+      <div class="card"><h3>Three lifetimes, three types</h3><p>Immutable site services, runtime configuration and the per-call <code>PlanContext</code> replace today's members and shared context pointer.</p></div>
     </div>
   </div>
   <aside class="notes">
     SolverSet is a small struct of the two solver pointers; the default set holds the DefaultSolvers that reproduce
-    today's behaviour. The code is a sketch: names follow the proposal, error handling uses stdx::Expected, and the
-    stages run in the same order as today. Motion planning and the action graph keep their current functions; their
-    interfaces are Part 4.
+    today's behaviour. SchedulerConfig holds what the ROS callback changes at run time (the bay readiness ratio) and
+    the audit switch, so Plan() reads configuration through one object.
+  </aside>
+</section>
+
+<section>
+  <div class="kicker">Architecture · target</div>
+  <h2><code style="font-size:.8em">Plan()</code> as a short sequence of stage calls</h2>
+  <div class="cols w40" style="align-items:center">
+<pre data-lang="cpp"><code>PlanResponse Scheduler::Plan(const PlanRequest&amp; req) const {
+  PlanContext ctx = MakePlanContext(req, services_);
+
+  ExpandJobs(ctx, req.pending_jobs);                  // stage 1
+
+  auto trays = tray_solver_-&gt;Solve(                   // stage 2
+      {ctx.initial_state, ctx.event_dag});
+  if(!trays) return FailAll(ctx, trays.error());
+  ApplyTrayAssignment(ctx, *trays);
+
+  auto agvs = agv_solver_-&gt;SolveInPlace(              // stage 3
+      {ctx.initial_state, ctx.first_event_by_tray}, ctx.event_dag);
+  if(!agvs) return FailAll(ctx, agvs.error());
+
+  auto motions = PlanMotions(ctx, services_);         // stage 4
+  return BuildResponse(ctx, BuildActionDag(ctx, motions));  // stage 5
+}</code></pre>
+    <div class="stack">
+      <div class="card"><h3>The pipeline is readable in one place</h3><p>Each stage is one call, in the order of the pipeline slide. What a stage reads and writes is visible at the call.</p></div>
+      <div class="card"><h3>Errors stop the pipeline</h3><p>Each solver returns <code>stdx::Expected</code>; a failure is reported once, with its cause, instead of a <code>BoolStringPair</code> checked by hand.</p></div>
+      <div class="card"><h3>Same order, same behaviour</h3><p>The stages run exactly as today. Motion planning and the action graph keep their current functions; their interfaces are future work.</p></div>
+    </div>
+  </div>
+  <aside class="notes">
+    The code is a sketch: names follow the proposal. Per-job failures inside job expansion are still reported per job,
+    as today; FailAll covers a failure of a whole stage.
   </aside>
 </section>
 
@@ -621,25 +660,30 @@ PlanResponse Scheduler::Plan(const PlanRequest&amp; req) const {
   <div class="kicker">Tray assignment interface</div>
   <h2>Read-only input, returned result, single point of application</h2>
   <div class="cols w40" style="align-items:center">
-<pre data-lang="cpp"><code>namespace volley::task_planning::tray_assignment {
+<div class="code-sm"><pre data-lang="cpp"><code>namespace volley::task_planning::tray_assignment {
+
 struct Input {          // read-only view
   const DiscreteGarageState&amp; initial_state;
   const EventDag&amp; event_dag;
 };
+
 struct Result {         // an edit log
   std::vector&lt;TrayFill&gt; fills;   // blanks filled
   std::vector&lt;DagEdit&gt;  edits;   // events, edges
   // + first event per tray, for AGV assignment
 };
+
 class Solver {
  public:
   virtual ~Solver() = default;
   [[nodiscard]] virtual stdx::Expected&lt;Result&gt;
   Solve(const Input&amp; input) const = 0;
 };
+
 }  // namespace
+
 // the only writer of the plan context
-ApplyTrayAssignment(plan_ctx, result);</code></pre>
+ApplyTrayAssignment(plan_ctx, result);</code></pre></div>
     <div class="stack">
       <div class="card"><h3>No side effects in Solve</h3><p>The solver receives a const view and returns its decisions. Two solvers can be run on the same input and compared.</p></div>
       <div class="card"><h3>Inspectable results</h3><p>Assignments and edits are plain data: tests assert on them directly, and logs record exactly what a solver changed.</p></div>
@@ -663,11 +707,13 @@ ApplyTrayAssignment(plan_ctx, result);</code></pre>
   <div class="kicker">AGV assignment interface</div>
   <h2>AGV assignment: same module layout, in-place edits</h2>
   <div class="cols w40" style="align-items:center">
-<pre data-lang="cpp"><code>namespace volley::task_planning::agv_assignment {
+<div class="code-sm"><pre data-lang="cpp"><code>namespace volley::task_planning::agv_assignment {
+
 struct Input {          // read-only part
   const DiscreteGarageState&amp; initial_state;
   const FirstEventByTray&amp; first_event_by_tray;
 };
+
 class Solver {          // first version
  public:
   virtual ~Solver() = default;
@@ -675,6 +721,7 @@ class Solver {          // first version
   SolveInPlace(const Input&amp; input,
                EventDag&amp; event_dag) const = 0;
 };
+
 // later version, same shape as tray assignment
 struct Result {
   std::vector&lt;AgvFill&gt; fills;   // AGV per tray move
@@ -682,7 +729,8 @@ struct Result {
 };
 //   stdx::Expected&lt;Result&gt; Solve(const Input&amp;) const;
 //   ApplyAgvAssignment(plan_ctx, result);
-}  // namespace</code></pre>
+
+}  // namespace</code></pre></div>
     <div class="stack">
       <div class="card"><h3>No Result struct in the first version</h3><p>The AGV loop reads the graph it builds: matched moves, AGVs already assigned, and edges added for path repair. Returning an edit log would require replicating that state inside the solver, a parity risk before benchmarks exist.</p></div>
       <div class="card"><h3>Path forward</h3><p>With parity tests and benchmarks in place, the solver works on a private copy of the event DAG and returns <code>AgvFill</code> entries and an ordered edit log, applied by <code>ApplyAgvAssignment</code>.</p></div>

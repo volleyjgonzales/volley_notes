@@ -1918,7 +1918,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     <tr><td>Dense storage with passive obstacles</td><td>Trays (with or without cars) stand on parking nodes and block each other; reaching one may require moving others</td><td>A rearrangement problem: blockers create extra tasks, and the set of tasks depends on routes (puzzle-based storage, navigation among movable obstacles)</td></tr>
     <tr><td>Carry by lifting</td><td>An AGV drives under a tray, lifts it, carries it and lowers it; with the lift down it can pass under trays whose legs allow</td><td>Agents change footprint and capability during a plan; pickup and delivery are separate goals of one agent</td></tr>
     <tr><td>Large agents, headings, motion types</td><td>Footprints overlap several nodes; heading matters; locomote, strafe and rotate have different durations; rotation only on some nodes</td><td>Conflicts are footprint overlaps (large-agent MAPF), states are poses, not vertices; time is continuous</td></tr>
-    <tr><td>Stateful non-AGV resources</td><td>Bays switch modes and process cars, VECS charge, VRCs carry AGVs between floors; a bay's overdrive-plate area blocks traffic in some states</td><td>Resources with state machines and durations, some of them unbounded (a patron's insert), and some that change the map</td></tr>
+    <tr><td>Stateful non-AGV resources</td><td>Bays switch modes and process cars, VECS charge, VRCs carry AGVs between floors; the overdrive-plate area at a bay blocks traffic in some states</td><td>Resources with state machines and durations, some of them unbounded (a patron's insert), and some that change the map</td></tr>
     <tr><td>Hard precedence from the domain</td><td>A bay must be in retrieve mode before a tray enters; the car must be in the bay before the hand-over; a tray cannot enter an occupied node</td><td>Some orderings are real constraints and must be kept in every plan</td></tr>
     <tr><td>Execution is uncertain</td><td>Speeds, acceleration, patron behaviour and reports vary; actions are released by Dispatch when their parents finish</td><td>The output must be an <em>order</em> that is safe at any speed (an ADG), not a timetable</td></tr>
     <tr><td>Online and persistent</td><td>Jobs arrive continuously; Dispatch plans every 850 ms when allowed; the fleet keeps moving</td><td>Lifelong planning: new plans must fit around running ones, and planning time is bounded</td></tr>
@@ -3120,7 +3120,7 @@ public:
       <td><code>BAY_ODP</code></td>
       <td><code>BAY_OVERDRIVE_PLATE</code></td>
       <td><span class="tier tier-b">B</span></td>
-      <td>ODP is the overdrive plate, the retractable front part of the tray; an unexplained acronym in a public enum</td>
+      <td>ODP is the overdrive plate, a retractable plate on the AGV; an unexplained acronym in a public enum</td>
     </tr>
     <tr>
       <td><code>CollisionTable</code>, <code>Query</code>, <code>collision_table_</code>, <code>occupancy_state_</code></td>

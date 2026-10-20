@@ -786,7 +786,7 @@ def layout_validation():
 
     base_xy = {2: (0, 0), 4: (4, 0), 6: (8, 0), 8: (8, 2.3)}
     types = {2: "Bay", 4: "Waypoint", 6: "Waypoint", 8: "Parking"}
-    tcol = {"Bay": T.teal, "Waypoint": T.fg2, "Parking": T.sky}
+    tcol = {"Bay": T.blue, "Waypoint": T.fg2, "Parking": T.sky}
 
     def node(nid, xy, idx, *, col=None, dashed=False, idx_col=T.muted, tlabel=True):
         x, y = P(*xy)
@@ -1120,7 +1120,7 @@ def layout_validation():
                    "faults on a four-node example that load without an error, then the checks that do exist.",
           badge_key="illustrative",
           legend=[("box", OK, "checked: throws"), ("box", BAD, "not checked"), ("box", WARN, "warning or unvalidated"),
-                  ("box", T.teal, "Bay"), ("box", T.sky, "Parking"), ("box", T.fg2, "Waypoint")],
+                  ("box", T.blue, "Bay"), ("box", T.sky, "Parking"), ("box", T.fg2, "Waypoint")],
           footnote="The four-node layout is illustrative; parser behaviour and the quoted lines are from layout.cpp, "
                    "pose_utils.cpp and pose_graph.cpp in the common_ros snapshot (line numbers are lines of each file). "
                    "Node 12 and the values in the step-7 messages are examples. The consequence of (e) beyond 'undefined "

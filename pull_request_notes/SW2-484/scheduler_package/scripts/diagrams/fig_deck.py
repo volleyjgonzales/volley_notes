@@ -259,16 +259,16 @@ def map_legend(d: Doc, x0, y0, width):
 
     def bay(cx, cy):
         w, h = 58, 32
-        d.rect(cx - w / 2, cy - h / 2, w, h, rx=6, fill=T.tint(T.teal, 0.12, T.bg_deep), stroke=T.teal, sw=1.5)
-        d.line(cx + w / 2, cy - h / 2 + 5, cx + w / 2, cy + h / 2 - 5, stroke=T.teal, sw=4, cap="round")
-        d.text(cx - w / 2 + 5, cy - h / 2 + 10, "B", size=10, family="mono", weight=700, fill=T.teal)
+        d.rect(cx - w / 2, cy - h / 2, w, h, rx=6, fill=T.tint(T.blue, 0.12, T.bg_deep), stroke=T.blue, sw=1.5)
+        d.line(cx + w / 2, cy - h / 2 + 5, cx + w / 2, cy + h / 2 - 5, stroke=T.blue, sw=4, cap="round")
+        d.text(cx - w / 2 + 5, cy - h / 2 + 10, "B", size=10, family="mono", weight=700, fill=T.blue)
 
     def charger(cx, cy):
         r = 10
-        d.circle(cx, cy, r, fill=T.tint(T.violet, 0.25, T.bg_deep), stroke=T.violet, sw=1.5)
+        d.circle(cx, cy, r, fill=T.tint(T.yellow, 0.25, T.bg_deep), stroke=T.yellow, sw=1.5)
         bolt = [(cx + 1.2, cy - 6.2), (cx - 3.8, cy + 1), (cx - 0.2, cy + 1), (cx - 1.4, cy + 6.2), (cx + 3.8, cy - 1.2),
                 (cx + 0.2, cy - 1.2)]
-        d.polygon(bolt, fill=T.violet, join="round")
+        d.polygon(bolt, fill=T.yellow, join="round")
 
     entries = [(agv, "AGV"), (lambda x, y: tray(x, y, False), "empty tray"),
                (lambda x, y: tray(x, y, True), "tray + vehicle"), (stall, "parking stall"),

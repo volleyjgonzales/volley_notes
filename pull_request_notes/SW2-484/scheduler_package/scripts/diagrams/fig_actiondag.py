@@ -19,7 +19,7 @@ from svgkit import BBox, Doc, text_width
 from theme import S, T
 
 DOC = "05-action-graph.html"
-A1C, A2C, BAYC = T.green, T.violet, T.teal
+A1C, A2C, BAYC = T.green, T.violet, T.blue
 CHAIN, OCC, EVT, GONE = T.green, T.sky, T.amber, T.faint
 
 

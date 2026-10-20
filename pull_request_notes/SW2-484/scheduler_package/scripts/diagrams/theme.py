@@ -38,6 +38,8 @@ class T:
     red = "#EF4444"         # conflict / destructive
     teal = "#2DD4BF"        # utility types
     pink = "#F472B6"        # payload
+    yellow = "#FACC15"      # chargers (AGV chargers and VECS on maps)
+    blue = "#60A5FA"        # customer bays on maps
 
     @staticmethod
     def tint(hex_color: str, alpha: float, over: str = "#1B2336") -> str:

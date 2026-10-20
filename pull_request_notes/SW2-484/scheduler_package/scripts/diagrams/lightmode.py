@@ -52,9 +52,10 @@ TOKENS = {
     # accents (Tailwind 600/700 shades: >= 4.5:1 on white)
     T.green: "#15803D", T.sky: "#0369A1", T.violet: "#6D28D9", T.amber: "#B45309",
     T.red: "#B91C1C", T.teal: "#0F766E", T.pink: "#BE185D", "#7DD3FC": "#075985",
+    T.yellow: "#CA8A04", T.blue: "#1D4ED8",
 }
 TOKENS = {k.upper(): v for k, v in TOKENS.items()}
-ACCENTS = [T.green, T.sky, T.violet, T.amber, T.red, T.teal, T.pink]
+ACCENTS = [T.green, T.sky, T.violet, T.amber, T.red, T.teal, T.pink, T.yellow, T.blue]
 NEUTRAL_FG = [T.fg, T.fg2, T.muted, T.faint, T.border, T.border_soft, T.card, T.muted_bg]
 BASES = [T.bg, T.bg_deep, T.card, T.card_hi, "#020617"]
 

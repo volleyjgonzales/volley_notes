@@ -423,7 +423,7 @@ def static_filter():
     S2 = d.step("Pass 2, AGVs. AGV-1 is not ignored, so the area of an AGV at W26 is switched off for a tray. "
                 "For a TRAY or payload footprint the code queries against TRAY, because an AGV meets a tray's "
                 "legs before its payload.")
-    S3 = d.step("Pass 3, bays. A bay that is not READY_TO_RETRIEVE has its overdrive plate out, so its BAY_ODP "
+    S3 = d.step("Pass 3, bays. A bay that is not READY_TO_RETRIEVE keeps its overdrive-plate area closed, so its BAY_ODP "
                 "volume is switched off: B21 itself and the approach from W41. A bay that is ready to retrieve "
                 "is skipped entirely.")
     S4 = d.step("Pass 4, disabled nodes. P24 is in disabled_nodes_ (or holds a disabled asset), so it is blocked at "
@@ -441,7 +441,7 @@ def static_filter():
     sc.agv("AGV-1", F_AGV, heading=90, label_side="above")
     sc.draw()
     bx, by = m.P(21)
-    label_pill(d, bx, by - 52, "B21 READY_TO_INSERT", color=T.teal, size=10.5, bg=T.bg_deep, border=T.teal)
+    label_pill(d, bx, by - 52, "B21 READY_TO_INSERT", color=T.blue, size=10.5, bg=T.bg_deep, border=T.blue)
     x24, y24 = m.P(24)
     label_pill(d, x24, y24 + 26, "P24 disabled", color=OFF, size=10.5, bg=T.bg_deep, border=OFF)
     passes = [("trays", S1), ("agvs", S2), ("bays", S3), ("disabled", S4)]

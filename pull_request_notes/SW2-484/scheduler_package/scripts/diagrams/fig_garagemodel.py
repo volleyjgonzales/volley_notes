@@ -879,14 +879,14 @@ def asset_types():
             ("plan event", "none: moves with its tray; PROCESS_RETRIEVE removes it"),
             ("command", "none"),
             ("footprint", "PAYLOAD + smallest parking window that fits")]),
-        ("bay", "bay", T.violet, "where customers insert and retrieve cars", [
+        ("bay", "bay", T.blue, "where customers insert and retrieve cars", [
             ("id", "uint16 = its node_id · GarageEntityId {entity_type: 'b', id}"),
             ("state", "DiscreteBayState {id, state (BayReport STATE_*), disabled}"),
             ("sits on", "is a node: TYPE_BAY (4) or TYPE_BLIFT (7)"),
             ("plan event", "BayTransition (BayCommand from a given bay state)"),
             ("command", "ActionNode TYPE_BAY_COMMAND · BayCommand {command_type, floor}"),
             ("footprint", "BAY_ODP (0), at bay poses only")]),
-        ("vecs", "VECS (EV charger)", T.sky, "charges a payload's battery", [
+        ("vecs", "VECS (EV charger)", T.yellow, "charges a payload's battery", [
             ("id", "uint16 = its node_id · GarageEntityId {entity_type: 'v', id}"),
             ("state", "DiscreteVecsState {id, state (VecsReport), disabled}"),
             ("sits on", "is a node: TYPE_EV_CHARGE (6)"),
@@ -924,7 +924,7 @@ def asset_types():
                    "(bay, VECS, VRC). Each row says which type in the code stands for that asset.",
           badge_key="as-built",
           legend=[("box", T.green, "AGV"), ("box", T.amber, "tray"), ("box", T.pink, "payload"),
-                  ("box", T.violet, "bay"), ("box", T.sky, "VECS"), ("box", T.teal, "VRC")],
+                  ("box", T.blue, "bay"), ("box", T.yellow, "VECS"), ("box", T.teal, "VRC")],
           footnote="From interfaces/msg (Discrete*State, GarageEntityId, ActionNode, *Command, GarageNode), "
                    "common_ros (AgvId/TrayId/BayId/VecsId/VrcId, CollisionEntityId) and planner_core (event classes).")
     return d
