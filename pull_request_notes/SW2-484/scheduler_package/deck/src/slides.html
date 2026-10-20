@@ -566,23 +566,15 @@ struct Result {
   <div class="swap">
     <div class="cols w60 fragment fade-out" data-fragment-index="0">
 <div class="tree"><span class="d">scheduler/</span>
-├── CMakeLists.txt         <span class="cm"># one library target</span>
-├── include/scheduler/
-│   ├── scheduler.hpp      <span class="cm"># class Scheduler: all state</span>
-│   ├── scheduler_ros.hpp  <span class="cm"># ROS node wrapper</span>
-│   ├── scheduler_msgs.hpp <span class="cm"># message conversions</span>
-│   └── utils.hpp          <span class="cm"># shared helpers</span>
-├── src/
-│   ├── <span class="d c-red">scheduler.cpp</span>      <span class="cm"># Plan(), job expansion,</span>
-│   │                      <span class="cm">#   tray and AGV assignment</span>
-│   ├── scheduler_ros.cpp
-│   ├── scheduler_component.cpp
-│   └── utils.cpp          <span class="cm"># shared helpers</span>
-└── test/
-    ├── scheduler_tests.cpp      <span class="cm"># each test builds</span>
-    ├── scheduler_jobs_tests.cpp <span class="cm">#   a full Scheduler</span>
-    ├── scheduler_insert_orientation_tests.cpp
-    └── utils_tests.cpp</div>
+├── <span class="d">include/scheduler/</span>     <span class="cm"># four headers, no subfolders</span>
+├── <span class="d">src/</span>                   <span class="cm"># four files, no subfolders</span>
+│   └── <span class="d c-red">scheduler.cpp</span>      <span class="cm"># most of the package:</span>
+│                          <span class="cm">#   Plan(), job expansion,</span>
+│                          <span class="cm">#   tray and AGV assignment,</span>
+│                          <span class="cm">#   motion planning call,</span>
+│                          <span class="cm">#   action graph, helpers</span>
+└── <span class="d">test/</span>                  <span class="cm"># four test files</span>
+    └── <span class="d">garage_states/</span>     <span class="cm"># one YAML fixture</span></div>
       <div class="stack">
         <div class="card"><h3>One source file for all planning stages</h3><p><code>Plan()</code>, the ten job expansions and both assignment stages share <code>scheduler.cpp</code> and the private state of <code>Scheduler</code>. No boundary separates one stage from another.</p></div>
         <div class="card"><h3>One target, one kind of test</h3><p>Every test constructs a complete <code>Scheduler</code>. A change to any stage rebuilds and retests the whole package.</p></div>
@@ -590,23 +582,22 @@ struct Result {
       </div>
     </div>
     <div class="cols w60 fragment fade-in" data-fragment-index="0">
-<div class="tree"><span class="d">scheduler/</span>                 <span class="cm"># package name unchanged</span>
-├── CMakeLists.txt         <span class="cm"># one target per stage</span>
-├── include/scheduler/
-│   ├── scheduler.hpp      <span class="cm"># Plan(): the orchestrator</span>
-│   ├── plan_context.hpp   <span class="cm"># was ScheduleContext</span>
-│   ├── <span class="d">core/</span>              <span class="cm"># shared, includes no stage</span>
+<div class="tree"><span class="d">scheduler/</span>
+├── <span class="d">include/scheduler/</span>     <span class="cm"># mirrors src/; public headers</span>
+├── <span class="d">src/</span>
+│   ├── <span class="d">scheduler.cpp</span>      <span class="cm"># Plan() only: runs the stages</span>
+│   ├── <span class="d">core/</span>              <span class="cm"># motion graph, collision table</span>
 │   ├── <span class="d">ros/</span>               <span class="cm"># messages ↔ internal types</span>
 │   ├── <span class="d">task_planning/</span>
-│   │   ├── job_expansion/
-│   │   ├── <span class="d c-accent">tray_assignment/</span> <span class="cm"># this ticket</span>
-│   │   ├── <span class="d c-accent">agv_assignment/</span>  <span class="cm"># this ticket</span>
-│   │   └── validation/
-│   ├── <span class="d">motion_planning/</span>
-│   └── <span class="d">action_graph/</span>
-├── src/                   <span class="cm"># mirrors include/; private headers</span>
-└── test/                  <span class="cm"># mirrors include/</span></div>
+│   │   ├── <span class="d">job_expansion/</span>    <span class="cm"># Expand&lt;Type&gt;Job ×10</span>
+│   │   ├── <span class="d c-accent">tray_assignment/</span>  <span class="cm"># this ticket</span>
+│   │   ├── <span class="d c-accent">agv_assignment/</span>   <span class="cm"># this ticket</span>
+│   │   └── <span class="d">validation/</span>
+│   ├── <span class="d">motion_planning/</span>   <span class="cm"># the CHUGG call</span>
+│   └── <span class="d">action_graph/</span>      <span class="cm"># BuildActionDag</span>
+└── <span class="d">test/</span>                  <span class="cm"># mirrors src/</span></div>
     <div class="stack">
+      <div class="card"><h3><code>scheduler.cpp</code> decomposed</h3><p>Each stage moves out of <code>scheduler.cpp</code> into its own folder; what remains is <code>Plan()</code>, which calls the stages in order.</p></div>
       <div class="card"><h3>Enforced boundaries</h3><p>Each stage is a separate library target. A CI include check prevents a stage from using another stage's private headers.</p></div>
       <div class="card"><h3>Separate packages deferred</h3><p>Packages add release and ownership overhead before the APIs are stable. A folder can be promoted later at low cost; <code>action_graph</code> is the first candidate.</p></div>
       </div>
