@@ -1918,7 +1918,7 @@ using ScheduleEventDag [[deprecated("use EventDag")]] = EventDag;
     <tr><td>Dense storage with passive obstacles</td><td>Trays (with or without cars) stand on parking nodes and block each other; reaching one may require moving others</td><td>A rearrangement problem: blockers create extra tasks, and the set of tasks depends on routes (puzzle-based storage, navigation among movable obstacles)</td></tr>
     <tr><td>Carry by lifting</td><td>An AGV drives under a tray, lifts it, carries it and lowers it; with the lift down it can pass under trays whose legs allow</td><td>Agents change footprint and capability during a plan; pickup and delivery are separate goals of one agent</td></tr>
     <tr><td>Large agents, headings, motion types</td><td>Footprints overlap several nodes; heading matters; locomote, strafe and rotate have different durations; rotation only on some nodes</td><td>Conflicts are footprint overlaps (large-agent MAPF), states are poses, not vertices; time is continuous</td></tr>
-    <tr><td>Stateful non-AGV resources</td><td>Bays switch modes and process cars, VECS charge, VRCs carry AGVs between floors; the overdrive-plate area at a bay blocks traffic in some states</td><td>Resources with state machines and durations, some of them unbounded (a patron's insert), and some that change the map</td></tr>
+    <tr><td>Stateful non-AGV resources</td><td>Bays switch modes and process cars, VECS charge, VRCs carry AGVs between floors; a bay's overdrive plate blocks traffic in some states</td><td>Resources with state machines and durations, some of them unbounded (a patron's insert), and some that change the map</td></tr>
     <tr><td>Hard precedence from the domain</td><td>A bay must be in retrieve mode before a tray enters; the car must be in the bay before the hand-over; a tray cannot enter an occupied node</td><td>Some orderings are real constraints and must be kept in every plan</td></tr>
     <tr><td>Execution is uncertain</td><td>Speeds, acceleration, patron behaviour and reports vary; actions are released by Dispatch when their parents finish</td><td>The output must be an <em>order</em> that is safe at any speed (an ADG), not a timetable</td></tr>
     <tr><td>Online and persistent</td><td>Jobs arrive continuously; Dispatch plans every 850 ms when allowed; the fleet keeps moving</td><td>Lifelong planning: new plans must fit around running ones, and planning time is bounded</td></tr>
@@ -3120,7 +3120,7 @@ public:
       <td><code>BAY_ODP</code></td>
       <td><code>BAY_OVERDRIVE_PLATE</code></td>
       <td><span class="tier tier-b">B</span></td>
-      <td>ODP is the overdrive plate, a retractable plate on the AGV; an unexplained acronym in a public enum</td>
+      <td>ODP is the overdrive plate, the bay's sliding plate that stops a car from driving over the bay's edge; an unexplained acronym in a public enum</td>
     </tr>
     <tr>
       <td><code>CollisionTable</code>, <code>Query</code>, <code>collision_table_</code>, <code>occupancy_state_</code></td>
@@ -3526,7 +3526,7 @@ Edge[] edges   # Edge: node_id_a, node_id_b, int16[] disallowed_headings (0:179,
   <li><strong>"Size class" for parking windows, resource windows and resource sizes.</strong> Confirm with the layout owners, who write these in YAML.</li>
   <li><strong>The interface version.</strong> Which tier C items go into it, and how stored <code>DiscreteGarageEvent</code> buffers are migrated or read.</li>
   <li><strong>Stage folder names.</strong> Tracked with the folder layout in <a class="ref" href="#pr-decisions-to-resolve-in-review">section 12</a>.</li>
-  <li><strong>What <code>BAY_ODP</code> and <code>TYPE_BLIFT</code> should be called.</strong> A BLift is a bay whose carriage is also a VRC terminal (<code>layout.cpp</code>: “A BLift is a Bay that is also a Lift (VRC) terminal”; Dispatch sends it <code>BayCommand.COMMAND_TYPE_MOVE_LIFT_TO_FLOOR</code> instead of a VRC command). The names should say that; <code>BAY_ODP</code> is the overdrive plate (the retractable front part of the tray) at a bay, so <code>BAY_OVERDRIVE_PLATE</code> says it in full.</li>
+  <li><strong>What <code>BAY_ODP</code> and <code>TYPE_BLIFT</code> should be called.</strong> A BLift is a bay whose carriage is also a VRC terminal (<code>layout.cpp</code>: “A BLift is a Bay that is also a Lift (VRC) terminal”; Dispatch sends it <code>BayCommand.COMMAND_TYPE_MOVE_LIFT_TO_FLOOR</code> instead of a VRC command). The names should say that; <code>BAY_ODP</code> is the bay's overdrive plate (the sliding plate that stops a car from driving over the bay's edge), so <code>BAY_OVERDRIVE_PLATE</code> says it in full.</li>
 </ol>
 
 <h3 data-num id="nm-rollout">Rollout</h3>

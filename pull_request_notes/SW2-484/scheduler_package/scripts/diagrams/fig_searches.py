@@ -423,7 +423,7 @@ def static_filter():
     S2 = d.step("Pass 2, AGVs. AGV-1 is not ignored, so the area of an AGV at W26 is switched off for a tray. "
                 "For a TRAY or payload footprint the code queries against TRAY, because an AGV meets a tray's "
                 "legs before its payload.")
-    S3 = d.step("Pass 3, bays. A bay that is not READY_TO_RETRIEVE keeps its overdrive-plate area closed, so its BAY_ODP "
+    S3 = d.step("Pass 3, bays. A bay that is not READY_TO_RETRIEVE has its overdrive plate in the way, so its BAY_ODP "
                 "volume is switched off: B21 itself and the approach from W41. A bay that is ready to retrieve "
                 "is skipped entirely.")
     S4 = d.step("Pass 4, disabled nodes. P24 is in disabled_nodes_ (or holds a disabled asset), so it is blocked at "

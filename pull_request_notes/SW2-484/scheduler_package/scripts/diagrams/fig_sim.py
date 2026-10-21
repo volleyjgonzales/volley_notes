@@ -126,7 +126,7 @@ def sim_scenario_run():
     selfmsg("sim", "patron_arrival -> Patrons insert queue")
     msg("sim", "bay", "/bay/b<N>/sim_offer_inserting_payload")
     msg("bay", "cen", "confirm_insert -> bay event -> INSERT job", ret=True)
-    step("Every update: the Simulator rebuilds a 3D box for every AGV, tray, payload, overdrive-plate area at each bay, charger "
+    step("Every update: the Simulator rebuilds a 3D box for every AGV, tray, payload, bay overdrive plate, charger "
          "and obstruction from the latest snapshot, and tests every pair. A carried tray is exempt.")
     msg("cen", "sim", "/central/garage_snapshot", ret=True)
     selfmsg("sim", "RunCollisionCheck(): FindCollisions()", "O(n^2) pairs; AGV + tray within 0.15 m = carried")
@@ -191,7 +191,7 @@ def sim_collision_volumes():
             (T.green, "   dashed: lifted, it reaches into the tray band (carried-tray exemption)"),
             (T.amber, "tray: (kTrayHeight - kTrayThickness) .. kTrayHeight"),
             (T.pink, "payload: tray top .. + payload.height_m, on the tray's pose"),
-            (T.blue, "overdrive-plate area at the bay: floor .. tray top - 6 mm; when the system"),
+            (T.blue, "bay overdrive plate: floor .. tray top - 6 mm; when the system"),
             (T.blue, "   doors are open it moves to -0.2 .. -0.1 m and never collides"),
             (T.yellow, "charger, obstruction: static, registered once")]
     for i, (c, r) in enumerate(rows):
@@ -234,7 +234,7 @@ def sim_collision_volumes():
                    "...) live in common, outside the snapshots.",
           badge_key="schematic",
           legend=[("box", T.green, "AGV"), ("box", T.amber, "tray"), ("box", T.pink, "payload"),
-                  ("box", T.blue, "overdrive-plate area at the bay"), ("box", T.yellow, "charger")])
+                  ("box", T.blue, "bay overdrive plate"), ("box", T.yellow, "charger")])
     return d
 
 
