@@ -26,7 +26,6 @@ Examples:
 import argparse
 import html
 import math
-import os
 import re
 import webbrowser
 from collections import Counter, defaultdict
@@ -41,7 +40,7 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-LAYOUT_PLOTTER_API: Final = 2  # layout_plotter.API_VERSION this script was written against
+LAYOUT_PLOTTER_API: Final = 3  # layout_plotter.API_VERSION this script was written against
 if getattr(lp, "API_VERSION", 0) < LAYOUT_PLOTTER_API:
     raise SystemExit(
         f"error: {lp.__file__} is older than this scenario_plotter.py needs "
@@ -1052,23 +1051,8 @@ SIDEBAR_JS: Final = """
 # Finding scenarios
 # =============================================================================================
 
-SCENARIOS_SUBDIR: Final = Path("share") / "scenario" / "scenarios"
-SOURCE_SCENARIOS: Final = Path("src") / "scenario" / "scenarios"
-SCENARIOS_ENV: Final = "VOLLEY_SCENARIOS"
-
-
-def scenario_dirs(extra: Sequence[Path] = ()) -> tuple[Path, ...]:
-    """--scenarios-dir, $VOLLEY_SCENARIOS, installed share/scenario/scenarios, then the workspace."""
-    env = (Path(p) for p in os.environ.get(SCENARIOS_ENV, "").split(os.pathsep) if p)
-    prefixes = (Path(p) for p in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep) if p)
-    candidates = (
-        *extra,
-        *env,
-        *(p / SCENARIOS_SUBDIR for p in prefixes),
-        *(root / SOURCE_SCENARIOS for root in (Path.cwd(), *lp.WORKSPACES)),
-    )
-    found = (c.expanduser() for c in candidates)
-    return tuple(dict.fromkeys(c.resolve() for c in found if c.is_dir()))
+SCENARIOS_ENV: Final = lp.SCENARIOS_ENV
+scenario_dirs = lp.scenario_dirs  # --scenarios-dir, $VOLLEY_SCENARIOS, installed, then the workspace
 
 
 def find_scenarios(dirs: Iterable[Path]) -> tuple[lp.LayoutFile, ...]:
@@ -1133,43 +1117,72 @@ def first_note(s: Scenario, width: int = 48) -> str:
 NOTES_MIN_WIDTH: Final = 150  # narrower terminals drop the notes column rather than squeeze the counts
 
 
-def scenario_table(width: int) -> Table:
+def scenario_table(width: int, *, with_git: bool) -> Table:
     table = Table(header_style="bold", box=None, padding=(0, 1), pad_edge=False)
     table.add_column("scenario", no_wrap=True, overflow="ellipsis", min_width=24)
     for col in ("agvs", "trays", "payloads", "events"):
         table.add_column(col, justify="right", no_wrap=True, min_width=len(col))
     table.add_column("ends", justify="right", style="dim", no_wrap=True, min_width=8)
+    if with_git:
+        table.add_column("changed", style="dim", no_wrap=True, min_width=10)
+        table.add_column("6 mo", justify="right", no_wrap=True)
+    table.add_column("used by", style="dim", no_wrap=True, overflow="ellipsis", min_width=10, max_width=26)
     # One line per scenario: long cells end in an ellipsis instead of wrapping the row.
-    table.add_column("actions", style="dim", no_wrap=True, overflow="ellipsis", min_width=18, max_width=44)
+    table.add_column("actions", style="dim", no_wrap=True, overflow="ellipsis", min_width=18, max_width=40)
     if width >= NOTES_MIN_WIDTH:
-        table.add_column("notes", style="dim italic", no_wrap=True, overflow="ellipsis", max_width=40)
+        table.add_column("notes", style="dim italic", no_wrap=True, overflow="ellipsis", max_width=36)
     return table
 
 
-def add_group(table: Table, title: str, items: Sequence[Listed], *, note: str = "") -> int:
+def add_group(
+    table: Table, title: str, items: Sequence[Listed], activity: Mapping[str, lp.Activity], *, note: str = ""
+) -> int:
     with_notes = table.columns[-1].header == "notes"
+    with_git = any(c.header == "changed" for c in table.columns)
     table.add_section()
     table.add_row(f"[bold cyan]{title}[/] [dim]· {len(items)}[/]{f'  {note}' if note else ''}")
     for item in sorted(items, key=lambda i: i.file.name.lower()):
-        name = f"  {item.file.name}"
+        act = activity.get(item.file.name)
+        mark = lp.STATUS_MARK[act.status] if act else " "
+        name = f"{mark} {item.file.name}"
+        changed, recent, used = lp.activity_cells(act)
+        git_cells = (changed, recent) if with_git else ()
         if item.scenario is None:
-            table.add_row(
-                name, *[""] * 5, f"[red]could not read: {item.error}[/]", *([""] if with_notes else [])
+            cells: tuple[str, ...] = (
+                name,
+                *[""] * 5,
+                *git_cells,
+                used,
+                f"[red]could not read: {item.error}[/]",
+                "",
             )
-            continue
-        sc = item.scenario
-        cells = (
-            name,
-            lp.count(len(sc.agvs)),
-            lp.count(len(sc.trays)),
-            lp.count(len(sc.payloads)),
-            lp.count(len(sc.events)),
-            fmt_time(sc.end_time) if sc.end_time is not None else "",
-            actions(sc),
-            first_note(sc),
-        )
+        else:
+            sc = item.scenario
+            cells = (
+                name,
+                lp.count(len(sc.agvs)),
+                lp.count(len(sc.trays)),
+                lp.count(len(sc.payloads)),
+                lp.count(len(sc.events)),
+                fmt_time(sc.end_time) if sc.end_time is not None else "",
+                *git_cells,
+                used,
+                actions(sc),
+                first_note(sc),
+            )
         table.add_row(*(cells if with_notes else cells[:-1]))
     return len(items)
+
+
+def scenario_activity(files: Sequence[lp.LayoutFile], dirs: Sequence[Path]) -> Mapping[str, lp.Activity]:
+    root = next((r for d in dirs if (r := lp.git_root(d))), None)
+    if root is None:
+        return {}
+    history = lp.git_histories(root, [f.path for f in files])
+    refs = lp.git_refs(root, [f.name for f in files], dirs)
+    return {
+        f.name: lp.Activity(history=history.get(f.path.resolve()), refs=refs.get(f.name, ())) for f in files
+    }
 
 
 def print_scenarios(
@@ -1186,6 +1199,7 @@ def print_scenarios(
     with console.status(f"reading {len(files)} scenarios…"):
         listed = tuple(map(read_listed, files))
         layout_names = known_layout_names(layout_extra)
+        activity = scenario_activity(files, dirs)
 
     match = pattern.lower()
     picked = [
@@ -1207,11 +1221,11 @@ def print_scenarios(
         console.print(f"[yellow]no scenarios matching {pattern!r}[/]")
         return 1
 
-    table = scenario_table(console.width)
+    table = scenario_table(console.width, with_git=bool(activity))
     for layout in renderable:
-        add_group(table, layout, by_layout[layout])
+        add_group(table, layout, by_layout[layout], activity)
     for layout in missing:  # last: these cannot be rendered from the layouts we found
-        add_group(table, layout, by_layout[layout], note="[red]layout not found[/]")
+        add_group(table, layout, by_layout[layout], activity, note="[red]layout not found[/]")
     if show_all and event_only:
         by_guess: defaultdict[str, list[Listed]] = defaultdict(list)
         for i in event_only:
@@ -1220,9 +1234,9 @@ def print_scenarios(
             title = "event-only" + (
                 f" · for {guess} (from file name)" if guess != "?" else " · layout unknown"
             )
-            add_group(table, title, by_guess[guess])
+            add_group(table, title, by_guess[guess], activity)
     if unreadable:
-        add_group(table, "unreadable", unreadable)
+        add_group(table, "unreadable", unreadable, activity)
     console.print(table)
 
     where = ", ".join(lp.pretty(d) for d in dirs)
@@ -1238,6 +1252,12 @@ def print_scenarios(
             f"[dim]+ {len(event_only)} event-only files (no layout or initial state; they run on top of a "
             "scenario) · [/]--all[dim] to list them[/]"
         )
+    if activity:
+        shown_names = {i.file.name for i in (*scenarios, *unreadable, *(event_only if show_all else ()))}
+        states = Counter(activity[n].status for n in shown_names if n in activity)
+        tally = " · ".join(f"{states[k]} {k}" for k in ("active", "quiet", "unused") if states[k])
+        lines.append(f"[dim]{tally}[/]\n{lp.STATUS_LEGEND}")
+        lines.append(f"[dim]{lp.CHANGED_LEGEND}[/]")
     lines.append(f"[dim]render one with:[/] {lp.invocation()} [cyan]<scenario>[/]")
     console.print("\n" + "\n".join(lines))
     return 0

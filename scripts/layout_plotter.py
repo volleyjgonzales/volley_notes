@@ -39,6 +39,7 @@ import webbrowser
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 from dataclasses import field as dataclass_field
 from enum import StrEnum
 from pathlib import Path
@@ -51,7 +52,7 @@ from rich.console import Console
 from rich.table import Table
 
 # Bumped when scenario_plotter.py needs something new from this module; it checks this on import.
-API_VERSION: Final = 2
+API_VERSION: Final = 3
 
 type Point = tuple[float, float]
 type Polygon = tuple[Point, ...]
@@ -1624,30 +1625,274 @@ def name_hint(s: LayoutSummary, titles: Sequence[str]) -> str:
     return f"[yellow]name matches {match}, but no shared nodes[/]" if match else ""
 
 
-def git_dates(folder: Path) -> Mapping[Path, str]:
-    """Last commit date of every file under `folder` (one `git log`), or {} outside a repo."""
-    try:
-        out = subprocess.run(
-            ["git", "-C", str(folder), "log", "--format=@%cs", "--name-only", "--relative", "--", "."],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        ).stdout
-    except (OSError, subprocess.SubprocessError):
-        return {}
-    dates: dict[Path, str] = {}
-    date = ""
-    for line in out.splitlines():
-        if line.startswith("@"):
-            date = line[1:]
-        elif line and (path := (folder / line).resolve()) not in dates:
-            dates[path] = date
-    return dates
-
-
 def count(n: int) -> str:
     return str(n) if n else "[dim]·[/]"
+
+
+# ---------------------------------------------------------------------------------------------
+# Activity: is a layout / scenario still in use? (git history + who references it)
+# ---------------------------------------------------------------------------------------------
+
+ACTIVE_DAYS: Final = 182  # "recent" = the last six months
+BULK_FILES: Final = 30  # commits touching more YAML files than this are sweeps (lint, moves), not edits
+REF_EXCLUDE: Final = ("repomix-*", "*.xml", "*.lock", "*.svg")  # snapshots that mention every name
+
+SCENARIOS_SUBDIR: Final = Path("share") / "scenario" / "scenarios"
+SOURCE_SCENARIOS: Final = Path("src") / "scenario" / "scenarios"
+SCENARIOS_ENV: Final = "VOLLEY_SCENARIOS"
+
+
+def scenario_dirs(extra: Sequence[Path] = ()) -> tuple[Path, ...]:
+    """--scenarios-dir, $VOLLEY_SCENARIOS, installed share/scenario/scenarios, then the workspace."""
+    env = (Path(p) for p in os.environ.get(SCENARIOS_ENV, "").split(os.pathsep) if p)
+    prefixes = (Path(p) for p in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep) if p)
+    candidates = (
+        *extra,
+        *env,
+        *(p / SCENARIOS_SUBDIR for p in prefixes),
+        *(root / SOURCE_SCENARIOS for root in (Path.cwd(), *WORKSPACES)),
+    )
+    found = (c.expanduser() for c in candidates)
+    return tuple(dict.fromkeys(c.resolve() for c in found if c.is_dir()))
+
+
+@dataclass(frozen=True, slots=True)
+class Change:
+    date: str  # YYYY-MM-DD
+    author: str
+    subject: str
+
+
+@dataclass(frozen=True, slots=True)
+class History:
+    last: Change | None  # last real edit (bulk commits and pure renames skipped)
+    recent: int  # real edits in the last ACTIVE_DAYS
+    added: str | None = None  # date of the commit that added it (even a bulk one)
+
+
+def git(root: Path, *args: str, timeout: float = 30) -> str | None:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(root), *args], capture_output=True, text=True, timeout=timeout, check=True
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def git_root(path: Path) -> Path | None:
+    out = git(path if path.is_dir() else path.parent, "rev-parse", "--show-toplevel", timeout=5)
+    return Path(out.strip()).resolve() if out else None
+
+
+def git_histories(root: Path, files: Iterable[Path]) -> Mapping[Path, History]:
+    """Real edit history of each file (absolute, resolved paths), following renames.
+
+    One `git log` over every YAML file in the repo, walked newest to oldest: a rename moves the
+    tracking to the old path, so a file keeps its history across moves (launcher -> site_config).
+    """
+    tracked: dict[str, Path] = {}
+    for f in files:
+        real = f.resolve()
+        if real.is_relative_to(root):
+            tracked[str(real.relative_to(root))] = real
+    if not tracked:
+        return {}
+    out = git(
+        root,
+        "log",
+        "-M",
+        "--no-merges",
+        "--name-status",
+        "--format=%x1e%cs%x1f%an%x1f%s",
+        "--",
+        "*.yaml",
+        "*.yml",
+    )
+    if out is None:
+        return {}
+    cutoff = (datetime.now() - timedelta(days=ACTIVE_DAYS)).date().isoformat()
+    last: dict[Path, Change] = {}
+    added: dict[Path, str] = {}
+    recent: Counter[Path] = Counter()
+    for record in out.split("\x1e")[1:]:
+        head, *lines = record.strip("\n").split("\n")
+        date, author, subject = [*head.split("\x1f"), "", "", ""][:3]
+        entries = [ln.split("\t") for ln in lines if ln.strip()]
+        bulk = len(entries) > BULK_FILES
+        for status, *paths in entries:
+            if status.startswith(("R", "C")) and len(paths) == 2:
+                old, new = paths
+                key = tracked.get(new)
+                if key is None:
+                    continue
+                tracked[old] = key  # older commits know this file by its old path
+                edited = status[1:] != "100"  # R100 = moved, not changed
+            elif paths and paths[0] in tracked and status[:1] in ("M", "A"):
+                key, edited = tracked[paths[0]], True
+                if status[:1] == "A":
+                    added[key] = date  # walking back in time: the oldest add wins
+            else:
+                continue
+            if edited and not bulk:
+                last.setdefault(key, Change(date, author, subject))
+                recent[key] += date >= cutoff
+    return {p: History(last.get(p), recent[p], added.get(p)) for p in set(tracked.values())}
+
+
+def ref_kind(path: str) -> str:
+    """What kind of file mentions a name: ci, test, batch, launch, config, docs or code."""
+    p = path.lower()
+    name = p.rsplit("/", 1)[-1]
+    if (
+        p.startswith((".github/", ".gitlab", ".circleci/", "ci/"))
+        or "/ci/" in p
+        or name.startswith("ci")
+        or "-ci" in name
+    ):
+        return "ci"
+    if "batch_config" in p:
+        return "batch"
+    if "/test" in p or name.startswith("test") or "tests/" in p or "system_test" in p:
+        return "test"
+    if "launch" in p:
+        return "launch"
+    if name.endswith((".md", ".rst", ".txt", ".html")) or p.startswith("docs/"):
+        return "docs"
+    if name.endswith((".yaml", ".yml", ".json", ".toml", ".cfg", ".ini", ".env")):
+        return "config"
+    return "code"
+
+
+def git_refs(root: Path, names: Iterable[str], skip: Iterable[Path]) -> Mapping[str, tuple[str, ...]]:
+    """Repo files (outside `skip` folders) that mention each name as a whole word."""
+    wanted = sorted({n for n in names if n})
+    if not wanted:
+        return {}
+    excludes = [
+        f":(exclude){d.resolve().relative_to(root)}" for d in skip if d.resolve().is_relative_to(root)
+    ]
+    excludes += [f":(exclude,glob)**/{g}" for g in REF_EXCLUDE]
+    pattern_file = "\n".join(wanted)
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "grep", "-I", "-z", "-o", "-w", "-F", "-f", "-", "--", ".", *excludes],
+            input=pattern_file,
+            check=False,  # exit 1 means no matches
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout  # exit 1 = no matches, which is fine
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    found: defaultdict[str, set[str]] = defaultdict(set)
+    for line in out.splitlines():
+        path, _, match = line.partition("\0")
+        if match:
+            found[match].add(path)
+    return {n: tuple(sorted(found[n])) for n in wanted if n in found}
+
+
+STRONG_REFS: Final = frozenset({"ci", "test", "batch", "launch", "config"})
+
+
+@dataclass(frozen=True, slots=True)
+class Activity:
+    history: History | None  # None outside a git repo
+    refs: tuple[str, ...]  # files that mention it
+    users: int = 0  # layouts: scenarios that use it
+    active_users: int = 0  # layouts: ...of which are active themselves
+
+    @property
+    def kinds(self) -> tuple[str, ...]:
+        order = ("ci", "test", "batch", "launch", "config", "code", "docs")
+        found = {ref_kind(r) for r in self.refs}
+        return tuple(k for k in order if k in found)
+
+    @property
+    def status(self) -> str:
+        """active: edited in the last six months, or wired into ci/tests/batch/launch/config;
+        quiet: referenced, but untouched; unused: nothing outside its folder points at it."""
+        recent = bool(self.history and self.history.recent)
+        if recent or STRONG_REFS & set(self.kinds) or self.active_users:
+            return "active"
+        if self.refs or self.users:
+            return "quiet"
+        return "unused"
+
+
+STATUS_MARK: Final = {"active": "[green]●[/]", "quiet": "[yellow]○[/]", "unused": "[red]✕[/]"}
+STATUS_LEGEND: Final = (
+    "[green]●[/] active = edited in the last 6 months, or used by ci/test/batch/launch/config"
+    " (layouts: or by an active scenario)\n[yellow]○[/] quiet = referenced, but untouched   "
+    "[red]✕[/] unused = nothing outside its folder references it"
+)
+
+
+CHANGED_LEGEND: Final = (
+    f"changed = last real edit (renames followed; commits touching >{BULK_FILES} YAML files skipped); "
+    "[italic]italic[/] = date added, no real edit since"
+)
+
+
+def activity_cells(a: Activity | None, *, users_label: str = "") -> tuple[str, str, str]:
+    """(changed, 6 mo, used by) table cells. A date in italics is when the file was added: it has had
+    no real edit since (only sweeps and moves)."""
+    if a is None:
+        return ("", "", "")
+    h = a.history
+    changed = (
+        h.last.date
+        if h and h.last
+        else f"[italic]{h.added}[/]"
+        if h and h.added
+        else "[dim]?[/]"
+        if h
+        else ""
+    )
+    recent = count(h.recent) if h else ""
+    noun = users_label if a.users != 1 else users_label.removesuffix("s")
+    active = f" ({a.active_users} active)" if a.active_users and a.active_users != a.users else ""
+    used = [f"{a.users} {noun}{active}"] if a.users and users_label else []
+    used += [f"{', '.join(a.kinds)} ({len(a.refs)})"] if a.refs else []
+    return (changed, recent, " · ".join(used) or "[dim]—[/]")
+
+
+def scenario_layouts(dirs: Iterable[Path]) -> Mapping[Path, str]:
+    """Scenario file -> the layout it names (`layout:` line), without parsing the files."""
+    pattern = re.compile(r"^layout:\s*['\"]?([^'\"#\s]+)", re.MULTILINE)
+    out: dict[Path, str] = {}
+    for f in find_layouts(dirs):
+        try:
+            if m := pattern.search(f.path.read_text(encoding="utf-8")):
+                out[f.path] = m.group(1)
+        except OSError:
+            continue
+    return out
+
+
+def layout_activity(
+    summaries: Sequence[LayoutSummary], dirs: Sequence[Path], scenario_folders: Sequence[Path]
+) -> Mapping[str, Activity]:
+    root = next((r for d in dirs if (r := git_root(d))), None)
+    scenarios = scenario_layouts(scenario_folders)
+    names = {s.name for s in summaries} | {s.yaml_name for s in summaries if s.yaml_name}
+    history = git_histories(root, [*(s.file.path for s in summaries), *scenarios]) if root else {}
+    refs = git_refs(root, names | {p.stem for p in scenarios}, [*dirs, *scenario_folders]) if root else {}
+
+    def scenario_active(path: Path) -> bool:
+        return Activity(history=history.get(path.resolve()), refs=refs.get(path.stem, ())).status == "active"
+
+    def of(s: LayoutSummary) -> Activity:
+        aliases = {s.name, s.yaml_name} - {None}
+        users = [p for p, layout in scenarios.items() if layout in aliases]
+        return Activity(
+            history=history.get(s.file.path.resolve()) if root else None,
+            refs=tuple(sorted({r for a in aliases for r in refs.get(str(a), ())})),
+            users=len(users),
+            active_users=sum(map(scenario_active, users)) if root else 0,
+        )
+
+    return {s.name: of(s) for s in summaries}
 
 
 def print_layouts(console: Console, pattern: str, extra: Sequence[Path]) -> int:
@@ -1663,7 +1908,7 @@ def print_layouts(console: Console, pattern: str, extra: Sequence[Path]) -> int:
         everything = tuple(map(summarize, files))
         summaries = tuple(s for s in everything if s.is_layout)
         others = tuple(s for s in everything if not s.is_layout)
-        dates = {p: d for folder in dirs for p, d in git_dates(folder).items()}
+        activity = layout_activity(summaries, dirs, scenario_dirs())
     groups = [g for g in site_groups(summaries) if any(pattern.lower() in s.name.lower() for s in g)]
     if not groups:
         console.print(f"[yellow]no layouts matching {pattern!r}[/]")
@@ -1674,11 +1919,12 @@ def print_layouts(console: Console, pattern: str, extra: Sequence[Path]) -> int:
     for col in ("floors", "nodes", "stalls", "bays", "chargers", "vrcs"):
         table.add_column(col, justify="right")
     table.add_column("size m", justify="right", style="dim", no_wrap=True)
-    layout_dates = {dates.get(s.file.path.resolve(), "") for s in summaries} - {""}
-    with_dates = len(layout_dates) > 1
-    if with_dates:
-        table.add_column("last commit", style="dim", no_wrap=True)
-    table.add_column("", style="dim italic")
+    with_git = any(a.history is not None for a in activity.values())
+    if with_git:
+        table.add_column("changed", style="dim", no_wrap=True)
+        table.add_column("6 mo", justify="right", no_wrap=True)
+    table.add_column("used by", style="dim", no_wrap=True, overflow="ellipsis", max_width=34)
+    table.add_column("", style="dim italic", no_wrap=True, overflow="ellipsis", max_width=48)
 
     shown = 0
     singles = [g[0] for g in groups if len(g) == 1]
@@ -1690,13 +1936,24 @@ def print_layouts(console: Console, pattern: str, extra: Sequence[Path]) -> int:
         table.add_section()
         table.add_row(f"[bold cyan]{title_of[group[0].name]}[/] [dim]· {len(group)} layouts[/]")
         for s in group:
-            table.add_row(*row(s, "  ", pattern, relation(s, group, prefix), dates if with_dates else None))
+            table.add_row(
+                *row(
+                    s,
+                    "",
+                    pattern,
+                    relation(s, group, prefix),
+                    activity=activity.get(s.name),
+                    with_git=with_git,
+                )
+            )
             shown += 1
     if singles:
         table.add_section()
         table.add_row("[bold cyan]other sites[/] [dim]· one layout each[/]")
         for s in singles:
-            table.add_row(*row(s, "  ", pattern, name_hint(s, titles), dates if with_dates else None))
+            table.add_row(
+                *row(s, "", pattern, name_hint(s, titles), activity=activity.get(s.name), with_git=with_git)
+            )
             shown += 1
     console.print(table)
 
@@ -1705,10 +1962,12 @@ def print_layouts(console: Console, pattern: str, extra: Sequence[Path]) -> int:
         console.print(f"\n[dim]not a layout (no nodes):[/] {s.file.path.name} [dim]({keys})[/]")
     where = ", ".join(pretty(d) for d in dirs)
     counted = f"{shown} of {len(summaries)} layouts" if shown != len(summaries) else f"{shown} layouts"
-    committed = f" · all last committed {layout_dates.pop()}" if len(layout_dates) == 1 else ""
+    states = Counter(a.status for a in activity.values())
+    tally = " · ".join(f"{states[k]} {k}" for k in ("active", "quiet", "unused") if states[k])
     console.print(
-        f"\n[dim]{counted} in {where}{committed}\n"
-        "grouped by section comments and shared node positions[/]\n"
+        f"\n[dim]{counted} in {where} · grouped by section comments and shared node positions[/]\n"
+        f"[dim]{tally}[/]\n{STATUS_LEGEND}\n"
+        f"[dim]{CHANGED_LEGEND}[/]\n"
         f"[dim]render one with:[/] {invocation()} [cyan]<layout>[/]"
     )
     return 0
@@ -1721,15 +1980,16 @@ def invocation() -> str:
 
 
 def row(
-    s: LayoutSummary, indent: str, pattern: str, note: str, dates: Mapping[Path, str] | None
+    s: LayoutSummary, indent: str, pattern: str, note: str, *, activity: Activity | None, with_git: bool
 ) -> tuple[str, ...]:
-    """One table row; `dates` None leaves out the last-commit cell."""
-    name = (
-        f"{indent}[bold]{s.name}[/]" if pattern and pattern.lower() in s.name.lower() else f"{indent}{s.name}"
-    )
-    date = () if dates is None else (dates.get(s.file.path.resolve(), ""),)
+    """One table row: status mark + name, counts, activity, note."""
+    mark = STATUS_MARK[activity.status] if activity else " "
+    label = f"[bold]{s.name}[/]" if pattern and pattern.lower() in s.name.lower() else s.name
+    name = f"{indent}{mark} {label}"
+    changed, recent, used = activity_cells(activity, users_label="scenarios")
+    act = (changed, recent, used) if with_git else (used,)
     if s.error:
-        return (name, *[""] * 7, *date, f"[red]could not read: {s.error}[/]")
+        return (name, *[""] * 7, *act, f"[red]could not read: {s.error}[/]")
     k = s.kinds
     return (
         name,
@@ -1740,7 +2000,7 @@ def row(
         count(sum(k[c] for c in CHARGERS)),
         count(s.vrcs),
         f"{s.size[0]:.0f} × {s.size[1]:.0f}",
-        *date,
+        *act,
         " · ".join(filter(None, (note, name_mismatch(s)))),
     )
 
