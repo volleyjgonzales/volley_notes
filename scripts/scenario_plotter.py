@@ -38,7 +38,11 @@ import layout_plotter as lp
 import plotly.graph_objects as go
 import yaml
 from rich.console import Console
+from rich.console import Group
+from rich.markup import escape
+from rich.padding import Padding
 from rich.table import Table
+from rich.text import Text
 
 LAYOUT_PLOTTER_API: Final = 3  # layout_plotter.API_VERSION this script was written against
 if getattr(lp, "API_VERSION", 0) < LAYOUT_PLOTTER_API:
@@ -1109,68 +1113,99 @@ def actions(s: Scenario) -> str:
     return ", ".join(f"{k}" + (f" ×{n}" if n > 1 else "") for k, n in kinds.most_common())
 
 
+JIRA_RE: Final = re.compile(r"https?://[^\s/]*atlassian\.net/browse/([A-Z][A-Z0-9]+-\d+)\S*")
+
+
+def compact_links(text: str) -> str:
+    """Jira links become their key (SW2-77); other links their host and last path segment."""
+    text = JIRA_RE.sub(r"\1", text)
+
+    def shorten(m: re.Match[str]) -> str:
+        url = m.group(0).rstrip(".,)")
+        host = re.sub(r"^https?://(www\.)?", "", url).split("/", 1)[0]
+        tail = url.rstrip("/").rsplit("/", 1)[-1]
+        return host if tail == host or tail.startswith("http") else f"{host}/…/{tail}"
+
+    return URL_RE.sub(shorten, text)
+
+
 def first_note(s: Scenario, width: int = 48) -> str:
+    """The first line of the scenario's header comments, links shortened, cut to `width`."""
     line = next((ln.strip() for n in s.notes for ln in n.splitlines() if ln.strip()), "")
+    line = compact_links(line)
     return line if len(line) <= width else line[: width - 1] + "…"
 
 
-NOTES_MIN_WIDTH: Final = 150  # narrower terminals drop the notes column rather than squeeze the counts
+ACTIONS_MIN: Final = 20  # actions keep this much room; "referenced in" gets what is left (12 to 34)
 
 
-def scenario_table(width: int, *, with_git: bool) -> Table:
+def scenario_table(*, with_git: bool, name_width: int, width: int) -> Table:
     table = Table(header_style="bold", box=None, padding=(0, 1), pad_edge=False)
-    table.add_column("scenario", no_wrap=True, overflow="ellipsis", min_width=24)
+    # Name, with the scenario's first note under it (wrapped to the column).
+    table.add_column("scenario", min_width=name_width, max_width=name_width, overflow="fold")
     for col in ("agvs", "trays", "payloads", "events"):
         table.add_column(col, justify="right", no_wrap=True, min_width=len(col))
-    table.add_column("ends", justify="right", style="dim", no_wrap=True, min_width=8)
     if with_git:
         table.add_column("changed", style="dim", no_wrap=True, min_width=10)
-        table.add_column("6 mo", justify="right", no_wrap=True)
-    table.add_column("used by", style="dim", no_wrap=True, overflow="ellipsis", min_width=10, max_width=26)
-    # One line per scenario: long cells end in an ellipsis instead of wrapping the row.
-    table.add_column("actions", style="dim", no_wrap=True, overflow="ellipsis", min_width=18, max_width=40)
-    if width >= NOTES_MIN_WIDTH:
-        table.add_column("notes", style="dim italic", no_wrap=True, overflow="ellipsis", max_width=36)
+    fixed = (
+        name_width
+        + sum(len(c) + 2 for c in ("agvs", "trays", "payloads", "events"))
+        + (12 if with_git else 0)
+    )
+    refs_width = max(12, min(34, width - fixed - ACTIONS_MIN - 4))
+    table.add_column(
+        "referenced in",
+        style="dim",
+        no_wrap=True,
+        overflow="ellipsis",
+        min_width=refs_width,
+        max_width=refs_width,
+    )
+    table.add_column(
+        "actions", style="dim", no_wrap=True, overflow="ellipsis", min_width=ACTIONS_MIN
+    )  # one per line
     return table
+
+
+def action_lines(s: Scenario) -> str:
+    """Garage actions, one per line, most frequent first."""
+    kinds = Counter(e.type for e in s.events if is_action(e.type))
+    return "\n".join(f"{k}" + (f" [dim]×{n}[/]" if n > 1 else "") for k, n in kinds.most_common())
 
 
 def add_group(
     table: Table, title: str, items: Sequence[Listed], activity: Mapping[str, lp.Activity], *, note: str = ""
 ) -> int:
-    with_notes = table.columns[-1].header == "notes"
     with_git = any(c.header == "changed" for c in table.columns)
+    width = table.columns[0].max_width or 50
     table.add_section()
     table.add_row(f"[bold cyan]{title}[/] [dim]· {len(items)}[/]{f'  {note}' if note else ''}")
     for item in sorted(items, key=lambda i: i.file.name.lower()):
         act = activity.get(item.file.name)
         mark = lp.STATUS_MARK[act.status] if act else " "
-        name = f"{mark} {item.file.name}"
-        changed, recent, used = lp.activity_cells(act)
-        git_cells = (changed, recent) if with_git else ()
+        changed, refs = lp.activity_cells(act)
+        git_cells = (changed,) if with_git else ()
+        title_line = Text.from_markup(f"{mark} {escape(item.file.name)}")
         if item.scenario is None:
-            cells: tuple[str, ...] = (
-                name,
-                *[""] * 5,
-                *git_cells,
-                used,
-                f"[red]could not read: {item.error}[/]",
-                "",
-            )
-        else:
-            sc = item.scenario
-            cells = (
-                name,
-                lp.count(len(sc.agvs)),
-                lp.count(len(sc.trays)),
-                lp.count(len(sc.payloads)),
-                lp.count(len(sc.events)),
-                fmt_time(sc.end_time) if sc.end_time is not None else "",
-                *git_cells,
-                used,
-                actions(sc),
-                first_note(sc),
-            )
-        table.add_row(*(cells if with_notes else cells[:-1]))
+            problem = Padding(Text(f"could not read: {item.error}", style="red"), (0, 0, 0, 2))
+            table.add_row(Group(title_line, problem), *[""] * 4, *git_cells, refs, "")
+            continue
+        sc = item.scenario
+        memo = first_note(sc, 2 * (width - 2))
+        # The note wraps under the name, indented, instead of being cut off in a column of its own.
+        name = (
+            Group(title_line, Padding(Text(memo, style="dim italic"), (0, 0, 0, 2))) if memo else title_line
+        )
+        table.add_row(
+            name,
+            lp.count(len(sc.agvs)),
+            lp.count(len(sc.trays)),
+            lp.count(len(sc.payloads)),
+            lp.count(len(sc.events)),
+            *git_cells,
+            refs,
+            action_lines(sc),
+        )
     return len(items)
 
 
@@ -1221,7 +1256,8 @@ def print_scenarios(
         console.print(f"[yellow]no scenarios matching {pattern!r}[/]")
         return 1
 
-    table = scenario_table(console.width, with_git=bool(activity))
+    name_width = min(60, max((len(i.file.name) for i in picked), default=30) + 3)
+    table = scenario_table(with_git=bool(activity), name_width=name_width, width=console.width)
     for layout in renderable:
         add_group(table, layout, by_layout[layout], activity)
     for layout in missing:  # last: these cannot be rendered from the layouts we found

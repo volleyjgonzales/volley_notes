@@ -49,6 +49,7 @@ import plotly.graph_objects as go
 import yaml
 from plotly.offline import get_plotlyjs, get_plotlyjs_version
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 # Bumped when scenario_plotter.py needs something new from this module; it checks this on import.
@@ -1834,11 +1835,11 @@ CHANGED_LEGEND: Final = (
 )
 
 
-def activity_cells(a: Activity | None, *, users_label: str = "") -> tuple[str, str, str]:
-    """(changed, 6 mo, used by) table cells. A date in italics is when the file was added: it has had
+def activity_cells(a: Activity | None, *, users_label: str = "") -> tuple[str, str]:
+    """(changed, referenced in) table cells. A date in italics is when the file was added: it has had
     no real edit since (only sweeps and moves)."""
     if a is None:
-        return ("", "", "")
+        return ("", "")
     h = a.history
     changed = (
         h.last.date
@@ -1849,12 +1850,27 @@ def activity_cells(a: Activity | None, *, users_label: str = "") -> tuple[str, s
         if h
         else ""
     )
-    recent = count(h.recent) if h else ""
     noun = users_label if a.users != 1 else users_label.removesuffix("s")
     active = f" ({a.active_users} active)" if a.active_users and a.active_users != a.users else ""
-    used = [f"{a.users} {noun}{active}"] if a.users and users_label else []
-    used += [f"{', '.join(a.kinds)} ({len(a.refs)})"] if a.refs else []
-    return (changed, recent, " · ".join(used) or "[dim]—[/]")
+    lines = [f"{a.users} {noun}{active}"] if a.users and users_label else []
+    lines += [escape(short_path(r)) for r in a.refs[:MAX_REFS]]
+    lines += [f"[dim]+{len(a.refs) - MAX_REFS} more[/]"] if len(a.refs) > MAX_REFS else []
+    return (changed, "\n".join(lines) or "[dim]—[/]")
+
+
+MAX_REFS: Final = 3  # files listed per row in "referenced in"; the rest are counted
+
+
+def short_path(path: str, width: int = 32) -> str:
+    """Repo path shortened from the middle: src/system_tests/test/test_x.py -> src/…/test/test_x.py."""
+    if len(path) <= width:
+        return path
+    parts = path.split("/")
+    for keep in range(len(parts) - 1, 0, -1):
+        candidate = "/".join([parts[0], "…", *parts[-keep:]])
+        if len(candidate) <= width:
+            return candidate
+    return parts[-1]  # just the file name; the cell cuts it if it is still too long
 
 
 def scenario_layouts(dirs: Iterable[Path]) -> Mapping[Path, str]:
@@ -1915,15 +1931,16 @@ def print_layouts(console: Console, pattern: str, extra: Sequence[Path]) -> int:
         return 1
 
     table = Table(header_style="bold", box=None, padding=(0, 1), pad_edge=False)
-    table.add_column("layout", no_wrap=True)
+    table.add_column("layout", no_wrap=True, min_width=max((len(s.name) for s in summaries), default=20) + 2)
     for col in ("floors", "nodes", "stalls", "bays", "chargers", "vrcs"):
-        table.add_column(col, justify="right")
-    table.add_column("size m", justify="right", style="dim", no_wrap=True)
+        table.add_column(col, justify="right", no_wrap=True, min_width=len(col))
+    table.add_column("size m", justify="right", style="dim", no_wrap=True, min_width=8)
     with_git = any(a.history is not None for a in activity.values())
     if with_git:
-        table.add_column("changed", style="dim", no_wrap=True)
-        table.add_column("6 mo", justify="right", no_wrap=True)
-    table.add_column("used by", style="dim", no_wrap=True, overflow="ellipsis", max_width=34)
+        table.add_column("changed", style="dim", no_wrap=True, min_width=10)
+    table.add_column(
+        "referenced in", style="dim", no_wrap=True, overflow="ellipsis", min_width=14, max_width=34
+    )
     table.add_column("", style="dim italic", no_wrap=True, overflow="ellipsis", max_width=48)
 
     shown = 0
@@ -1986,10 +2003,10 @@ def row(
     mark = STATUS_MARK[activity.status] if activity else " "
     label = f"[bold]{s.name}[/]" if pattern and pattern.lower() in s.name.lower() else s.name
     name = f"{indent}{mark} {label}"
-    changed, recent, used = activity_cells(activity, users_label="scenarios")
-    act = (changed, recent, used) if with_git else (used,)
+    changed, used = activity_cells(activity, users_label="scenarios")
+    act = (changed, used) if with_git else (used,)
     if s.error:
-        return (name, *[""] * 7, *act, f"[red]could not read: {s.error}[/]")
+        return (name, *[""] * 7, *act, f"[red]could not read: {escape(s.error)}[/]")
     k = s.kinds
     return (
         name,
