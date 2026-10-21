@@ -753,8 +753,8 @@ def layout_yaml_to_map():
 # ======================================================================================
 C_LOC, C_STR, C_ROT = T.green, T.amber, T.pink
 SLOT_ORDER = ["FORWARD", "RIGHT", "BACK", "LEFT", "ROT_RIGHT", "ROT_LEFT", "VRC_UP", "VRC_DOWN"]
-SLOT_KIND = {"FORWARD": ("STRAFE", "body -y"), "BACK": ("STRAFE", "body +y"), "LEFT": ("LOCOMOTE", "body +x"),
-             "RIGHT": ("LOCOMOTE", "body -x"), "ROT_RIGHT": ("ROTATION", "clockwise"),
+SLOT_KIND = {"FORWARD": ("STRAFE", "AGV right"), "BACK": ("STRAFE", "AGV left"), "LEFT": ("LOCOMOTE", "AGV fwd"),
+             "RIGHT": ("LOCOMOTE", "AGV back"), "ROT_RIGHT": ("ROTATION", "clockwise"),
              "ROT_LEFT": ("ROTATION", "counter-cw"), "VRC_UP": ("VRC_TRANSITION", "floor up"),
              "VRC_DOWN": ("VRC_TRANSITION", "floor down")}
 KIND_COL = {"STRAFE": C_STR, "LOCOMOTE": C_LOC, "ROTATION": C_ROT, "VRC_TRANSITION": T.violet}
@@ -775,7 +775,8 @@ def slot_arrow(m: Map, src, dst, name, *, frac=0.62, cut0=16, cut1=10, edge_xy=N
     d.line(a[0], a[1], b[0] - ux * 8, b[1] - uy * 8, stroke=col, sw=3, layer="over")
     d.arrowhead(b, a, kind="filled", color=col, size=12, layer="over")
     px, py = x0 + (x1 - x0) * frac + lab_dx, y0 + (y1 - y0) * frac + lab_dy
-    label_pill(d, px, py, f"{name} · {kind}", color=col, bg=T.bg_deep, border=col, size=10.5, layer="top")
+    rd = {"FORWARD": "right", "BACK": "left", "LEFT": "forward", "RIGHT": "back"}[name]
+    label_pill(d, px, py, f"{name} slot · AGV {rd} · {kind}", color=col, bg=T.bg_deep, border=col, size=10.5, layer="top")
 
 
 def rot_arc(d, cx, cy, r, h0, h1, col, label, *, lab_r=None, lab_anchor="middle"):
@@ -829,30 +830,29 @@ def node_to_poses():
     edge_r = (m.box.x1 - 2, m.P(9)[1])     # W11 is off the crop to the east
 
     caps = [
-        "Two YAML entries. Node 8 at (30.8823, 12.7753) lists headings [0, 90] and rotation_allowed true; node 9, "
-        "6.30 m to the east, lists [90] and may not rotate. Both are XL waypoints.",
-        "GetAllowedHeadings (pose_utils.cpp) emits Wrap(h) and Wrap(h + 180) for every listed heading and sorts: "
-        "node 8 gets four poses, -90, 0, 90, 180; node 9 gets two, -90 and 90. These are poses_[14..17] and "
+        "Two YAML entries. W8 at (30.8823, 12.7753) lists headings [0°, 90°] and rotation_allowed true; W9, "
+        "6.30 m to the east, lists [90°] and may not rotate. Both are XL waypoints.",
+        "GetAllowedHeadings (pose_utils.cpp) emits Wrap(h) and Wrap(h + 180°) for every listed heading and sorts: "
+        "W8 gets four poses, −90°, 0°, 90°, 180°; W9 gets two, −90° and 90°. These are poses_[14..17] and "
         "poses_[18..19] of the 60 Pecos poses.",
-        "What a heading means for the AGV. At (8, 90) the body +x axis, the AGV's long side and driving (locomote) "
-        "axis, points west: heading 90 = facing west. Its right side (body -y) points north; moving sideways is a "
-        "strafe. GeometricPose.yaw is the same angle in radians.",
-        "The eight slots of (8, 90). For each layout neighbour with the same heading, pose_graph.cpp measures the "
-        "bearing relative to the heading: 0 is FORWARD (W13, north), 180 BACK (W4), +90 LEFT (W31, west), -90 RIGHT "
-        "(W9). Rotation: the nearest clockwise heading is ROT_RIGHT (8, 0), the nearest counter-clockwise is "
-        "ROT_LEFT (8, 180). No VRC, so VRC_UP and VRC_DOWN stay empty (-1).",
-        "The same node at heading -90: the AGV faces east, so every name flips. FORWARD is now W4, BACK W13, LEFT "
-        "W9 and RIGHT W31; ROT_LEFT is (8, 0) and ROT_RIGHT (8, 180). The neighbours are the same nodes, reached "
-        "through different slots.",
-        "(8, 0) and (8, 180) are stepping stones. No neighbour of node 8 has heading 0 or 180, so these poses get "
-        "rotation slots only. They turn a 90 to -90 flip into two 90-degree steps; without heading 0 in the YAML, "
-        "ROT_LEFT and ROT_RIGHT would both be one 180-degree spin.",
+        "What a heading means for the AGV. At (W8, 90°) the body +x axis, the AGV's long side and driving "
+        "(locomote) axis, points west: heading 90° = facing west. Its right side (body −y) points north; moving "
+        "sideways is a strafe. GeometricPose.yaw is the same angle in radians.",
+        "The eight slots of (W8, 90°). pose_graph.cpp subtracts the heading from each edge's atan2 bearing as if "
+        "the heading were a math angle (0° = east), so the slot names are not the AGV's own directions: FORWARD is "
+        "W13 (north, the AGV's right), LEFT is W31 (west, its real forward), BACK is W4 (its left), RIGHT is W9 "
+        "(its back). ROT_RIGHT is (W8, 0°), ROT_LEFT (W8, 180°); no VRC, so VRC_UP and VRC_DOWN stay −1.",
+        "The same node at heading −90°: the AGV faces east, so every name flips. FORWARD is now W4, BACK W13, "
+        "LEFT W9 (the AGV's real forward) and RIGHT W31; ROT_LEFT is (W8, 0°) and ROT_RIGHT (W8, 180°). The "
+        "neighbours are the same nodes, reached through different slots.",
+        "(W8, 0°) and (W8, 180°) are stepping stones. No neighbour of W8 allows 0° or 180°, so these poses get "
+        "rotation slots only. They turn a 90° to −90° flip into two 90° steps; without 0° in the YAML, "
+        "ROT_LEFT and ROT_RIGHT would both be one 180° spin.",
         "The names describe the helper frame, not driving. FORWARD and BACK are travel out of the AGV's right and "
-        "left sides: GarageGraph types them STRAFE. LEFT and RIGHT are along body +x and -x: LOCOMOTE, the AGV's "
-        "normal driving. Node 9 "
-        "shows it: (9, 90) FORWARD is the 0.61 m strafe north onto charger C10, LEFT is the drive west to W8; it "
-        "has no rotation slots.",
-        "Summary for Pecos: 26 nodes with one heading give 2 poses each, nodes 8 and 22 give 4: 60 poses and 480 "
+        "left sides: GarageGraph types them STRAFE. LEFT and RIGHT are along body +x and −x: LOCOMOTE, the AGV's "
+        "normal driving. W9 shows it: (W9, 90°) FORWARD is the 0.61 m strafe north onto charger C10, LEFT is the "
+        "drive west to W8; it has no rotation slots.",
+        "Summary for Pecos: 26 nodes with one heading give 2 poses each, W8 and W22 give 4: 60 poses and 480 "
         "slots, of which 164 are filled (148 translations, 16 rotations, no VRC). GarageGraph turns each filled "
         "slot into one directed edge.",
     ]
@@ -880,21 +880,21 @@ def node_to_poses():
         slot_arrow(m, 8, 4, "BACK", frac=0.74, cut0=40)
         slot_arrow(m, 8, 31, "LEFT", frac=0.86, cut0=80, lab_dy=24)
         slot_arrow(m, 8, 9, "RIGHT", frac=0.5, cut0=80)
-        rot_arc(d, x8, y8, 94, 90, 0, C_ROT, "ROT_RIGHT -> (8, 0)", lab_r=120, lab_anchor="end")
-        rot_arc(d, x8, y8, 94, 90, 180, C_ROT, "ROT_LEFT -> (8, 180)", lab_r=124, lab_anchor="end")
+        rot_arc(d, x8, y8, 94, 90, 0, C_ROT, "ROT_RIGHT -> (W8, 0°)", lab_r=120, lab_anchor="end")
+        rot_arc(d, x8, y8, 94, 90, 180, C_ROT, "ROT_LEFT -> (W8, 180°)", lab_r=124, lab_anchor="end")
     with d.only(4):
         m.agv(8, "AGV-1", heading=-90, label_side="below")
         slot_arrow(m, 8, 4, "FORWARD", frac=0.74, cut0=40)
         slot_arrow(m, 8, 13, "BACK", frac=0.55, cut0=40)
         slot_arrow(m, 8, 9, "LEFT", frac=0.5, cut0=80)
         slot_arrow(m, 8, 31, "RIGHT", frac=0.86, cut0=80, lab_dy=24)
-        rot_arc(d, x8, y8, 94, -90, 0, C_ROT, "ROT_LEFT -> (8, 0)", lab_r=120, lab_anchor="start")
-        rot_arc(d, x8, y8, 94, -90, -180, C_ROT, "ROT_RIGHT -> (8, 180)", lab_r=124, lab_anchor="start")
+        rot_arc(d, x8, y8, 94, -90, 0, C_ROT, "ROT_LEFT -> (W8, 0°)", lab_r=120, lab_anchor="start")
+        rot_arc(d, x8, y8, 94, -90, -180, C_ROT, "ROT_RIGHT -> (W8, 180°)", lab_r=124, lab_anchor="start")
     with d.only(5):
         m.agv(8, "AGV-1", heading=0, label_side="right")
-        rot_arc(d, x8, y8, 94, 0, 90, C_ROT, "ROT_LEFT -> (8, 90)", lab_r=124, lab_anchor="end")
-        rot_arc(d, x8, y8, 94, 0, -90, C_ROT, "ROT_RIGHT -> (8, -90)", lab_r=124, lab_anchor="start")
-        label_pill(d, x8, y8 + 128, "(8, 0): no FORWARD / BACK / LEFT / RIGHT", color=T.fg2, bg=T.bg_deep,
+        rot_arc(d, x8, y8, 94, 0, 90, C_ROT, "ROT_LEFT -> (W8, 90°)", lab_r=124, lab_anchor="end")
+        rot_arc(d, x8, y8, 94, 0, -90, C_ROT, "ROT_RIGHT -> (W8, −90°)", lab_r=124, lab_anchor="start")
+        label_pill(d, x8, y8 + 128, "(W8, 0°): no FORWARD / BACK / LEFT / RIGHT", color=T.fg2, bg=T.bg_deep,
                    border=T.border)
     with d.only(6):
         d.circle(x9, y9, 13, fill="none", stroke=LAY, sw=2, layer="top")
@@ -902,8 +902,8 @@ def node_to_poses():
         slot_arrow(m, 9, 10, "FORWARD", frac=1.0, cut0=14, cut1=22, lab_dx=-96, lab_dy=-34)
         slot_arrow(m, 9, 5, "BACK", frac=0.6, cut0=16)
         slot_arrow(m, 9, 8, "LEFT", frac=0.5, cut0=46, lab_dy=-22)
-        slot_arrow(m, 9, 11, "RIGHT", frac=0.55, cut0=46, edge_xy=edge_r, cut1=2, lab_dy=22)
-        label_pill(d, x9, y9 - 150, "(9, 90): heading [90] only, rotation_allowed false: no ROT slots",
+        slot_arrow(m, 9, 11, "RIGHT", frac=0.33, cut0=46, edge_xy=edge_r, cut1=2, lab_dy=30)
+        label_pill(d, x9, y9 - 150, "(W9, 90°): heading [90°] only, rotation_allowed false: no ROT slots",
                    color=T.fg2, bg=T.bg_deep, border=T.border)
         d.text(edge_r[0] - 8, edge_r[1] + 22, "to W11", size=10.5, family="mono", fill=T.muted, anchor="end",
                halo=T.bg_deep, halo_w=3)
@@ -913,13 +913,13 @@ def node_to_poses():
         slot_arrow(m, 8, 4, "BACK", frac=0.74, cut0=40)
         slot_arrow(m, 8, 31, "LEFT", frac=0.86, cut0=80, lab_dy=24)
         slot_arrow(m, 8, 9, "RIGHT", frac=0.5, cut0=80)
-        rot_arc(d, x8, y8, 94, 90, 0, C_ROT, "ROT_RIGHT -> (8, 0)", lab_r=120, lab_anchor="end")
-        rot_arc(d, x8, y8, 94, 90, 180, C_ROT, "ROT_LEFT -> (8, 180)", lab_r=124, lab_anchor="end")
+        rot_arc(d, x8, y8, 94, 90, 0, C_ROT, "ROT_RIGHT -> (W8, 0°)", lab_r=120, lab_anchor="end")
+        rot_arc(d, x8, y8, 94, 90, 180, C_ROT, "ROT_LEFT -> (W8, 180°)", lab_r=124, lab_anchor="end")
 
     # ---------------- body axes at the four poses of node 8 ----------------
     by = m.box.y1 + 64
     with d.at(2):
-        d.text(0, by, "Body axes at the four poses of node 8 (same convention as figure 78)", size=13.5,
+        d.text(0, by, "Body axes at the four poses of W8 (same convention as figure 78)", size=13.5,
                weight=600, fill=T.fg)
         mm = Map(d, 0, by + 20, 48, (0.0, m.box.w / 48), (0.0, 4.4))
         for i, (h, txt) in enumerate(((-90, "faces east"), (0, "faces north"), (90, "faces west"),
@@ -928,7 +928,7 @@ def node_to_poses():
             mm.agv((cxm, 2.4), None, heading=h)
             px, py = mm.P((cxm, 2.4))
             body_axes(d, px, py, h, L=58)
-            d.text(px, by + 20 + 4.4 * 48 - 14, f"(8, {h})", size=12, family="mono", weight=700, fill=PG,
+            d.text(px, by + 20 + 4.4 * 48 - 14, f"(W8, {h}°)".replace("-", "−"), size=12, family="mono", weight=700, fill=PG,
                    anchor="middle")
             d.text(px, by + 20 + 4.4 * 48 + 4, txt, size=11, fill=T.muted, anchor="middle")
 
@@ -949,14 +949,15 @@ def node_to_poses():
     # slot table
     ty = gy + 132
     d.text(rx, ty, "PoseNeighbor slots (pose_graph.hpp), -1 = empty", size=13.5, weight=600, fill=T.fg)
-    cols = [("slot", 0), ("(8, 90)", 112), ("(8, -90)", 202), ("(8, 0)", 292), ("(8, 180)", 372),
-            ("(9, 90)", 462), ("motion", 546)]
+    cols = [("slot", 0), ("(W8, 90°)", 112), ("(W8, −90°)", 202), ("(W8, 0°)", 292), ("(W8, 180°)", 372),
+            ("(W9, 90°)", 462), ("motion", 546)]
     tw = 680
     rh = 25
     y0 = ty + 18
     d.rect(rx, y0, tw, rh, rx=4, fill=T.tint(PG, 0.14, T.bg))
     for hdr, ox in cols:
         d.text(rx + 10 + ox, y0 + rh / 2, hdr, size=10.5, family="mono", weight=600, fill=T.muted)
+    d.text(rx + tw - 8, y0 + rh / 2, "AGV dir", size=10.5, family="mono", weight=600, fill=T.muted, anchor="end")
     poses_cols = [((8, 90), 3), ((8, -90), 4), ((8, 0), 5), ((8, 180), 5), ((9, 90), 6)]
     for i, sl in enumerate(SLOT_ORDER):
         yy = y0 + rh * (i + 1)
@@ -965,12 +966,13 @@ def node_to_poses():
         for j, (p, k) in enumerate(poses_cols):
             v = slots(p).get(sl)
             with d.at(k):
-                d.text(rx + 10 + cols[j + 1][1], yy + rh / 2, f"({v[0]}, {v[1]})" if v else "-1", size=11,
+                d.text(rx + 10 + cols[j + 1][1], yy + rh / 2, f"(W{v[0]}, {v[1]}°)".replace("-", "−") if v else "-1", size=11,
                        family="mono", fill=(KIND_COL[SLOT_KIND[sl][0]] if v else T.faint))
         kind, axis = SLOT_KIND[sl]
         with d.at(6):
             d.text(rx + 10 + 546, yy + rh / 2, kind if kind != "VRC_TRANSITION" else "VRC", size=11,
                    family="mono", weight=600, fill=KIND_COL[kind])
+        with d.at(3):
             d.text(rx + tw - 8, yy + rh / 2, axis, size=10, family="mono", fill=T.muted, anchor="end")
     tb = BBox(rx, y0, rx + tw, y0 + rh * 9)
     d.rect(rx, y0, tw, rh * 9, rx=4, fill="none", stroke=T.tint(PG, 0.5, T.bg), sw=1)
@@ -987,9 +989,10 @@ def node_to_poses():
             d.rect(rx + 1, y0 + rh * (i + 1) + 1, tw - 2, rh - 2, rx=3, fill="none", stroke=C_LOC, sw=1.6,
                    layer="top")
     with d.at(6):
-        note(d, rx, tb.y1 + 14, tw, "Naming issue: FORWARD and BACK are strafes (body y), LEFT and RIGHT are "
-                                    "locomotes (body x, the driving axis). The bearing test uses the heading as a math "
-                                    "angle, which points out of the AGV's right side, not the way it drives.",
+        note(d, rx, tb.y1 + 14, tw, "Naming issue: the slot names are not the AGV's frame. FORWARD and BACK are "
+                                    "strafes out of its right and left sides; LEFT and RIGHT are locomotes along its "
+                                    "driving axis (LEFT = the AGV's real forward). The bearing test uses the heading as "
+                                    "a math angle, which points out of the AGV's right side.",
              size=11, accent=C_STR)
     # summary
     sy = tb.y1 + 96
@@ -1012,11 +1015,11 @@ def node_to_poses():
                    fill=T.green if v in ("60", "164") else T.fg, anchor="end")
 
     frame(d, title="How one node becomes poses and neighbour slots",
-          subtitle="Step through node 8 and node 9 of the Pecos YAML: their listed headings, the poses they become, "
-                   "what a heading means for the AGV's body, and the eight PoseNeighbor slots pose_graph.cpp fills.",
+          subtitle="Step through W8 and W9 of the Pecos YAML: their listed headings, the poses they become, what a "
+                   "heading means for the AGV's body, and the eight PoseNeighbor slots pose_graph.cpp fills.",
           badge_key="yaml",
-          legend=[("arrow", PG, "pose heading (facing)"), ("arrow", C_LOC, "LOCOMOTE slot (body +-x)"),
-                  ("arrow", C_STR, "STRAFE slot (body +-y)"), ("arrow", C_ROT, "rotation slot"),
+          legend=[("arrow", PG, "pose heading (facing)"), ("arrow", C_LOC, "LOCOMOTE slot (AGV forward / back)"),
+                  ("arrow", C_STR, "STRAFE slot (AGV right / left)"), ("arrow", C_ROT, "rotation slot"),
                   ("box", T.green, "AGV (schematic 2.2 x 1.1 m)")],
           footnote="Slots recomputed from the YAML with pose_graph.cpp L58-165 (bearing tolerance 0.1 rad) and checked "
                    "against the report's table; the sign of SignedAngleDist is not in the snapshots and is inferred "

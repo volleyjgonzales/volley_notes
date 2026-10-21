@@ -379,14 +379,14 @@ def _classify(src, dst_xy, heading_deg):
 @figure("110_edge_classification", "Edge classification: layout edges become neighbour slots (animated)", DOC)
 def edge_classification():
     d = Doc("110_edge_classification", "From layout edges to neighbour slots",
-            "Animated: PoseGraph classifies each edge of node 8 for pose (8, 90) by the bearing of the edge relative "
-            "to the yaw: 31 LEFT, 9 RIGHT, 4 BACK, 13 FORWARD, each within 0.1 rad. Then three hypothetical edits: "
+            "Animated: PoseGraph classifies each edge of W8 for pose (W8, 90°) by the bearing of the edge relative "
+            "to the yaw: W31 LEFT, W9 RIGHT, W4 BACK, W13 FORWARD, each within 0.1 rad. Then three hypothetical edits: "
             "a diagonal edge that throws, a disallowed_edge_orientation that removes heading 90 and -90 from edge "
             "8-13, and a 0.1 m misalignment that PoseGraph accepts but GetMotionType rejects.")
     H = 90
     S_ = 56.0
     m = Map(d, 0, 30, S_, (26.8, 38.6), (9.5, 18.1))
-    d.text(0, 0, "Node 8 and its graph neighbours (real coordinates)", size=13.5, weight=600, fill=T.fg)
+    d.text(0, 0, "W8 and its graph neighbours (real coordinates)", size=13.5, weight=600, fill=T.fg)
     m.base(labels=True, zones=False, axes=True)
     cx, cy = m.P(8)
 
@@ -395,36 +395,36 @@ def edge_classification():
         return cx + r * math.cos(a), cy - r * math.sin(a)
 
     # ---- steps ----
-    k0 = d.step("Pose (8, 90): W8 at heading 90. PoseGraph measures each edge against yaw = 90 x pi/180 = pi/2 "
+    k0 = d.step("Pose (W8, 90°): W8 at heading 90°. PoseGraph measures each edge against yaw = 90° × pi/180 = pi/2 "
                 "rad in the atan2 frame (0 = +x, counter-clockwise), which points to +y. The four wedges are the "
-                "translation slots: FORWARD at relative bearing 0, LEFT at +pi/2, BACK at pi, RIGHT at -pi/2, each "
-                "+-0.1 rad (5.7 deg) wide. The yaw used as a math angle points out of the AGV's right side; the AGV "
-                "faces -x, so LEFT is the facing direction: LEFT and RIGHT are locomotes, FORWARD and BACK strafes. All eight slots start at -1 (kInvalidIndex).")
-    k1 = d.step("Neighbour 31 (28.0253, 12.7753) also allows heading 90, so pose (31, 90) exists. dx = -2.857, "
-                "dy = 0: bearing atan2(0, -2.857) = 180 deg; relative to the yaw: +90 deg, inside the LEFT wedge. "
-                "Slot LEFT (3) = (31, 90): a locomote toward the approach of bay 7.")
-    k2 = d.step("Neighbour 9 (37.1856, 12.7753): dx = +6.3033, dy = 0, bearing 0 deg, relative -90 deg: RIGHT (1) "
-                "= (9, 90), the other locomote direction.")
-    k3 = d.step("Neighbour 4 (30.8823, 10.4893): dx = 0, dy = -2.286, bearing -90 deg, relative -180 deg, the same "
-                "angle as +180: BACK (2) = (4, 90), a strafe.")
-    k4 = d.step("Neighbour 13 (30.8823, 17.1663): dy = +4.391, bearing +90 deg, relative 0: FORWARD (0) = (13, 90), "
-                "a strafe. Node 8 has rotation_allowed, so ROT_RIGHT (4) = (8, 0) and ROT_LEFT (5) = (8, 180), the "
-                "nearest headings clockwise and counter-clockwise; no VRC, so slots 6 and 7 stay -1. Pose (8, -90) "
-                "gets the mirror image: FORWARD 4, RIGHT 31, BACK 13, LEFT 9.")
-    k5 = d.step("Hypothetical edge 8-5 (not in the YAML). Both nodes allow heading 90, so the edge is classified: "
-                "bearing atan2(-2.286, 6.3033) = -19.9 deg, relative -109.9 deg, 19.9 deg (0.35 rad) from RIGHT and "
+                "translation slots: FORWARD at relative bearing 0, LEFT at +pi/2, BACK at pi, RIGHT at −pi/2, each "
+                "±0.1 rad (5.7°) wide. The yaw used as a math angle points out of the AGV's right side, not its "
+                "front: the AGV faces −x, so LEFT is the AGV's forward, RIGHT its back, FORWARD its right and BACK its left. All eight slots start at -1 (kInvalidIndex).")
+    k1 = d.step("Neighbour W31 (28.0253, 12.7753) also allows heading 90°, so pose (W31, 90°) exists. dx = -2.857, "
+                "dy = 0: bearing atan2(0, -2.857) = 180°; relative to the yaw: +90°, inside the LEFT wedge. "
+                "Slot LEFT (3) = (W31, 90°): the AGV's forward, a locomote toward the approach of bay B7.")
+    k2 = d.step("Neighbour W9 (37.1856, 12.7753): dx = +6.3033, dy = 0, bearing 0°, relative −90°: RIGHT (1) "
+                "= (W9, 90°), the AGV's back, the other locomote direction.")
+    k3 = d.step("Neighbour W4 (30.8823, 10.4893): dx = 0, dy = -2.286, bearing −90°, relative −180°, the same "
+                "angle as +180°: BACK (2) = (W4, 90°), the AGV's left, a strafe.")
+    k4 = d.step("Neighbour W13 (30.8823, 17.1663): dy = +4.391, bearing +90°, relative 0°: FORWARD (0) = (W13, 90°), "
+                "the AGV's right, a strafe. W8 has rotation_allowed, so ROT_RIGHT (4) = (W8, 0°) and ROT_LEFT (5) = (W8, 180°), the "
+                "nearest headings clockwise and counter-clockwise; no VRC, so slots 6 and 7 stay -1. Pose (W8, −90°) "
+                "gets the mirror image: FORWARD W4, RIGHT W31, BACK W13, LEFT W9.")
+    k5 = d.step("Hypothetical edge W8–W5 (not in the YAML). Both nodes allow heading 90°, so the edge is classified: "
+                "bearing atan2(-2.286, 6.3033) = −19.9°, relative −109.9°, 19.9° (0.35 rad) from RIGHT and "
                 "outside every wedge. The PoseGraph constructor throws. Poses are built in node-id order, so pose "
-                "(5, -90) gets there first and the message reads \"Edge 5 <-> 8 with invalid translation "
+                "(W5, −90°) gets there first and the message reads \"Edge 5 <-> 8 with invalid translation "
                 "connection!\". Had the nodes shared no heading, the edge would be skipped without a word.")
-    k6 = d.step("Hypothetical disallowed_edge_orientation: 90 on edge 8-13. IsAngleOrReciprocal(90, heading) is true "
-                "for 90 and -90, so (8, 90) loses FORWARD, (8, -90) loses BACK, and 13's poses lose 8. Node 13 has "
-                "only those two headings, so the edge is gone from the PoseGraph while Layout::HasEdge(8, 13) stays "
-                "true. 8-13 is the only edge between the two YAML sandboxes, so the pose graph would split in two.")
-    k7 = d.step("Hypothetical: node 31 moved 0.1 m north (y = 12.8753). Bearing 178.0 deg, relative +88.0 deg: still "
-                "inside the 5.7 deg LEFT wedge, so PoseGraph builds the edge. GetMotionType checks the same edge "
-                "with IsLocomoteOrStrafe at 1e-3 rad: 2.0 deg (0.035 rad) is neither a locomote nor a strafe, and "
+    k6 = d.step("Hypothetical disallowed_edge_orientation: 90 on edge W8–W13. IsAngleOrReciprocal(90, heading) is true "
+                "for 90° and −90°, so (W8, 90°) loses FORWARD, (W8, −90°) loses BACK, and W13's poses lose W8. W13 has "
+                "only those two headings, so the edge is gone from the PoseGraph while Layout::HasEdge(W8, 13°) stays "
+                "true. W8–W13 is the only edge between the two YAML sandboxes, so the pose graph would split in two.")
+    k7 = d.step("Hypothetical: W31 moved 0.1 m north (y = 12.8753). Bearing 178.0°, relative +88.0°: still "
+                "inside the 5.7° LEFT wedge, so PoseGraph builds the edge. GetMotionType checks the same edge "
+                "with IsLocomoteOrStrafe at 1e-3 rad: 2.0° (0.035 rad) is neither a locomote nor a strafe, and "
                 "it throws \"Edge traversal is not perpendicular to where we are.\" on the first command that uses it.")
-    k8 = d.step("The complete picture: the four Pecos edges of node 8 fill slots 0 to 3 of (8, 90), rotation fills "
+    k8 = d.step("The complete picture: the four Pecos edges of W8 fill slots 0 to 3 of (W8, 90°), rotation fills "
                 "4 and 5. Three rules to remember when editing edges: an off-axis edge throws only when the two "
                 "nodes share a heading; a disallowed orientation removes a heading and its reciprocal from one "
                 "edge; and PoseGraph's 0.1 rad tolerance is 100 times looser than the 1e-3 rad of GetMotionType.")
@@ -471,7 +471,7 @@ def edge_classification():
         x, y = m.P(nid)
         with d.at(k):
             d.line(cx, cy, x, y, stroke=col, sw=3.2, layer="edges")
-            chip(d, x + ox, y + oy, f"({nid}, 90)", col, size=10,
+            chip(d, x + ox, y + oy, f"(W{nid}, 90°)", col, size=10,
                  anchor=anc, fill=T.tint(col, 0.28, T.bg_deep), layer="top")
         with d.only(k):
             d.circle(x, y, 13, fill="none", stroke=col, sw=2, layer="top")
@@ -483,9 +483,9 @@ def edge_classification():
         q0, q1 = pt(0, 150), pt(b85, 150)
         d.path(f"M{q0[0]:.2f} {q0[1]:.2f} A150 150 0 0 1 {q1[0]:.2f} {q1[1]:.2f}", stroke=T.red, sw=1.4,
                layer="top", bbox=BBox(q1[0], q0[1], q0[0], q1[1]))
-        d.text(pt(-10, 158)[0] + 4, pt(-10, 158)[1], f"{abs(b85):.1f} deg off RIGHT", size=10.5, family="mono",
+        d.text(pt(-10, 158)[0] + 4, pt(-10, 158)[1], f"{abs(b85):.1f}° off RIGHT", size=10.5, family="mono",
                fill=T.red, halo=T.bg_deep, halo_w=4)
-        chip(d, x5 + 10, y5 + 20, "hyp. edge 8-5: throws", T.red, size=10, anchor="end",
+        chip(d, x5 + 10, y5 + 20, "hyp. edge W8–W5: throws", T.red, size=10, anchor="end",
              fill=T.tint(T.red, 0.25, T.bg_deep), layer="top")
     # DEO on 8-13
     x13, y13 = m.P(13)
@@ -501,15 +501,15 @@ def edge_classification():
     with d.only(k7):
         d.line(cx, cy, x31, y31, stroke=T.red, sw=2.2, dash="5 4", layer="top")
         d.circle(x31, y31, 6, fill=T.bg_deep, stroke=T.red, sw=1.8, dash="3 2", layer="top")
-        chip(d, x31 - 30, y31 - 46, "31 moved +0.1 m (hyp.)", T.red, size=10, anchor="start",
+        chip(d, x31 - 30, y31 - 46, "W31 moved +0.1 m (hyp.)", T.red, size=10, anchor="start",
              fill=T.tint(T.red, 0.25, T.bg_deep), layer="top")
 
     # ---- slots of (8, 90) ----
     mb = m.box
     sy0 = mb.y1 + 58
-    d.text(0, sy0, "pose_neighbors_ for pose (8, 90): 8 slots per pose", size=13, weight=600, fill=T.fg)
-    slots = [("FORWARD", 0, "(13, 90)", k4), ("RIGHT", 1, "(9, 90)", k2), ("BACK", 2, "(4, 90)", k3),
-             ("LEFT", 3, "(31, 90)", k1), ("ROT_RIGHT", 4, "(8, 0)", k4), ("ROT_LEFT", 5, "(8, 180)", k4),
+    d.text(0, sy0, "pose_neighbors_ for pose (W8, 90°): 8 slots per pose", size=13, weight=600, fill=T.fg)
+    slots = [("FORWARD", 0, "(W13, 90°)", k4), ("RIGHT", 1, "(W9, 90°)", k2), ("BACK", 2, "(W4, 90°)", k3),
+             ("LEFT", 3, "(W31, 90°)", k1), ("ROT_RIGHT", 4, "(W8, 0°)", k4), ("ROT_LEFT", 5, "(W8, 180°)", k4),
              ("VRC_UP", 6, None, None), ("VRC_DOWN", 7, None, None)]
     cw_ = mb.w / 4
     for i, (name, idx, val, k) in enumerate(slots):
@@ -534,15 +534,15 @@ def edge_classification():
             with d.at(k):
                 d.text(x + 12, y + 31, val, size=11.5, family="mono", weight=600, fill=T.fg)
     with d.at(k4):
-        d.text(0, sy0 + 18 + 2 * 50 + 10, "pose (8, -90): FORWARD (4, -90), RIGHT (31, -90), BACK (13, -90), "
-               "LEFT (9, -90)", size=11, family="mono", fill=T.fg2)
-        d.text(0, sy0 + 18 + 2 * 50 + 28, "poses (8, 0), (8, 180): no neighbour allows heading 0 or 180, so only "
+        d.text(0, sy0 + 18 + 2 * 50 + 10, "pose (W8, −90°): FORWARD (W4, −90°), RIGHT (W31, −90°), BACK (W13, −90°), "
+               "LEFT (W9, −90°)", size=11, family="mono", fill=T.fg2)
+        d.text(0, sy0 + 18 + 2 * 50 + 28, "poses (W8, 0°), (W8, 180°): no neighbour allows heading 0° or 180°, so only "
                "rotation slots", size=11, family="mono", fill=T.fg2)
 
     # ---- table ----
     tx = mb.x1 + 50
     d.text(tx, 0, "atan2 bearing, relative bearing, slot", size=13.5, weight=600, fill=T.fg)
-    cols = [("to", 0), ("dx, dy [m]", 52), ("bearing", 210), ("relative", 300), ("slot", 390), ("motion type", 510)]
+    cols = [("to", 0), ("dx, dy [m]", 52), ("bearing", 210), ("relative", 300), ("slot", 390), ("motion type (AGV direction)", 510)]
     TW = 760
     for lab_, off in cols:
         d.text(tx + off + 8, 30, lab_, size=10.5, family="mono", weight=600, fill=T.muted)
@@ -554,22 +554,22 @@ def edge_classification():
         col = SLOT_COL.get(slot, T.red) if not hyp else T.red
         with d.at(k_first, k_last):
             d.rect(tx, y - 12, TW, 24, rx=4, fill=T.tint(col, 0.10, T.bg))
-            vals = [label or str(nid), f"{dx:+.4f}, {dy:+.4f}", f"{bear:+.1f} deg",
-                    ("+-180.0 deg" if abs(abs(rel) - 180) < 1e-6 else f"{rel:+.1f} deg"),
+            vals = [label or f"W{nid}", f"{dx:+.4f}, {dy:+.4f}", f"{bear:+.1f}°",
+                    ("±180.0°" if abs(abs(rel) - 180) < 1e-6 else f"{rel:+.1f}°"),
                     slot_txt or f"{slot} ({SLOT_IDX[slot]})", mt]
             for j, (lab_, off) in enumerate(cols):
                 d.text(tx + off + 8, y, vals[j], size=11.5, family="mono", weight=700 if j in (0, 4) else 400,
                        fill=col if j in (0, 4) else T.fg2)
-    row(0, k1, None, 31, (NODES[31].x, NODES[31].y), "LOCOMOTE")
-    row(1, k2, None, 9, (NODES[9].x, NODES[9].y), "LOCOMOTE")
-    row(2, k3, None, 4, (NODES[4].x, NODES[4].y), "STRAFE")
-    row(3, k4, None, 13, (NODES[13].x, NODES[13].y), "STRAFE")
-    row(4, k5, k5, 5, (NODES[5].x, NODES[5].y), "-", hyp=True, slot_txt="none: throw", label="5 hyp")
-    row(4, k6, k6, 13, (NODES[13].x, NODES[13].y), "-", hyp=True, slot_txt="skipped (DEO)", label="13 hyp")
+    row(0, k1, None, 31, (NODES[31].x, NODES[31].y), "LOCOMOTE (AGV fwd)")
+    row(1, k2, None, 9, (NODES[9].x, NODES[9].y), "LOCOMOTE (AGV back)")
+    row(2, k3, None, 4, (NODES[4].x, NODES[4].y), "STRAFE (AGV left)")
+    row(3, k4, None, 13, (NODES[13].x, NODES[13].y), "STRAFE (AGV right)")
+    row(4, k5, k5, 5, (NODES[5].x, NODES[5].y), "-", hyp=True, slot_txt="none: throw", label="W5 hyp")
+    row(4, k6, k6, 13, (NODES[13].x, NODES[13].y), "-", hyp=True, slot_txt="skipped (DEO)", label="W13 hyp")
     row(4, k7, k7, 31, (NODES[31].x, NODES[31].y + 0.1), "throws (1e-3)", hyp=True, slot_txt="LEFT (3)",
-        label="31 hyp")
-    d.text(tx, 62 + 5 * 28 - 4, "relative = SignedAngleDist(yaw, bearing) = bearing - yaw, wrapped; yaw = 90 deg. "
-           "Slot if within 0.1 rad (5.73 deg) of 0, +90, 180 or -90.", size=11, fill=T.muted)
+        label="W31 hyp")
+    d.text(tx, 62 + 5 * 28 - 4, "relative = SignedAngleDist(yaw, bearing) = bearing - yaw, wrapped; yaw = 90°. "
+           "Slot if within 0.1 rad (5.73°) of 0°, +90°, 180° or −90°.", size=11, fill=T.muted)
     d.text(tx, 62 + 5 * 28 + 13, "Motion type from IsLocomoteOrStrafe: along yaw + pi/2 (or its reciprocal) = "
            "LOCOMOTE, along yaw = STRAFE.", size=11, fill=T.muted)
 
@@ -651,14 +651,14 @@ def edge_classification():
     frame(d, title="From layout edges to neighbour slots",
           subtitle="The YAML edges are undirected and carry no direction names. PoseGraph gives them names per pose: "
                    "it takes the atan2 bearing of each edge, subtracts the pose's yaw and snaps the result to one of "
-                   "four slots, within 0.1 rad. Step through the four neighbours of pose (8, 90), then three "
+                   "four slots, within 0.1 rad. Step through the four neighbours of pose (W8, 90°), then three "
                    "hypothetical edits that throw, remove an edge, or pass here and fail later.",
           badge_key="yaml",
-          legend=[("box", SLOT_COL["FORWARD"], "FORWARD 0 (strafe)"), ("box", SLOT_COL["RIGHT"], "RIGHT 1 (locomote)"),
-                  ("box", SLOT_COL["BACK"], "BACK 2 (strafe)"), ("box", SLOT_COL["LEFT"], "LEFT 3 (locomote)"),
+          legend=[("box", SLOT_COL["FORWARD"], "FORWARD 0 (strafe, AGV right)"), ("box", SLOT_COL["RIGHT"], "RIGHT 1 (locomote, AGV back)"),
+                  ("box", SLOT_COL["BACK"], "BACK 2 (strafe, AGV left)"), ("box", SLOT_COL["LEFT"], "LEFT 3 (locomote, AGV forward)"),
                   ("line", T.pink, "yaw reference"), ("dash", T.red, "hypothetical edit")],
-          footnote="Coordinates and edges from 5675_pecos_combined.yaml; the edge 8-5, the orientation on 8-13 and the "
-                   "moved node 31 are hypothetical. Rules from pose_graph.cpp L58-165 and agv_motion_type.cpp. The "
+          footnote="Coordinates and edges from 5675_pecos_combined.yaml; the edge W8–W5, the orientation on W8–W13 and "
+                   "the moved W31 are hypothetical. Rules from pose_graph.cpp L58-165 and agv_motion_type.cpp. The "
                    "sign convention SignedAngleDist(a, b) = b - a is inferred (volley::SignedAngleDist is not in the "
                    "snapshots); it is the one under which GetBayOutboundPose's documented 'always LEFT' holds for bays "
                    "7 and 21. The enum order is FORWARD 0, RIGHT 1, BACK 2, LEFT 3 (pose_graph.hpp); the code tests "

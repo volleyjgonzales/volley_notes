@@ -269,7 +269,7 @@ table_(gg_, logger),                                   // CollisionTable: which 
 <p>The heading is the direction of the AGV's body +x axis, which runs along its long side and is its driving (locomote) axis; 90 means facing west. Moving along body x is a locomote, along body y a strafe (<a class="ref" href="#ly-agv-coordinate-system">section 3</a>).</p>
 <figure id="ly-fig-107_node_to_poses">
   <img src="figures/107_node_to_poses.svg" alt="Animated figure: a map crop around waypoints W8 and W9 with an AGV at the poses of node 8, coloured arrows for the FORWARD, BACK, LEFT, RIGHT and rotation slots, and a table of the eight PoseNeighbor slots for poses (8,90), (8,−90), (8,0), (8,180) and (9,90), ending with Pecos totals.">
-  <figcaption><strong>How one node becomes poses and neighbour slots.</strong> Step through node 8 (headings [0, 90], rotation allowed) and node 9 (heading [90]): <code>GetAllowedHeadings</code> adds each reciprocal, so node 8 has four poses and node 9 two; an AGV at each pose shows that the heading is where body +x, the long and driving axis, points (90 = west). The table fills the eight <code>PoseNeighbor</code> slots as <code>pose_graph.cpp</code> does. FORWARD and BACK turn out to be strafes and LEFT and RIGHT locomotes, and (8, 0) and (8, 180) exist only as stepping stones for rotation. Pecos has 60 poses and 164 filled slots.</figcaption>
+  <figcaption><strong>How one node becomes poses and neighbour slots.</strong> Step through W8 (headings [0°, 90°], rotation allowed) and W9 (heading [90°]): <code>GetAllowedHeadings</code> adds each reciprocal, so W8 has four poses and W9 two; an AGV at each pose shows that the heading is where body +x, the long and driving axis, points (90° = west). The table fills the eight <code>PoseNeighbor</code> slots as <code>pose_graph.cpp</code> does, with the direction each slot means for the AGV. The slot names are not the AGV's own frame: <code>FORWARD</code> and <code>BACK</code> are strafes out of its right and left sides, <code>LEFT</code> and <code>RIGHT</code> locomotes forward and back. (W8, 0°) and (W8, 180°) exist only as stepping stones for rotation. Pecos has 60 poses and 164 filled slots; <a class="ref" href="#ly-vertices-and-edges">section 6</a> shows how they connect.</figcaption>
 </figure>
 <p>Why headings matter:</p>
 <ul>
@@ -314,14 +314,75 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
 <p>The edge list says <em>which</em> nodes connect; the node coordinates and headings say <em>how</em>. For each pose, <code>PoseGraph</code> computes the bearing of every edge relative to the pose's heading and files the destination into one of four slots, within 0.1 rad (about 5.7°). An edge that fits no slot, for a heading both nodes share, throws when the graph is built.</p>
 <figure id="ly-fig-110_edge_classification">
   <img src="figures/110_edge_classification.svg" alt="Map of node 8 and its neighbours 31, 9, 4 and 13 at real coordinates, with four narrow tolerance wedges around node 8. A table of bearings and slots, the classification code with highlighted lines, the eight slots of pose (8, 90), and hypothetical edits shown in red.">
-  <figcaption><strong>From layout edges to neighbour slots.</strong> PoseGraph names each edge per pose: it takes the atan2 bearing of the edge, subtracts the pose's yaw and snaps the result to FORWARD (0), LEFT (+pi/2), BACK (pi) or RIGHT (-pi/2) within 0.1 rad. For pose (8, 90) this gives 13 FORWARD, 31 LEFT, 4 BACK and 9 RIGHT. Because the pose faces -x, LEFT and RIGHT are locomotes and FORWARD and BACK are strafes. Step through the four neighbours, then three hypothetical edits: a diagonal edge that makes the constructor throw, a disallowed_edge_orientation that removes a heading and its reciprocal from one edge, and a 0.1 m misalignment that PoseGraph accepts at 0.1 rad but GetMotionType rejects at 1e-3 rad.</figcaption>
+  <figcaption><strong>From layout edges to neighbour slots.</strong> PoseGraph names each edge per pose: it takes the atan2 bearing of the edge, subtracts the pose's yaw and snaps the result to FORWARD (0°), LEFT (+90°), BACK (180°) or RIGHT (−90°) within 0.1 rad. For pose (W8, 90°) this gives W13 FORWARD, W31 LEFT, W4 BACK and W9 RIGHT. The pose faces −x (west), so for the AGV itself LEFT is forward and RIGHT back (locomotes), FORWARD is its right and BACK its left (strafes). Step through the four neighbours, then three hypothetical edits: a diagonal edge that makes the constructor throw, a disallowed_edge_orientation that removes a heading and its reciprocal from one edge, and a 0.1 m misalignment that PoseGraph accepts at 0.1 rad but GetMotionType rejects at 1e-3 rad.</figcaption>
 </figure>
 <p>What follows for whoever edits a layout:</p>
 <ul>
   <li><strong>Edges must be axis-aligned with the headings they serve.</strong> Pecos's are exactly horizontal or vertical. A diagonal edge between nodes that share a heading stops the scheduler at start-up; a diagonal edge between nodes with no shared heading is silently useless.</li>
   <li><strong>The two tolerances disagree.</strong> <code>PoseGraph</code> accepts 0.1 rad, but <code>GetMotionType</code>, which classifies a motion as locomote or strafe when commands are built, demands 1e-3 rad and throws otherwise. A short edge (the 0.6096 m charger spurs) with a few millimetres of coordinate error passes the first check and fails the second.</li>
-  <li><strong>The slot names are misleading.</strong> <code>FORWARD</code> and <code>BACK</code> are out of the AGV's right and left sides (body ∓y), which is a strafe; <code>LEFT</code> and <code>RIGHT</code> are along body ±x, the driving axis. The names belong to the planner's helper frame, whose x axis points out of the AGV's right side (<a class="ref" href="#ly-the-planners-helper-frame">section 3.4</a>).</li>
+  <li><strong>The slot names are misleading.</strong> <code>FORWARD</code> and <code>BACK</code> are out of the AGV's right and left sides (body ∓y), which is a strafe; <code>LEFT</code> and <code>RIGHT</code> are along body ±x, the driving axis. The names belong to the planner's helper frame, whose x axis points out of the AGV's right side (<a class="ref" href="#ly-the-planners-helper-frame">section 3.4</a>); <a class="ref" href="#ly-graph-slot-frame">section 6.3</a> maps each slot to the AGV's own direction.</li>
   <li><strong>The sandboxes hang on one edge.</strong> Pecos's two YAML sections are joined only by edge 8–13 (4.391 m); a <code>disallowed_edge_orientation</code> of 90 on it would split the garage for every AGV.</li>
+</ul>
+
+<h2 data-num id="ly-vertices-and-edges">From the layout to the graph: vertices and edges</h2>
+<p>The layout lists nodes and undirected edges; the planner searches a directed graph whose vertices are <em>poses</em>, a node together with a heading. Two classes build that graph when the scheduler starts. <code>PoseGraph</code> (<code>common_ros/src/pose_graph.cpp</code>) decides which poses exist and which pose can be reached from which; <code>GarageGraph</code> (<code>garage_graph.cpp</code>) turns that into a Boost graph with one vertex per pose and one typed, directed edge per connection. This section follows both constructors on W8 and its four neighbours, the part of Pecos where an AGV can turn, and answers two questions the earlier figures leave open: how a vertex connects to the vertices of the next node, and where turning fits in.</p>
+<figure id="ly-fig-148_pose_graph_construction">
+  <img src="figures/148_pose_graph_construction.svg" alt="Animated schematic of W8 with W31 to the west, W9 east, W13 north and W4 south. Each node holds small circles, one per allowed heading, labelled with the heading and the vertex number. Translation edges join circles of the same heading on neighbouring nodes in two layers (90° and −90°); W8's 0° and 180° circles have no translation edges; a ring of rotation edges at W8 joins all four of its circles. Edges are then coloured LOCOMOTE (east–west), STRAFE (north–south) and ROTATION, and a highlighted route goes from (W31, 90°) to W8, turns twice and returns to (W31, −90°). Beside it, the abridged PoseGraph and GarageGraph constructors and a table of the six out-edges of (W8, 90°).">
+  <figcaption><strong>How vertices and edges are built from the layout.</strong> Step through W8 (headings [0°, 90°], rotation allowed) and its neighbours W31, W9, W4 and W13 (heading [90°], no rotation), drawn as a schematic. Every allowed heading of a node is one vertex. A translation edge joins two vertices of the <em>same</em> heading on neighbouring nodes, so the 90° and −90° vertices form two separate layers, and W8's 0° and 180° vertices get no translation edge at all. Rotation edges stay on W8 and join each heading to the nearest one clockwise and counter-clockwise; they are the only link between the layers. GarageGraph types each edge from the geometry, and the last step shows the route that turns an AGV at W31 round: drive to W8, rotate twice, drive back.</figcaption>
+</figure>
+
+<h3 data-num id="ly-graph-vertices">Vertices: one per node and heading</h3>
+<p>A vertex is a pose, the pair (node, heading), not a node. <code>PoseGraph</code> walks the nodes in id order and, for each, the headings returned by <code>GetAllowedHeadings</code>: every heading listed in the YAML plus its reciprocal, wrapped to <span class="math">[-179^\circ, 180^\circ]</span> and sorted. Each one becomes a pose, appended to <code>poses_</code> and recorded in <code>pose_indices_</code>. A node therefore has as many vertices as it has distinct allowed headings: two for a node that lists one heading, four for W8 and W22, which list 0° and 90°. <code>GarageGraph</code> then adds one Boost vertex per pose, in the same order, to an <code>adjacency_list</code> with <code>vecS</code> storage, so the vertex number equals the pose index: (W8, 90°) is pose 16 and vertex <code>v16</code>, and (W22, 90°) is <code>v44</code>, the vertex in <a class="ref" href="#bg-fig-76_garage_graph_vertex">Figure</a>.</p>
+<p>All poses of a node share its position. They differ only in the AGV's orientation, which decides the directions it can drive and the area it covers. That is why the planner cannot work on nodes alone: at W8 facing west and at W8 facing north are different states with different next moves.</p>
+
+<h3 data-num id="ly-graph-translations">Translation edges: same heading, and both nodes must allow it</h3>
+<p>For each pose (node <span class="math">n</span>, heading <span class="math">h</span>) and each layout neighbour <span class="math">m</span> of <span class="math">n</span>, the constructor builds the pose <span class="math">(m, h)</span> with the <strong>same heading</strong> and looks it up. If <span class="math">m</span> does not allow <span class="math">h</span>, that pose does not exist and no edge is made; this is the rule through which headings decide connectivity. Two more checks can drop or redirect the edge: a <code>disallowed_edge_orientation</code> on the layout edge that equals <span class="math">h</span> or its reciprocal removes it, and a pair of VRC nodes is filed under <code>VRC_UP</code> or <code>VRC_DOWN</code> by floor (<a class="ref" href="#ly-floors-and-vrcs">section</a>). Otherwise the destination goes into one of the four translation slots, chosen by the bearing of the edge (<a class="ref" href="#ly-edges">section</a>).</p>
+<p>Three consequences, all visible in <a class="ref" href="#ly-fig-148_pose_graph_construction">Figure</a>:</p>
+<ul>
+  <li><strong>A translation never turns the AGV.</strong> Every translation edge joins two vertices with the same heading, so the vertices of one heading form a layer of their own; around W8 there is a 90° layer and a −90° layer.</li>
+  <li><strong>Each layout edge becomes up to four graph edges.</strong> The neighbour loop runs from both ends, once for each heading both nodes allow: W8–W31 gives (W8, 90°) → (W31, 90°), (W31, 90°) → (W8, 90°) and the same pair at −90°. The four layout edges around W8 give 16 translation edges.</li>
+  <li><strong>A pose whose heading no neighbour shares has no translation edge.</strong> (W8, 0°) and (W8, 180°) look for (W31, 0°), (W9, 0°) and so on, and find none. They can only be reached by turning.</li>
+</ul>
+
+<h3 data-num id="ly-graph-slot-frame">Slot names and the AGV's own directions</h3>
+<p>The four translation slots are called <code>FORWARD</code>, <code>LEFT</code>, <code>BACK</code> and <code>RIGHT</code>, but they are not the AGV's forward, left, back and right. <code>pose_graph.cpp</code> computes the bearing of the edge with <code>atan2</code>, which measures from east, and subtracts the heading as if the heading were also measured from east. The heading is measured from north (<a class="ref" href="#ly-the-heading">section</a>), so the result is a quarter turn off, and the names belong to the planner's helper frame, whose x axis points out of the AGV's right side (<a class="ref" href="#ly-the-planners-helper-frame">section</a>). <code>GarageGraph::LocomoteOrStrafe</code> compares the same two angles and adds <span class="math">\pi/2</span> first, with a comment that explains the mismatch; the slot names were never changed. In the AGV's own frame, forward from (W8, 90°) is (W31, 90°), which the code stores as <code>LEFT</code>.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Slot in the code</th>
+      <th>Relative bearing in the code</th>
+      <th>Direction for the AGV</th>
+      <th>Neighbour of (W8, 90°)</th>
+      <th>Edge type</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>LEFT</code></td><td><span class="math">+90^\circ</span></td><td>forward</td><td>(W31, 90°), west</td><td><code>LOCOMOTE</code></td></tr>
+    <tr><td><code>RIGHT</code></td><td><span class="math">-90^\circ</span></td><td>back</td><td>(W9, 90°), east</td><td><code>LOCOMOTE</code></td></tr>
+    <tr><td><code>FORWARD</code></td><td><span class="math">0^\circ</span></td><td>right</td><td>(W13, 90°), north</td><td><code>STRAFE</code></td></tr>
+    <tr><td><code>BACK</code></td><td><span class="math">180^\circ</span></td><td>left</td><td>(W4, 90°), south</td><td><code>STRAFE</code></td></tr>
+  </tbody>
+</table>
+<p>The mapping is the same at every heading, because it comes from a fixed quarter-turn offset: at (W8, −90°), where the AGV faces east, <code>LEFT</code> is W9 (its forward) and <code>RIGHT</code> is W31. The names do not affect planning, since edge types come from geometry; the one place that reads a slot by name is <code>GetBayOutboundPose</code>, which takes the <code>LEFT</code> neighbour of a bay pose, that is, the AGV's forward move out of the bay. <code>PoseGraph</code> belongs to <code>common_ros</code>, so renaming the slots is outside this refactor; it is listed with the format changes in <a class="ref" href="#ly-improvements-in-the-format">section</a>.</p>
+
+<h3 data-num id="ly-graph-rotations">Rotation edges: on one node, to the nearest heading each way</h3>
+<p>If the node has <code>rotation_allowed</code>, each of its poses gets two more neighbours on the <em>same node</em>: <code>ROT_RIGHT</code>, the allowed heading reached by the smallest clockwise turn, and <code>ROT_LEFT</code>, the one reached by the smallest counter-clockwise turn. With W8's headings −90°, 0°, 90° and 180°, (W8, 90°) has <code>ROT_RIGHT</code> = (W8, 0°) and <code>ROT_LEFT</code> = (W8, 180°), and the four poses form a ring of 8 directed rotation edges. These are the only edges that change the heading, and so the only link between the 90° and −90° layers. A node without <code>rotation_allowed</code> has no rotation edges, and an AGV there keeps the heading it arrived with. If a rotating node lists a single heading, the nearest heading in both directions is the reciprocal, and both rotation slots hold the same 180° turn.</p>
+
+<h3 data-num id="ly-graph-edge-types">Edge types and lengths</h3>
+<p><code>GarageGraph</code> adds one directed edge for every filled slot (<code>AddEdge</code>) and gives it a <code>Transition</code> with a type and a length:</p>
+<ul>
+  <li><strong><code>ROTATION</code></strong> for the two rotation slots; the length is the angle turned, in radians (<span class="math">\pi/2</span> for each step at W8).</li>
+  <li><strong><code>VRC_TRANSITION</code></strong> for the two VRC slots; the length is the difference in floor height.</li>
+  <li><strong><code>LOCOMOTE</code> or <code>STRAFE</code></strong> for a translation, decided by <code>LocomoteOrStrafe</code> from the geometry: motion mostly along the AGV's facing axis is a locomote, mostly across it a strafe. The length is the distance between the nodes. Around W8 at ±90°, east–west edges are locomotes and north–south edges strafes; the slot name plays no part.</li>
+</ul>
+<p>The cost functions turn these lengths into durations, and the searches in <a class="ref" href="#mp-single-agent-searches">section</a> run on this graph.</p>
+
+<h3 data-num id="ly-graph-a-route">Reading a route on the graph</h3>
+<p>Translations keep the heading and rotations stay on one node, so every change of orientation happens at a node that allows rotation. To turn an AGV at W31 from 90° to −90°, the shortest route is (W31, 90°) → (W8, 90°), a locomote driven backwards; (W8, 90°) → (W8, 0°) → (W8, −90°), two 90° turns; and (W8, −90°) → (W31, −90°), a locomote driven forwards. Turning through 180° instead costs the same. This is also why W8 lists 0°: without it, W8 would have only the poses ±90°, and both rotation slots would hold a single 180° spin. For whoever edits a layout, three rules follow:</p>
+<ul>
+  <li>a node connects to a neighbour only in the headings both of them allow;</li>
+  <li>an AGV cannot change heading at a node without <code>rotation_allowed</code>;</li>
+  <li>every area where AGVs must turn round needs a reachable rotation node; in Pecos these are W8 and W22.</li>
 </ul>
 
 <h2 data-num id="ly-parking-windows-and-the-buffer">Parking windows and the buffer</h2>
@@ -558,7 +619,12 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
       <td><code>STRAFE_POS</code> / <code>LOCOMOTE_POS</code> / ... (or document the body frame next to the enum)</td>
       <td>The current names contradict the heading convention</td>
     </tr>
-  </tbody>
+      <tr>
+      <td><code>PoseNeighbor</code> slots <code>FORWARD</code>, <code>LEFT</code>, <code>BACK</code>, <code>RIGHT</code>, named in the planner's helper frame</td>
+      <td>Names in the AGV's own frame: today's <code>LEFT</code> becomes <code>FORWARD</code>, <code>RIGHT</code> becomes <code>BACK</code>, <code>FORWARD</code> becomes <code>RIGHT</code>, <code>BACK</code> becomes <code>LEFT</code>; <code>GetBayOutboundPose</code> updated with them</td>
+      <td>The names then describe the move the AGV makes; behaviour unchanged, because edge types come from geometry</td>
+    </tr>
+</tbody>
 </table>
 <p><strong>A schema and a linter.</strong> Most of the silent cases above are cheap to catch before a file ever reaches a robot:</p>
 <ul>
