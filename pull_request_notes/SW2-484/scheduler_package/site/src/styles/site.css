@@ -821,14 +821,20 @@ h4:hover .anchor,
   font-size: 0.88em;
 }
 
-/* math (MathML from KaTeX) */
-.prose math {
-  font-size: 1.08em;
+/* math (KaTeX HTML; stylesheet and fonts inlined at build time) */
+.prose .katex {
+  font-size: 1.12em;
+  line-height: 1.2;
 }
-.prose math[display='block'] {
-  margin: 0.8em 0;
+.prose .katex-display {
+  margin: 1em 0;
+  padding: 0.2em 0;
   overflow-x: auto;
+  overflow-y: hidden;
   max-width: 100%;
+}
+.prose .katex-display > .katex {
+  font-size: 1.16em;
 }
 
 /* inline code */

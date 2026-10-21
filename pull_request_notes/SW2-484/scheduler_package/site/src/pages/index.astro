@@ -1,10 +1,10 @@
 ---
-import { renderAll } from '../lib/render';
+import { renderAll, katexCss } from '../lib/render';
 import Sidebar from '../components/Sidebar.astro';
 import Rail from '../components/Rail.astro';
 import siteCss from '../styles/site.css?raw';
 import figLightCss from '../styles/figures-light.css?raw';
-const css = siteCss + '\n' + figLightCss;
+const css = katexCss() + '\n' + siteCss + '\n' + figLightCss;
 import appJs from '../scripts/app.js?raw';
 
 const { docs, terms, decls } = await renderAll();

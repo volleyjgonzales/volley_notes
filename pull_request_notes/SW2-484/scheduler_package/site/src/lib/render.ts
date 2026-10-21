@@ -268,8 +268,9 @@ function renderMath(p: Parsed) {
   visit(p.tree, 'element', (node, index, parent) => {
     if (!cls(node).includes('math') || !parent || index === undefined) return;
     const display = node.tagName === 'div';
-    // MathML output: rendered natively by current browsers, no KaTeX stylesheet or fonts to ship
-    const html = katex.renderToString(toString(node), { output: 'mathml', displayMode: display, throwOnError: true });
+    // KaTeX HTML (with hidden MathML for screen readers): browser MathML engines lack a math font and
+    // render matrices, hats and stretchy brackets poorly; the KaTeX stylesheet and fonts are inlined
+    const html = katex.renderToString(toString(node), { output: 'htmlAndMathml', displayMode: display, throwOnError: true });
     const frag = fromHtml(html, { fragment: true });
     (parent as Element).children.splice(index, 1, ...(frag.children as ElementContent[]));
     return [SKIP, index + frag.children.length];
@@ -352,7 +353,7 @@ function replaceInText(
   skip: Set<string> = NO_LINK_INSIDE,
 ) {
   visit(tree, (node, index, parent) => {
-    if (isEl(node) && skip.has(node.tagName)) return SKIP;
+    if (isEl(node) && (skip.has(node.tagName) || cls(node).includes('katex'))) return SKIP;
     if (node.type !== 'text' || !parent || index === undefined) return;
     const value = (node as Text).value;
     re.lastIndex = 0;
@@ -831,3 +832,13 @@ export async function renderAll(): Promise<{ docs: RenderedDoc[]; terms: Resolve
   return cache;
 }
 
+
+/** The KaTeX stylesheet with its woff2 fonts inlined as data URIs (the page is a single file). */
+export function katexCss(): string {
+  const dir = path.join(process.cwd(), 'node_modules', 'katex', 'dist');
+  const css = fs.readFileSync(path.join(dir, 'katex.min.css'), 'utf8');
+  return css.replace(/src:url\(fonts\/([\w-]+)\.woff2\) format\("woff2"\)[^;}]*/g, (_m, name) => {
+    const b64 = fs.readFileSync(path.join(dir, 'fonts', `${name}.woff2`)).toString('base64');
+    return `src:url(data:font/woff2;base64,${b64}) format("woff2")`;
+  });
+}
