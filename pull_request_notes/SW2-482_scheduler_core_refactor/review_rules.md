@@ -34,6 +34,11 @@ it was learned the hard way, what it cost. The checklist at the end is the pre-P
   narrative blocks, history ("before X was added ... after"), recaps of PR discussion, comments that
   go stale on the next change. Applied: a 15-line history block and an "ordering should now be"
   list cut to one or three lines each.
+- **Comment only when necessary to explain the why** (dambrosio, PR #1007, on generated comments):
+  verbose comments and comments that repeat the implementation are "human context overload". A
+  label over an assertion that reads the same as the assertion goes; a module docstring is a
+  purpose statement, not a tour; the tour belongs in the README. Applied across the PR: 130 comment
+  lines cut to 43 in 22 files.
 - **`///` doxygen on headers**, used the same way throughout a file; no mixing of `//` and `///` for
   docs. Omit `@brief` when the name already says it. One-line docstrings in Python; no
   Args/Returns blocks that repeat the signature.
@@ -77,6 +82,18 @@ it was learned the hard way, what it cost. The checklist at the end is the pre-P
   defaults rather than a default that hides a behaviour change.
 - **Ownership and threads**: `RCPPUTILS_TSA_GUARDED_BY` on shared members, no raw pointers into
   data that gets replaced, no blocking in `Step()`.
+
+- **Namespaces: `volley::<package>` for a package, `volley::<package>::test` for its test helpers**
+  (dambrosio, PR #1007): a developer once stripped the packages' namespaces, so much code sits in
+  bare `volley`, which invites collisions and longer names; new code goes under the package's
+  namespace. Precedent: `volley::agvhito::test`, `volley::yasminx::test`. Applied: the scheduler's
+  test support and tests moved to `volley::scheduler::test`.
+
+- **No `*Msg` / `*Srv` aliases from the `*_msgs.hpp` headers in new code** (dambrosio, PR #1007,
+  user agreed): the aliases hide where a type comes from (`interfaces::msg::PlanRequest`) and the
+  alias header drags in every interfaces header for two messages. Write the `interfaces::msg::X`
+  type and `#include <interfaces/msg/x.hpp>` for what the file uses. Applied to the scheduler's
+  test code (208 uses, 20 files); the library's own headers were left as they are.
 
 ## 4. Tests
 

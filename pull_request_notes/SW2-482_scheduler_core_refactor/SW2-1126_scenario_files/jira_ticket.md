@@ -54,8 +54,8 @@ benchmark suites the epic asks for: they run on the current customer site layout
   its car lift); two blocking-tray fallback scenarios stay on the synthetic tiny_lot.
 - Four new tests: an insert-readiness job, a base schedule that reserves an AGV, and the two
   tray-assignment fallbacks (advance the root tray, park the blocker on the critical path).
-- `tools/view_scheduler_tests.py` (package `tools/plan_viewer/`, dev dependency group
-  `scheduler`: plotly, rich): one HTML page with every scenario drawn to scale, the request and the
+- `tools/view_scheduler_tests` (package `tools/plan_viewer/`, dev dependency group
+  `scheduler-dev`: plotly, rich): one HTML page with every scenario drawn to scale, the request and the
   schedule as tables, the planned paths and the action graph.
 
 ## Definition of Done
@@ -100,5 +100,5 @@ benchmark suites the epic asks for: they run on the current customer site layout
 
 Start with `test/scenarios/README.md`, then one scenario file next to its test (for example
 `test/scenarios/plan/retrieve_job/FromStall.yaml` and `test/jobs/retrieve_job_tests.cpp`), then the
-viewer page (`uv run python src/planner/scheduler/tools/view_scheduler_tests.py`). Two commits on
+viewer page (`uv run python src/planner/scheduler/tools/view_scheduler_tests`). Two commits on
 top of main: the tests and scenario files, then the viewer.

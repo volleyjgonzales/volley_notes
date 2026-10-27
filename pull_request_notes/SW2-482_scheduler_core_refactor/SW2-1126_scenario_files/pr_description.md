@@ -27,7 +27,7 @@ Two commits: the tests and scenario files, then the viewer.
 
 ### Viewer
 
-`tools/view_scheduler_tests.py` (package `tools/plan_viewer/`, dev dependency group `scheduler`: plotly, rich) renders every scenario as one HTML page: the garage to scale with the initial state, the request and the schedule as tables, the planned paths and the action graph. It is the review aid for the recorded files: a change in a recording is read on the drawing rather than in the YAML diff. Nothing of it ships in the runtime images.
+`tools/view_scheduler_tests` (package `tools/plan_viewer/`, dev dependency group `scheduler-dev`: plotly, rich) renders every scenario as one HTML page: the garage to scale with the initial state, the request and the schedule as tables, the planned paths and the action graph. It is the review aid for the recorded files: a change in a recording is read on the drawing rather than in the YAML diff. Nothing of it ships in the runtime images.
 
 ### Behaviour and expectation changes
 
@@ -50,5 +50,7 @@ The Scheduler Core Refactor (SW2-482) moves tray-move planning and AGV assignmen
 - [x] `prek` hooks and the pre-push `clang-tidy` pass (0 findings)
 - [x] Every scenario re-recorded and compared on the current scheduler; no recording changed on the final rebase
 - [x] The viewer renders all 58 scenarios
+
+Coverage note: octocov reports -1.3% against main, with `collision_geometry.cpp` and the scheduler files among the affected ones. The unit-test coverage report shows `scheduler.cpp` up (2,019 to 2,026 covered lines) and the other scheduler files level. The delta is the collision-table builder: push runs on main skip the collision-table cache, so all 27 jobs build the tables and cover the builder, while PR runs download the cache and only the three jobs that build small tables cover it. The comparison is between two CI configurations, not between the tests.
 
 Refs: SW2-1126

@@ -743,6 +743,202 @@ Still never covered end to end: REBALANCE_GARAGE, `planned_jobs`, `active_jobs`.
        pr_description.md rewritten in the What/Why/Testing form with the traceability list under
        What.
 
+  120. `done` Test time. Measured with gh: the PR's first CI run spent 653 s in colcon test (35 s
+       on main; the scheduler job 2.0-3.8 min over 16 main runs): 143 s a one-off build+save of
+       the 275_sunrise_b collision table, the rest 26 parses of its 281 MB JSON (17 M pose
+       objects) at 13 s each on arc-test-runners pods (about 2.5x slower per test than the
+       workstation, where a parse is 5 s). Fix in commit 1: `scenarios::SharedScheduler(layout,
+       params)`, one const Scheduler per layout+params per binary (all entry points the tests use
+       are const); Plan and the stage tests use it; the readiness-ratio service test keeps its own
+       (it mutates). Local: loads 67 -> 27, per-binary totals 203 s -> 92 s, package 3m26s ->
+       1m36s, 170 tests pass. Code notes: walkthrough paragraph and a new Q&A on the CI time; README
+       sentence. Pitfall for me: `volley-in-container build ... | tail -2 && test` hid a build
+       failure (the pipe's status is tail's) and the tests ran on stale binaries; the build's
+       exit code is checked explicitly now. Folded into commit 1 by detached amend + rebase
+       --onto; commits now d95b2165 (test) + 0a37f96f (viewer); tree clean; remote has the
+       first push of the renamed branch, before this change. The table's size is a common_ros matter (SaveTable /
+       LoadTable in collision_geometry.cpp, JSON with a key-named object per pose): ticket
+       material, not this PR.
+
+  121. `done` Test output noise, at the user's request. The planner narrates at INFO (critical
+       path, blocking trays, illegal poses, every planned motion, the request's garage state as a
+       multi-line entry, the collision-table build per vertex and edge); the test log of the
+       package was 9,372 lines. Test-side fix, no library change: a gtest Environment
+       `QuietLogging` in scenarios.cpp (registered with AddGlobalTestEnvironment; owning-memory
+       NOLINT for gtest's raw new) sets the `scheduler`, `garage_graph` and `pose_graph` loggers to
+       WARN via rclcpp::Logger::set_level unless SCHEDULER_TEST_LOG is set. Package log 9,372 ->
+       653 lines, 0 INFO lines, the 88 WARN lines of the fallback scenarios stay. 170 tests pass,
+       hooks and tidy clean. README and code-notes walkthrough describe it. Folded into commit 1:
+       3162bcf0 (test) + c276879e (viewer); tree clean; remote predates it. The per-vertex and
+       per-edge INFO lines of the collision-table build belong to common_ros and go with the
+       table-size ticket.
+
+  122. `done` Coverage question: octocov on PR #1007 says 72.7% -> 71.4% (-380 lines), scheduler
+       files -9.9%. Analysed from the artifacts (gh): the PR run has two `coverage-report`
+       artifacts (system-tests and unit-tests report jobs; `gh run download -n` picks one, so by
+       id). Unit-test gcovr report, PR vs main, per line: scheduler.cpp 2019 -> 2026 covered,
+       schedule_events.hpp 42 -> 47, utils/chugg_sequential/print_utils level: the tests cover
+       more, not less. Per-job tracefiles (27 per run): every system job, scheduler-advanced-tests
+       and the scheduler job lost 280-340 lines, all in collision_geometry.cpp/.hpp, the table
+       builder; main's push runs set cache_collision_table=false so all 27 jobs build the tables
+       and cover the builder, PR runs download the cache and only central, common_ros and
+       motion-planner cover it (small tables). My union of all tracefiles: main 21,298 vs PR
+       21,295 covered lines; octocov's merge rule is not a plain union (its main count is 21,370)
+       and it weighs the builder's loss across jobs. Genuine union losses: 33 lines of agvhito
+       error_state.cpp (a sim error-recovery path that ran on main's run only), 10 of print_utils
+       (the quiet logging skips INFOF arguments), 5 of scheduler.cpp. Conclusion: a CI-configuration
+       artefact of the cache policy, not the tests; a coverage note added to pr_description.md.
+       Possible follow-up for CI: use the table cache on push runs too, so main and PR coverage
+       compare like for like.
+
+  123. `done` (2026-10-27) Review session: the user invited the two reviewers to a 30-minute
+       walkthrough of PR #1007. Agenda written to review_meeting_agenda.md, for reviewers with
+       little knowledge of the scheduler: why the PR (3), the scheduler in two minutes (3), a
+       scenario next to its test (7), the test folder (4), the viewer demo (5), what the
+       recordings showed and what is not fixed (3), how to review (4), buffer with likely
+       questions (1). Preparation list and the numbers at the top.
+  124. `done` (2026-10-27) PR feedback, item 1 (Greptile P2, paths.py): AGV paths drawn from stale
+       positions in the stage scenarios, because the drawing walked one agent at a time, preferred
+       the cached node over the step's own source, and a stage's tray move carried no AGV id.
+       Fix: `Step.agv` filled from the event, one ordered pass over the steps that tracks every
+       agent and carries the assigned AGV with the tray, source from the step when it names one.
+       Checked by recording every leg and badge of all 58 scenarios before and after: the nine
+       AGV-assignment scenarios change as intended; two Gramercy retrieve plans show the lower
+       after the car-lift ride as `▼` at node 26 instead of `⇅` at node 2 (the ride is the
+       conveyor step, badge-less either way). Written up in code_notes.md "PR review feedback".
+       Amended into the viewer commit on the user's instruction (two commits in the PR, always).
+  125. `done` (2026-10-27) PR feedback, item 2 (Greptile P2, reader.py): the initial state's EV
+       chargers and car lifts never reached the drawing or the table. Valid. `NodeState` now has a
+       kind, an own id and a name; charger and conveyor state vocabularies from VecsReport.msg and
+       VrcState.msg; the layout's `vrcs` list gives the lift's root node; labels stack where the
+       lift's floors share a spot; every disabled node is dashed. Checked by recording the node
+       states of all 58 scenarios before and after (11 gain chargers, 3 the lift). Patch proposed,
+       Amended into the viewer commit.
+  126. `done` (2026-10-27) PR feedback, item 3 (Greptile P2, app.js): the graph box always carried
+       the `output` class, which the stylesheet hides while the solution is off, so the input
+       event DAG never showed. Valid. `updateDag()` now toggles the class from the solution state
+       and the markup drops it; three lines. Reasoned from the three call sites, not viewed in the
+       browser. Amended into the viewer commit.
+  127. `done` (2026-10-27) PR feedback, item 4 (Greptile P2, tables.py): three direct indexes into
+       the recorded part (`input`/`output` dag in `stage_tables`, output edges in `step_graph`)
+       bypassed the tolerant `dag()` helper, so one authored-only stage file crashed the viewer.
+       Valid. Routed through `dag()`; checked by loading a stage and a plan file with their
+       recorded parts stripped (both render). Amended into the viewer commit.
+  128. `done` (2026-10-27) PR feedback, item 5 (Greptile P2, stage tests): two comments narrated
+       the pre-migration inputs (tiny_lot destinations, trays 14/12 at P2147/P2148). Valid. The
+       user's call: the scenario descriptions and the viewer carry the story now, so the
+       narrative comments in both stage test files are removed rather than rewritten (31 lines);
+       mechanics comments stay; the recursion test's "P(6)" comment reads "tray 6, at P2117".
+       Rebuilt, both binaries green. Amended into the viewer commit on "amend patch" (not moved to
+       the recording commit).
+  129. `done` (2026-10-27) PR feedback, item 6 (Greptile P2, viewer docstrings): the 15-line tour
+       in scene.py, the layer map in __init__.py and the 9-line steps() docstring cut to purpose
+       statements (29 lines out, 9 in); the tour text moved into code_notes.md. The user's rule:
+       concise in the code, verbose allowed in volley_notes. Amended into the viewer commit.
+  130. `done` (2026-10-27) PR feedback, item 7 (teammate, pyproject.toml): group renamed
+       `scheduler-dev`, comment dropped, include moved up among the include groups, `poe lock`
+       re-run in the container (lock diff: the two group-name lines). README, PR description and
+       Jira note updated. Amended into the viewer commit.
+  131. `done` (2026-10-27) PR feedback, item 8 (teammate, CMakeLists.txt): the support library is
+       `${PROJECT_NAME}_test_support` in all five places; reconfigure + "ninja: no work to do"
+       (same expansion), one binary green. Patch proposed, awaiting approval. This one, like the
+       test-comment cleanup, would belong in the recording commit; amended where the user says.
+       Amended into the viewer commit.
+  132. `done` (2026-10-27) PR feedback, item 9 (teammate, comments in general): comment only to
+       explain the why; scrub the PR. Listed every comment/docstring in the touched C++, Python
+       and JS, cut 173 lines to 43 in 22 files (assertion labels, test-name restatements,
+       narrative preambles, long `///` docs, viewer module docstrings); kept the why comments
+       and the case labels of table-style tests. Rule added to review_rules.md. Formatted,
+       rebuilt, 170 tests green. Amended into the viewer commit.
+  133. `done` (2026-10-27) PR feedback, item 10 (teammate, test/.clang-tidy): the reference to
+       agvhito's file dropped; comment cut to two lines. Amended into the viewer commit.
+  134. `done` (2026-10-27) PR feedback, item 11 (teammate, namespaces): test support and tests
+       moved to `volley::scheduler::test` (nested `scenarios`, `initial_states`), after the
+       agvhito / yasminx precedent; `IsLift` / `IsLower` became `RaisesLift` / `LowersLift`; the
+       `test` local in ExpectOwnTest renamed `owner`; 18 redundant `using volley::` lines dropped.
+       Built, 170 tests green, tidy 0 findings. Rule added to review_rules.md. Predicates then
+       renamed `IsAgvLiftRaised` / `IsAgvLiftLowered` (the user's `Is` convention) and amended.
+  135. `done` (2026-10-27) PR feedback, item 12 (teammate, message aliases): every `*Msg` / `*Srv`
+       alias in the test code replaced by its `interfaces::msg::X` / `interfaces::srv::X` type
+       with an explicit include (23 types, 208 uses, 20 files); library headers untouched.
+       Built, 170 tests green, tidy 0 findings. Rule added to review_rules.md. Amended into the
+       viewer commit.
+  136. `done` (2026-10-27) PR feedback, item 13 (teammate, viewer script): renamed to
+       `tools/view_scheduler_tests`, chmod +x, usage and README updated; hooks still select it
+       through the shebang. Amended into the viewer commit.
+  137. `done` (2026-10-27) PR feedback, items 14 and 15 (teammate, viewer script): no `uv run`
+       (a `.venv` in the workspace); poe task `scheduler-test-viewer` added and named in the README;
+       `from __future__ import annotations` removed from the 15 viewer files (Python 3.14).
+       Hooks and the task green. Task renamed `scheduler-test-viewer`; amended into the viewer
+       commit.
+  138. `done` (2026-10-27) PR feedback, item 16 (teammate, test includes): the three test headers
+       moved to `test/include/scheduler/test/`, include dir `test/include`, 40 includes now
+       `<scheduler/test/x.hpp>`; README updated. Built, 170 tests green; amended, then tidy on the
+       moved headers: 0 findings.
+  139. `done` (2026-10-27) PR feedback, item 17 (user + teammate): support sources moved to
+       `test/src/` (CMake updated); the 59 in-package includes of the test code quoted. Built,
+       170 tests green. Then, the user: all test sources under `test/src/` (jobs, stages, utils
+       moved; CMake loop `test/src/${test}.cpp`; README). Built, 170 green, amended with advance
+       approval, tidy after the amend: 0 findings.
+  140. `done` (2026-10-27) PR feedback, item 18 (teammate, ament_index for the scenario paths):
+       evaluated, no change. Intentional: recording writes the files back, failures must name the
+       source file, test data has no consumer in share; layouts still come through ament_index
+       (site_config). Reply text drafted for the PR. README got the one-sentence why; amended.
+  141. `done` (2026-10-27) PR feedback, item 19 (teammate, unused struct fields): all three test
+       structs traced; `InitialState::layout`, `Scenario::description`, `Scenario::initial_state`
+       and `Run::now` removed (table in code_notes.md); `Run::scenario` kept and flagged. Built,
+       170 green. Amended (`Run::scenario` kept); tidy 0 findings.
+  142. `done` (2026-10-27) PR feedback, items 20 and 21 (teammate, CMake gtest wiring): the
+       redundant `find_package(ament_cmake_gtest)` dropped (volley_package finds test depends),
+       the support library links `GTest::gtest` and the include list loses `GTEST_INCLUDE_DIRS`.
+       Built, 170 green. Amended into the viewer commit.
+  143. `done` (2026-10-27) PR feedback, item 22 (teammate, scenarios.hpp responsibilities): split
+       into `scenarios/{file,request,recording,shared_scheduler,plan,stage}.{hpp,cpp}`, same
+       namespace, tests include what they use (table in code_notes.md). Patch proposed, awaiting
+       approval. Built, 170 green, amended, tidy 0 findings.
+  144. `done` (2026-10-27) PR feedback, item 23 (teammate, plan twice): `Plan()` plans once;
+       `ExpectDeterministic()` plans every file of the suite twice (`planned` / `replanned`),
+       through a new `Read` without the ownership check; `TEST(<Suite>, Deterministic)` in the
+       eight job binaries. Built, 178 green, amended, tidy 0 findings.
+  145. `done` (2026-10-27) PR feedback, item 24 (teammate, ExpectRecorded): the text is built
+       before the ofstream opens (open truncates; a throw would have emptied the file). Compare
+       path green. Amended on "amend commit" without a record run; tidy 0 findings.
+  146. `done` (2026-10-27) PR feedback, item 25 (teammate, YAML::convert): `scenarios/yaml.hpp`
+       with decode specializations for pose, job, command, params and a new `Request`; key tables
+       as constants; `Scenario::request` decoded; `BuildRequest` reduced to numbering; eight
+       `ScenarioYaml` tests in a new binary. Built, 187 green, amended. Tidy flagged `decode`
+       (naming): NOLINT block with the reason. Pattern question answered (customisation point,
+       like std::formatter).
+  147. `done` (2026-10-27) PR feedback, item 26 (teammate, SharedScheduler key): explained; the
+       key is layout | ratio | cost_audit, motion_cost excluded; comment reworded to say so.
+       Amended into the viewer commit.
+  148. `done` (2026-10-27) PR feedback, item 27 (teammate, QuietLogging): valid; the environment
+       class, its global and the NOLINT replaced by a function-local static in SharedScheduler's
+       cache-miss branch. One own-scheduler test narrates again (accepted). Amended into the
+       viewer commit; tidy 0 findings.
+  149. `done` (2026-10-27) CI red after the user's rebase and push: mypy on all files sees two
+       extensionless scripts as module `__main__` (clang-tidy-diff-hook and the viewer). Fix:
+       `scripts_are_modules = true` in [tool.mypy] (bare, no comment); hook green on all files
+       in the container. Amended into the viewer commit; the user pushes.
+  150. `done` (2026-10-27) Greptile second pass: `Palette.css()` compared `f.type` with "str";
+       after the future-import removal the type is the class, so both themes lost every colour
+       (confirmed: only `--move` emitted). Fixed with `is str`; 27 tokens per palette again.
+       Amended into the viewer commit (b62423ca). Fetched main for a rebase: still dd96ed86, the
+       commit the user had rebased onto, so the branch was already up to date and nothing moved.
+  151. `done` (2026-10-27) code_notes.md brought up to date with the design as reviewed: status
+       and contents; the file tree with test/include and test/src, the seven scenarios/ headers
+       and their responsibilities (table), the YAML::convert layer, Read vs Load, Plan once plus
+       ExpectDeterministic, SharedScheduler with the function-local quieting, the IsAgvLift*
+       predicates, explicit message types, quoted includes; the walkthrough rewritten along the
+       current call chain with a section for the determinism test; stale paths in the Q&A fixed;
+       the "where these notes say X, read Y" patches removed. The feedback log stays as history.
+  152. `done` (2026-10-27) Greptile second pass, two items assessed: cars with
+       `reciprocal_to_tray` drawn aligned (valid; `Asset.reciprocal`, windows turned, hover and
+       table say reversed; checked numerically on FromStall) and `AgvInTheWay`'s description
+       naming W2070 for W2074 (valid; fixed; a sweep of all 58 descriptions found no other wrong
+       node). Amended into the viewer commit (396ca448). Remote main still dd96ed86: rebase a
+       no-op, no rebuild needed.
+
   Round 24 (2026-10-26):
   103. `done` Jon's force push is slow at the clang-tidy pre-push hook; where does the output go,
        and a code-notes section on it. Answer: tools/clang-tidy-diff-hook (prek.toml, stage
