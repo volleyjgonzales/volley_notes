@@ -134,6 +134,116 @@ Greptile did not know. Real defects in error, reconnect and race paths, process 
 comment hygiene are accepted and fixed; findings that are factually wrong about ROS or the build
 are answered with the fact.
 
+## 7. What PR #1007 taught (apply from stage 2 on)
+
+The conventions below came out of the review of SW2-1126 (Greptile, Dan Ambrosio, Justin Abel; review
+log items 1 to 157). They are the house style for every later stage. Where a rule above already says
+it, this section only adds the specific form the team asked for.
+
+### C++
+
+- **Comments say only the why, briefly.** Two drafts in that PR came back as "too verbose". A doc
+  comment on a switch states what runs by default and what the switch adds, in one clause. Do not
+  narrate test data in comments (the scenario `description` carries the story); never cite another
+  package's file as precedent in a comment. Config settings stay bare (`scripts_are_modules = true`),
+  the why lives in these notes. Verbose explanation belongs in `volley_notes`.
+- **Namespaces:** `volley::scheduler` for new library code, `volley::scheduler::test` for test code,
+  nested `scenarios` / `initial_states` in the support so call sites read `scenarios::Plan()`. No
+  `using volley::X` inside `volley`; no locals named like an enclosing namespace (`test`, `scheduler`).
+- **Types and includes:** `interfaces::msg::X` written out with `#include <interfaces/msg/x.hpp>`, never
+  the `*Msg` aliases of the `*_msgs.hpp` headers in new code (the library's existing headers are left
+  as they are in a test PR). The package's own headers in quotes, other packages' in angle brackets;
+  groups gtest / `<...>` / `"..."`, each sorted; no `../` includes. rosidl include names are snake_case.
+- **Naming:** `Is...` for bool predicates (`IsAgvLiftRaised`); a flag named after the message field it
+  mirrors (`reciprocal`), never after a builtin (`reversed`); `_or` for an `Expected`, `_it` for an
+  iterator; `kCamel` file-scope constants, `k_lower_case` local and function-local static constants
+  (`kQuiet` for a static is what tidy accepted); file-local helpers, constants and key tables
+  (`constexpr std::string_view`) in an anonymous namespace, each key string once.
+- **Library customisation points over hand-rolled generics:** `YAML::convert<T>` specialisations, as
+  `std::formatter` would be; when the required name breaks `readability-identifier-naming`, wrap the
+  block in `NOLINTBEGIN/END` with the reason.
+- **Small things the reviewers asked for:** `const` on every local not reassigned, by reference when only
+  read; `std::format` for every message; `EXPECT_TRUE(x)` rather than `EXPECT_EQ(x, true)`; build a
+  string fully before opening an `ofstream` (opening truncates); a function-local `static const` over a
+  gtest `Environment` global; `== nullptr` where the neighbouring reads compare that way; remove struct
+  fields nothing reads, derive instead of storing, and flag the judgement calls.
+- **One responsibility per header.** A support header that grew past one topic is split along
+  responsibilities, same namespace; each test includes only what it uses.
+
+### Tests and test support
+
+- **Layout:** headers under `test/include/scheduler/test/` (the path mirrors the namespace), sources
+  under `test/src/<folder>/`, data under `test/scenarios/`. One file, one suite, one binary; the suite
+  named after the file; test names without the suite's words and at most five words; files of a few
+  hundred lines.
+- **Shared sources go in a static library** (`${PROJECT_NAME}_test_support`), never into every binary:
+  clang-tidy once analysed the same sources 18 times. `ament_find_gtest()` before the library, link
+  `GTest::gtest`, no `find_package(ament_cmake_gtest)` (`volley_package` finds test depends), no
+  `GTEST_INCLUDE_DIRS`. Target names `${PROJECT_NAME}_...`; CMake variables plain.
+- **Expensive fixtures shared per binary** (`SharedScheduler`: one scheduler per layout and parameter
+  set); a test that mutates owns its own. Library logging quiet in tests unless `SCHEDULER_TEST_LOG` is
+  set.
+- **Determinism is an explicit test** (`TEST(<Suite>, Deterministic)` calling `ExpectDeterministic`),
+  not a hidden second run; the two runs are named `planned` / `replanned`, not `first` / `second`.
+- **Brittle comparisons are gated** behind an environment variable, off by default; the determinism
+  test is never gated; CI runs the invariant properties only (Justin Abel, Dan Ambrosio).
+- **Garage states are files** (`initial_states/<layout>/<name>.yaml`, named after what stands in the
+  garage, not after the test); no YAML literals in test sources; no acronyms (`vecs`, `vexen`) in the
+  files, the spelled-out names instead. Layouts: `275_sunrise_b` default, `38_gramercy` for EV chargers,
+  `5675_pecos_combined` for bays and AGV chargers, `tiny_lot` only where a full lot is needed;
+  `576_eccles*` and `1355_fulton` are decommissioned.
+- **A parsing layer gets unit tests** (`utils/scenario_yaml_tests`). One helper instead of copies
+  (`ExpectInsert`). Scenario files sit two folders below `scenarios/`, which keeps Greptile's
+  knowledge-base checks for the exerciser's scenarios off them.
+- **Test data is never installed to `share/`** unless another package consumes it; tests that record in
+  place keep the source-tree define (`SCHEDULER_SCENARIO_DIR`).
+
+### Python tooling
+
+- A script with a shebang is executable and has no `.py`; run it by path or through a poe task, never
+  with `uv run`. `scripts_are_modules = true` in `[tool.mypy]` (CI runs `--all-files`, and extensionless
+  scripts collide as `__main__`). No `from __future__ import annotations` (Python 3.14); compare dataclass
+  field types with `is str`. Dependency groups named `<package>-dev`, `include-group` lines together, no
+  comment, `poe lock` in the container. poe tasks kebab-case, alphabetical, named for what they do; no
+  task where a README one-liner suffices.
+
+### The review loop
+
+- **Assess every finding before applying it.** Greptile was right about half the time in that PR;
+  reproduce in the container, then write what was wrong, what changed and how it was verified. Answer
+  the rest with the fact or the reason, in a line.
+- **One item at a time, amended on the user's word.** The PR keeps its commit count; each round is
+  amended into the commit the user names; moving a change into an earlier commit is a fixup plus a
+  non-interactive autosquash rebase, with approval. The user pushes (force-with-lease); never touch the
+  working tree while the user pushes.
+- **Before every amend:** clang-format or black on the touched files, rebuild with 0 warnings, the
+  package tests both ways (plain, and with `SCHEDULER_CHECK_RECORDINGS=1`), `prek run --files` on the
+  touched files, and the tidy hook after the amend (it diffs `main..HEAD`, so a run before an amend
+  that moves files errors). Check the build's exit code explicitly; a pipe through `tail` once hid a
+  failure.
+- **A record run rewrites tracked files** and needs the user's approval each time.
+- **Output changes (viewer, recordings) are verified by diffing before and after** across every
+  scenario, not by looking at one.
+- **Replies to reviewers are drafted, not posted.** A teammate question gets the evaluation and a
+  draft; say when a decision was taken without asking. Commit bodies and PR text in an objective tone:
+  no judgement on earlier authors, no colloquialisms ("decommissioned", not "defunct"), no Jira keys in
+  commit messages, a `Refs:` line in the PR body. Add a coverage note to the PR body when octocov drops.
+
+### Rejected in that PR; do not re-apply
+
+- `ament_index_cpp` for the scenario paths (intentional: recording writes in place; the share tree has
+  no reader).
+- Comparing `scheduled_jobs` in the scheduler's order (an `unordered_map`'s iteration order carries
+  nothing; the canonical form sorts by GUID).
+- "Overfitting" of the recordings: they are characterisation tests for the refactor by design; the
+  `EXPECT_*` lines stay the correctness checks; the comparison is opt-in.
+- A poe task and a CI matrix entry for the recording check: dropped (the README command is enough; CI
+  runs the invariants only; the files may move or go later).
+- Deleting `utils_tests.cpp` (pushed back); a decode template instead of `YAML::convert` (answered,
+  kept); `!getenv` over `== nullptr` (kept); `Run::scenario` as unused (kept deliberately).
+- After removing postponed annotations, re-inspect rendered output: Greptile's palette finding was a
+  regression that the tests did not catch.
+
 ## Pre-PR checklist
 
 1. One coherent change per commit; conventional header; no correction-only commits.
@@ -146,3 +256,6 @@ are answered with the fact.
 5. Test names of five words or fewer; deterministic; no `main()`; ROS clock, not system time.
 6. YAML and tools: say what the data is; no dead blocks; defaults as arguments; focused modules.
 7. Replies planned for the findings that will come anyway.
+8. Section 7 applied: comments brief and why-only; explicit message types and includes;
+   `volley::scheduler[::test]`; test files one suite per binary under `test/src/`; parity run with
+   `SCHEDULER_CHECK_RECORDINGS=1` and no change under `test/scenarios/`; `tidy` clean.

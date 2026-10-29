@@ -1,15 +1,22 @@
 # Claude Code prompt: scheduler core refactor (SW2-484), the tray solver
 
-> **How to use this file.** Installed by `claude-setup/install.py` at
-> `/home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/PROMPT.md`. See "Running the refactor" in `HOW-IT-WORKS.md`. In short: open `~/volley` in the
-> Code tab of the desktop app (local session, Worktree off, Accept edits) with the devcontainer running.
+> **How to use this file.** It lives at
+> `/home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/PROMPT.md`,
+> outside the volley repo. Open `~/volley` in the Code tab of the desktop app (local session, Worktree
+> off, Accept edits) with the devcontainer running, on `main` freshly pulled.
 >
 > 1. **Design review (Phase R)**: done on 2026-10-22; the user's answers to its questions are at the end of
 >    `DESIGN-REVIEW.md` next to this file. The survey is in the notes file. This file is the plan that came
 >    out of it.
-> 2. **Implementation**, in a new session, after the user approves the plan:
->    `Read the file /home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/PROMPT.md and the notes file, then start commit 1.`
+> 2. **Stage A (commit 1)**: done. Merged on 2026-10-29 as PR #1007 (`[SW2-1126] Record the scheduler
+>    planning tests as scenario files`, main `61e7b0d7`). What landed differs from the original step A1/A2
+>    text (scenario files instead of reference files, an opt-in comparison); section 5 "Phase A" and
+>    section 6.4 describe the real state, and `SW2-1126_scenario_files/code_notes.md` describes it in full.
+> 3. **Stage 2 (phase B2, commits 2 and 3)**, in a new session:
+>    `Read /home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/PROMPT.md, review_rules.md and SW2-482_notes.md, then start commit 2.`
 >    Claude prepares one commit at a time and stops before committing so you can review it (rule 12).
+>    `review_rules.md` holds the team's review conventions as learned in PR #1007; they are part of the
+>    ground rules (rule 8).
 
 ---
 
@@ -19,14 +26,15 @@ You are implementing the first part of the **scheduler core refactor** in the `s
 (C++20, colcon, GoogleTest). The goal of this PR is Jira **SW2-484**: put tray assignment behind a
 generic, swappable solver interface. You will also do the preparatory work the interface needs:
 
-- parity references for the existing planning tests;
+- parity references for the existing planning tests (**done**: stage A, PR #1007);
 - the renames of stage B2 that the user kept: `Scheduler` members, the expansion methods, and the
   per-call context with its fields;
 - pure helper functions in a tray-assignment module with its own library target;
 - one merged copy of the move-emission code.
 
-The work runs through stages **A**, **B2**, **C1** and **C2** of the plan in section 5 (eight commits).
-The ROS-boundary types of the old stage B2 (`AssetId`, `ros/convert`, `ScheduledJob`, a `Timepoint`
+The work runs through stages **A**, **B2**, **C1** and **C2** of the plan in section 5 (eight commits),
+**one PR per stage**, each PR a sub-ticket of the epic SW2-482 that the user creates (stage A was
+SW2-1126). The ROS-boundary types of the old stage B2 (`AssetId`, `ros/convert`, `ScheduledJob`, a `Timepoint`
 constructor, `ReserveBaseScheduleAssets`, the `common_ros` vocabulary aliases), stage folders for the other
 pipeline stages (C0), AGV assignment (F), the benchmarks (G), the final cleanup (H) and the `planner_core`
 renames (I) come in later PRs. Section 9 lists them so that you can see where your work leads. **Do not
@@ -52,36 +60,52 @@ start them.**
 
 The single most important rule:
 
-> After every commit, the package builds, every existing test passes, and every reference output
-> matches, except outputs that commit deliberately re-records (rule 6).
+> After every commit, the package builds, every existing test passes, and every recorded scenario
+> output matches when the comparison is turned on, except outputs that commit deliberately re-records
+> (rule 6).
 
-**Reference outputs.** Every planning test (a test that calls `Scheduler::Plan`, `DoTrayAssignments` /
-`AssignTrays` or `DoAgvAssignments`) ends by comparing a canonical description of its result with a
-recorded file, `test/reference/<Suite>.<Name>[.<suffix>].yaml`, recorded once by the first commit on code
-that is still identical to the branch point. The test's own inputs (inline YAML state, jobs, hand-built
-events) are the fixture; there is no separate input file.
+**Scenario files (stage A, as merged).** Every planning test runs from a scenario file under
+`src/planner/scheduler/test/scenarios/`: `plan/<suite>/<Name>[.<suffix>].yaml` for a test through
+`Scheduler::Plan` (45 files) and `task_planning/<stage>/<Name>.yaml` for a test that calls
+`DoTrayAssignments` or `DoAgvAssignments` directly (13 files). The authored part of a file names the test,
+the initial state (`initial_states/<layout>/<name>.yaml`, 60 files) and the request; the recorded part
+holds the scheduler's response (or the event DAG before and after the stage) in a canonical, compacted
+form. `test/scenarios/README.md` in the repo documents the format and the commands.
 
-A reference output records **today's behaviour, including its bugs**. It is not ground truth. It
-changes only when a commit changes behaviour on purpose, and then the diff of each reference file shows
-reviewers exactly which behaviour changed, so keep the format easy to diff (rule 6).
+The comparison with the recorded part is **opt-in**: a test always asserts its own properties and checks
+that its file exists and holds a recording, and it compares with the recording only when
+`SCHEDULER_CHECK_RECORDINGS=1` is set. CI runs the property assertions only. That was the team's decision
+(Justin Abel, Dan Ambrosio; review log item 156): a change to a planner configuration input (a cost, a
+speed, a site layout) moves every recording and must not force a re-record. **For this refactor, parity
+is checked with the variable set** (rule 5): a refactor commit is green only when that run passes and
+`git status` shows no change under `test/scenarios/`.
 
-The PR must be reviewable as a **sequence of at most 10 commits** (the table in section 5), and each
-commit must:
+A recording records **today's behaviour, including its bugs**. It is not ground truth. It changes only
+when a commit changes behaviour on purpose, and then the diff of each scenario file shows reviewers
+exactly which behaviour changed (rule 6).
+
+Each stage is a PR of a few commits (the table in section 5), reviewed commit by commit, and each commit
+must:
 
 - have **one scoped objective**, stated in its title;
 - compile;
 - pass all tests;
-- pass the parity check.
-
-Reviewers will read it commit by commit.
+- pass the parity check with the comparison on.
 
 ## 2. Reference material
 
 - **This plan's review:** `/home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/DESIGN-REVIEW.md`: what changed from the original plan and why, the
   parity decisions, and the user's answers to the open questions.
 - **The notes file** (rule 11): `/home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/SW2-482_notes.md`. It holds the Phase 0 survey: the baseline
-  numbers, where every symbol is, the assumption checks, and a list of bugs found but not fixed (B1 to
-  B11). Read it at the start of every session.
+  numbers, where every symbol is, the assumption checks, a list of bugs found but not fixed (B1 to
+  B11), and the review log of stage A (items 1 to 157). Read its Status section and the log's last
+  items at the start of every session.
+- **The review rules:** `review_rules.md` next to this file, what the team's reviewers and Greptile check
+  and what PR #1007 taught (its section 7 is the list from that PR). Apply it to every line you write.
+- **Stage A as merged:** `SW2-1126_scenario_files/code_notes.md` (the test support library, how a test
+  run flows, the comparison, the review items and their answers) and, in the repo,
+  `src/planner/scheduler/test/scenarios/README.md`. Read the code notes' sections "The files under
+  src/planner/scheduler/test/" and "How a test run flows" before touching the tests.
 
 A study pack documents the current code and the original design in detail. It is at `/home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/scheduler_package`.
 The chapters were converted to Markdown in `/home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/scheduler_package/md/`; `/home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/scheduler_package/md/INDEX.md` lists every heading with its
@@ -124,7 +148,7 @@ code on the branch**, the code is the truth: stop and report the difference (sec
    when it is:
    - listed in section 8 as **fix**, or proposed at a review gate and approved by the user;
    - in its own commit, or clearly separated inside one, never mixed silently into a refactor;
-   - accompanied by re-recorded reference outputs in the same commit (rule 6), with the commit body and
+   - accompanied by re-recorded scenario files in the same commit (rule 6), with the commit body and
      the notes file explaining what changed and why.
 
    If you find a bug that isn't in the plan, write it down in the notes file with a reproducing test
@@ -142,8 +166,8 @@ code on the branch**, the code is the truth: stop and report the difference (sec
    - If you notice something else worth doing, note it and keep going.
 5. **Every commit compiles and passes.** Before each commit:
    - build `scheduler` and its tests;
-   - run the scheduler tests (which include the parity references);
-   - run `planner_core` and `scheduler_advanced_tests` at the end of commits 1, 3, 5 and 8, or more often
+   - run the scheduler tests twice: once as CI runs them, once with the comparison on;
+   - run `planner_core` and `scheduler_advanced_tests` at the end of commits 3, 5 and 8, or more often
      if you touched anything they see (`scheduler_advanced_tests` sees only `Scheduler(layout, logger,
      params)`, `SchedulerParams::bay_readiness_ratio` and `Plan()`).
 
@@ -153,43 +177,58 @@ code on the branch**, the code is the truth: stop and report the difference (sec
    ```bash
    volley-in-container build scheduler scheduler_advanced_tests
    volley-in-container test scheduler
+   SCHEDULER_CHECK_RECORDINGS=1 volley-in-container test scheduler   # the parity check
    volley-in-container test planner_core scheduler_advanced_tests
    ```
    `test` prints `colcon test-result` per package. A green build does not mean the tests ran: check the
-   test counts in that summary (baseline: scheduler 76, planner_core 23, scheduler_advanced_tests 16, as
-   `colcon test-result` counts them). One test binary can be run directly, for example
-   `volley-in-container gtest scheduler scheduler_tests 'Scheduler.AmigaStash'`.
-6. **Reference outputs and test data.**
-   - Record reference outputs only through `volley-in-container record-reference scheduler <binary>` (it
-     sets `RECORD_REFERENCE_OUTPUT=1` and asks the user for approval; the wrapper refuses that variable in
-     any other command). Three binaries hold planning tests: `scheduler_tests`, `scheduler_jobs_tests`,
-     `scheduler_insert_orientation_tests`. Recording happens in commit 1, and again only in a commit that
-     makes a deliberate behaviour change (rule 3). Never re-record to make an unexpected difference go
-     away.
+   test counts in that summary (baseline on main `61e7b0d7`: scheduler 187 as `colcon test-result` counts
+   them, which is 92 `TEST` cases in 19 binaries; planner_core 23; scheduler_advanced_tests 16). One test
+   binary can be run directly, for example
+   `volley-in-container gtest scheduler retrieve_job_tests 'RetrieveJob.FromStall'`; the wrapper passes
+   `SCHEDULER_CHECK_RECORDINGS=1` through to `test` and `gtest`. The parity check is green when the run
+   with the variable passes **and** `git status` shows nothing changed under `test/scenarios/`.
+6. **Scenario files and test data.**
+   - Re-record only through `volley-in-container record-reference scheduler <binary>` (it sets
+     `RECORD_REFERENCE_OUTPUT=1`, which rewrites the recorded part of every scenario file the binary
+     runs, and asks the user for approval; the wrapper refuses that variable in any other command). Any of
+     the 19 binaries under `build/scheduler/` can be recorded; the `jobs/` binaries hold the plan
+     scenarios, `tray_assignment_tests` and `agv_assignment_tests` the stage scenarios. Record only in a
+     commit that makes a deliberate behaviour change (rule 3), then run the parity check in a fresh
+     process. Never re-record to make an unexpected difference go away.
+   - Never hand-edit a recorded part: the format (`Compact`, `Emit` in the test support) is fixed, and
+     recording rewrites it anyway. The authored part is hand-written and kept byte for byte.
+   - A new planning test is a new scenario file with its authored part only (`test`, `description`,
+     `initial_state`, `scheduler`, `request`); its first recording adds the rest. A new initial state is a
+     file under `initial_states/<layout>/`, named after what stands in the garage, shared by the scenarios
+     that start from it. `test/scenarios/README.md` has the key tables.
    - Every test data file you add is YAML with the `.yaml` extension (the team's hooks reject `.yml`).
-     Read and write it with `yaml-cpp`, which the test targets already link. Do not add a JSON library or
+     Read and write it with `yaml-cpp`, which the test support already links. Do not add a JSON library or
      JSON files.
-   - Write reference outputs so their diffs are readable: block style, one value per line, keys in the
-     order section 6.4 defines, lists in the order it defines, no trailing whitespace and a final newline
-     (`YAML::Emitter` does not add one), so the end-of-file-fixer and trailing-whitespace hooks never
-     rewrite them.
 7. **Git hygiene.**
-   - Work on a branch named `jg/SW2-484/scheduler-core-refactor`, created from `main`. Phase 0 confirmed
-     that the name passes the team's pre-push hook `scripts/check_branch_name.sh`.
-   - Create the branch on the host with `git switch -c`. Stage files by name with `git add <files>` on
-     the host. Commit only with `volley-in-container git commit ...`, so the team's prek and commitlint
-     hooks run (they are installed in the container, not on the host).
-   - Do not rebase, squash, amend or force-push. Do not push at all.
-   - Commit messages must pass commitlint (`@commitlint/config-conventional`, see `.commitlintrc.yaml`):
-     - header: `<type>(scheduler): <imperative summary in lower case> (SW2-484 <step>)`, at most 100
-       characters. The summary must not start with a capital letter.
+   - One branch per stage, created from `main` on the host with `git switch -c`, named
+     `jmg/SW2-<ticket>/<slug>` where the ticket is the stage's sub-ticket under the epic, which the user
+     creates and names (stage A: `jmg/SW2-1126/scheduler-scenario-files`). The pre-push hook
+     `scripts/check_branch_name.sh` checks the form; the Jira integration links the branch by its key, so
+     commit messages carry no key.
+   - Stage files by name with `git add <files>` on the host, never `git add -A` or `.`. Commit only with
+     `volley-in-container git commit ...`, so the team's prek and commitlint hooks run (they are installed
+     in the container, not on the host).
+   - Never push: the user pushes, and force-pushes with lease after an amend. Amend or rebase only when
+     the user says so for that change ("amend", "approved"); the wrapper's `ALLOW_AMEND` / `ALLOW_REBASE`
+     flags exist for that and for nothing else. Never reset, never force, never skip hooks. Do not touch
+     the working tree while the user is pushing.
+   - Commit messages must pass commitlint (`@commitlint/config-conventional`, see `.commitlintrc.yaml`),
+     in the form the team accepted in PR #1007:
+     - header: `<type>(scheduler): <imperative summary in lower case>`, at most 100 characters, no
+       step tag and no ticket key. The summary must not start with a capital letter.
      - type: as listed in the commit table in section 5. Allowed types: build, chore, ci, docs, feat,
        fix, perf, refactor, revert, style, test, wip.
-     - body: a blank line after the header, lines of at most 100 characters, saying what changed, why,
-       and how parity was checked (tests run, number of reference files compared).
-     - footer: `Refs: SW2-484`.
-     - Example header: `refactor(scheduler): merge the two tray move-emission blocks (SW2-484 C1)`.
-   - Use the titles in the commit table in section 5. The bracketed titles on the steps (`[A] ...`)
+     - body: a blank line after the header, paragraphs of lines at most 100 characters, saying what
+       changed and why, in an objective tone (no judgement on earlier authors, no colloquialisms:
+       "decommissioned", not "defunct"); the parity check and the test counts go in the PR body, not here.
+     - no footer; the PR body ends with `Refs: SW2-<ticket>`.
+     - Example header: `refactor(scheduler): merge the two tray move-emission blocks`.
+   - Use the titles in the commit table in section 5. The bracketed titles on the steps (`[B2] ...`)
      describe steps, not commits.
    - If a hook fails, read its message, fix the cause, re-stage and commit again. If a formatter hook
      changed files, re-stage them and commit again. Never skip hooks.
@@ -204,9 +243,16 @@ code on the branch**, the code is the truth: stop and report the difference (sec
      namespace-scope and static constants `kCamelCase`; enum constants UPPER_CASE; namespaces lower_case.
      Designated initializers are allowed (the check that would forbid them is disabled) and the code
      already uses them.
-   - At the end of commits 3, 5 and 8, run `volley-in-container tidy` (the team's clang-tidy hook on
-     lines changed since `main`; CI runs the same check on push). Fix findings in code you added or
-     moved. Record findings in code you only renamed or did not touch, without fixing them.
+   - At the end of commits 3, 5 and 8, and before every push the user makes, run
+     `volley-in-container tidy` (the team's clang-tidy hook on lines changed since `main`; CI runs the
+     same check on push). Fix findings in code you added or moved. Record findings in code you only
+     renamed or did not touch, without fixing them.
+   - **Follow `review_rules.md`**, section 7 in particular: comments say only the why, and briefly (two
+     drafts in PR #1007 were sent back as too verbose); explicit `interfaces::msg::X` types with their
+     includes, no `*Msg` aliases in new code; the package's own headers in quotes, other packages' in
+     angle brackets; `volley::scheduler` for new code in the library, `volley::scheduler::test` for test
+     code; `Is...` for bool predicates; `== nullptr` where the neighbouring code compares that way. Assess
+     each Greptile finding before applying it: in PR #1007 about half were right.
    - Keep the footprint small (objective 2): prefer one clear function over several thin ones, standard
      algorithms over hand-written loops where they read better, and deleting dead code over keeping it.
      Report lines added and removed per commit in the review packet (`git diff --stat`).
@@ -216,11 +262,18 @@ code on the branch**, the code is the truth: stop and report the difference (sec
      `common_ros`, `cost_functions`, `yaml-cpp` (test) and `ament_index_cpp` (test) are already declared
      (verified in Phase 0).
 9. **Tests come with extractions.** Every function declared in a public header of the tray module gets a
-   test in `tray_assignment_tests` that constructs no `Scheduler` and no `ScheduleEventDag`. File-local
-   helpers (anonymous namespace) are tested through the function that calls them. Use the existing test
-   layouts (`tiny_lot`, `triple_pick_lot`, `576_eccles_half`, `1355_fulton`, found with
-   `GetLayoutPathByName`) and inline YAML states loaded with `DiscreteGarageState::Set(YAML::Load(...))`,
-   as the existing tests do.
+   test in the module's own binary (section 10 names it) that constructs no `Scheduler` and no
+   `ScheduleEventDag`. File-local helpers (anonymous namespace) are tested through the function that
+   calls them. Tests follow the conventions of stage A: one file per suite under `test/src/<folder>/`,
+   one binary per file, registered in the `scheduler_tests` list of `CMakeLists.txt` (the module test
+   is the exception: it must not link `${PROJECT_NAME}_test_support`, which links the scheduler, so it
+   gets its own `volley_add_gtest` call); namespace `volley::scheduler::test`; names of at most five
+   words. Use the layouts stage A settled on, found with `GetLayoutPathByName`: `275_sunrise_b` by
+   default, `38_gramercy` for EV chargers (the only current site with them), `5675_pecos_combined` for
+   bays and AGV chargers, `tiny_lot` only where a full lot is needed (the blocking-tray fallbacks);
+   `576_eccles*` and `1355_fulton` are decommissioned and not to be used. Garage states come from files
+   under `test/scenarios/initial_states/<layout>/`, loaded with `initial_states::Load("<layout>/<name>")`
+   (`test/include/scheduler/test/initial_states.hpp`), never from YAML literals in the source.
 10. **Stop and ask** (do not guess) when:
     - the branch differs from this plan in a way that affects it;
     - parity fails and the cause is not an obvious mistake in your own change (section 8 names the one
@@ -254,10 +307,21 @@ code on the branch**, the code is the truth: stop and report the difference (sec
        files by name, commit with `volley-in-container git commit`, and report the SHA. The user's
        permission prompt for the commit is the final check.
     5. Then stop. Start the next commit only when the user says so (for example "next").
+    6. **After the PR is open**, the same loop runs on the reviewers' items (Greptile first, then the
+       teammates), as in PR #1007: the user pastes one item at a time; assess it (say whether it is
+       right, and why), propose the patch, verify it in the container, write it into the stage's code
+       notes and the review log, and amend it **only on the user's word** into the commit the user
+       names; the user force-pushes. The PR keeps its commit count. Before every amend: formatter,
+       rebuild with 0 warnings, both test runs of rule 5, the prek hooks on the touched files
+       (`volley-in-container sh 'prek run --files <files>'`), and `volley-in-container tidy` once the
+       amend is in (the hook diffs `main..HEAD`, so run it after, not before). Draft replies to the
+       reviewers when asked; the user posts them.
 
     If you disagree with a feedback item, say why and ask; don't silently skip it. At the last commit of
     a phase, also meet the phase's exit criteria (including `scheduler_advanced_tests` and
-    `volley-in-container tidy`) before posting the review packet.
+    `volley-in-container tidy`) before posting the review packet. At the end of a stage, draft the PR
+    text (title `[SW2-<ticket>] ...`, body `# What`, `# Why`, `# Testing`, `Refs:`) and the sub-ticket
+    text into the stage's folder, as `SW2-1126_scenario_files/` has them.
 
 ## 4. Context you need in your head
 
@@ -311,16 +375,24 @@ numbers valid at `703bfe7c`):
 - it **writes** `ctx->first_tray_event` (its only writer; read once in the AGV tree, 2487). This is the
   hand-off to AGV assignment: for each tray, its **first** move.
 
-**Tests that call stages directly.** `test/scheduler_tests.cpp` calls `scheduler.DoTrayAssignments(ctx)` 4
-times (lines 70, 165, 245, 378), `scheduler.DoAgvAssignments(ctx)` 9 times and
-`scheduler.ResolveBlockingTrays(...)` once (301). They build the context as
-`std::make_shared<ScheduleContext>(MakeGuid(0, 0xDEADBEEF), state, rclcpp::Time())` and add events with
-`ctx->events.AddEvent / AddDependency`. There are 72 active `TEST` cases in four binaries
-(`scheduler_tests` 25, `scheduler_jobs_tests` 30, `scheduler_insert_orientation_tests` 4, `utils_tests`
-13), no fixtures, no shared helpers, and no test reads the clock. `Scheduler.DoubleRetrieveDodgeAgv` is
-commented out. Tests use `GetGarageGraph()` (3), `disabledness_filters` (3), `last_entity_event` (15),
-`UpdateLastEntityEvent` (4); none uses `gg_`, `table_`, `PrintDags`, `first_tray_event`,
-`PushBackScheduledJob` or `UpdateLeafDependencies`.
+**Tests that call stages directly** (after stage A; all under `src/planner/scheduler/test/src/`).
+`stages/tray_assignment_tests.cpp` calls `scheduler.DoTrayAssignments(ctx)` 4 times and
+`DoAgvAssignments` twice; `stages/agv_assignment_tests.cpp` calls `DoAgvAssignments` 8 times;
+`ResolveBlockingTrays` is called once in `stages/tray_assignment_tests.cpp` and once in
+`jobs/clean_garage_job_tests.cpp`. They build the context as `std::make_shared<ScheduleContext>(...)`
+and add events with `ctx->events.AddEvent / AddDependency` (about 60 uses of `ctx->events` across the
+four stage files). The test support reads the context too: `scenarios::Dag(const ScheduleContext&)` in
+`test/src/scenarios/stage.cpp` (declared in `test/include/scheduler/test/scenarios/stage.hpp`) reads
+`ctx.events` and `first_tray_event`. There are 92 `TEST` cases in 19 binaries (one file, one suite, one
+binary each: `scheduler_tests`, five under `stages/`, ten under `jobs/`, four under `utils/`), the
+support library `${PROJECT_NAME}_test_support`, no fixtures, and no test reads the clock
+(`scenarios::kNow`). Tests use `GetGarageGraph()` (3, `stages/sanity_check_tests.cpp`),
+`disabledness_filters` (3, same file), `last_entity_event` (18) and `UpdateLastEntityEvent` (4, both in
+`stages/scheduler_state_tests.cpp`); none uses `gg_`, `table_`, `PrintDags`, `PushBackScheduledJob` or
+`UpdateLeafDependencies`. Outside the tests, `src/scheduler_ros.cpp` sets `scheduler_->printdags_`
+directly (line 20) and calls `PrintDags()` from the `debug/printdags` service (line 55); nothing outside
+the package uses the renamed members (the `GetGarageGraph` hits in `motion_planner`'s tests are those
+tests' own helpers).
 
 **Failure contract.** If tray or AGV assignment fails, `Plan()` sets:
 
@@ -356,7 +428,9 @@ pointer, so the order in which several occupants of one pose become edges is add
 
 **GUIDs.** Action-node GUIDs come from a static counter in `utils.cpp` (`CreateActionGuid`), so they depend
 on how many actions earlier tests in the same binary produced; the canonical response replaces them by
-positions.
+positions. Job GUIDs are fixed by the scenario loader (request 1000, jobs 1001 upwards).
+`BuildScheduledActionsArray` refills `scheduled_jobs` from an `unordered_map`, so the canonical response
+sorts that list by GUID (review log item 155).
 
 ## 5. The plan: phases and commits
 
@@ -365,16 +439,18 @@ detail. Commits group the steps as follows:
 
 | # | Commit header (after `<type>(scheduler): `) | Type | Steps | Objective | Est. size (+/−) |
 |---|---|---|---|---|---|
-| 1 | `add parity references to the planning tests (SW2-484 A)` | test | A1, A2 | Record today's behaviour before any change. | +400 code, ~45 reference files |
-| 2 | `rename scheduler members and expansion methods (SW2-484 B2)` | refactor | B2-1, B2-2 | Purely mechanical renames inside `Scheduler`; no logic change. | +400 / −400 |
-| 3 | `rename ScheduleContext to PlanContext and its fields (SW2-484 B2)` | refactor | B2-3 | The per-call context in its own header, with the catalogue's names. | +300 / −280 |
-| 4 | `add garage services and the tray heading and empty-tray helpers (SW2-484 C1)` | refactor | C1-1 to C1-3 | `GarageServices`, the module's library and test targets, the first pure helpers. | +330 / −120 |
-| 5 | `make blocking-tray resolution a free function with plain results (SW2-484 C1)` | refactor | C1-4 | `ResolveBlockingTrays` and its two searches leave `Scheduler`; results are plain data. | +320 / −300 |
-| 6 | `extract the main-loop decisions of tray assignment (SW2-484 C1)` | refactor | C1-5 | Destination check, critical path, blocker scan, parking-spot choice as pure functions. | +260 / −200 |
-| 7 | `merge the two tray move-emission blocks (SW2-484 C1)` | refactor | C1-6 | One emission function and one root-commit function; the riskiest change, alone. | +120 / −160 |
-| 8 | `put tray assignment behind a solver interface (SW2-484 C2)` | refactor | C2-1 to C2-4 | `Solver`, `DefaultSolver`, adapter, `Scheduler::AssignTrays`, injection; legacy members deleted. | +500 / −450 |
+| 1 | **done**, PR #1007: `record the planning tests as scenario files` + `add a viewer page for the test scenarios` | test, feat | A | Record today's behaviour before any change. | 58 scenario files, 60 initial states, the support library, the viewer |
+| 2 | `rename scheduler members and expansion methods` | refactor | B2-1, B2-2 | Purely mechanical renames inside `Scheduler`; no logic change. | +400 / −400 |
+| 3 | `rename ScheduleContext to PlanContext and its fields` | refactor | B2-3 | The per-call context in its own header, with the catalogue's names. | +300 / −280 |
+| 4 | `add garage services and the tray heading and empty-tray helpers` | refactor | C1-1 to C1-3 | `GarageServices`, the module's library and test targets, the first pure helpers. | +330 / −120 |
+| 5 | `make blocking-tray resolution a free function with plain results` | refactor | C1-4 | `ResolveBlockingTrays` and its two searches leave `Scheduler`; results are plain data. | +320 / −300 |
+| 6 | `extract the main-loop decisions of tray assignment` | refactor | C1-5 | Destination check, critical path, blocker scan, parking-spot choice as pure functions. | +260 / −200 |
+| 7 | `merge the two tray move-emission blocks` | refactor | C1-6 | One emission function and one root-commit function; the riskiest change, alone. | +120 / −160 |
+| 8 | `put tray assignment behind a solver interface` | refactor | C2-1 to C2-4 | `Solver`, `DefaultSolver`, adapter, `Scheduler::AssignTrays`, injection; legacy members deleted. | +500 / −450 |
 
-Each commit goes through the review gate in rule 12. Two named split points keep the count within ten:
+Stages map to PRs: stage A was commit 1 (PR #1007); stage 2 is phase B2, commits 2 and 3, one PR; C1
+and C2 follow, each its own PR unless the user groups them. Each commit goes through the review gate
+in rule 12. Two named split points keep the count within ten:
 commit 3 may become "type rename" then "field renames"; commit 8 may become "module added, not yet used"
 then "switch `Plan()` and delete the legacy members" (the first half then keeps the old loop alive for one
 commit).
@@ -384,78 +460,53 @@ commit).
 Done on 2026-10-22; report and the user's answers in `DESIGN-REVIEW.md`. Phase 0 (the survey) was done as
 part of it; its findings are in the notes file.
 
-### Phase A: parity baseline (test-only; `src/` untouched)
+### Phase A: parity baseline (done, PR #1007)
 
-Goal: every planning test compares a **canonical description** of its result with a recorded reference
-file. Everything lives in `scheduler/test/`.
+What was planned as `test/parity.hpp` and `test/reference/` landed as **scenario files** and a test
+support library, after the design was reworked during the review rounds (review log items 1 to 157).
+The state to build on:
 
-**Step A1: `[A] Add the parity helper (canonicalise, record or compare)`**
+- `test/scenarios/`: 45 plan scenarios (`plan/<suite>/`), 13 stage scenarios
+  (`task_planning/tray_assignment/`, `task_planning/agv_assignment/`), 60 initial states
+  (`initial_states/<layout>/`), a README with the formats and commands.
+- `test/include/scheduler/test/` and `test/src/`: `initial_states.{hpp,cpp}`, `agv_commands.hpp`, and
+  `scenarios/{yaml,file,request,recording,shared_scheduler,plan,stage}.{hpp,cpp}`, compiled into the
+  static library `${PROJECT_NAME}_test_support`. The entry points a test calls: `scenarios::Plan()`
+  (plans the running test's scenario once, checks the file, returns scenario, scheduler, request and
+  response), `scenarios::ExpectDeterministic()` (one `TEST(<Suite>, Deterministic)` per job binary: plans
+  every file of the suite twice and compares the two runs; never gated), `scenarios::Stage("<stage>")`
+  and `scenarios::ExpectStage(...)` with `scenarios::Dag(ctx)` for the stage tests,
+  `scenarios::SharedScheduler(layout_path, params)` (one scheduler per layout and parameter set per
+  binary), `scenarios::kNow`.
+- 19 test binaries, one per file under `test/src/{stages,jobs,utils}/` plus `scheduler_tests`, 92
+  `TEST` cases, all in `volley::scheduler::test`.
+- `tools/view_scheduler_tests` and `tools/plan_viewer/` (`poe scheduler-test-viewer`): the HTML viewer of
+  the scenario files, the review aid for recording diffs.
+- The comparison is opt-in (`SCHEDULER_CHECK_RECORDINGS=1`); recording is `RECORD_REFERENCE_OUTPUT=1`
+  through the wrapper's `record-reference`.
 
-Add `test/parity.hpp` and `test/parity.cpp`, namespace `volley::parity`, compiled into the three planning
-test binaries (section 6.4 has the function list and the canonical format):
-
-- `YAML::Node Canonical(const ScheduleContext& ctx)`: the events, the raw edge set and `first_tray_event`
-  (under the key `first_event_by_tray`, its name after commit 3, so the files never change for a rename).
-- `YAML::Node Canonical(const PlanResponseMsg& response)`: the response with GUIDs replaced by positions and
-  `scheduled_jobs` sorted.
-- `void ExpectReference(const YAML::Node& actual, std::string_view suffix = {})`: compares `actual` with
-  `test/reference/<Suite>.<Name>[.<suffix>].yaml` (suite and name from gtest's `current_test_info()`), or
-  writes it when `RECORD_REFERENCE_OUTPUT` is set. On a mismatch it fails the test and prints the first
-  differing lines of the two emitted documents. A missing file fails with a message naming the record
-  command.
-- `template <class F> void ExpectReference(F&& produce, std::string_view suffix = {})`: calls `produce()`
-  twice, asserts the two canonical documents are equal (the determinism check), then compares the first
-  with the reference.
-- CMake: add `test/parity.cpp` to `scheduler_tests`, `scheduler_jobs_tests` and
-  `scheduler_insert_orientation_tests`, and give each
-  `target_compile_definitions(<target> PRIVATE SCHEDULER_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/reference")`
-  so recording and comparing use the source tree. No install step.
-
-**Step A2: `[A] Instrument the planning tests and record the references`**
-
-- After every `scheduler.Plan(request_data, now)` in the three binaries, add
-  `parity::ExpectReference([&] { return parity::Canonical(scheduler.Plan(request_data, now)); });`.
-  Where a test plans more than once (`ReadyForRetrieveJob`, `TransitionBay`, …), pass a suffix. Where the
-  test already stores the response, reuse it for the test's own assertions and let the lambda plan again.
-- After each of the 4 `DoTrayAssignments` and 9 `DoAgvAssignments` calls, add
-  `parity::ExpectReference(parity::Canonical(*ctx));` with suffix `"tray"` / `"agv"` in the two tests
-  that run both stages (`TrayAssignmentTestComplexDag`, `TrayAndAgvAssignments`). Skip the
-  `ResolveBlockingTrays` test (its own assertions pin the result).
-- Add ordinary tests, each with a reference, for scenarios no test covers today: a `READY_FOR_INSERT`
-  request on `tiny_lot` (blank tray id through `Plan()`); a request with a non-empty `base_schedule` (one
-  `TYPE_AGV_COMMAND` node, so an AGV and two nodes are reserved); and, if each can be built on a test
-  layout in under about 60 lines, a scenario that reaches fallback 1 (advance the root) and one that reaches
-  fallback 2 (park on the critical path). Report which of these you could not build. The waypoint stash
-  is already covered (`CleanGarageUnstashesTrayFromWaypoint`).
-- Record with `volley-in-container record-reference scheduler scheduler_tests`, then the same for
-  `scheduler_jobs_tests` and `scheduler_insert_orientation_tests`. Then run `volley-in-container test
-  scheduler` (a new process) and confirm every comparison passes. Record the commit SHA of the branch
-  point in the notes file (the reference files carry no SHA field: the commit that adds them is the
-  record).
-
-If a reference differs between the record run and the compare run, or between the two in-process runs,
-**stop and report**: define the equivalence (for example, sort a list) in the canonicaliser before you
-commit, and record why. The one known candidate is the occupancy-edge order of section 8.
-
-Exit criteria for phase A:
-
-- every test passes;
-- every reference compares equal in a fresh process;
-- the notes file lists the reference files with what each covers (job types, stages, failure paths).
+Known gaps and points the notes record: REBALANCE_GARAGE, `planned_jobs` and `active_jobs` are still
+never covered end to end; the insert-heading rule (`InitRetrievalHeadings`) is exercised by no test on
+the sites; `ReparkTrayJob.UnplugsChargerAgvMovesFirst` duplicates `UnplugsCharger`; the two blocking-tray
+fallbacks stay on `tiny_lot`. Details: `SW2-1126_scenario_files/scenario_selection.md`, section 8.
 
 ### Phase B2: names (mechanical; commits 2 and 3)
 
-No planning logic changes. Parity must stay green **without** touching any reference file. If the parity
-helper reads a renamed type or field, update the helper in the same commit; that is allowed. Error strings
-that spell an old method name stay as they are (rule 1); log lines may follow the new names.
+No planning logic changes. Parity must stay green **without** touching any scenario file: run the
+scheduler tests with `SCHEDULER_CHECK_RECORDINGS=1` after every step and confirm `git status` is clean
+under `test/scenarios/`. If the test support reads a renamed type or field (`scenarios::Dag` does),
+update it in the same commit; that is allowed. Error strings that spell an old method name stay as they
+are (rule 1); log lines may follow the new names. This stage is a PR of its own: the user creates the
+sub-ticket under SW2-482 and the branch `jmg/SW2-<ticket>/<slug>` from `main` at `61e7b0d7` or later.
 
 - **B2-1** `[B2] Rename Scheduler members` (commit 2)
   - `gg_` → `motion_graph_`, `table_` → `collision_table_`, `GetGarageGraph()` → `GetMotionGraph()`
-    (three uses in `scheduler_tests.cpp`).
+    (three uses in `test/src/stages/sanity_check_tests.cpp`).
   - `pg_` becomes a local in the constructor (Phase 0 verified it is used only to build `gg_`).
   - `costaudit_` → `cost_audit_`, `printdags_` → `print_dags_`, `PrintDags()` → `TogglePrintDags()`.
-  - Update callers in `scheduler_ros.cpp` and `scheduler_component.cpp` if they use any of these (check
-    with `rg`). `scheduler_advanced_tests` uses none of them.
+  - Update the callers in `src/scheduler_ros.cpp`: it assigns `scheduler_->printdags_` from the
+    `printdags` parameter (line 20) and calls `PrintDags()` in the `debug/printdags` service (line 55);
+    check `scheduler_component.cpp` with `rg`. `scheduler_advanced_tests` uses none of them.
 - **B2-2** `[B2] Rename Plan<Type>Job to Expand<Type>Job` (commit 2)
   - All twelve expansion methods, plus `PlanOpenBayDoor` → `ExpandOpenBayDoor` and
     `PlanUnstashWaypointTraysJob` → `ExpandUnstashWaypointTraysJob`.
@@ -469,16 +520,22 @@ that spell an old method name stay as they are (rule 1); log lines may follow th
     `last_entity_event` (`GarageEntityEventMap`) → `last_event_by_asset` (`AssetEventMap`, still keyed by
     `GarageEntityIdMsg`: the `AssetId` type is a later PR).
   - Methods: `PushBackScheduledJob` → `AddScheduledJob`, `UpdateLastEntityEvent` → `AppendToAssetChain`,
-    `UpdateLeafDependencies` → `AddAfterJobLeaves`. The test `Scheduler.UpdateLastEntityEvent` is renamed
-    to match (its reference file, if it has one, is renamed with it).
+    `UpdateLeafDependencies` → `AddAfterJobLeaves`. The tests in `test/src/stages/scheduler_state_tests.cpp`
+    that name `UpdateLastEntityEvent` and `last_entity_event` follow the new names (they have no scenario
+    files; a test that has one keeps its name or renames the file with it).
   - `request_id_str` stays: it labels the `PrintGraph` output under `print_dags_`. The constructor keeps
     taking `rclcpp::Time` (the `Timepoint` constructor is a later PR).
-  - Update the parity helper's `Canonical(const PlanContext&)`.
+  - Update the test support: `scenarios::Dag(const PlanContext&)` and `ExpectStage` in
+    `test/src/scenarios/stage.cpp` and `test/include/scheduler/test/scenarios/stage.hpp` read `events`
+    and `first_tray_event`; the recorded key is already `first_event_by_tray`, so no scenario file
+    changes. Update the ~60 `ctx->events` uses in the four stage test files.
   - Split point: the type rename and header move first, then the field and method renames, if one commit
     is too large to review.
 
-Exit criteria for phase B2: all tests pass with every reference file unchanged (`git status` shows no
-change under `test/reference/`); `scheduler_advanced_tests` builds and passes.
+Exit criteria for phase B2: all tests pass as CI runs them and with `SCHEDULER_CHECK_RECORDINGS=1`, with
+every scenario file unchanged (`git status` shows no change under `test/scenarios/`);
+`scheduler_advanced_tests` and `planner_core` build and pass; `volley-in-container tidy` is clean on
+the changed lines; the stage's PR text is drafted.
 
 ### Phase C1: pure helpers, extracted straight into the module
 
@@ -497,21 +554,29 @@ commit body lists every change inside it. Each commit adds unit tests for the fu
     `motion_graph_`, `collision_table_`, `logger_` and `cost_model_`, initialised as
     `services_{motion_graph_, collision_table_, cost_model_, *layout_, logger_}`.
   - CMake (section 6.2): the static library `scheduler_tray_assignment` (position-independent, linked into
-    `${PROJECT_NAME}`) and the gtest `tray_assignment_tests`, which links `scheduler_tray_assignment` and
-    `yaml-cpp` but **not** `${PROJECT_NAME}`. Check that the static target receives the package's
-    dependencies (`ament_auto_add_library` calls `ament_target_dependencies`); if not, add them explicitly.
-  - In `test/task_planning/tray_assignment_tests.cpp`, a small helper that builds the services from a
+    `${PROJECT_NAME}`) and the module's gtest (section 10 names it; `tray_assignment_tests` is taken by
+    the stage tests of `test/src/stages/`), which links `scheduler_tray_assignment` and `yaml-cpp` but
+    **not** `${PROJECT_NAME}` nor `${PROJECT_NAME}_test_support`, so it is added with its own
+    `volley_add_gtest` call outside the `scheduler_tests` loop. Check that the static target receives the
+    package's dependencies (`ament_auto_add_library` calls `ament_target_dependencies`); if not, add them
+    explicitly.
+  - In `test/src/task_planning/<module test>.cpp`, a small helper that builds the services from a
     layout name the way `Scheduler::Scheduler` does (`Layout` from file, `PoseGraph`, `GarageGraph`,
     `CollisionTable`, `cost::MotionCostModel` from default params, a logger) and owns them for the test's
-    lifetime.
+    lifetime. Garage states for these tests come from `initial_states::Load` (rule 9), which the module
+    test may use: `initial_states.cpp` depends on `common_ros` only, not on the scheduler; if linking it
+    without the support library is awkward, compile it into the module test directly.
 - **C1-2** `[C1] Move the heading helpers to tray_assignment/headings` (commit 4)
   - `EvChargeHeading`, `RetrievalHeading`, `PreferredHeading` as in section 6.3: they return the adjusted
     pose instead of editing a reference, and `PreferredHeading` drops the unused tray argument.
   - Update the callers: `ExpandAgvMoveJob`, `ExpandReparkTrayJob`, `ExpandChargePayloadJob`,
     `AssignTrayIdForEmptyMove`, `AssignDestForUntargetedMove`, `DoTrayAssignments` (two places). Delete
     the three members.
-  - Tests: `EvChargeHeading` on `576_eccles_half` nodes 46 and 47 gives heading 0 and is empty elsewhere
-    and on other layouts; `RetrievalHeading` with and without a payload, and with `reciprocal_to_tray`.
+  - Tests: `EvChargeHeading` on the EV-charger stalls of `38_gramercy` (the rule was written for
+    `576_eccles`, which is decommissioned: check on the branch which layouts it still engages on, and
+    use a site) and empty elsewhere and on other layouts; `RetrievalHeading` with and without a payload,
+    and with `reciprocal_to_tray` (stage A found the rule caches no heading for the stalls of
+    `5675_pecos_combined` and cannot apply on `275_sunrise_b`: see `scenario_selection.md`).
 - **C1-3** `[C1] Extract ChooseEmptyTray from AssignTrayIdForEmptyMove` (commit 4)
   - `stdx::Expected<TrayChoice> ChooseEmptyTray(services, state, destination)` (section 6.3). It returns
     the choice (tray id and possibly adjusted destination) instead of mutating the move; the error texts
@@ -536,8 +601,8 @@ commit body lists every change inside it. Each commit adds unit tests for the fu
     `AssignDestForUntargetedMove` and the two copies of the emission code create the `TrayMove`s from
     `PlannedTrayMove`s (`std::make_shared<TrayMove>(move->GetJobIndex())`, `SetTrayId`, `SetDest`) at the
     point where today they receive ready-made events. Delete the three members and the two structs.
-  - Move `Scheduler.ResolveBlockingTraysRecursivelyUnblocksChain` to `tray_assignment_tests` (no
-    `Scheduler`), asserting on the plain fields. Add a test for the waypoint-stash tier
+  - Move the `ResolveBlockingTrays` test of `test/src/stages/tray_assignment_tests.cpp` to the module
+    test (no `Scheduler`), asserting on the plain fields. Add a test for the waypoint-stash tier
     (`allow_waypoint_stash`) and one for `immobile_trays`.
 - **C1-5** `[C1] Extract the main-loop decisions` (commit 6)
   - In `critical_path.{hpp,cpp}`: `CheckDestinationUsable` (the three error texts of 2622–2648),
@@ -553,7 +618,7 @@ commit body lists every change inside it. Each commit adds unit tests for the fu
     exactly (section 8, B1 and B2 in the notes), and add a one-line test or `static_assert`-style check
     that documents what `std::vector<GaragePoseMsg>{vertex, pose}` constructs.
   - Preserve call order and the exact paths recorded.
-  - Tests on `tiny_lot` / `triple_pick_lot`: a disabled destination fails with the exact text; the critical
+  - Tests on `275_sunrise_b` (a `tiny_lot` state only where a full lot is needed): a disabled destination fails with the exact text; the critical
     path lists the trays in path order; `BlockersOnPath` finds a tray that collides by footprint, not only
     by node id; `ChooseParkingSpot` for an empty and a loaded tray.
 - **C1-6** `[C1] Merge the two move-emission blocks` (commit 7)
@@ -574,11 +639,11 @@ commit body lists every change inside it. Each commit adds unit tests for the fu
     ToString() + ": " + msg` versus the raw message): keep both. The caller adds the `last emitted move →
     root move` edge itself, at the point where today's code adds it (per blocker round in the main loop,
     after `Apply` in `AssignDestForUntargetedMove`), so the order of DAG writes stays identical.
-  - This is the riskiest commit of the phase. Run the full scheduler suite; every reference must match
-    unchanged.
+  - This is the riskiest commit of the phase. Run the full scheduler suite with the comparison on; every
+    recording must match unchanged.
 
-Exit criterion for phase C1: all tests pass, every reference matches unchanged, `tray_assignment_tests`
-covers every public function of the module, `volley-in-container tidy` run after commits 5 and 7.
+Exit criterion for phase C1: all tests pass, every recording matches unchanged, the module test covers
+every public function of the module, `volley-in-container tidy` run after commits 5 and 7.
 
 ### Phase C2: the solver (commit 8)
 
@@ -620,7 +685,7 @@ covers every public function of the module, `volley-in-container tidy` run after
     (d) a blocker on the path (the states of `UnblockingTrayMoveTest`) with the expected new move and the
     expected edges in order; (e) a `StateChange` (bay transition) before a move into that bay gives an
     edge from the transition's step; (f) `Solve` twice on the same `Input` gives equal `Result`s. In
-    `scheduler_tests`: a `FakeSolver` injected through the constructor whose `Solve` returns
+    `test/src/scheduler_tests.cpp`: a `FakeSolver` injected through the constructor whose `Solve` returns
     `stdx::Unexpected("nope")` makes `Plan()` report `"Failed tray assignments: nope"` and fail every
     pending job.
   - Split point: C2-1 to C2-3 with their module tests first (the old loop still runs), then C2-4.
@@ -628,13 +693,13 @@ covers every public function of the module, `volley-in-container tidy` run after
 Exit criteria for phase C2 (and for the PR):
 
 - no production call to the removed methods; `rg DoTrayAssignments` finds nothing in `src/` or `test/`;
-- all tests pass and every reference matches unchanged (or changed only by the deliberate difference of
+- all tests pass and every recording matches unchanged (or changed only by the deliberate difference of
   section 8, recorded in the same commit with its diff);
-- `tray_assignment_tests` links without `${PROJECT_NAME}` and constructs a `DefaultSolver`;
+- the module test links without `${PROJECT_NAME}` and constructs a `DefaultSolver`;
 - `scheduler_advanced_tests` and `planner_core` pass;
 - `volley-in-container tidy` is clean on added and moved code;
 - the notes file is finished (decisions, deviations, deferred bugs) and the PR description is drafted from
-  it into `/home/jon-gonzales/repos/volley_notes/pull_request_notes/SW2-482_scheduler_core_refactor/SW2-482_pr_description.md` (not committed).
+  it into the stage's folder next to this file (`SW2-<ticket>_<slug>/pr_description.md`, not committed).
 
 ## 6. Specifications
 
@@ -642,7 +707,7 @@ Exit criteria for phase C2 (and for the PR):
 
 ```
 scheduler/
-├── CMakeLists.txt                     # + scheduler_tray_assignment (static), tray_assignment_tests, parity sources
+├── CMakeLists.txt                     # + scheduler_tray_assignment (static) and the module test; the scheduler_tests list and ${PROJECT_NAME}_test_support exist since stage A
 ├── package.xml                        # unchanged
 ├── include/scheduler/
 │   ├── scheduler.hpp                  # Scheduler: Plan(), Expand*Job, AGV assignment …; owns services_, tray_solver_
@@ -661,12 +726,16 @@ scheduler/
 ├── src/
 │   ├── scheduler.cpp, utils.cpp, scheduler_ros.cpp, scheduler_component.cpp   # existing
 │   └── task_planning/tray_assignment/ # one .cpp per header above; default_solver.cpp holds the file-local Pass
-└── test/
-    ├── scheduler_tests.cpp, scheduler_jobs_tests.cpp, scheduler_insert_orientation_tests.cpp, utils_tests.cpp
-    ├── parity.hpp, parity.cpp         # Canonical(), ExpectReference()
-    ├── reference/<Suite>.<Name>[.<suffix>].yaml   # recorded canonical results (commit 1)
-    ├── task_planning/tray_assignment_tests.cpp    # links only scheduler_tray_assignment
-    └── garage_states/double_retrieve_garage_state.yaml   # existing, used by a commented-out test
+└── test/                              # stage A's layout; see SW2-1126_scenario_files/code_notes.md
+    ├── .clang-tidy                    # disables bugprone-unchecked-optional-access for the tests
+    ├── include/scheduler/test/        # initial_states.hpp, agv_commands.hpp, scenarios/{yaml,file,request,recording,shared_scheduler,plan,stage}.hpp
+    ├── src/
+    │   ├── initial_states.cpp, scenarios/*.cpp          # ${PROJECT_NAME}_test_support
+    │   ├── scheduler_tests.cpp
+    │   ├── stages/{tray_assignment,agv_assignment,assignment_cost,sanity_check,scheduler_state}_tests.cpp
+    │   ├── jobs/<job>_tests.cpp (10), utils/<topic>_tests.cpp (4)
+    │   └── task_planning/<module test>.cpp              # new in C1; links only scheduler_tray_assignment
+    └── scenarios/                     # README.md, initial_states/<layout>/*.yaml, plan/<suite>/*.yaml, task_planning/<stage>/*.yaml
 ```
 
 No other folders: no `core/`, `ros/`, `job_expansion/`, `agv_assignment/`, `validation/`,
@@ -713,7 +782,8 @@ if(BUILD_TESTING)
       yaml-cpp
       scheduler_tray_assignment              # not ${PROJECT_NAME}: the test cannot reach Scheduler
   )
-  # the three planning test targets also list test/parity.cpp and get SCHEDULER_REFERENCE_DIR (commit 1)
+  # ${PROJECT_NAME}_test_support (SCHEDULER_SCENARIO_DIR, GTest::gtest, yaml-cpp) and the
+  # scheduler_tests loop exist since stage A; the module test stays outside that loop
 endif()
 ```
 
@@ -866,28 +936,30 @@ if(auto assigned = AssignTrays(plan_ctx); !assigned) {
 The mutable loop state lives in the file-local `Pass`, created inside `Solve`, so `Solve` is pure from the
 caller's point of view.
 
-### 6.4 The parity helper
+### 6.4 The test support (stage A, as merged)
 
-`test/parity.hpp`, namespace `volley::parity`:
+The support library under `test/include/scheduler/test/` and `test/src/`, namespace
+`volley::scheduler::test` with the nested `scenarios` and `initial_states`. What a refactor commit needs
+to know:
 
-- `YAML::Node Canonical(const ScheduleContext& ctx)` (`PlanContext` after commit 3), a map with keys in
-  this order:
-  - `events`: a sequence of strings, one per vertex of the context's event DAG: `std::to_string(*event)`
-    (the `planner_core` `ToString()`, unchanged in this PR) followed by `#<n>` where n counts earlier
-    identical strings; **sorted**. Each string's position is the event's canonical index.
-  - `edges`: a sequence of `[from, to]` canonical index pairs for every edge of the DAG (the **raw** edge
-    set, not reduced; no copy, no `Reduce()`); sorted.
-  - `first_event_by_tray`: a map tray id → canonical index, keys sorted numerically (the key is named
-    after the field's post-rename name so the files survive commit 3).
-- `YAML::Node Canonical(const PlanResponseMsg& response)`: a copy of the message with every action node's
-  `guid` replaced by `MakeGuid(0, position + 1)`, every `agv_command.id` (today `std::to_string(guid)`)
-  and `scheduled_jobs[].bay_arrival_node_guid` rewritten to the same positional value, and
-  `scheduled_jobs` sorted by `std::to_string(job.guid)`; then `YAML::Load(interfaces::msg::to_yaml(copy))`.
-  Actions stay in schedule order. Job GUIDs and bay `command_id`s are deterministic already (they come
-  from the request or from constants).
-- `ExpectReference(actual, suffix)` and `ExpectReference(produce, suffix)` as in step A1. The file is
-  written with `YAML::Emitter` in block style plus a final newline, and compared after loading and
-  emitting both sides the same way, so formatting never causes a difference.
+- `scenarios::Dag(const ScheduleContext& ctx)` (`stage.hpp`): the context's event DAG as a document:
+  `events` (one string per vertex, `ScheduleEvent::ToString()` plus ` #n` for repeats, sorted),
+  `edges` (`[from, to]` positions, sorted) and `first_event_by_tray` (tray id to position). This is the
+  function commit 3 updates for the renamed type and fields; the keys do not change.
+- `CanonicalResponse(const interfaces::msg::PlanResponse&)` (`plan.cpp`): action-node GUIDs replaced by
+  `MakeGuid(0, position + 1)` (also in the charger and conveyor command ids and `bay_arrival_node_guid`),
+  `scheduled_jobs` stable-sorted by `std::to_string(job.guid)`, then `MessageYaml` and `Compact`
+  (default-valued fields left out, GUIDs as one scalar, short maps on one line).
+- `ExpectRecorded(path, recorded)` (`recording.cpp`): the file must exist, name the running test and
+  hold a recorded part; with `SCHEDULER_CHECK_RECORDINGS` set it compares line by line (`ExpectSameDocument`,
+  first differing line in the failure message); with `RECORD_REFERENCE_OUTPUT` set it rewrites the
+  recorded part, building the whole text before opening the file.
+- `scenarios::ExpectDeterministic()`: plans every scenario of the suite twice in one process and compares
+  the two canonical responses with each other; it does not read the files and is never gated.
+- The YAML decoders are `YAML::convert<T>` specialisations with key tables (`yaml.hpp`); an unknown key
+  fails the load with the file name and the key.
+
+Nothing in the plan's old `test/parity.hpp` exists; do not add it.
 
 ### 6.5 Error-handling rules
 
@@ -904,7 +976,7 @@ identical. `std::format` is fine inside `LOG_*` macros and `stdx::Unexpected(fmt
 that must match today's text byte for byte unless you check the result. The conversion applies to the
 tray tree only; `Expand*Job`, `DoAgvAssignments` and `SanityCheckEvents` keep `BoolStringPair` in this PR.
 
-## 7. Invariants (the parity references and reviewers will check these)
+## 7. Invariants (the recorded scenarios and reviewers will check these)
 
 1. Every `TrayMove` that will execute has a tray id and a destination after tray assignment.
 2. The DAG stays acyclic; `GetTopologicalOrdering()` succeeds after `ApplyResult`.
@@ -941,7 +1013,7 @@ Behaviour that looks wrong in today's code. Each is marked **keep** (preserve it
   taken after the state was refreshed; by overload resolution this most likely builds *n* copies of the
   destination pose (B1 in the notes). The advance move is applied twice (B2). **Keep** the same expression
   and the double apply; `EmitOptions::check_apply` is false on this path. Confirm what the expression
-  builds with a test in commit 6; fix in a follow-up with its own reference diff.
+  builds with a test in commit 6; fix in a follow-up with its own recording diff.
 - `AssignDestForUntargetedMove` never registers the original move's source or destination in
   `freeing_moves` (B3). **Keep** behind `CommitOptions`.
 - `AddDependency` never checks cycles and silently returns false for a missing endpoint. **Keep**;
@@ -954,7 +1026,7 @@ Behaviour that looks wrong in today's code. Each is marked **keep** (preserve it
   of `shared_ptr`s (pointer hash) and can differ between processes (B4). The solver keys occupancy by id,
   so its order is deterministic. **Fix, if it surfaces** (approved by the user in the design review): this
   is the one difference a parity failure may legitimately trace back to. When it does, re-record the
-  affected references in the same commit, show the diff in the review packet, and record it in the notes.
+  affected scenario files in the same commit, show the diff in the review packet, and record it in the notes.
   If it never surfaces, nothing changes.
 - The error text `"... TrayId=<id>does not exist in working_state"` lacks a space (B6). **Keep.**
 
@@ -964,7 +1036,7 @@ Behaviour that looks wrong in today's code. Each is marked **keep** (preserve it
   and `ros/convert.hpp` (`ToAssetId`, `ToMsg`), `last_event_by_asset` keyed by `AssetId`, `ScheduledJob`
   instead of `ScheduledJobDataMsg` inside the context, a `Timepoint` context constructor,
   `ReserveBaseScheduleAssets`, the `common_ros` vocabulary aliases and their report. Each is one
-  mechanical commit guarded by the references of commit 1.
+  mechanical commit guarded by the recordings of stage A.
 - **C0, stage folders**: `task_planning/job_expansion/` and `validation/`, `motion_planning/`
   (`PlanMotions` as a free function), `action_graph/` (the anonymous-namespace builders and
   `InsertVrcActionsIntoDag`, with narrowed inputs), one library target each, and an include-boundary
@@ -975,7 +1047,7 @@ Behaviour that looks wrong in today's code. Each is marked **keep** (preserve it
 - **G, benchmarks** (SW2-487): at least 10 real-site scenarios per solver, timed. The `Solve(services,
   input)` entry point can be timed without a DAG.
 - **H, final cleanup:** `SanityCheckEvents` → `ValidateEvents`, `ResponseFromTrajectories` →
-  `BuildPlanResponse`; `stdx` for the remaining `BoolStringPair` members; fix B1/B3 with reference diffs;
+  `BuildPlanResponse`; `stdx` for the remaining `BoolStringPair` members; fix B1/B3 with recording diffs;
   optionally move job expansion into `task_planning/job_expansion/`.
 - **I, `planner_core` renames** with `[[deprecated]]` aliases: `ScheduleEventDag` → `EventDag`,
   `SetDest` → `SetDestination`, and others.
@@ -992,7 +1064,7 @@ depends on `planner_core` only through the adapter and the `StateChange` events.
 | Solver injection | Trailing constructor parameter `std::unique_ptr<tray_assignment::Solver>` defaulting to `DefaultSolver`; services passed per `Solve` call, so no lifetime rule. (User: per call.) |
 | Module folder and namespace | `include/scheduler/task_planning/tray_assignment/`, `volley::task_planning::tray_assignment`; `scheduler.cpp` declares `namespace tray_assignment = task_planning::tray_assignment;`. (User's choice.) |
 | Non-tray events in the input | Bay and VECS transitions travel as `StateChange{shared_ptr<const ScheduleEvent>}`; AGV and VRC events are not steps. (User: accepted.) |
-| Parity mechanism | Instrument the existing tests with `ExpectReference`; references named after the test. (User: accepted.) |
+| Parity mechanism | Landed in stage A as scenario files named after the test, with an opt-in comparison (`SCHEDULER_CHECK_RECORDINGS=1`); CI runs the property assertions only. (Team decision in PR #1007.) |
 | Renames kept in this PR | `Scheduler` members, `Expand*Job`, `PlanContext` and its fields and methods (commits 2 and 3). `stdx` conversion of the tray tree happens inside commits 4 to 8; no separate commit. Deferred: `AssetId`, `ros/convert`, `ScheduledJob`, `Timepoint`, `ReserveBaseScheduleAssets`, vocabulary aliases. (User's choice.) |
 | Occupancy-edge order | A deliberate difference if it surfaces; re-record in that commit with the diff. (User: accepted.) |
 | B1 (fallback-1 path expression) | Keep for parity; document with a test; follow-up ticket. |
@@ -1000,7 +1072,9 @@ depends on `planner_core` only through the adapter and the `StateChange` events.
 | Formatter for `GaragePoseMsg` in errors | `std::to_string(pose)`, identical to today. |
 | `request_id_str` | Stays (used for `PrintGraph` labels). |
 | Scripts (vocabulary, include check) | None in this PR. The module test's link line and one review rule replace the include check. |
-| Direct tray tests | Stay in `scheduler_tests` through `AssignTrays`; the module tests cover the solver without a `Scheduler`. |
+| Direct tray tests | Stay in `test/src/stages/tray_assignment_tests.cpp` through `AssignTrays`; the module tests cover the solver without a `Scheduler`. |
+| Module test binary name | `tray_assignment_tests` is taken by the stage tests since stage A. Default: `tray_assignment_module_tests` at `test/src/task_planning/tray_assignment_module_tests.cpp`, suite `TrayAssignmentModule`; the user may pick another name at commit 4's review gate. |
+| Stage A's open points | The duplicate `ReparkTrayJob.UnplugsChargerAgvMovesFirst`, the two `tiny_lot` fallback scenarios, the uncovered insert-heading rule and REBALANCE_GARAGE stay as they are until the user decides (`scenario_selection.md`, section 8); not this stage's work. |
 | `blocking_tray_set.erase` inside the main loop's emission | Dropped in commit 7 as dead code (both containers are cleared right after the loop); stated in the commit body. |
 
 ## 11. What to send me at each review gate
@@ -1011,16 +1085,15 @@ The review packet for a commit (rule 12):
 - the files changed, grouped as logic changes and mechanical changes (renames, moves, call-site updates);
 - a short walkthrough of the logic changes: what to look at first and why; for a moved function, what
   changed inside it;
-- build and test results: counts of tests run, passed and failed per package; the number of reference
-  files compared; the result of the determinism check;
+- build and test results: counts of tests run, passed and failed per package, for both runs of rule 5;
+  `git status` under `test/scenarios/` after the run with the comparison on;
 - size: lines added and removed (`git diff --stat`), against the estimate in the commit table;
-- for a deliberate behaviour change: which reference files changed and a summary of their diff;
+- for a deliberate behaviour change: which scenario files changed and a summary of their diff;
 - deviations from this plan, and why;
 - open questions, and the exact decision you need from me.
 
 At the last commit of a phase, add the phase summary: the phase's commits (SHA, title, one line each),
-the exit criteria with their results, and the `tidy` findings. For phase A, add the list of reference
-files with what each covers.
+the exit criteria with their results, and the `tidy` findings.
 
-Start with **commit 1** when the user has approved this plan. Do not modify anything in `~/volley`, or
-commit anything, until then.
+Start with **commit 2** (step B2-1) once the user has created the stage's sub-ticket and branch, or
+tells you the names to use. Do not modify anything in `~/volley`, or commit anything, until then.

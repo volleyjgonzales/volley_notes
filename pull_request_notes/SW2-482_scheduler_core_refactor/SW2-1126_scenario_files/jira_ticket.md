@@ -40,9 +40,11 @@ benchmark suites the epic asks for: they run on the current customer site layout
 - Scenario files under `src/planner/scheduler/test/scenarios/`: an authored part (the test, a
   description, the initial state, the scheduler parameters, the request) and a recorded part (the
   scheduler's response in a canonical, compacted form: GUIDs by position, jobs sorted, acronym
-  field names spelled out, default-valued fields left out). A test compares its response with the
-  recorded part and fails on any difference; recording is explicit (`RECORD_REFERENCE_OUTPUT`) and
-  rewrites only the recorded part.
+  field names spelled out, default-valued fields left out). A test asserts its own properties on
+  every run and, with `SCHEDULER_CHECK_RECORDINGS` set (`SCHEDULER_CHECK_RECORDINGS=1 poe test-pkg
+  scheduler`; CI does not set it), also fails on any difference from the recorded part; off by default so that a
+  configuration change (cost model, speeds, layouts) does not force a re-record.
+  Recording is explicit (`RECORD_REFERENCE_OUTPUT`) and rewrites only the recorded part.
 - Initial states as files, `test/scenarios/initial_states/<layout>/<name>.yaml`, replacing the YAML
   literals embedded in the test sources.
 - The three planning test files split into one file per stage or job type (`test/stages/`,

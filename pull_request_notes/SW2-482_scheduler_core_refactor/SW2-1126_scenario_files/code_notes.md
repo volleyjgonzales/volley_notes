@@ -1,12 +1,15 @@
 # Commit 1: scenario files for the planning tests
 
-Status: two commits on jmg/SW2-1126/scheduler-scenario-files (Jira SW2-1126, child of epic
-SW2-482; PR #1007), on top of main (dd96ed86): b26ea5d6
-`test(scheduler): record the planning tests as scenario files` and b62423ca
-`feat(scheduler): add a viewer page for the test scenarios`; amended after every review round
-(review log items 1 to 150 in `../SW2-482_notes.md`; the PR review feedback is answered item by
-item in the section of that name below). This document describes the commit as it stands; it is
-rewritten after every change to the code.
+Status: **merged**. PR #1007 (Jira SW2-1126, child of epic SW2-482) merged into main on 2026-10-29
+as `61e7b0d7`, two commits: 28f69008 `test(scheduler): record the planning tests as scenario files` and
+6d4ae5b5 `feat(scheduler): add a viewer page for the test scenarios`, amended after every review round
+(review log items 1 to 157 in `../SW2-482_notes.md`; the PR review feedback is answered item by item in
+the section of that name below). This document describes the commits as merged; later stages change
+the code and will supersede it (the B2 renames of `PROMPT.md` touch `ScheduleContext`, which the
+stage tests and `scenarios::Dag` use). The recording comparison is gated behind
+`SCHEDULER_CHECK_RECORDINGS`, off by default (last section of the review feedback below); unlike
+the earlier review items, that change sits in the recording commit, in its own layout
+(`test/scenarios.cpp`), and the viewer commit carries it through the header split.
 
 ## Contents
 
@@ -142,8 +145,10 @@ A plan test calls `scenarios::Plan()` (with a suffix when one test has several s
 `scenarios::Plan("to_insert")`): it finds the file from gtest's current test info,
 `plan/<suite in snake case>/<Name>[.<suffix>].yaml`, checks that its `test` key names the running
 test, loads the initial state, takes the shared scheduler for the file's layout and parameters,
-builds the request, plans once and compares the canonical response with the file's recorded
-`output`, or rewrites the recorded part when `RECORD_REFERENCE_OUTPUT` is set. It returns a `Run`
+builds the request, plans once and checks the file: with `SCHEDULER_CHECK_RECORDINGS` set, the
+canonical response must match the file's recorded `output`; with `RECORD_REFERENCE_OUTPUT` set,
+the recorded part is rewritten instead; by default the file must only exist, name the test and
+hold a recorded part. It returns a `Run`
 with the scenario, the scheduler, the request and the response, for the test's own assertions.
 Each job binary ends with `TEST(<Suite>, Deterministic) { scenarios::ExpectDeterministic(); }`,
 which plans every scenario file of the suite's folder twice and expects the same canonical
@@ -175,7 +180,9 @@ Nothing is written to disk when a test compares; only recording writes. In `scen
    YAML text, yaml-cpp parses that text, and two passes over the node put scalar sequences on one
    line and spell out the acronym field names. `Compact` then reduces the node to what differs
    from the message defaults (below).
-2. The scenario file is parsed with `YAML::LoadFile`, and its `output` node is the expected side.
+2. The scenario file is parsed with `YAML::LoadFile`; it must name the running test and hold an
+   `output`. Without `SCHEDULER_CHECK_RECORDINGS` in the environment, `ExpectRecorded` returns
+   here (the default); with it, the `output` node is the expected side.
 3. `ExpectSameDocument` emits both nodes to text with `Emit` (yaml-cpp's emitter, block style,
    into a string, not a file) and walks the two strings line by line with `std::getline`. The first
    line that differs, or the first document that ends early, fails the test with the line number
@@ -529,7 +536,8 @@ and puts poses on one line.
 
 `ExpectRecorded(path, {output: {response: ...}})` (`recording.cpp`) is the comparison itself. The
 file must exist and its `test:` key must name the running test (`ExpectOwnTest`). Without
-`RECORD_REFERENCE_OUTPUT` in the environment, `YAML::LoadFile(path)["output"]` is the expected
+`RECORD_REFERENCE_OUTPUT` in the environment, the file must hold an `output`, and then, only
+with `SCHEDULER_CHECK_RECORDINGS` set, `YAML::LoadFile(path)["output"]` is the expected
 side and `ExpectSameDocument` compares it with the canonical response: both are emitted with
 `Emit` (yaml-cpp's emitter into a string, then parsed and emitted once more so that fresh and
 parsed empty collections print the same) and walked line by line with `std::getline`; a difference
@@ -590,8 +598,8 @@ second call writes to or compares with the file of the same name under the secon
 
 ### What a failure looks like
 
-gtest prints the file and line of the failing assertion. For a recorded-part mismatch the message
-reads `recorded output of FromStall.yaml and the result differ at line 42`, with the expected and the
+gtest prints the file and line of the failing assertion. For a recorded-part mismatch (only with
+`SCHEDULER_CHECK_RECORDINGS` set) the message reads `recorded output of FromStall.yaml and the result differ at line 42`, with the expected and the
 actual line, so the next step is to open the scenario file at that line; for a determinism failure
 it reads `two plans of FromStall.yaml differ at line ...`, from the suite's `Deterministic` test. A
 scenario file with a key the decoders do not know fails at load with
@@ -721,11 +729,14 @@ simulator's initial placement; the scheduler and its tests never read it.
 
 ## What is tested against what
 
-Two things, on every run. The `EXPECT_*` lines of a test are hand-written expectations of the
+Two things. The `EXPECT_*` lines of a test are hand-written expectations of the
 properties its author cared about (the last command ends at the destination, there is a lift before
 the move, the job is returned as executing); they are the specification as far as it was written
-down. The recorded `output` of the scenario file is the complete result, compared line by line, so
-that a refactor cannot change a detail nobody thought to assert. A recorded file is not a claim
+down, and they run on every run. The recorded `output` of the scenario file is the complete result,
+compared line by line when `SCHEDULER_CHECK_RECORDINGS` is set (`SCHEDULER_CHECK_RECORDINGS=1 poe test-pkg scheduler`),
+so that a refactor cannot change a detail nobody thought to assert; it is off by default, and CI
+does not set it, so that a change to what the planner is configured with (a cost, a speed, a site
+layout) does not force a re-record of files whose assertions still hold. A recorded file is not a claim
 that the output is right; it is a claim that it is what the scheduler produced before the refactor.
 Where it is wrong, the fix is a later commit that changes behaviour on purpose and re-records the
 file, and the diff is the evidence.
@@ -1559,6 +1570,70 @@ hits, of which the other three hold (C16 "free" in `TwoAgvsDistinctChargers` and
 `FillsBlankDestination` describe the layout, which the files do not list; W2103 in
 `ResolvesManyBlockersThenAssignsAgvs` names the critical path, which the stage file does not
 record). One wrong waypoint in 58 descriptions.
+
+### Teammates (Justin, Dan): gate the recording comparison behind an environment variable
+
+The request, after a discussion with the teammates: compare with the recorded part only when an
+environment variable is set, off by default. The reason: when a configuration input of the planner
+changes (the cost model, a speed, a site layout), every recording moves, and the team does not want
+such a change to force a re-record; the properties the `EXPECT_*` lines assert are what must hold
+across any configuration, and a run that must prove the output unchanged (the refactor's parity) is
+explicit about it. Assessed as sound with one condition, given to the user: a check nobody runs
+rots, so the gated mode must run somewhere automatically, or the first time it is turned on thirty
+files fail and nobody knows which drift was intended. Also given: a cost-model change is then no
+longer reviewed against its effect on the plans unless someone runs the comparison, which the team
+accepts; stale recordings would mislead the viewer, which has no prose to carry a warning (its page
+is the drawing and the tables); every one of the 58 plan and stage tests asserts properties of its
+own, inline or through `ExpectInsert` / `ExpectRetrieveThroughLift`, so none relies on the recording
+alone (checked by counting assertions per test). The user chose this form; the opposite default
+(on, with a skip variable) was offered as the same code and not taken.
+
+Done and amended, on the user's approval, into the recording commit (its own layout:
+`test/scenarios.cpp` and `.hpp`, README), with the viewer commit carrying the change through the
+header split, so that `recording.cpp` at HEAD holds it; the files below are HEAD's:
+
+- `recording.cpp`, `ExpectRecorded`: after the load, the own-test check and the missing-`output`
+  failure, return unless `SCHEDULER_CHECK_RECORDINGS` is set (three lines). The recording branch
+  (`RECORD_REFERENCE_OUTPUT`) is untouched. The missing-output failure stays on by default so that a
+  file is never half authored. `ExpectDeterministic` is untouched: it compares two runs with each
+  other, not with the file, so no configuration change can break it. The name follows
+  `SCHEDULER_TEST_LOG`.
+- `recording.hpp`, `plan.hpp`, `stage.hpp`: the doc comments say what is checked by default and
+  what the variable adds; the why is one clause in `recording.hpp`. A first version said more
+  and the user found it too verbose; cut to four, two and two lines.
+- No poe task. A first version added `poe scheduler-check-recordings` (a sequence with
+  `env = { SCHEDULER_CHECK_RECORDINGS = "1" }`); the user removed it: the command in the README,
+  `SCHEDULER_CHECK_RECORDINGS=1 poe test-pkg scheduler`, is enough.
+- CI: nothing. A first draft added a `scheduler-recordings` matrix entry (a boolean input on
+  `.call-unit-tests.yml`, a `$GITHUB_ENV` step before `colcon test`, since an `env:` expression
+  would set the variable to the empty string when off, which `getenv` reports as set); it was
+  blocking, as every matrix entry is (a reusable-workflow call takes no `continue-on-error`, and
+  the `unit-system-test-status` meta job fails on any failure), and it ran the scheduler package
+  twice. Non-blocking forms were laid out (a `::warning` annotation on a soft `colcon test-result`,
+  `continue-on-error` on the inner job, the nightly workflow). After a second discussion the user
+  decided against any comparison in CI: CI runs the invariant properties only, the files may be
+  deleted or moved in a later stage, so nothing is designed around them. The two workflow files
+  are reverted; the comparison is run by hand with the poe task.
+- `test/scenarios/README.md`: the first paragraph and "Building, running and recording" say what
+  runs by default, what the variable adds, that CI does not set it, and that recording is
+  followed by a run with the variable set.
+- The user's `volley-in-container` (outside the repo): `SCHEDULER_CHECK_RECORDINGS` is passed
+  through to the container like `RECORD_REFERENCE_OUTPUT`, unset when empty, so
+  `SCHEDULER_CHECK_RECORDINGS=1 volley-in-container test scheduler` and `gtest` work.
+
+The user also asked why `== nullptr` rather than `!std::getenv(...)`: consistency with the two
+other environment reads (`RECORD_REFERENCE_OUTPUT`, `SCHEDULER_TEST_LOG`);
+`readability-implicit-bool-conversion` is not enabled in the team's `.clang-tidy`, so either form
+passes; left as is.
+
+Verified in the container: build clean (0 warnings); `FromStall.yaml` with one duration edited
+(7.91000 to 7.99000) passes `RetrieveJob.FromStall` with the variable unset and fails with it set
+at line 32 with the expected and actual values, then the file restored (git shows the scenarios
+folder clean). The full package: 187 tests green with the variable unset
+(`volley-in-container test scheduler`) and green with it set (then still through the poe task,
+removed since; the variable reaches the binaries the same way from the shell); with the edited
+file and the variable set exactly `RetrieveJob.FromStall` fails. prek hooks pass on every touched
+file. The comment and poe-task changes after that were comments, TOML and Markdown only.
 
 
 

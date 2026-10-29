@@ -1,5 +1,10 @@
 # SW2-484 design review (Phase R), 2026-10-22
 
+> Historical record. Stage A was implemented and merged (PR #1007, 2026-10-29) in a form that differs
+> from item 2 below: scenario files with an authored part and a recorded part, loaded from files rather
+> than instrumented inline tests, and an opt-in comparison. `PROMPT.md` (sections 1, 5 "Phase A", 6.4)
+> describes the state that later stages build on; nothing else in this review changed.
+
 Reviewed against: the objectives in `PROMPT.md` section 1, the code on `main` at `703bfe7c`, and the study
 pack (`07-issue-and-proposal.md`, `08-verification.md`, `03-task-planning.md`). The survey findings are in
 `SW2-482_notes.md`. The rewritten plan is `PROMPT.md`. Nothing in `~/volley` was changed.

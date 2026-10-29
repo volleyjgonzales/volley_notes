@@ -11,7 +11,7 @@ Title: `[SW2-1126] Record the scheduler planning tests as scenario files`
 
 # What
 
-Every planning test of the scheduler now runs from a scenario file under `src/planner/scheduler/test/scenarios/`. The authored part of a file names the test, the initial state and the request; the recorded part holds the scheduler's response in a canonical, compacted form (action-node GUIDs by position, jobs sorted by GUID, acronym field names spelled out, default-valued fields left out). A test compares its response with the recorded part and fails on any difference; recording is explicit (`RECORD_REFERENCE_OUTPUT=1`) and rewrites only the recorded part. These files are gtest inputs and recordings, not simulation scenarios: those live under `src/scenario/scenarios/` and none of the exerciser's workload conventions apply here.
+Every planning test of the scheduler now runs from a scenario file under `src/planner/scheduler/test/scenarios/`. The authored part of a file names the test, the initial state and the request; the recorded part holds the scheduler's response in a canonical, compacted form (action-node GUIDs by position, jobs sorted by GUID, acronym field names spelled out, default-valued fields left out). A test asserts the properties its author wrote on every run; with `SCHEDULER_CHECK_RECORDINGS=1` (`SCHEDULER_CHECK_RECORDINGS=1 poe test-pkg scheduler`; CI does not set it) it also compares its response with the recorded part and fails on any difference. That comparison is off by default so that a change to what the planner is configured with (a cost, a speed, a site layout) does not force a re-record; a change that must keep the output, such as the refactor, turns it on. Recording is explicit (`RECORD_REFERENCE_OUTPUT=1`) and rewrites only the recorded part. These files are gtest inputs and recordings, not simulation scenarios: those live under `src/scenario/scenarios/` and none of the exerciser's workload conventions apply here.
 
 Two commits: the tests and scenario files, then the viewer.
 
@@ -21,7 +21,7 @@ Two commits: the tests and scenario files, then the viewer.
 - The three test files split into one file per stage, job type or utility (`test/stages/`, `test/jobs/`, `test/utils/`), one gtest suite and one binary each, built from one CMake list; the scenario and initial-state loaders are compiled once into a static library every binary links. Test code follows the conventions of `src/agvhito/src/sm`.
 - 58 scenarios: 45 through `Scheduler::Plan`, 4 tray-assignment and 9 AGV-assignment stage scenarios. They run on 275_sunrise_b (most), 5675_pecos_combined (bays, AGV chargers, sanity checks) and 38_gramercy (EV chargers; its bay is the car lift BL26, so retrieves go through the lift) instead of the decommissioned 576_eccles and 1355_fulton sites and three synthetic lots. Two blocking-tray fallback scenarios keep the synthetic tiny_lot: a closed-off region of a site either leaves the tray no path or makes the planner cycle for minutes.
 - Four new tests: an insert-readiness job, a base schedule that reserves an AGV, and the two tray-assignment fallbacks (advance the root tray; park the blocker on the critical path).
-- A plan scenario is planned twice in one process and both runs must agree before the comparison.
+- A plan scenario is planned twice in one process and both runs must agree, whether or not the comparison is on.
 - `src/planner/scheduler/test/.clang-tidy` disables `bugprone-unchecked-optional-access` for the test folder, as `src/agvhito/test/.clang-tidy` does: the check cannot see gtest's assertions.
 - `test/scenarios/README.md` documents the file formats, the vocabulary, the layouts to use, and how to build, run, record and view.
 
@@ -49,6 +49,7 @@ The Scheduler Core Refactor (SW2-482) moves tray-move planning and AGV assignmen
 - [x] `poe test-pkg scheduler` (170 tests), `planner_core` and `scheduler_advanced_tests` pass
 - [x] `prek` hooks and the pre-push `clang-tidy` pass (0 findings)
 - [x] Every scenario re-recorded and compared on the current scheduler; no recording changed on the final rebase
+- [x] `SCHEDULER_CHECK_RECORDINGS=1 poe test-pkg scheduler` (the comparison on) passes; with it off, a deliberately edited recording passes and its test's own assertions still run
 - [x] The viewer renders all 58 scenarios
 
 Coverage note: octocov reports -1.3% against main, with `collision_geometry.cpp` and the scheduler files among the affected ones. The unit-test coverage report shows `scheduler.cpp` up (2,019 to 2,026 covered lines) and the other scheduler files level. The delta is the collision-table builder: push runs on main skip the collision-table cache, so all 27 jobs build the tables and cover the builder, while PR runs download the cache and only the three jobs that build small tables cover it. The comparison is between two CI configurations, not between the tests.

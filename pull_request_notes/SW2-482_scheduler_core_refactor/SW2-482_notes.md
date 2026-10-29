@@ -12,11 +12,21 @@
   branch point; two merges after the study pack's `703bfe7c`: `#996` motion_planner perf, `#998` launcher
   fix. `scheduler`, `planner_core` and `common_ros` are unchanged between the two, so the study pack's line
   numbers still hold.)
-- **In progress: commit 1** (steps A1, A2). Work done, unstaged, review packet posted on 2026-10-22;
-  waiting for the user's feedback. See "Commit 1" below.
-- **Next:** address feedback, commit on approval, then commit 2 (B2-1, B2-2 renames) when the user says so.
+- **Stage A done.** PR #1007 `[SW2-1126] Record the scheduler planning tests as scenario files` merged
+  on 2026-10-29 as `61e7b0d7` on main (two commits: `28f69008` the tests and scenario files, `6d4ae5b5`
+  the viewer). Review log items 1 to 157 cover its rounds. What landed is described in
+  `SW2-1126_scenario_files/code_notes.md`; the "Commit 1" section below is the original design as first
+  built (reference files, `parity.hpp`) and is kept as history only.
+- **Next: stage 2, phase B2** (commits 2 and 3 of `PROMPT.md`: the `Scheduler` member and expansion
+  renames, then `PlanContext`). In a new session: read `PROMPT.md` (updated 2026-10-29 for the merged
+  state), `review_rules.md` (section 7: what PR #1007 taught) and this file, then start commit 2. The
+  user creates the sub-ticket under SW2-482 and the branch `jmg/SW2-<ticket>/<slug>` from `main`.
+- **Parity from now on:** `SCHEDULER_CHECK_RECORDINGS=1 volley-in-container test scheduler` green and
+  `git status` clean under `test/scenarios/`; CI runs the property assertions only (item 156).
+- **Baseline on main `61e7b0d7`:** scheduler 187 tests as colcon counts them (92 `TEST` cases, 19
+  binaries), planner_core 23, scheduler_advanced_tests 16.
 
-## Commit 1: parity references (A1, A2)
+## Commit 1 as first built: parity references (A1, A2); superseded by the scenario files (history)
 
 Files (all under `src/planner/scheduler/`): `test/parity.hpp` (44 lines), `test/parity.cpp` (176),
 `CMakeLists.txt` (+12), `test/scheduler_tests.cpp` (+18), `test/scheduler_insert_orientation_tests.cpp` (+6),
@@ -938,6 +948,92 @@ Still never covered end to end: REBALANCE_GARAGE, `planned_jobs`, `active_jobs`.
        naming W2070 for W2074 (valid; fixed; a sweep of all 58 descriptions found no other wrong
        node). Amended into the viewer commit (396ca448). Remote main still dd96ed86: rebase a
        no-op, no rebuild needed.
+  153. `done` (2026-10-28) scenario_selection.md written for the user's review of the selection:
+       the rule (every old test ported one to one, four gaps closed), the four old binaries, an
+       old-to-new table for all 72 tests, the four new scenarios, the layout decisions and what the
+       move changed, the initial states, and the gaps and five points to decide (the duplicate
+       UnplugsChargerAgvMovesFirst, the TwoAgvsDistinctChargers GUID fix, tiny_lot, two odd
+       recordings, the retrieve-heavy mix).
+  154. `done` (2026-10-28) scenario_selection.md extended at the user's asking: section 3 "Did
+       the port expand the coverage?" (41 planned situations before, 45 plans + 13 stages after;
+       four new scenarios = 2,019 to 2,026 covered lines of scheduler.cpp; depth, layouts and data
+       form are what changed); "same inputs" defined as same situation, not same numbers; a
+       subsection on how a ported state was designed (role-to-role node map, headings turned by
+       90 degrees, the FromStall example, hand-written gramercy and pecos states, the redesigned
+       blockers, the four new states). Sections renumbered.
+  155. `done` (2026-10-28) Justin's two review points reasoned through, reply drafted for the user
+       (no code change). (a) Overfitting: the recordings are characterisation tests for the
+       refactor's parity, by design change detectors; the EXPECT_* lines are the correctness
+       checks and stay; a parameter change (strafe speed) does re-record, with the diff as the
+       review artefact; options for later: drop durations from the canonical form, or demote
+       the recordings to the stage DAGs once the solver interface exists. (b) Sorting
+       scheduled_jobs: the scheduler rebuilds the list from an unordered_map keyed by GUID
+       (BuildScheduledActionsArray), so the returned order is hash order of process-wide
+       counter GUIDs, carries nothing and would flap; dispatch matches by GUID; the order that
+       matters is the action nodes' parents, compared in full.
+  156. `review` (2026-10-28) Teammates' request after their discussion: gate the comparison with
+       the recorded part behind an environment variable, off by default, so that a change to a
+       planner configuration input (cost model) does not force a re-record; the EXPECT_* properties
+       hold across configurations, a parity run is explicit. Assessed (sound, provided the gated
+       mode runs automatically somewhere; the trade-offs given) and drafted, uncommitted, for the
+       user's review: `ExpectRecorded` returns before the comparison unless
+       `SCHEDULER_CHECK_RECORDINGS` is set (the existence, own-test and missing-output checks stay;
+       `ExpectDeterministic` untouched); doc comments in recording.hpp, plan.hpp, stage.hpp;
+       README (the command `SCHEDULER_CHECK_RECORDINGS=1 poe test-pkg scheduler`); the user's
+       wrapper passes the variable through. A poe task `scheduler-check-recordings` was drafted
+       and removed at the user's asking (the README command is enough), and the three doc
+       comments cut after the user found them too verbose. A CI matrix entry was drafted, explained line by line at the user's
+       asking (blocking; non-blocking forms laid out) and then dropped on the user's decision after
+       a second team discussion: CI runs the invariant properties only, the files may be deleted
+       or moved later, nothing is designed around them. Verified: build clean; an edited
+       `FromStall.yaml` passes with the variable unset and fails at line 32 with it set, file
+       restored. Full package: `volley-in-container test scheduler` 187 tests green with the
+       variable unset and 187 green with it set (at the time through the poe task); with the
+       edited FromStall.yaml and the variable set exactly that test fails (colcon counts it
+       twice, gtest and ctest), file restored, scenarios folder clean. prek hooks pass on every touched file.
+       `== nullptr` kept over `!getenv` for consistency with the two other reads (asked). Open for
+       the user: which commit (recording commit by fixup + autosquash, or the viewer commit).
+       Details in code_notes.md, last review section.
+  157. `blocked` (2026-10-28) User approved amending into the recording commit by fixup +
+       autosquash. Fixup commit a0e1a853 made in the container (hooks, commitlint green), then
+       `git -c sequence.editor=true rebase -i --autosquash dd96ed86` conflicted: modify/delete on
+       plan.hpp, recording.hpp, stage.hpp, recording.cpp and content on README.md, because the
+       recording commit b26ea5d6 has no `test/include/` or `test/src/` at all; every review amend
+       since the header split and the `test/src/` move went into the viewer commit 396ca448, which
+       is where the gated files were created. Rebase aborted; branch back to b26ea5d6, 396ca448,
+       a0e1a853 (fixup on top), tree clean. The fixup can only fold into the viewer commit (a
+       rebase whose todo marks a0e1a853 `fixup` under 396ca448). The user asked to try again,
+       carefully, two commits only. Done: the recording commit has the old layout
+       (`test/scenarios.cpp` / `.hpp`, `ExpectRecorded` at scenarios.cpp:394), so the same change
+       was made there by hand on a detached HEAD at b26ea5d6 (gate, four-line comment, the Plan
+       and ExpectStage comments, the header's overview line, the README's three passages), built
+       (0 warnings) and checked (edited FromStall passes unset, fails at line 32 set, restored),
+       committed as fixup 7cf22eab (hooks green). Then one rebase onto dd96ed86 with an explicit
+       todo (`sequence.editor=printf ... >`): pick b26ea5d6, fixup 7cf22eab, pick 396ca448, fixup
+       a0e1a853. The viewer pick conflicted as expected (modify/delete on scenarios.cpp/.hpp,
+       content on README.md); resolved by taking the viewer commit's side (`git rm` the two,
+       README `--theirs`, verified identical to 396ca448's), `rebase --continue`, and the viewer
+       fixup applied cleanly. Result: 28f69008 `test(scheduler): record ...` (b26ea5d6 + the
+       three files, 29/17 lines) and 6d4ae5b5 `feat(scheduler): add a viewer page ...`; authors
+       and dates kept; `git diff a0e1a853 HEAD` empty, so the final tree is the verified one.
+       Rebuilt at HEAD (0 warnings) and the package re-run: 187 tests green. Tree clean. Not
+       pushed; the user force-pushes.
+  158. `done` (2026-10-29) PR #1007 merged (`61e7b0d7`). Stage-2 preparation at the user's asking:
+       `PROMPT.md` rewritten for the merged state (header: stage A done, how to start stage 2; section 1:
+       scenario files and the opt-in comparison as the parity mechanism; rules 5 to 9 and 12: the two
+       test runs, record-reference on any of the 19 binaries, one branch and PR per stage, the commit
+       message form the team accepted (no step tag, no key), amend/rebase only on the user's word, the
+       post-PR review loop; section 4: where the B2 names live now (sanity_check_tests,
+       scheduler_state_tests, stage.cpp, scheduler_ros.cpp lines 20 and 55); commit table without step
+       tags; Phase A replaced by what landed; B2 and C1 file references corrected (the module test
+       cannot be named `tray_assignment_tests`, default `tray_assignment_module_tests`; layouts per
+       stage A; `initial_states::Load`); 6.1 tree and 6.4 rewritten for the support library; section
+       10 rows for the parity mechanism, the module test name and stage A's open points).
+       `review_rules.md` section 7 added: what PR #1007 taught, distilled from the review log and the
+       code notes by a subagent and checked (C++, tests, Python, the review loop, rejected items), plus
+       checklist item 8. Status sections of this file, the folder README, the SW2-1126 README and
+       code_notes updated to "merged"; a historical note on top of DESIGN-REVIEW.md. `HOW-IT-WORKS.md`,
+       which the old header cited, does not exist anywhere under ~/repos; the reference is gone.
 
   Round 24 (2026-10-26):
   103. `done` Jon's force push is slow at the clang-tidy pre-push hook; where does the output go,
