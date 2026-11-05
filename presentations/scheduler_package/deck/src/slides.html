@@ -19,7 +19,7 @@
     <span class="pill">SW2-484 tray solver interface</span>
     <span class="pill">SW2-769 package reorganization</span>
     <span class="pill">SW2-487 tray benchmark set</span>
-    <span class="pill">October 2026</span>
+    <span class="pill">November 2026</span>
   </div>
   <aside class="notes">
     Purpose: establish a shared understanding of the scheduler sufficient to review the refactor, and reach agreement on
@@ -165,7 +165,7 @@
   </div>
   <div class="swap" style="margin-top:18px">
     <div class="fragment fade-out" data-fragment-index="0">
-      <p class="callout" style="margin:0">Task planning (stages 1-3) accounts for <strong>78% of the <code>scheduler</code> package</strong>. Motion planning is a separate library (<code>motion_planner</code>). The refactor addresses stages 2 and 3.</p>
+      <p class="callout" style="margin:0">Task planning (stages 1-3) accounts for <strong>73% of the <code>scheduler</code> package</strong>. Motion planning is a separate library (<code>motion_planner</code>). The refactor addresses stages 2 and 3.</p>
     </div>
     <div class="p1 fragment fade-in-then-out" data-fragment-index="0">
       <div class="steplab">The example used in the next steps: one retrieve job, two AGVs</div>
@@ -213,7 +213,7 @@
     </div>
     <div class="p4 fragment fade-in" data-fragment-index="4">
       <div class="steplab">Stage 5 returns an action DAG: no times, only the order Dispatch must respect</div>
-      <svg class="dg" viewBox="0 0 1150 200" style="width:100%"><defs><marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker><marker id="ahP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ec4899"/></marker></defs><text x="0" y="35" class="mono" style="font-size:14px;font-weight:600">Bay</text><rect class="box" x="95" y="13" width="100" height="34" rx="7"/><text x="145.0" y="35" text-anchor="middle" class="mono" style="font-size:12.5px">retrieve mode</text><rect class="box" x="991" y="13" width="100" height="34" rx="7"/><text x="1041.0" y="35" text-anchor="middle" class="mono" style="font-size:12.5px">hand over</text><text x="0" y="100" class="mono" style="font-size:14px;font-weight:600">AGV-1</text><rect class="box" x="95" y="78" width="100" height="34" rx="7"/><text x="145.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W26→B21 (4)</text><rect class="box" x="207" y="78" width="100" height="34" rx="7"/><text x="257.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">lift T21</text><path d="M195 95H204" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="319" y="78" width="100" height="34" rx="7"/><text x="369.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">B21→W41</text><path d="M307 95H316" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="431" y="78" width="100" height="34" rx="7"/><text x="481.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W41→W22</text><path d="M419 95H428" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="543" y="78" width="100" height="34" rx="7"/><text x="593.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W22→P23</text><path d="M531 95H540" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="655" y="78" width="100" height="34" rx="7"/><text x="705.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">lower T21</text><path d="M643 95H652" class="arrow" marker-end="url(#ahA)"/><text x="0" y="165" class="mono" style="font-size:14px;font-weight:600">AGV-2</text><rect class="box" x="95" y="143" width="100" height="34" rx="7"/><text x="145.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W13→P19 (2)</text><rect class="box" x="207" y="143" width="100" height="34" rx="7"/><text x="257.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">lift T17</text><path d="M195 160H204" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="319" y="143" width="100" height="34" rx="7"/><text x="369.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">P19→W18</text><path d="M307 160H316" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="655" y="143" width="100" height="34" rx="7"/><text x="705.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W18→W22</text><path d="M419 160H652" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="767" y="143" width="100" height="34" rx="7"/><text x="817.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W22→W41</text><path d="M755 160H764" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="879" y="143" width="100" height="34" rx="7"/><text x="929.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W41→B21</text><path d="M867 160H876" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="991" y="143" width="100" height="34" rx="7"/><text x="1041.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">lower T17</text><path d="M979 160H988" class="arrow" marker-end="url(#ahA)"/><path d="M145.0 47.0V62.5H257.0V75.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><path d="M593.0 112.0V127.5H705.0V140.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><text x="616" y="121" style="font-size:12.5px;fill:#ec4899">W22 free</text><path d="M1041.0 143.0V50.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><text x="0" y="196" class="sub" style="font-size:13px">Boxes: actions; grey arrows: each agent's own order; pink: an agent waits for another. AGV-2 also needs W41 and B21 after AGV-1: those edges are implied by the W22 edge, so Reduce() removes them.</text></svg>
+      <svg class="dg" viewBox="0 0 1150 200" style="width:100%"><defs><marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker><marker id="ahP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ec4899"/></marker></defs><text x="0" y="35" class="mono" style="font-size:14px;font-weight:600">Bay</text><rect class="box" x="95" y="13" width="100" height="34" rx="7"/><text x="145.0" y="35" text-anchor="middle" class="mono" style="font-size:12.5px">retrieve mode</text><rect class="box" x="991" y="13" width="100" height="34" rx="7"/><text x="1041.0" y="35" text-anchor="middle" class="mono" style="font-size:12.5px">hand over</text><text x="0" y="100" class="mono" style="font-size:14px;font-weight:600">AGV-1</text><rect class="box" x="95" y="78" width="100" height="34" rx="7"/><text x="145.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W26→B21 (4)</text><rect class="box" x="207" y="78" width="100" height="34" rx="7"/><text x="257.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">lift T21</text><path d="M195 95H204" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="319" y="78" width="100" height="34" rx="7"/><text x="369.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">B21→W41</text><path d="M307 95H316" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="431" y="78" width="100" height="34" rx="7"/><text x="481.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W41→W22</text><path d="M419 95H428" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="543" y="78" width="100" height="34" rx="7"/><text x="593.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">W22→P23</text><path d="M531 95H540" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="655" y="78" width="100" height="34" rx="7"/><text x="705.0" y="100" text-anchor="middle" class="mono" style="font-size:12.5px">lower T21</text><path d="M643 95H652" class="arrow" marker-end="url(#ahA)"/><text x="0" y="165" class="mono" style="font-size:14px;font-weight:600">AGV-2</text><rect class="box" x="95" y="143" width="100" height="34" rx="7"/><text x="145.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W13→P19 (2)</text><rect class="box" x="207" y="143" width="100" height="34" rx="7"/><text x="257.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">lift T17</text><path d="M195 160H204" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="319" y="143" width="100" height="34" rx="7"/><text x="369.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">P19→W18</text><path d="M307 160H316" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="655" y="143" width="100" height="34" rx="7"/><text x="705.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W18→W22</text><path d="M419 160H652" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="767" y="143" width="100" height="34" rx="7"/><text x="817.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W22→W41</text><path d="M755 160H764" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="879" y="143" width="100" height="34" rx="7"/><text x="929.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">W41→B21</text><path d="M867 160H876" class="arrow" marker-end="url(#ahA)"/><rect class="box" x="991" y="143" width="100" height="34" rx="7"/><text x="1041.0" y="165" text-anchor="middle" class="mono" style="font-size:12.5px">lower T17</text><path d="M979 160H988" class="arrow" marker-end="url(#ahA)"/><path d="M145.0 47.0V62.5H257.0V75.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><path d="M593.0 112.0V127.5H705.0V140.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><text x="616" y="121" style="font-size:12.5px;fill:#ec4899">W22 free</text><path d="M1041.0 143.0V50.0" class="arrow" style="stroke:#ec4899;stroke-width:2.2;stroke-linejoin:round" marker-end="url(#ahP)"/><text x="0" y="196" class="sub" style="font-size:13px">Boxes: actions; grey arrows: each agent's own order; pink: an agent waits for another. AGV-2 also needs W41 and B21 after AGV-1: those edges are implied by the W22 edge, so RemoveRedundantEdges() removes them.</text></svg>
     </div>
   </div>
   <aside class="notes">
@@ -286,7 +286,7 @@
       <ul class="small tight">
         <li>The job requests <strong>an</strong> empty tray, not a specific one. The choice belongs to tray assignment and affects the plan: some choices require other trays to be moved first.</li>
         <li>Current rule: search outward from the bay, with cost = travel time + <strong>30 s per obstructing tray</strong>, and select the lowest cost.</li>
-        <li>Other rules are possible, for example keeping the stalls nearest the bay for vehicles. The rule currently resides in the 560-line <code>DoTrayAssignments</code>; behind an interface, alternative rules can be compared on the benchmark set.</li>
+        <li>Other rules are possible, for example keeping the stalls nearest the bay for vehicles. The rule currently resides in the 284-line <code>AssignTrays</code>; behind an interface, alternative rules can be compared on the benchmark set.</li>
       </ul>
     </div>
   </div>
@@ -308,7 +308,7 @@
       <ul class="small tight">
         <li>A <strong>cost</strong> for each pair of AGV and tray move: the time to reach and lift the tray.</li>
         <li>A <strong>bottleneck matching</strong> minimises the largest chosen cost, not the total.</li>
-        <li>Both the cost and the matching rule are <strong>policies</strong>. Both currently reside in the 365-line <code>DoAgvAssignments</code>, which the second interface of the ticket replaces.</li>
+        <li>Both the cost and the matching rule are <strong>policies</strong>. Both currently reside in <code>AssignAgvs</code> and the 21 other <code>Scheduler</code> methods of <code>agv_assignment.cpp</code>, which the second interface of the ticket replaces.</li>
       </ul>
     </div>
   </div>
@@ -396,36 +396,40 @@
       <p class="tiny">Out of scope: changes to CHUGG/SIPP motion planning, a new optimal solver, adding to active schedules.</p>
     </div>
     <div class="stack">
-      <div class="card"><h3><span class="mono">SW2-769</span> <span class="pill green">Done</span></h3><p>Scheduler package reorganization.</p></div>
-      <div class="card"><h3><span class="mono">SW2-484</span> <span class="pill amber">In progress</span></h3><p>Tray solver interface. The first implementation ticket.</p></div>
-      <div class="card"><h3><span class="mono">SW2-487</span> <span class="pill">To do</span></h3><p>Tray benchmark set. Can begin once baseline capture is deterministic.</p></div>
+      <div class="card"><h3><span class="mono">SW2-1126 · SW2-1135</span> <span class="pill green">Done</span></h3><p>Planning tests as scenario files (PR #1007); renames, one source file per stage and bug fixes (PR #1018).</p></div>
+      <div class="card"><h3><span class="mono">SW2-484</span> <span class="pill amber">In progress</span></h3><p>Tray solver interface. Next: pure tray helpers, then the solver.</p></div>
+      <div class="card"><h3><span class="mono">SW2-487</span> <span class="pill">To do</span></h3><p>Tray benchmark set. Follows the tray solver interface.</p></div>
       <p class="tiny">No child ticket exists yet for AGV assignment; one is required.</p>
     </div>
   </div>
   <aside class="notes">
     The scope is deliberately narrow: no new algorithm and no change to motion planning. It is an enabling refactor.
     Its value is that future tray or AGV solvers can be introduced behind an interface and evaluated quantitatively.
+    The two preparatory stages are merged: every planning test now runs from a scenario file with a recorded output,
+    and the scheduler has today's names, one source file per pipeline stage and one error type. SW2-769 (package
+    reorganization) is also marked done.
   </aside>
 </section>
 
 <section>
   <div class="kicker">Code distribution</div>
-  <h2>Task planning dominates the scheduler and is concentrated in a few large methods</h2>
+  <h2>Task planning dominates the scheduler; tray assignment is still one large method</h2>
   <div class="bars" style="margin-top:20px">
-    <div class="lab">scheduler package</div><div class="track"><div class="bar go" style="--w:100%;--c:var(--slate)"></div></div><div class="val">4,570</div>
-    <div class="lab">task planning (stages 1-3)</div><div class="track"><div class="bar go" style="--w:78%;--c:var(--slate)"></div></div><div class="val">~3,590</div>
+    <div class="lab">scheduler package</div><div class="track"><div class="bar go" style="--w:100%;--c:var(--slate)"></div></div><div class="val">3,799</div>
+    <div class="lab">task planning (stages 1-3)</div><div class="track"><div class="bar go" style="--w:73%;--c:var(--slate)"></div></div><div class="val">2,771</div>
   </div>
-  <h3 style="margin-top:34px">The three largest methods</h3>
+  <h3 style="margin-top:34px">The two stage entry points in scope, and <code>Plan</code></h3>
   <div class="bars" style="margin-top:10px">
-    <div class="lab"><code>DoTrayAssignments</code></div><div class="track"><div class="bar go" style="--w:100%;--c:var(--accent)"></div></div><div class="val">560</div>
-    <div class="lab"><code>DoAgvAssignments</code></div><div class="track"><div class="bar go" style="--w:65%;--c:var(--accent)"></div></div><div class="val">365</div>
-    <div class="lab"><code>Plan</code></div><div class="track"><div class="bar go" style="--w:52%;--c:var(--slate)"></div></div><div class="val">291</div>
+    <div class="lab"><code>AssignTrays</code></div><div class="track"><div class="bar go" style="--w:100%;--c:var(--accent)"></div></div><div class="val">284</div>
+    <div class="lab"><code>AssignAgvs</code></div><div class="track"><div class="bar go" style="--w:31%;--c:var(--accent)"></div></div><div class="val">88</div>
+    <div class="lab"><code>Plan</code></div><div class="track"><div class="bar go" style="--w:39%;--c:var(--slate)"></div></div><div class="val">112</div>
   </div>
   <p class="small" style="margin-top:16px"><span class="key" style="--c:var(--accent)"></span> in scope of the ticket &nbsp;&nbsp; <span class="key" style="--c:var(--slate)"></span> context</p>
-  <p class="callout" style="margin-top:18px">The two methods in scope are the largest functions in the package: approximately 925 lines that read and modify shared planner state directly.</p>
-  <p class="source">lines of C++ in the scheduler package snapshot studied; with library code, task planning is ~5,000 and motion planning ~3,900</p>
+  <p class="callout" style="margin-top:18px">Tray assignment is the largest function in the package. AGV assignment is shorter since PR #1018 moved parts of its loop into named helpers, but it and its 21 helpers are still <code>Scheduler</code> methods that read and modify shared planner state directly.</p>
+  <p class="source">lines of function code in the scheduler package at main a468657f (2026-11-05); before PR #1018, 4,570 lines, with DoTrayAssignments 560 and DoAgvAssignments 365</p>
   <aside class="notes">
-    Size is a symptom rather than the cause. The following slide describes the structural issues.
+    Size is a symptom rather than the cause. PR #1018 removed narration logging and extracted helpers, which shrank
+    the code, but did not change its structure. The following slide describes the structural issues.
   </aside>
 </section>
 
@@ -434,15 +438,16 @@
   <h2>Structural limitations of the planning core</h2>
   <div class="cols c3">
     <div class="card"><h3>Implicit inputs and outputs</h3><p>The assignment methods read and modify the event DAG, the working garage state and member maps in place. Their signatures do not state what they require or change.</p></div>
-    <div class="card"><h3>No isolated testing</h3><p>Testing tray assignment requires constructing a complete <code>Scheduler</code>. There is no separable unit and no point of substitution.</p></div>
+    <div class="card"><h3>No isolated testing</h3><p>Stage tests run from scenario files (PR #1007) but still need a complete <code>Scheduler</code>. There is no separable unit and no point of substitution.</p></div>
     <div class="card"><h3>Shared helpers</h3><p>The same helpers (headings, blockers, empty-tray selection) are used by job expansion. Relocating them without redesign either breaks callers or introduces back-references.</p></div>
-    <div class="card"><h3>Inconsistent error handling</h3><p><code>BoolStringPair</code>, <code>std::optional</code> and silent <code>false</code> returns are mixed; some failures lose their cause.</p></div>
-    <div class="card"><h3>Inconsistent naming</h3><p>Names such as <code>gg_</code>, <code>table_</code>, <code>CollisionEntityId</code> and "disabled" obscure their meaning and impede comprehension.</p></div>
-    <div class="card"><h3>No performance baseline</h3><p>Without a benchmark set, the effect of a change on plan quality or planning time cannot be determined.</p></div>
+    <div class="card"><h3>Inconsistent error handling <span class="pill green">Fixed</span></h3><p>Was: <code>BoolStringPair</code>, <code>std::optional</code> and silent <code>false</code> returns, some losing their cause. Since PR #1018 the scheduler returns <code>stdx::Expected</code> and reports those failures.</p></div>
+    <div class="card"><h3>Inconsistent naming <span class="pill green">Mostly fixed</span></h3><p>PR #1018 renamed <code>gg_</code>, <code>table_</code>, the per-call context and the stage methods. <code>common_ros</code> names such as <code>CollisionEntityId</code> and "disabled" remain.</p></div>
+    <div class="card"><h3>No performance baseline</h3><p>Recorded outputs now catch a changed plan, but without a benchmark set the effect on plan quality or planning time cannot be measured.</p></div>
   </div>
   <aside class="notes">
     The first three are addressed directly by the interfaces. The last three make the work safe and reviewable:
-    a single error type, descriptive names, and measurable baselines.
+    a single error type and descriptive names (both delivered in PR #1018 for the scheduler), and measurable
+    baselines (parity recordings delivered in PR #1007; benchmarks still to do).
   </aside>
 </section>
 
@@ -453,14 +458,14 @@
     <defs><marker id="ahR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ef4444"/></marker></defs>
     <rect x="10" y="10" width="760" height="500" rx="14" class="box" style="fill:none"/>
     <text x="34" y="46" class="mono sub" style="font-size:18px">class Scheduler</text>
-    <rect class="box" x="40" y="70" width="300" height="60" rx="8"/><text x="190" y="107" text-anchor="middle" class="mono" style="font-size:17px">Plan()  291 lines</text>
-    <rect class="box" x="40" y="160" width="300" height="60" rx="8"/><text x="190" y="197" text-anchor="middle" class="mono" style="font-size:17px">Plan&lt;Type&gt;Job ×10</text>
-    <rect class="box focus-line" x="40" y="250" width="300" height="70" rx="8"/><text x="190" y="282" text-anchor="middle" class="mono" style="font-size:17px">DoTrayAssignments()</text><text x="190" y="305" text-anchor="middle" class="sub">560 lines · in scope</text>
-    <rect class="box focus-line" x="40" y="350" width="300" height="70" rx="8"/><text x="190" y="382" text-anchor="middle" class="mono" style="font-size:17px">DoAgvAssignments()</text><text x="190" y="405" text-anchor="middle" class="sub">365 lines · in scope</text>
+    <rect class="box" x="40" y="70" width="300" height="60" rx="8"/><text x="190" y="107" text-anchor="middle" class="mono" style="font-size:17px">Plan()  112 lines</text>
+    <rect class="box" x="40" y="160" width="300" height="60" rx="8"/><text x="190" y="197" text-anchor="middle" class="mono" style="font-size:17px">Expand&lt;Type&gt;Job ×11</text>
+    <rect class="box focus-line" x="40" y="250" width="300" height="70" rx="8"/><text x="190" y="282" text-anchor="middle" class="mono" style="font-size:17px">AssignTrays()</text><text x="190" y="305" text-anchor="middle" class="sub">284 lines · in scope</text>
+    <rect class="box focus-line" x="40" y="350" width="300" height="70" rx="8"/><text x="190" y="382" text-anchor="middle" class="mono" style="font-size:17px">AssignAgvs()</text><text x="190" y="405" text-anchor="middle" class="sub">88 lines + 21 helpers · in scope</text>
     <rect class="box" x="40" y="440" width="300" height="50" rx="8"/><text x="190" y="471" text-anchor="middle" class="sub">shared helpers</text>
-    <rect class="box" x="470" y="70" width="270" height="60" rx="8"/><text x="605" y="98" text-anchor="middle" class="mono" style="font-size:16px">gg_</text><text x="605" y="118" text-anchor="middle" class="sub" style="font-size:13px">motion graph of the garage</text>
-    <rect class="box" x="470" y="160" width="270" height="60" rx="8"/><text x="605" y="188" text-anchor="middle" class="mono" style="font-size:16px">table_</text><text x="605" y="208" text-anchor="middle" class="sub" style="font-size:13px">collision table</text>
-    <rect class="box" x="470" y="250" width="270" height="170" rx="8"/><text x="605" y="282" text-anchor="middle" class="mono" style="font-size:16px">ScheduleContext* ctx</text>
+    <rect class="box" x="470" y="70" width="270" height="60" rx="8"/><text x="605" y="98" text-anchor="middle" class="mono" style="font-size:16px">motion_graph_</text><text x="605" y="118" text-anchor="middle" class="sub" style="font-size:13px">motion graph of the garage</text>
+    <rect class="box" x="470" y="160" width="270" height="60" rx="8"/><text x="605" y="188" text-anchor="middle" class="mono" style="font-size:16px">collision_table_</text><text x="605" y="208" text-anchor="middle" class="sub" style="font-size:13px">collision table</text>
+    <rect class="box" x="470" y="250" width="270" height="170" rx="8"/><text x="605" y="282" text-anchor="middle" class="mono" style="font-size:16px">PlanContext ctx</text>
     <text x="605" y="314" text-anchor="middle" class="sub">event DAG</text><text x="605" y="340" text-anchor="middle" class="sub">working garage state</text><text x="605" y="366" text-anchor="middle" class="sub">per-job maps, first events</text><text x="605" y="392" text-anchor="middle" class="sub">scheduled jobs</text>
     <path d="M340 285C400 285 420 300 462 305" class="arrow" style="stroke:#ef4444" marker-end="url(#ahR)"/>
     <path d="M340 275C410 240 430 120 462 105" class="arrow" style="stroke:#ef4444" marker-end="url(#ahR)"/>
@@ -472,7 +477,7 @@
     <rect x="800" y="70" width="370" height="350" rx="12" class="box"/>
     <text x="822" y="108" style="font-size:19px;font-weight:600">Modifying tray assignment requires</text>
     <text x="822" y="142" class="sub" style="font-size:16px">knowledge of what it reads and</text>
-    <text x="822" y="166" class="sub" style="font-size:16px">writes in ctx, gg_ and table_,</text>
+    <text x="822" y="166" class="sub" style="font-size:16px">writes in ctx and the two graphs,</text>
     <text x="822" y="190" class="sub" style="font-size:16px">which helpers job expansion also</text>
     <text x="822" y="214" class="sub" style="font-size:16px">uses, and what AGV assignment</text>
     <text x="822" y="238" class="sub" style="font-size:16px">expects to find afterwards.</text>
@@ -483,7 +488,8 @@
   </svg>
   <aside class="notes">
     The red arrows are reads and writes that the method signatures do not declare. The coupling matrix on the study
-    site lists each of them; this diagram is a simplification.
+    site lists each of them; this diagram is a simplification. Since PR #1018 the stages are in separate source files,
+    but they are still methods of one class and share its state, so the picture is unchanged.
   </aside>
 </section>
 
@@ -498,14 +504,14 @@
   <div class="kicker">Principles</div>
   <h2>Guiding principles</h2>
   <div class="cols">
-    <div class="card edge-accent"><h3>1 · Behavioural parity</h3><p>The default solvers reproduce current behaviour exactly: identical assignments, identical event DAG after reduction, and byte-identical responses on the baseline fixtures. Improvements follow separately, behind the interfaces.</p></div>
+    <div class="card edge-accent"><h3>1 · Behavioural parity</h3><p>The default solvers reproduce current behaviour exactly: identical assignments, identical event DAG after reduction, and identical responses in every recorded scenario file. Improvements follow separately, behind the interfaces.</p></div>
     <div class="card edge-accent"><h3>2 · Incremental, mechanical steps</h3><p>Each pull request contains one kind of change (move, rename or extract) and is verified by parity tests rather than by manual review of large diffs.</p></div>
     <div class="card edge-accent"><h3>3 · Limited renaming scope</h3><p>Renames are confined to <code>scheduler</code> and <code>planner_core</code>. <code>common_ros</code> is used by many other modules; its names are translated at the package boundary instead.</p></div>
     <div class="card edge-accent"><h3>4 · Folders first, packages when justified</h3><p>Stage folders, each with its own build target, within <code>scheduler</code>. A stage becomes a separate package only once it has a second consumer and a stable API.</p></div>
   </div>
   <aside class="notes">
-    Principle 1 is the most important, as it makes a large refactor reviewable. Any step that changes a plan is, by
-    definition, defective.
+    Principle 1 is the most important, as it makes a large refactor reviewable. An unexpected change to a plan is a
+    defect. A deliberate fix re-records the affected scenario files, so reviewers see exactly which plans changed.
   </aside>
 </section>
 
@@ -514,37 +520,40 @@
   <h2>Scheduler today: one class, six responsibilities</h2>
   <svg class="dg" viewBox="0 0 1180 470">
     <rect class="box" x="10" y="10" width="760" height="450" rx="14" style="fill:none"/>
-    <text x="34" y="44" class="mono sub" style="font-size:18px">class Scheduler · 55 methods · 8 members · scheduler.cpp</text>
+    <text x="34" y="44" class="mono sub" style="font-size:18px">class Scheduler · 74 methods · 8 members · one file per stage</text>
     <g>
-      <rect class="box" x="34" y="66" width="712" height="54" rx="8"/><text x="52" y="91" class="lbl" style="font-size:17px">Job expansion</text><text x="52" y="111" class="sub mono" style="font-size:13px">Plan&lt;Type&gt;Job ×11, PlanOpenBayDoor, PlanUnstashWaypointTraysJob</text><rect x="600" y="80" width="130" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="112" class="sub" text-anchor="end">13</text>
-      <rect class="box focus-line" x="34" y="128" width="712" height="54" rx="8"/><text x="52" y="153" class="lbl" style="font-size:17px">Tray assignment</text><text x="52" y="173" class="sub mono" style="font-size:13px">DoTrayAssignments, ResolveBlockingTrays, Assign…, heading helpers</text><rect x="630" y="142" width="100" height="14" rx="3" style="fill:var(--accent)"/><text x="740" y="174" class="sub" text-anchor="end">10</text>
-      <rect class="box focus-line" x="34" y="190" width="712" height="54" rx="8"/><text x="52" y="215" class="lbl" style="font-size:17px">AGV assignment</text><text x="52" y="235" class="sub mono" style="font-size:13px">DoAgvAssignments, cost estimates, path repair, AMIGA dependencies</text><rect x="580" y="204" width="150" height="14" rx="3" style="fill:var(--accent)"/><text x="740" y="236" class="sub" text-anchor="end">15</text>
-      <rect class="box" x="34" y="252" width="712" height="54" rx="8"/><text x="52" y="277" class="lbl" style="font-size:17px">Orchestration and checks</text><text x="52" y="297" class="sub mono" style="font-size:13px">Plan, SanityCheckEvents, FailJob, GetEventDag, DagToVec, PrintDags</text><rect x="670" y="266" width="60" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="298" class="sub" text-anchor="end">6</text>
-      <rect class="box" x="34" y="314" width="712" height="54" rx="8"/><text x="52" y="339" class="lbl" style="font-size:17px">Motion planning and response</text><text x="52" y="359" class="sub mono" style="font-size:13px">PlanMotions, ResponseFromTrajectories</text><rect x="710" y="328" width="20" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="360" class="sub" text-anchor="end">2</text>
-      <rect class="box" x="34" y="376" width="712" height="54" rx="8"/><text x="52" y="401" class="lbl" style="font-size:17px">Services, configuration, accessors</text><text x="52" y="421" class="sub mono" style="font-size:13px">constructor, InitRetrievalHeadings, report, ratio callback, getters</text><rect x="640" y="390" width="90" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="422" class="sub" text-anchor="end">9</text>
+      <rect class="box" x="34" y="66" width="712" height="54" rx="8"/><text x="52" y="91" class="lbl" style="font-size:17px">Job expansion</text><text x="52" y="111" class="sub mono" style="font-size:13px">ExpandJob, Expand&lt;Type&gt;Job ×11, ReparkWaypointStashedTrays, bay and charger helpers</text><rect x="530" y="80" width="200" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="112" class="sub" text-anchor="end">20</text>
+      <rect class="box focus-line" x="34" y="128" width="712" height="54" rx="8"/><text x="52" y="153" class="lbl" style="font-size:17px">Tray assignment</text><text x="52" y="173" class="sub mono" style="font-size:13px">AssignTrays, ResolveBlockingTrays, AssignEmptyTrayToMove, heading helpers</text><rect x="610" y="142" width="120" height="14" rx="3" style="fill:var(--accent)"/><text x="740" y="174" class="sub" text-anchor="end">12</text>
+      <rect class="box focus-line" x="34" y="190" width="712" height="54" rx="8"/><text x="52" y="215" class="lbl" style="font-size:17px">AGV assignment</text><text x="52" y="235" class="sub mono" style="font-size:13px">AssignAgvs, cost estimates, path repair, lift ordering</text><rect x="510" y="204" width="220" height="14" rx="3" style="fill:var(--accent)"/><text x="740" y="236" class="sub" text-anchor="end">22</text>
+      <rect class="box" x="34" y="252" width="712" height="54" rx="8"/><text x="52" y="277" class="lbl" style="font-size:17px">Orchestration and checks</text><text x="52" y="297" class="sub mono" style="font-size:13px">Plan, ValidateEventSequence, MakeFailedJob, PrintDagIfEnabled</text><rect x="670" y="266" width="60" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="298" class="sub" text-anchor="end">6</text>
+      <rect class="box" x="34" y="314" width="712" height="54" rx="8"/><text x="52" y="339" class="lbl" style="font-size:17px">Motion planning and response</text><text x="52" y="359" class="sub mono" style="font-size:13px">PlanMotions, BuildActionGraph</text><rect x="710" y="328" width="20" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="360" class="sub" text-anchor="end">2</text>
+      <rect class="box" x="34" y="376" width="712" height="54" rx="8"/><text x="52" y="401" class="lbl" style="font-size:17px">Services, configuration, accessors</text><text x="52" y="421" class="sub mono" style="font-size:13px">constructor, StorePreferredPayloadHeadings…, ratio callback, layout queries</text><rect x="610" y="390" width="120" height="14" rx="3" style="fill:var(--slate)"/><text x="740" y="422" class="sub" text-anchor="end">12</text>
     </g>
     <rect x="800" y="10" width="370" height="450" rx="12" class="box"/>
     <text x="822" y="46" style="font-size:18px;font-weight:600">Members, by lifetime</text>
     <text x="822" y="80" class="sub" style="font-size:15px">fixed per site, built once</text>
-    <text x="836" y="106" class="mono" style="font-size:15px">layout_, pg_, gg_, table_,</text>
-    <text x="836" y="128" class="mono" style="font-size:15px">cost_model_</text>
+    <text x="836" y="106" class="mono" style="font-size:15px">layout_, motion_graph_,</text>
+    <text x="836" y="128" class="mono" style="font-size:15px">collision_table_, cost_model_</text>
     <text x="822" y="164" class="sub" style="font-size:15px">runtime configuration</text>
-    <text x="836" y="190" class="mono" style="font-size:15px">bay_readiness_ratio_</text>
+    <text x="836" y="190" class="mono" style="font-size:15px">target_insert_ready_bay_fraction_</text>
     <text x="836" y="212" class="sub" style="font-size:13px">set by a ROS service callback</text>
-    <text x="836" y="238" class="mono" style="font-size:15px">costaudit_</text>
-    <text x="822" y="274" class="sub" style="font-size:15px">infrastructure</text>
-    <text x="836" y="300" class="mono" style="font-size:15px">logger_</text>
+    <text x="836" y="238" class="mono" style="font-size:15px">is_cost_audit_enabled_,</text>
+    <text x="836" y="260" class="mono" style="font-size:15px">is_dag_printing_enabled_</text>
+    <text x="822" y="290" class="sub" style="font-size:15px">infrastructure</text>
+    <text x="836" y="314" class="mono" style="font-size:15px">logger_</text>
     <text x="822" y="346" style="font-size:16px;font-weight:600">Per-call state is not a member:</text>
-    <text x="822" y="372" class="sub" style="font-size:15px">one ScheduleContext per Plan(),</text>
+    <text x="822" y="372" class="sub" style="font-size:15px">one PlanContext per Plan(),</text>
     <text x="822" y="394" class="sub" style="font-size:15px">passed to every method as a</text>
     <text x="822" y="416" class="sub" style="font-size:15px">shared_ptr and modified in place.</text>
   </svg>
-  <p class="tiny" style="margin-top:4px">Method counts from <code>scheduler.hpp</code>; the grouping into responsibilities is this review's. Accent: the two responsibilities this ticket extracts.</p>
+  <p class="tiny" style="margin-top:4px">Method counts from <code>scheduler.hpp</code> at main <code>a468657f</code>; each group is one source file since PR #1018. Accent: the two responsibilities this ticket extracts.</p>
   <aside class="notes">
     The class is cohesive in data, not in purpose: every method can reach the layout, the graphs, the collision table
     and the shared context, so every method can call every other. That is what makes the assignment stages hard to
-    test or replace on their own. The good news for the refactor is that per-call state is already separated from
-    the long-lived members: Plan() is const and builds a fresh context each call.
+    test or replace on their own. PR #1018 put each group in its own source file and split the long stage functions
+    into named helpers (hence 74 methods, up from 55), but did not change the class. The good news for the refactor
+    is that per-call state is already separated from the long-lived members: Plan() is const and builds a fresh
+    context each call.
   </aside>
 </section>
 
@@ -565,7 +574,7 @@
     <rect class="box focus-line" x="255" y="126" width="200" height="78" rx="10"/><text x="355" y="150" text-anchor="middle" class="sub accent-text" style="font-size:12px">«interface» · stage 2</text><text x="355" y="176" text-anchor="middle" class="mono" style="font-size:14px">tray_assignment::</text><text x="355" y="194" text-anchor="middle" class="mono" style="font-size:14px">Solver</text>
     <rect class="box focus-line" x="490" y="126" width="200" height="78" rx="10"/><text x="590" y="150" text-anchor="middle" class="sub accent-text" style="font-size:12px">«interface» · stage 3</text><text x="590" y="176" text-anchor="middle" class="mono" style="font-size:14px">agv_assignment::</text><text x="590" y="194" text-anchor="middle" class="mono" style="font-size:14px">Solver</text>
     <rect class="box" x="725" y="126" width="200" height="78" rx="10"/><text x="825" y="150" text-anchor="middle" class="sub" style="font-size:12px">«function» · stage 4</text><text x="825" y="176" text-anchor="middle" class="mono" style="font-size:14px">PlanMotions(ctx)</text><text x="825" y="196" text-anchor="middle" class="sub" style="font-size:12px">calls CHUGG</text>
-    <rect class="box" x="960" y="126" width="200" height="78" rx="10"/><text x="1060" y="150" text-anchor="middle" class="sub" style="font-size:12px">«function» · stage 5</text><text x="1060" y="176" text-anchor="middle" class="mono" style="font-size:14px">BuildActionDag(ctx,</text><text x="1060" y="194" text-anchor="middle" class="mono" style="font-size:14px">motions)</text>
+    <rect class="box" x="960" y="126" width="200" height="78" rx="10"/><text x="1060" y="150" text-anchor="middle" class="sub" style="font-size:12px">«function» · stage 5</text><text x="1060" y="176" text-anchor="middle" class="mono" style="font-size:14px">BuildActionGraph(</text><text x="1060" y="194" text-anchor="middle" class="mono" style="font-size:14px">ctx, motions)</text>
     <rect class="box focus-line" x="265" y="250" width="180" height="58" rx="8"/><text x="355" y="275" text-anchor="middle" class="mono" style="font-size:14px">DefaultSolver</text><text x="355" y="296" text-anchor="middle" class="sub" style="font-size:12px">today's algorithm</text>
     <rect class="box focus-line" x="500" y="250" width="180" height="58" rx="8"/><text x="590" y="275" text-anchor="middle" class="mono" style="font-size:14px">DefaultSolver</text><text x="590" y="296" text-anchor="middle" class="sub" style="font-size:12px">today's algorithm</text>
     <rect class="box" x="265" y="326" width="180" height="58" rx="8" style="stroke-dasharray:6 4"/><text x="355" y="351" text-anchor="middle" class="mono sub" style="font-size:14px">CandidateSolver</text><text x="355" y="372" text-anchor="middle" class="sub" style="font-size:12px">later, same interface</text>
@@ -586,7 +595,7 @@
   <p class="small" style="margin-top:6px"><span class="key" style="--c:var(--accent)"></span> delivered by this ticket &nbsp;&nbsp; <span class="key dashed"></span> enabled for later &nbsp;&nbsp; Component view; the folders that hold these parts are on the module layout slide.</p>
   <aside class="notes">
     The orchestrator defines the order of the stages and owns the solver objects. Each assignment stage exposes a
-    minimal interface with a single entry point. Shared services that are currently Scheduler members (gg_, table_)
+    minimal interface with a single entry point. Shared services that are currently Scheduler members (motion_graph_, collision_table_)
     become an explicit GarageServices object passed as an argument.
   </aside>
 </section>
@@ -607,17 +616,17 @@
   GarageServices services_;   // layout, graphs, cost model
   std::unique_ptr&lt;tray_assignment::Solver&gt; tray_solver_;
   std::unique_ptr&lt;agv_assignment::Solver&gt;  agv_solver_;
-  SchedulerConfig config_;    // bay readiness ratio, audit
+  SchedulerConfig config_;    // insert-ready bay fraction, audit
 };</code></pre>
     <div class="stack">
-      <div class="card"><h3>One responsibility left</h3><p>The class sequences the stages and owns the solver objects. The stage logic moves out; 55 methods become a handful.</p></div>
+      <div class="card"><h3>One responsibility left</h3><p>The class sequences the stages and owns the solver objects. The stage logic moves out; 74 methods become a handful.</p></div>
       <div class="card"><h3>Dependencies passed in</h3><p>Services, solvers and configuration arrive through the constructor. A test builds a <code>Scheduler</code> with a fake or candidate solver, or calls a solver with no <code>Scheduler</code> at all.</p></div>
       <div class="card"><h3>Three lifetimes, three types</h3><p>Immutable site services, runtime configuration and the per-call <code>PlanContext</code> replace today's members and shared context pointer.</p></div>
     </div>
   </div>
   <aside class="notes">
     SolverSet is a small struct of the two solver pointers; the default set holds the DefaultSolvers that reproduce
-    today's behaviour. SchedulerConfig holds what the ROS callback changes at run time (the bay readiness ratio) and
+    today's behaviour. SchedulerConfig holds what the ROS callback changes at run time (the target insert-ready bay fraction) and
     the audit switch, so Plan() reads configuration through one object.
   </aside>
 </section>
@@ -641,11 +650,11 @@
   if(!agvs) return FailAll(ctx, agvs.error());
 
   auto motions = PlanMotions(ctx, services_);         // stage 4
-  return BuildResponse(ctx, BuildActionDag(ctx, motions));  // stage 5
+  return BuildResponse(ctx, BuildActionGraph(ctx, motions));  // stage 5
 }</code></pre>
     <div class="stack">
       <div class="card"><h3>The pipeline is readable in one place</h3><p>Each stage is one call, in the order of the pipeline slide. What a stage reads and writes is visible at the call.</p></div>
-      <div class="card"><h3>Errors stop the pipeline</h3><p>Each solver returns <code>stdx::Expected</code>; a failure is reported once, with its cause, instead of a <code>BoolStringPair</code> checked by hand.</p></div>
+      <div class="card"><h3>Errors stop the pipeline</h3><p>Already true since PR #1018: each stage returns <code>stdx::Result</code>, and a stage failure fails every job once, with its cause. The solvers keep that contract.</p></div>
       <div class="card"><h3>Same order, same behaviour</h3><p>The stages run exactly as today. Motion planning and the action graph keep their current functions; their interfaces are future work.</p></div>
     </div>
   </div>
@@ -683,7 +692,7 @@ class Solver {
 }  // namespace
 
 // the only writer of the plan context
-ApplyTrayAssignment(plan_ctx, result);</code></pre></div>
+ApplyTrayAssignment(ctx, result);</code></pre></div>
     <div class="stack">
       <div class="card"><h3>No side effects in Solve</h3><p>The solver receives a const view and returns its decisions. Two solvers can be run on the same input and compared.</p></div>
       <div class="card"><h3>Inspectable results</h3><p>Assignments and edits are plain data: tests assert on them directly, and logs record exactly what a solver changed.</p></div>
@@ -728,7 +737,7 @@ struct Result {
   std::vector&lt;DagEdit&gt; edits;   // events, edges
 };
 //   stdx::Expected&lt;Result&gt; Solve(const Input&amp;) const;
-//   ApplyAgvAssignment(plan_ctx, result);
+//   ApplyAgvAssignment(ctx, result);
 
 }  // namespace</code></pre></div>
     <div class="stack">
@@ -751,19 +760,20 @@ struct Result {
   <div class="swap">
     <div class="cols w60 fragment fade-out" data-fragment-index="0">
 <div class="tree"><span class="d">scheduler/</span>
-├── <span class="d">include/scheduler/</span>     <span class="cm"># four headers, no subfolders</span>
-├── <span class="d">src/</span>                   <span class="cm"># four files, no subfolders</span>
-│   └── <span class="d c-red">scheduler.cpp</span>      <span class="cm"># most of the package:</span>
-│                          <span class="cm">#   Plan(), job expansion,</span>
-│                          <span class="cm">#   tray and AGV assignment,</span>
-│                          <span class="cm">#   motion planning call,</span>
-│                          <span class="cm">#   action graph, helpers</span>
-└── <span class="d">test/</span>                  <span class="cm"># four test files</span>
-    └── <span class="d">garage_states/</span>     <span class="cm"># one YAML fixture</span></div>
+├── <span class="d">include/scheduler/</span>     <span class="cm"># eight headers, no subfolders</span>
+├── <span class="d">src/</span>                   <span class="cm"># one file per stage, no subfolders</span>
+│   ├── <span class="d">scheduler.cpp</span>      <span class="cm"># Plan(), PlanMotions()</span>
+│   ├── <span class="d">job_expansion.cpp</span>  <span class="cm"># stage 1</span>
+│   ├── <span class="d c-red">tray_assignment.cpp</span> <span class="cm"># stage 2</span>
+│   ├── <span class="d c-red">agv_assignment.cpp</span> <span class="cm"># stage 3</span>
+│   ├── <span class="d">validation.cpp</span>     <span class="cm"># check before stage 4</span>
+│   └── <span class="d">action_graph.cpp</span>   <span class="cm"># stage 5</span>
+└── <span class="d">test/</span>                  <span class="cm"># 19 test binaries</span>
+    └── <span class="d">scenarios/</span>         <span class="cm"># YAML: state, request, recording</span></div>
       <div class="stack">
-        <div class="card"><h3>One source file for all planning stages</h3><p><code>Plan()</code>, the ten job expansions and both assignment stages share <code>scheduler.cpp</code> and the private state of <code>Scheduler</code>. No boundary separates one stage from another.</p></div>
-        <div class="card"><h3>One target, one kind of test</h3><p>Every test constructs a complete <code>Scheduler</code>. A change to any stage rebuilds and retests the whole package.</p></div>
-        <p class="tiny">Layout of the package snapshot studied. SW2-769 has since reorganized the package; its structure is to be compared with the proposal.</p>
+        <div class="card"><h3>One file per stage, still one class</h3><p>Since PR #1018 each stage has its own source file, but every stage function is still a <code>Scheduler</code> method sharing its private state, in one build target.</p></div>
+        <div class="card"><h3>Scenario files, one kind of test</h3><p>Since PR #1007 every planning test runs from a scenario file with a recorded output. Each still constructs a complete <code>Scheduler</code>.</p></div>
+        <p class="tiny">Layout of <code>main</code> at <code>a468657f</code> (2026-11-05).</p>
       </div>
     </div>
     <div class="cols w60 fragment fade-in" data-fragment-index="0">
@@ -774,23 +784,24 @@ struct Result {
 │   ├── <span class="d">core/</span>              <span class="cm"># motion graph, collision table</span>
 │   ├── <span class="d">ros/</span>               <span class="cm"># messages ↔ internal types</span>
 │   ├── <span class="d">task_planning/</span>
-│   │   ├── <span class="d">job_expansion/</span>    <span class="cm"># Expand&lt;Type&gt;Job ×10</span>
+│   │   ├── <span class="d">job_expansion/</span>    <span class="cm"># Expand&lt;Type&gt;Job ×11</span>
 │   │   ├── <span class="d c-accent">tray_assignment/</span>  <span class="cm"># this ticket</span>
 │   │   ├── <span class="d c-accent">agv_assignment/</span>   <span class="cm"># this ticket</span>
 │   │   └── <span class="d">validation/</span>
 │   ├── <span class="d">motion_planning/</span>   <span class="cm"># the CHUGG call</span>
-│   └── <span class="d">action_graph/</span>      <span class="cm"># BuildActionDag</span>
+│   └── <span class="d">action_graph/</span>      <span class="cm"># BuildActionGraph</span>
 └── <span class="d">test/</span>                  <span class="cm"># mirrors src/</span></div>
     <div class="stack">
-      <div class="card"><h3><code>scheduler.cpp</code> decomposed</h3><p>Each stage moves out of <code>scheduler.cpp</code> into its own folder; what remains is <code>Plan()</code>, which calls the stages in order.</p></div>
+      <div class="card"><h3>Stage files become stage folders</h3><p>Each stage file moves into its own folder and leaves the <code>Scheduler</code> class; <code>scheduler.cpp</code> keeps <code>Plan()</code>, which calls the stages in order.</p></div>
       <div class="card"><h3>Enforced boundaries</h3><p>Each stage is a separate library target. A CI include check prevents a stage from using another stage's private headers.</p></div>
       <div class="card"><h3>Separate packages deferred</h3><p>Packages add release and ownership overhead before the APIs are stable. A folder can be promoted later at low cost; <code>action_graph</code> is the first candidate.</p></div>
       </div>
     </div>
   </div>
   <aside class="notes">
-    SW2-769 has already reorganized the package; its structure should first be checked against this layout. The test
-    tree mirrors the folders, so each stage's tests link only that stage.
+    PR #1018 split scheduler.cpp into one file per stage, so each folder of the proposal already has its source file.
+    What remains is moving the functions out of the class and giving each folder its own target. The test tree
+    mirrors the folders, so each stage's tests link only that stage.
   </aside>
 </section>
 
@@ -834,11 +845,11 @@ struct Result {
   <h2>Who reads and writes the plan, stage by stage</h2>
   <table style="font-size:17px">
     <tr><th>Stage</th><th>Reads</th><th>Writes today, through the shared context</th><th>Proposed contract</th></tr>
-    <tr><td>Job expansion</td><td>jobs, <code>initial_state</code></td><td>events, <code>last_entity_event</code>, <code>scheduled_jobs</code></td><td>Unchanged in this ticket; <code>ExpandJob</code> functions later</td></tr>
-    <tr><td>Tray assignment</td><td>event DAG, <code>initial_state</code></td><td>tray ids and destinations, blocker moves, edges, <code>first_tray_event</code></td><td><code>Solve(Input)</code> returns a <code>Result</code>; <code>ApplyTrayAssignment</code> is the only writer</td></tr>
-    <tr><td>AGV assignment</td><td>event DAG, <code>first_tray_event</code></td><td>AGV ids, approach, lift and lower events, edges</td><td><code>SolveInPlace(Input, EventDag&amp;)</code>: the one mutable argument is in the signature</td></tr>
+    <tr><td>Job expansion</td><td>jobs, <code>initial_state</code></td><td>events, <code>last_event_by_entity</code>, <code>scheduled_jobs</code></td><td>Unchanged in this ticket; free functions later</td></tr>
+    <tr><td>Tray assignment</td><td>event DAG, <code>initial_state</code></td><td>tray ids and destinations, blocker moves, edges, <code>first_event_by_tray</code></td><td><code>Solve(Input)</code> returns a <code>Result</code>; <code>ApplyTrayAssignment</code> is the only writer</td></tr>
+    <tr><td>AGV assignment</td><td>event DAG, <code>first_event_by_tray</code></td><td>AGV ids, approach, lift and lower events, edges</td><td><code>SolveInPlace(Input, EventDag&amp;)</code>: the one mutable argument is in the signature</td></tr>
     <tr><td>Motion planning</td><td>event DAG, <code>initial_state</code>, base schedule</td><td>trajectories</td><td><code>PlanMotions</code> unchanged; a solver interface is future work</td></tr>
-    <tr><td>Action graph</td><td>trajectories, event DAG, <code>scheduled_jobs</code></td><td>the response</td><td><code>BuildActionDag</code> as a function of its inputs</td></tr>
+    <tr><td>Action graph</td><td>trajectories, event DAG, <code>scheduled_jobs</code></td><td>the response</td><td><code>BuildActionGraph</code> as a function of its inputs</td></tr>
   </table>
   <p class="callout" style="margin-top:20px">Today every stage can write everything in the context. After the refactor, each write is visible in a signature: a returned result, an apply function, or a named mutable argument.</p>
   <aside class="notes">
@@ -853,10 +864,10 @@ struct Result {
   <h2>Where new behaviour plugs in</h2>
   <table style="font-size:17px">
     <tr><th>Extension point</th><th>Mechanism</th><th>Today</th><th>After this refactor</th></tr>
-    <tr><td>Tray assignment rule</td><td>Strategy: <code>tray_assignment::Solver</code></td><td>Edit <code>DoTrayAssignments</code></td><td>A new solver class, chosen at construction</td></tr>
-    <tr><td>AGV assignment rule</td><td>Strategy: <code>agv_assignment::Solver</code></td><td>Edit <code>DoAgvAssignments</code></td><td>A new solver class, chosen at construction</td></tr>
+    <tr><td>Tray assignment rule</td><td>Strategy: <code>tray_assignment::Solver</code></td><td>Edit <code>AssignTrays</code></td><td>A new solver class, chosen at construction</td></tr>
+    <tr><td>AGV assignment rule</td><td>Strategy: <code>agv_assignment::Solver</code></td><td>Edit <code>AssignAgvs</code></td><td>A new solver class, chosen at construction</td></tr>
     <tr><td>Cost estimates</td><td>Pure functions</td><td><code>Scheduler</code> member functions</td><td>Free functions, tested and benchmarked alone</td></tr>
-    <tr><td>Job types</td><td>One function per job type</td><td>One <code>Scheduler</code> method per type, chosen by a switch in <code>Plan()</code></td><td>Functions in <code>job_expansion/</code>; a registry by job type is possible later</td></tr>
+    <tr><td>Job types</td><td>One function per job type</td><td>One <code>Scheduler</code> method per type, chosen by a switch in <code>ExpandJob</code></td><td>Functions in <code>job_expansion/</code>; a registry by job type is possible later</td></tr>
     <tr><td>Search problems</td><td>Strategy: <code>SearchEnvironment</code> subclass</td><td>Already in place in <code>motion_planner</code></td><td>Unchanged</td></tr>
     <tr><td>Motion planner</td><td>Interface: <code>MotionProblem</code> / <code>MotionPlan</code></td><td>CHUGG called directly</td><td>Future work (Part 4)</td></tr>
   </table>
@@ -874,34 +885,39 @@ struct Result {
   <div class="cols">
     <div class="stack">
       <h3>Error handling</h3>
-<pre data-lang="cpp"><code>// current
+<pre data-lang="cpp"><code>// before PR #1018
 BoolStringPair r = DoTrayAssignments(ctx);
 if (!r.first) { /* r.second: message */ }
 
-// proposed
-stdx::Expected&lt;Result&gt; r = solver.Solve(input);
-if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
-      <p class="small muted">Values and errors are returned together; <code>[[nodiscard]]</code> prevents failures from being ignored.</p>
+// since PR #1018
+stdx::Result r = AssignTrays(ctx);
+if (!r) { return fail_all_jobs(r.error()); }
+
+// proposed solver
+stdx::Expected&lt;Result&gt; r = solver.Solve(input);</code></pre>
+      <p class="small muted">Values and errors are returned together; <code>[[nodiscard]]</code> prevents failures from being ignored. <code>BoolStringPair</code> remains in <code>planner_core</code> and <code>common_ros</code>.</p>
     </div>
     <div>
       <h3>Headline renames <span class="pill">scheduler · planner_core</span></h3>
       <table style="margin-top:6px">
-        <tr><th>Current</th><th>Proposed</th></tr>
-        <tr><td><code>gg_</code></td><td><code>motion_graph_</code></td></tr>
-        <tr><td><code>table_</code></td><td><code>collision_table_</code></td></tr>
-        <tr><td><code>ScheduleContext</code></td><td><code>PlanContext</code></td></tr>
-        <tr><td><code>Plan&lt;Type&gt;Job</code></td><td><code>Expand&lt;Type&gt;Job</code></td></tr>
-        <tr><td><code>CollisionEntityId</code></td><td><code>FootprintType</code></td></tr>
-        <tr><td><code>disabledness_filters</code></td><td><code>keep_out_filter_by_footprint</code></td></tr>
-        <tr><td><code>BAY_ODP</code></td><td><code>BAY_OVERDRIVE_PLATE</code></td></tr>
+        <tr><th>Before</th><th>After</th><th></th></tr>
+        <tr><td><code>gg_</code>, <code>table_</code></td><td><code>motion_graph_</code>, <code>collision_table_</code></td><td><span class="pill green">PR #1018</span></td></tr>
+        <tr><td><code>ScheduleContext</code></td><td><code>PlanContext</code></td><td><span class="pill green">PR #1018</span></td></tr>
+        <tr><td><code>Plan&lt;Type&gt;Job</code></td><td><code>Expand&lt;Type&gt;Job</code></td><td><span class="pill green">PR #1018</span></td></tr>
+        <tr><td><code>DoTrayAssignments</code></td><td><code>AssignTrays</code></td><td><span class="pill green">PR #1018</span></td></tr>
+        <tr><td><code>disabledness_filters</code></td><td><code>keep_out_filter_by_footprint</code></td><td><span class="pill green">PR #1018</span></td></tr>
+        <tr><td><code>CollisionEntityId</code></td><td><code>FootprintType</code></td><td><span class="pill">proposed</span></td></tr>
+        <tr><td><code>BAY_ODP</code></td><td><code>BAY_OVERDRIVE_PLATE</code></td><td><span class="pill">proposed</span></td></tr>
       </table>
-      <p class="tiny" style="margin-top:8px"><code>common_ros</code> names are unchanged; a translation header maps them to the new vocabulary.</p>
+      <p class="tiny" style="margin-top:8px"><code>common_ros</code> names are unchanged; a translation header is to map them to the new vocabulary.</p>
     </div>
   </div>
   <aside class="notes">
-    Renames are made as separate mechanical commits, one group at a time, so that review is limited to the choice of
-    name. planner_core renames are scheduled late (stage I), with deprecated aliases, because other packages depend
-    on it.
+    The scheduler renames and the error type landed in PR #1018 as separate mechanical commits, so that review was
+    limited to the choice of name; the recorded scenario outputs confirmed that no plan changed by accident. Some
+    planner_core names changed with it (DagBase to Dag, Reduce to RemoveRedundantEdges); the rest, such as
+    ScheduleEventDag to EventDag, are scheduled late (stage I), with deprecated aliases, because other packages depend
+    on it. The common_ros names in the last two rows are still proposals.
   </aside>
 </section>
 
@@ -909,17 +925,19 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   <div class="kicker">Staged plan</div>
   <h2>Five phases, each ending with unchanged behaviour</h2>
   <div class="phases">
-    <div class="card edge-accent"><div class="ph-n">1 · Baseline</div><p>Run the 72 GoogleTest cases; store canonical results of fixed inputs as golden files; document the dependencies.</p><span class="pill">SW2-484</span></div>
-    <div class="card edge-accent"><div class="ph-n">2 · Prepare</div><p>Names, stage folders, pure helpers and a single error type. No planning logic is relocated.</p><span class="pill">SW2-484</span></div>
-    <div class="card edge-accent"><div class="ph-n">3 · Tray interface</div><p>Solver, default solver and apply function replace <code>DoTrayAssignments</code>.</p><span class="pill">SW2-484</span></div>
-    <div class="card edge-accent"><div class="ph-n">4 · AGV interface</div><p>Solver and default solver, with the same module layout, replace <code>DoAgvAssignments</code>.</p><span class="pill">new ticket</span></div>
+    <div class="card edge-accent"><div class="ph-n">1 · Baseline</div><p>Every planning test became a scenario file with a recorded output; the comparison is switched on for the refactor.</p><span class="pill green">Done · PR #1007</span></div>
+    <div class="card edge-accent"><div class="ph-n">2 · Prepare</div><p>Names, one file per stage, a single error type and bug fixes are merged. Pure tray helpers come next.</p><span class="pill green">Names done · PR #1018</span></div>
+    <div class="card edge-accent"><div class="ph-n">3 · Tray interface</div><p>Solver, default solver and apply function replace the loop in <code>AssignTrays</code>.</p><span class="pill">SW2-484</span></div>
+    <div class="card edge-accent"><div class="ph-n">4 · AGV interface</div><p>Solver and default solver, with the same module layout, replace <code>AssignAgvs</code>.</p><span class="pill">new ticket</span></div>
     <div class="card edge-accent"><div class="ph-n">5 · Measure</div><p>At least ten real-site scenarios per solver, and a naming check in CI.</p><span class="pill">SW2-487</span></div>
   </div>
   <p class="small muted" style="margin-top:14px">Afterwards: <code>planner_core</code> renames and a first stage package. The study site breaks the phases into thirteen reviewable steps.</p>
-  <p class="callout green" style="margin-top:14px">Exit criterion for every phase: all tests and DAG snapshots identical, and response messages byte-identical on the baseline fixtures.</p>
+  <p class="callout green" style="margin-top:14px">Exit criterion for every phase: all tests pass, and every recorded scenario output is unchanged except where a deliberate fix re-records it.</p>
   <aside class="notes">
-    Phase 3 keeps DoTrayAssignments for a while so that both implementations can be run and their DAGs compared
-    before the old code is removed. Phases 1 to 5 are the Definition of Done of the Jira initiative.
+    Phase 1 is SW2-1126 (PR #1007). The renames, stage files and fixes of phase 2 are SW2-1135 (PR #1018); PR #1018
+    also fixed known bugs on purpose, with new tests; only two recorded outputs (error messages) changed. Phase 3 may keep the current
+    loop alive for one commit so that both implementations can be run and compared before the old code is removed.
+    Phases 1 to 5 are the Definition of Done of the Jira initiative.
   </aside>
 </section>
 
@@ -928,25 +946,27 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   <h2>Verifying behavioural parity</h2>
   <svg class="dg" viewBox="0 0 1180 300">
     <defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#cbd5e1"/></marker></defs>
-    <rect class="box" x="10" y="110" width="220" height="80" rx="10"/><text x="120" y="145" text-anchor="middle" style="font-size:18px;font-weight:600">Baseline fixtures</text><text x="120" y="170" text-anchor="middle" class="sub">jobs + garage state</text>
+    <rect class="box" x="10" y="110" width="220" height="80" rx="10"/><text x="120" y="145" text-anchor="middle" style="font-size:18px;font-weight:600">Scenario files</text><text x="120" y="170" text-anchor="middle" class="sub">garage state + request</text>
     <path d="M230 135C270 135 280 70 322 70" class="arrow" marker-end="url(#ah4)"/>
-    <rect class="box" x="330" y="30" width="260" height="80" rx="10"/><text x="460" y="65" text-anchor="middle" class="mono" style="font-size:16px">pinned commit</text><text x="460" y="90" text-anchor="middle" class="sub">current Plan()</text>
+    <rect class="box" x="330" y="30" width="260" height="80" rx="10"/><text x="460" y="65" text-anchor="middle" class="mono" style="font-size:16px">recorded output</text><text x="460" y="90" text-anchor="middle" class="sub">stored in each scenario file</text>
     <path d="M230 165C270 165 280 230 322 230" class="arrow" marker-end="url(#ah4)"/>
     <rect class="box focus-line" x="330" y="190" width="260" height="80" rx="10"/><text x="460" y="225" text-anchor="middle" class="mono" style="font-size:16px">refactored branch</text><text x="460" y="250" text-anchor="middle" class="sub">Plan() through the interfaces</text>
     <path d="M590 70C640 70 650 150 692 150M590 230C640 230 650 150 692 150" class="arrow" marker-end="url(#ah4)"/>
     <rect x="700" y="80" width="470" height="140" rx="10" class="box"/>
     <text x="722" y="114" style="font-size:18px;font-weight:600">Must be identical</text>
     <text x="722" y="144" class="sub">• tray and AGV assignments</text>
-    <text x="722" y="170" class="sub">• event DAG edges after Reduce, final state, errors</text>
-    <text x="722" y="196" class="sub">• response messages, byte for byte</text>
+    <text x="722" y="170" class="sub">• event DAG before and after a stage, errors</text>
+    <text x="722" y="196" class="sub">• the response, in canonical form</text>
   </svg>
   <div class="cols" style="margin-top:6px">
-    <div class="card"><h3>Parity</h3><p>The 72 GoogleTest cases, plus golden files of canonical results on fixed and replayed inputs, stored in the repository. Every refactor step must reproduce them; no simulator required.</p></div>
+    <div class="card"><h3>Parity <span class="pill green">in place</span></h3><p>99 test cases in 19 binaries; every planning test runs from a scenario file whose recorded output is compared with <code>SCHEDULER_CHECK_RECORDINGS=1</code>. Every refactor step must reproduce them; no simulator required.</p></div>
     <div class="card"><h3>Benchmarks (SW2-487)</h3><p>≥10 real-site scenarios per solver, timed in a pinned environment, results stored with metadata. This is the reference for any future solver.</p></div>
   </div>
   <aside class="notes">
-    Some test layouts (tiny_lot, triple_pick_lot) are synthetic; which layouts correspond to real sites must be
-    confirmed before they are counted toward the ten-scenario requirement.
+    The scenarios use three real-site layouts (275_sunrise_b, 5675_pecos_combined, 38_gramercy) and the synthetic
+    tiny_lot for two fallbacks. CI checks each test's own assertions only; the comparison with the recordings is
+    opt-in, because a change to a cost, a speed or a layout moves every recording. Benchmarks need further real-site
+    scenarios with timing, which the scenario files do not provide.
   </aside>
 </section>
 
@@ -959,7 +979,7 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
     <tr><td>Input and output style</td><td>Tray: read-only input, returned result, a single apply function. AGV: in-place modification for the first version.</td></tr>
     <tr><td>Interface mechanism</td><td>Virtual <code>Solve</code>, solver owned by <code>Scheduler</code> through <code>std::unique_ptr</code>.</td></tr>
     <tr><td>Renaming scope</td><td>Rename in <code>scheduler</code> and <code>planner_core</code>; translate <code>common_ros</code> names at the edge.</td></tr>
-    <tr><td>Tickets</td><td>Create a child ticket for AGV assignment (stage F); verify the SW2-769 structure against the current branch.</td></tr>
+    <tr><td>Tickets</td><td>Create a child ticket for AGV assignment (stage F).</td></tr>
   </table>
 </section>
 
@@ -1008,7 +1028,7 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   <p class="small" style="margin-top:22px"><strong>Evaluation.</strong> An agreed time budget per call; growth measured against each size parameter (jobs, trays, AGVs, graph size, blockers); a catalogue of stress cases; slow plans in the field saved as replayable fixtures; runtime and work-counter gates in CI, with plan quality measured separately.</p>
   <aside class="notes">
     Known candidates for steep growth: the tray-search step checks every tray, the blocking-tray loop searches again per
-    blocker, every job method replays the event DAG, HideAgvs backtracks, and CHUGG's heuristic table is cubic in the
+    blocker, every job method replays the event DAG, the AGV hiding search backtracks, and CHUGG's heuristic table is cubic in the
     number of poses. The study site lists them under Future work.
   </aside>
 </section>
@@ -1017,7 +1037,7 @@ if (!r) { return stdx::Unexpected(r.error()); }</code></pre>
   <div class="kicker">Roadmap</div>
   <h2>Roadmap</h2>
   <div class="cols c4">
-    <div class="card edge-accent"><h3>Current</h3><p class="small"><span class="pill">SW2-484</span><br>Baseline, renames, stage folders and tray solver interface (A-E).</p></div>
+    <div class="card edge-accent"><h3>Current</h3><p class="small"><span class="pill">SW2-484</span><br>Scenario-file baseline and renames merged (PRs #1007, #1018); pure tray helpers and the tray solver interface next.</p></div>
     <div class="card"><h3>Next</h3><p class="small"><span class="pill">new ticket</span> <span class="pill">SW2-487</span><br>AGV solver interface (F), benchmark set (G) and cleanup (H).</p></div>
     <div class="card"><h3>Subsequent</h3><p class="small"><code>planner_core</code> renames (I), first stage package (J), naming catalogue, typed event edges and performance instrumentation.</p></div>
     <div class="card"><h3>Longer term</h3><p class="small">Improved tray and AGV solvers, PBS-PC ordering, concurrent planning with Dispatch and replaceable motion planners.</p></div>

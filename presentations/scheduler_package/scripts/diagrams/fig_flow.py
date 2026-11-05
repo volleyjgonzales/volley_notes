@@ -46,16 +46,16 @@ def pipeline():
             "DAG (an action dependency graph), which Dispatch executes.")
     cw, gap, ch = 210, 38, 178
     stages = [
-        ("Job expansion", "Validate the base state, create ScheduleContext, expand each pending job into events.",
-         ["Plan<Type>Job()", "+ rule A/B/C edges"], ACT),
+        ("Job expansion", "Validate the base state, create PlanContext, expand each pending job into events.",
+         ["Expand<Type>Job()", "+ rule A/B/C edges"], ACT),
         ("Tray assignment", "Fill missing tray ids and destinations; insert moves for blocking trays.",
-         ["DoTrayAssignments(ctx)", "+ freeing_moves edges"], TRAY),
-        ("AGV assignment", "Match AGVs to tray moves; add approach, lift and lower events; Reduce + check.",
-         ["DoAgvAssignments(ctx)", "Reduce(), SanityCheck"], AGV),
+         ["AssignTrays(ctx)", "+ occupancy edges"], TRAY),
+        ("AGV assignment", "Match AGVs to tray moves; add approach, lift and lower events; prune edges + check.",
+         ["AssignAgvs(ctx)", "RemoveRedundantEdges,", "ValidateEventSequence"], AGV),
         ("Motion planning", "CHUGG: plan every event in topological order with SIPP, collision-free in time.",
          ["PlanMotions(ctx)", "-> ContinuousState"], BAY),
         ("Action DAG", "One action per motion that changes something; order shared space; copy event edges.",
-         ["ResponseFromTrajectories", "-> Schedule.nodes"], T.green),
+         ["BuildActionGraph", "-> Schedule.nodes"], T.green),
     ]
     top = 96
     boxes = []
@@ -155,9 +155,9 @@ def target_architecture():
     EX, NEW, CORE = T.sky, T.amber, T.violet
     sched = uml_class(d, W / 2, 0, "Scheduler", accent=EX, stereo="orchestrator · existing",
                       attrs=["- tray_solver_: tray_assignment::Solver", "- agv_solver_: agv_assignment::Solver",
-                             "- gg_, table_, cost_model_, layout_  (owned)", "- services_: GarageServices"],
+                             "- motion_graph_, collision_table_,", "  cost_model_, layout_  (owned)", "- services_: GarageServices"],
                       methods=["+ Plan(request): PlanResponse", "  keeps validation, job expansion,", "  ApplyTrayAssignment(),",
-                               "  Reduce(), sanity checks, PlanMotions"], center_x=True)
+                               "  RemoveRedundantEdges(), validation,", "  PlanMotions"], center_x=True)
     iy = sched.y1 + 70
     iw = 330
     lx, rx = 40, W - 40 - iw
@@ -168,10 +168,10 @@ def target_architecture():
     dy = ti.y1 + 70
     td = uml_class(d, lx, dy, "tray_assignment::DefaultSolver", accent=NEW, stereo="default implementation", w=iw,
                    attrs=["- services_: const GarageServices&"],
-                   methods=["+ Solve(input) const  // today:", "    DoTrayAssignments + helpers"])
+                   methods=["+ Solve(input) const  // today:", "    AssignTrays + helpers"])
     ad = uml_class(d, rx, dy, "agv_assignment::DefaultSolver", accent=NEW, stereo="default implementation", w=iw,
                    attrs=["- services_: const GarageServices&"],
-                   methods=["+ SolveInPlace(input, events) const", "    // today: DoAgvAssignments + helpers"])
+                   methods=["+ SolveInPlace(input, events) const", "    // today: AssignAgvs + helpers"])
     # planner_core package
     py = max(td.y1, ad.y1) + 64
     ph = 96
@@ -257,11 +257,11 @@ def dependencies():
     e("e1", "e2", color=T.fg2)
     e("e2", "e3", color=T.fg2)
     e("e3", "e4", color=T.fg2)
-    # redundant transitive edge e1 -> e3, removed by Reduce()
+    # redundant transitive edge e1 -> e3, removed by RemoveRedundantEdges()
     A, Bb = B["e1"], B["e3"]
     yb = A.y1 + 14
     connect(d, [(A.cx, A.y1), (A.cx, yb), (Bb.cx, yb), (Bb.cx, Bb.y1)], kind="flow", size=9, color=T.faint,
-            dash="4 4", label="redundant: removed by Reduce()", label_at=((A.cx + Bb.cx) / 2, yb),
+            dash="4 4", label="redundant: removed by RemoveRedundantEdges()", label_at=((A.cx + Bb.cx) / 2, yb),
             label_color=T.muted)
     # topological order axis
     ay = len(lanes) * lane_h + 14
@@ -286,15 +286,15 @@ def dependencies():
 
 CODE_BY_STAGE = [
     # (row label, sub label, [(segment label, lines, color, in_scheduler)])
-    ("Task planning", "stages 1-3", [("job expansion", 1430, "tp", 1.0), ("tray assignment", 1039, "tp", 0.72),
-                                     ("AGV assignment", 1004, "tp", 0.5), ("validation", 113, "tp", 0.34),
-                                     ("searches, filters (motion_planner)", 1420, "tp", None)]),
-    ("Motion planning", "stage 4", [("PlanMotions", 63, "mp", 1.0),
-                                    ("CHUGG sequential, SIPP, timeline (motion_planner)", 3870, "mp", None),
+    ("Task planning", "stages 1-3", [("job expansion", 1125, "tp", 1.0), ("tray assignment", 709, "tp", 0.72),
+                                     ("AGV assignment", 830, "tp", 0.5), ("validation", 107, "tp", 0.34),
+                                     ("searches, filters (motion_planner)", 1393, "tp", None)]),
+    ("Motion planning", "stage 4", [("PlanMotions", 45, "mp", 1.0),
+                                    ("CHUGG sequential, SIPP, timeline (motion_planner)", 3879, "mp", None),
                                     ("not called: CBS solver, coalescing, debug printers", 660, "mp", -1)]),
-    ("Action graph", "stage 5", [("motions -> action DAG", 544, "ag", 1.0)]),
-    ("Orchestrator", "Plan(), errors", [("Plan()", 381, "orc", 1.0)]),
-    ("Shared", "all stages", [("planner_core", 1454, "core", None), ("cost_functions", 501, "core", None)]),
+    ("Action graph", "stage 5", [("motions -> action DAG", 566, "ag", 1.0)]),
+    ("Orchestrator", "Plan(), utils", [("Plan()", 417, "orc", 1.0)]),
+    ("Shared", "all stages", [("planner_core", 1129, "core", None), ("cost_functions", 501, "core", None)]),
 ]
 
 
@@ -338,18 +338,20 @@ def code_by_stage():
             d.text(cx, y + H + 16, txt, size=S.small, fill=T.fg2, anchor="start" if cx < X0 + 600 else "end")
         y += H + GAP + (14 if below else 0)
     frame(d, title="Where the code is, by pipeline stage",
-          subtitle="Lines of C++ (headers and sources, without tests). In the scheduler package, task planning is "
-                   "about 3,590 of 4,570 lines (78%), the motion-planning adapter 63, the action graph about 540. "
-                   "Counting the library code the scheduler actually calls, task planning is about 5,000 lines and motion "
+          subtitle="Lines of C++ (sources, without tests). In the scheduler package, task planning is "
+                   "about 2,770 of 3,800 lines (73%), the motion-planning adapter 45, the action graph about 570. "
+                   "Counting the library code the scheduler actually calls, task planning is about 4,160 lines and motion "
                    "planning about 3,900; about 660 lines of motion_planner are never called. The action graph stays small.",
           badge_key="as-built",
           legend=[("box", T.violet, "task planning"), ("box", T.sky, "motion planning"), ("box", T.green, "action graph"),
                   ("box", T.amber, "orchestrator"), ("box", T.teal, "shared libraries"),
                   ("dashbox", T.fg2, "in a library package"), ("dashbox", T.faint, "in motion_planner, never called")],
-          footnote="Scheduler: function definitions in scheduler.cpp and utils.cpp, grouped by the stage that calls "
-                   "them (4,574 of 4,721 lines; the rest is includes and namespaces). Libraries: every .hpp and .cpp "
-                   "in the motion_planner, planner_core and cost_functions snapshots; 'never called' = no call path from the "
-                   "scheduler's code (found by tracing calls from its sources). Not counted: task_planner "
-                   "(BottleneckAssignment, not in the snapshots), common_ros (the garage model, about 9,800 lines, used "
-                   "by every stage) and tests (6,546 lines in scheduler, mostly end-to-end).")
+          footnote="Scheduler (main at a468657f): src/*.cpp without the ROS node (3,799 lines), counted by stage file: "
+                   "job expansion = job_expansion.cpp with bay_rebalancing.cpp and move_events.cpp; PlanMotions and its "
+                   "cost-audit log are counted out of scheduler.cpp, whose rest, with utils.cpp, is the orchestrator. "
+                   "Libraries: every .hpp and .cpp in the motion_planner, planner_core and cost_functions snapshots; "
+                   "'never called' = no call path from the scheduler's code (found by tracing calls from its sources). "
+                   "Not counted: headers, task_planner (BottleneckAssignment, not in the snapshots), common_ros (the garage "
+                   "model, about 9,800 lines, used by every stage) and tests (about 3,660 lines of C++ in scheduler plus "
+                   "130 scenario and initial-state YAML files).")
     return d

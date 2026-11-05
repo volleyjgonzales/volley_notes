@@ -1,6 +1,6 @@
 """ScheduleEventDag figures for doc 01 ("Directed acyclic graphs, then ScheduleEventDag"): class family, storage and identity, the operations
-on a small example, and the shallow copy used as a work queue in DoAgvAssignments.
-Types from sources/repomix-planner-core.xml and the interfaces .msg files."""
+on a small example, and the shallow copy used as a work queue in AssignAgvs.
+Types from sources/repomix-planner-core.xml (main a468657f) and the interfaces .msg files."""
 from __future__ import annotations
 
 from components import EVENT_COLOR, chip, connect, frame, label_pill, note, uml_class
@@ -91,61 +91,63 @@ def _panel(d: Doc, x, y, w, h, n, title, sub, col=T.sky):
 # 63 — class family
 # --------------------------------------------------------------------------------------
 
-@figure("63_event_dag_classes", "ScheduleEventDag and the DagBase family", DOC1)
+@figure("63_event_dag_classes", "ScheduleEventDag and the Dag family", DOC1)
 def event_dag_classes():
-    d = Doc("63_event_dag_classes", "ScheduleEventDag and the DagBase family",
-            "ScheduleEventDag specialises the generic DagBase<T> for events. The scheduler uses three DagBase "
+    d = Doc("63_event_dag_classes", "ScheduleEventDag and the Dag family",
+            "ScheduleEventDag specialises the generic Dag<T> for events. The scheduler uses three Dag "
             "instantiations.")
     M = 11.5
-    base = uml_class(d, 0, 0, "DagBase<T>", accent=T.violet,
+    base = uml_class(d, 0, 0, "Dag<T>", accent=T.violet,
                      stereo="class template · planner_core/event_dag.hpp", size=M,
-                     attrs=["# dag_: adjacency_list<vecS, vecS, bidirectionalS,", "        shared_ptr<T>>",
-                            "# ptr_to_vertex_: unordered_map<shared_ptr<T>, Vertex>",
+                     attrs=["# graph_: adjacency_list<vecS, vecS, bidirectionalS,", "        shared_ptr<T>>",
+                            "# vertex_by_node_: unordered_map<shared_ptr<T>, Vertex>",
                             "  Vertex = vertex_descriptor (size_t, 0..n-1)"],
-                     methods=["+ Add(ptr): optional<Vertex>  // nullopt if present",
+                     methods=["+ Add(node): optional<Vertex>  // nullopt if present",
                               "+ AddDependency(parent, child): bool  // no cycle check",
-                              "+ AddDependent(child, parent): bool",
-                              "+ Has(ptr), HasVertex(v), HasDependency(p, c): bool",
-                              "+ GetVertex(ptr), GetFromVertex(v): optional<...>",
+                              "+ Has(node), HasVertex(v), HasDependency(p, c): bool",
+                              "+ GetVertex(node): optional<Vertex>",
+                              "+ GetNode(v): shared_ptr<T>  // throws if absent",
                               "+ GetInEdges(v), GetOutEdges(v)  // throw if absent",
                               "+ GetSourceVertex(e), GetTargetVertex(e), GetVertices()",
-                              "+ GetParents(x), GetChildren(x)",
+                              "+ GetBaseGraph(), GetParents(x), GetChildren(x)",
                               "+ GetRootVertices(), GetLeafVertices()",
                               "+ WouldCreateCycle(parent, child): bool  // BFS",
                               "+ GetTopologicalOrdering()  virtual  // Boost DFS",
-                              "+ Reduce(): BoolStringPair", "+ Remove(ptr), RemoveVertex(v)  // renumbers",
+                              "+ [[nodiscard]] RemoveRedundantEdges(): stdx::Result",
+                              "+ Remove(node)  // renumbers later vertices",
                               "+ Replace(old, new): bool", "+ NumVertices(), NumEdges()",
-                              "+ PrintGraph(label, logger), DrawGraph(name)"])
+                              "+ PrintGraph(label, logger)"])
     sub = uml_class(d, 0, base.y1 + 90, "ScheduleEventDag", accent=T.amber,
-                    stereo="planner_core · DagBase<ScheduleEvent> + 8 methods", size=M,
-                    attrs=["  VertexVec = std::vector<Vertex>"],
-                    methods=["+ AddEvent(e): bool", "+ HasEvent(e): bool",
-                             "+ GetEventFromVertex(v): optional<ScheduleEventSPtr>",
-                             "+ GetVertexFromEvent(e): optional<Vertex>",
+                    stereo="planner_core · Dag<ScheduleEvent> + 6 methods", size=M,
+                    methods=["+ AddEvent(e): bool  // Add(e).has_value()",
+                             "+ GetEvent(v): ScheduleEventSPtr  // = GetNode(v)",
+                             "+ GetEventsInTopologicalOrder():",
+                             "    optional<vector<ScheduleEventSPtr>>",
                              "+ GetRootEvents(): vector  // sorted by job index",
                              "+ GetLeafEvents(): vector  // vertex order",
                              "+ GetTopologicalOrdering()  override",
                              "    // Kahn, lowest job index first",
-                             "+ Apply(DiscreteGarageState&) const: BoolStringPair"])
+                             "+ [[nodiscard]] ApplyEventsTo(DiscreteGarageState&)",
+                             "    const: stdx::Result"])
     # inheritance (hollow triangle at base)
     connect(d, [(sub.cx, sub.y0), (sub.cx, base.y1)], kind="inh", color=T.amber, label="T = ScheduleEvent",
             label_at=(sub.cx, (sub.y0 + base.y1) / 2))
     # instances column
     ix = max(base.x1, sub.x1) + 110
     inst = [
-        ("ctx->events", "ScheduleEventDag", T.amber,
-         ["the plan: built in job expansion,", "extended by tray and AGV assignment,", "read by CHUGG and the response"]),
-        ("event_dag_copy", "ScheduleEventDag", T.amber,
-         ["local in DoAgvAssignments: a shallow", "copy consumed root by root (Remove)", "as a work queue (see below)"]),
-        ("agv_event_dag", "DagBase<uint16_t>", T.violet,
-         ["local in DoAgvAssignments (GetEventDag):", "which matched AGV must go first", "within one matching round"]),
-        ("final_actions_dag", "DagBase<ActionNodeMsg>", T.violet,
-         ["local in ResponseFromTrajectories:", "one vertex per action node; becomes", "the response's parent indices"]),
+        ("ctx->event_dag", "ScheduleEventDag", T.amber,
+         ["the plan: built in job expansion,", "extended by tray and AGV assignment,", "read by CHUGG and the action graph"]),
+        ("pending_events", "ScheduleEventDag", T.amber,
+         ["local in AssignAgvs: a shallow copy", "consumed root by root (Remove)", "as a work queue (see below)"]),
+        ("agv_order_dag", "Dag<uint16_t>", T.violet,
+         ["local in AssignAgvs (BuildAgvOrderDag):", "which matched AGV must go first", "within one matching round"]),
+        ("final_actions_dag", "Dag<interfaces::msg::ActionNode>", T.violet,
+         ["local in BuildActionGraph:", "one vertex per action node; becomes", "the response's parent indices"]),
     ]
     y = 0
     boxes = []
     for nm, ty, col, lines in inst:
-        w = 330
+        w = 370
         h = 30 + 18 * len(lines) + 12
         d.rect(ix, y, w, h, rx=8, fill=T.card, stroke=col, sw=1.4)
         d.rich(ix + 14, y + 17, [(nm, "mono", 700, T.fg), (" : " + ty, "mono", 400, col)], size=12)
@@ -159,16 +161,19 @@ def event_dag_classes():
         connect(d, [(b.x0, b.cy), (mx, b.cy), (mx, tgt.y0 + 30 if tgt is sub else tgt.y0 + 60),
                     (tgt.x1, tgt.y0 + 30 if tgt is sub else tgt.y0 + 60)], kind="dep", color=col)
     label_pill(d, ix - 50, (boxes[1][0].y1 + boxes[2][0].y0) / 2, "«instance of»", color=T.muted)
-    note(d, ix, y + 6, 330,
-         "DagBase<T> is header-only. ScheduleEventDag's Apply, GetRootEvents, GetLeafEvents and "
-         "GetTopologicalOrdering are in src/event_dag.cpp; the other four are one-line wrappers in the header.",
+    note(d, ix, y + 6, 370,
+         "Dag<T> is header-only. ScheduleEventDag's ApplyEventsTo, GetEventsInTopologicalOrder, GetRootEvents, "
+         "GetLeafEvents and GetTopologicalOrdering are in src/event_dag.cpp; AddEvent and GetEvent are one-line "
+         "wrappers in the header.",
          title="Where the code is", accent=T.violet)
-    frame(d, title="ScheduleEventDag and the DagBase family",
+    frame(d, title="ScheduleEventDag and the Dag family",
           subtitle="One generic graph class, three element types. ScheduleEventDag adds the event-specific helpers "
                    "and replaces the topological sort with one that puts lower job indices first.",
           badge_key="as-built",
-          legend=[("box", T.violet, "generic DagBase<T> / its other instances"), ("box", T.amber, "ScheduleEventDag"),
-                  ("inh", T.amber, "specialises"), ("dep", T.fg2, "instance of")])
+          legend=[("box", T.violet, "generic Dag<T> / its other instances"), ("box", T.amber, "ScheduleEventDag"),
+                  ("inh", T.amber, "specialises"), ("dep", T.fg2, "instance of")],
+          footnote="RemoveRedundantEdges returns \"The graph must be a DAG.\" when GetTopologicalOrdering finds a "
+                   "cycle; GetNode, GetInEdges and GetOutEdges throw std::invalid_argument for a vertex not in the graph.")
     return d
 
 
@@ -178,11 +183,11 @@ def event_dag_classes():
 
 @figure("64_event_dag_storage", "ScheduleEventDag storage and event identity", DOC1)
 def event_dag_storage():
-    d = Doc("64_event_dag_storage", "Inside ctx->events: vertices, edges and shared event objects",
+    d = Doc("64_event_dag_storage", "Inside ctx->event_dag: vertices, edges and shared event objects",
             "The DAG stores a vertex per event holding a shared_ptr, and directed edges between vertex indices. "
             "Other structures point at the same event objects.")
     # ---- vertex table ----
-    d.text(0, 0, "dag_: vertices", size=13, weight=600, fill=T.fg)
+    d.text(0, 0, "graph_: vertices", size=13, weight=600, fill=T.fg)
     d.text(0, 18, "index = insertion order (vecS)", size=S.small, fill=T.muted)
     rows_y = {}
     for i, k in enumerate(ORDER):
@@ -208,7 +213,7 @@ def event_dag_storage():
         connect(d, [(180, rows_y[k]), (ex, ev_y[k])], kind="flow", color=T.fg2, size=7, sw=1.2)
     # ---- edge list ----
     lx = ex + 260 + 70
-    d.text(lx, 0, "dag_: edges (u -> v: u finishes first)", size=13, weight=600, fill=T.fg)
+    d.text(lx, 0, "graph_: edges (u -> v: u finishes first)", size=13, weight=600, fill=T.fg)
     d.text(lx, 18, "stored between vertex indices", size=S.small, fill=T.muted)
     for i, (u, v) in enumerate(EDG):
         y = 40 + i * 32
@@ -219,17 +224,17 @@ def event_dag_storage():
     hx = lx
     hy = 40 + len(EDG) * 32 + 30
     d.text(hx, hy, "other holders of the same objects", size=13, weight=600, fill=T.fg)
-    holders = [("ctx->last_entity_event[Tray 19]", "f", T.green),
-               ("ctx->first_tray_event[21]", "b", T.green),
-               ("event_dag_copy  (DoAgvAssignments)", "a", T.amber)]
+    holders = [("ctx->last_event_by_entity[Tray 19]", "f", T.green),
+               ("ctx->first_event_by_tray[21]", "b", T.green),
+               ("pending_events  (AssignAgvs)", "a", T.amber)]
     for i, (nm, k, col) in enumerate(holders):
         y = hy + 22 + i * 36
         b = chip(d, hx, y + 8, nm, col, size=11)
         connect(d, [(b.x0, y + 8), (b.x0 - 22, y + 8), (b.x0 - 22, ev_y[k]), (ex + 260, ev_y[k])], kind="flow",
                 color=col, size=7, sw=1.2, dash="5 4")
-    # ---- ptr_to_vertex_ map ----
+    # ---- vertex_by_node_ map ----
     py = 40 + 6 * 44 + 26
-    d.text(0, py, "ptr_to_vertex_: the reverse map", size=13, weight=600, fill=T.fg)
+    d.text(0, py, "vertex_by_node_: the reverse map", size=13, weight=600, fill=T.fg)
     d.text(0, py + 18, "unordered_map<shared_ptr<ScheduleEvent>, Vertex>", size=S.small, family="mono", fill=T.muted)
     for i, k in enumerate(ORDER):
         x = (i % 3) * 100
@@ -268,25 +273,25 @@ def event_dag_storage():
         cbs.append(BBox(x, y0 + 24, x + cw, y0 + 24 + h))
     a, b, c = cbs
     connect(d, [(a.x1, a.y0 + 34), (b.x0, b.y0 + 34)], kind="flow", color=T.fg2, size=7,
-            label="GetVertexFromEvent(e)", label_at=((a.x1 + b.x0) / 2, a.y0 + 20))
-    d.text((a.x1 + b.x0) / 2, a.y0 + 50, "hash lookup in ptr_to_vertex_", size=10.5, fill=T.muted, anchor="middle")
+            label="GetVertex(e)", label_at=((a.x1 + b.x0) / 2, a.y0 + 20))
+    d.text((a.x1 + b.x0) / 2, a.y0 + 50, "hash lookup in vertex_by_node_", size=10.5, fill=T.muted, anchor="middle")
     connect(d, [(b.x0, b.y0 + 74), (a.x1, a.y0 + 74)], kind="flow", color=T.fg2, size=7,
-            label="GetEventFromVertex(v)", label_at=((a.x1 + b.x0) / 2, a.y0 + 92))
-    d.text((a.x1 + b.x0) / 2, a.y0 + 112, "index into dag_", size=10.5, fill=T.muted, anchor="middle")
+            label="GetEvent(v)", label_at=((a.x1 + b.x0) / 2, a.y0 + 92))
+    d.text((a.x1 + b.x0) / 2, a.y0 + 112, "index into graph_; throws if absent", size=10.5, fill=T.muted, anchor="middle")
     yb = a.y1 + 30
     connect(d, [(a.cx, a.y1), (a.cx, yb), (c.cx, yb), (c.cx, c.y1)], kind="flow", color=T.fg2, size=7,
             label="event->GetJobIndex()", label_at=((a.cx + c.cx) / 2, yb))
     d.text(b.x1 + 14, b.y0 + 54, "no index -> event lookup:", size=S.small, fill=T.muted)
     d.text(b.x1 + 14, b.y0 + 72, "many events share one job", size=S.small, fill=T.muted)
-    frame(d, title="Inside ctx->events: vertices, edges and shared event objects",
+    frame(d, title="Inside ctx->event_dag: vertices, edges and shared event objects",
           subtitle="The example is the DAG of the topological-ordering figure (job 0 = a retrieve, jobs 1 and 2 repark T19). "
-                   "dag_ and ptr_to_vertex_ are DagBase's two members; the holders on the right are illustrative.",
+                   "graph_ and vertex_by_node_ are Dag's two members; the holders on the right are illustrative.",
           badge_key="as-built",
           legend=[("box", T.sky, "shared_ptr identity"), ("box", T.amber, "vertex index"),
                   ("box", T.green, "job index / bookkeeping maps"), ("dasharrow", T.green, "another pointer to the same object")],
-          footnote="From planner_core/event_dag.hpp. PlanMotions maps each motion back to its event with "
-                   "static_cast<ScheduleEventDag::Vertex>(motion.GetActionId()), which is why ctx->events must never "
-                   "lose a vertex.")
+          footnote="From planner_core/event_dag.hpp. BuildActionGraph maps each motion back to its event with "
+                   "static_cast<ScheduleEventDag::Vertex>(motion.GetActionId()) (action_graph.cpp:390), which is why "
+                   "ctx->event_dag must never lose a vertex.")
     return d
 
 
@@ -326,13 +331,14 @@ def event_dag_operations():
         _node(d, x + 18 + i * 50, y + 82, k, w=42)
         d.text(x + 39 + i * 50, y + 128, f"v{VIDX[k]}", size=10.5, family="mono", fill=T.muted, anchor="middle")
     d.text(x + 18, y + 156, "returns vertex indices, not events;", size=S.small, fill=T.fg2)
-    d.text(x + 18, y + 174, "map back with GetEventFromVertex(v)", size=S.small, fill=T.fg2)
-    # 5 Apply
+    d.text(x + 18, y + 174, "map back with GetEvent(v), or call", size=S.small, fill=T.fg2)
+    d.text(x + 18, y + 192, "GetEventsInTopologicalOrder() instead", size=S.small, fill=T.fg2)
+    # 5 ApplyEventsTo
     x, y = at(4)
-    _panel(d, x, y, PW, PH, 5, "Apply(working_state)", ["replays every event, in a topological order,",
-                                                        "onto a COPY of initial_state; returns BoolStringPair"],
+    _panel(d, x, y, PW, PH, 5, "ApplyEventsTo(state)", ["replays every event, in a topological order,",
+                                                        "onto a COPY of initial_state; returns stdx::Result"],
            col=T.violet)
-    lines = ["working_state = ctx->initial_state;", "ctx->events.Apply(working_state);", "",
+    lines = ["auto state = ctx.initial_state;", "ctx.event_dag.ApplyEventsTo(state);", "",
              "a  B21 -> TO_RETRIEVE", "b  T21 leaves B21 (dest ?)", "c  T17 -> B21", "d  B21 PROCESS_RETRIEVE",
              "e, f  T19 -> P24 -> P23"]
     for i, ln in enumerate(lines):
@@ -346,15 +352,15 @@ def event_dag_operations():
     connect(d, [(bx0, y + dy + 30), (bx0, y + dy + 46), (x + dx + 25, y + dy + 46), (x + dx + 25, y + dy + 30)],
             kind="flow", color=T.red, dash="4 3", size=7)
     label_pill(d, x + dx + 1.5 * 74 + 25, y + dy + 46, "d -> a ?", color=T.red)
-    # 7 Reduce
+    # 7 RemoveRedundantEdges
     x, y = at(6)
-    _panel(d, x, y, PW, PH, 7, "Reduce()", ["drops a -> c and a -> d: implied by a -> b -> c -> d",
+    _panel(d, x, y, PW, PH, 7, "RemoveRedundantEdges()", ["drops a -> c and a -> d: implied by a -> b -> c -> d",
                                             "HasDependency(a, c): true before, false after"], col=T.amber)
     _mini_dag(d, x + dx, y + dy, edge_styles={("a", "c"): "gone", ("a", "d"): "gone"})
     # 8 Remove on a copy
     x, y = at(7)
-    _panel(d, x, y, PW, PH, 8, "copy.Remove(a)", ["on event_dag_copy only: roots become {b, e};",
-                                                  "ctx->events keeps a (and its vertex index)"], col=T.amber)
+    _panel(d, x, y, PW, PH, 8, "pending_events.Remove(a)", ["on the copy only: roots become {b, e};",
+                                                  "ctx->event_dag keeps a (and its vertex index)"], col=T.amber)
     boxes = _mini_dag(d, x + dx, y + dy, nodes=["b", "c", "d", "e", "f"], edges=[e for e in EDG if "a" not in e],
                       states={"b": "hi", "e": "hi"})
     _node(d, x + dx, y + dy, "a", state="gone")
@@ -366,42 +372,43 @@ def event_dag_operations():
           legend=[("box", T.green, "returned / selected"), ("box", T.sky, "added"), ("dasharrow", T.red, "removed / refused"),
                   ("dashbox", T.faint, "removed vertex")],
           footnote="Behaviour from planner_core/event_dag.hpp and src/event_dag.cpp. AddDependency returns false if an "
-                   "endpoint is missing or the edge exists, and never checks for cycles.")
+                   "endpoint is missing or the edge exists, and never checks for cycles. RemoveRedundantEdges and "
+                   "ApplyEventsTo return \"The graph must be a DAG.\" on a cycle.")
     return d
 
 
 # --------------------------------------------------------------------------------------
-# 66 — the shallow copy as a work queue in DoAgvAssignments
+# 66 — the shallow copy as a work queue in AssignAgvs
 # --------------------------------------------------------------------------------------
 
-@figure("66_event_dag_copy_queue", "event_dag_copy as a work queue", DOC1)
+@figure("66_event_dag_copy_queue", "pending_events as a work queue", DOC1)
 def event_dag_copy_queue():
-    d = Doc("66_event_dag_copy_queue", "DoAgvAssignments consumes a shallow copy of the DAG",
-            "Rounds of DoAgvAssignments: the copy loses its roots one by one while ctx->events gains AGV events; "
+    d = Doc("66_event_dag_copy_queue", "AssignAgvs consumes a shallow copy of the DAG",
+            "Rounds of AssignAgvs: the copy loses its roots one by one while ctx->event_dag gains AGV events; "
             "both point at the same event objects.")
     # step k: (nodes left in the copy, roots highlighted, title, code line)
     S_ = [
-        (ORDER, {"a", "e"}, "start", "auto event_dag_copy(ctx->events);"),
-        (["b", "c", "d", "e", "f"], {"b", "e"}, "round 1 · phase 1", "apply + Remove the non-tray root a"),
+        (ORDER, {"a", "e"}, "start", "auto pending_events(ctx->event_dag);"),
+        (["b", "c", "d", "e", "f"], {"b", "e"}, "round 1 · phase 1", "ApplyNonTrayRootEvents: apply + Remove a"),
         (["c", "d", "f"], {"c", "f"}, "round 1 · phase 2", "match AGVs to tray roots b, e; Remove them"),
         (["d"], {"d"}, "round 2 · phase 2", "match AGVs to tray roots c, f; Remove them"),
         ([], set(), "round 3 · phase 1", "apply + Remove d; the copy is empty"),
     ]
-    d.step("Start: the copy has the same six events (the same objects) as ctx->events. Its roots, a and e, are the "
+    d.step("Start: the copy has the same six events (the same objects) as ctx->event_dag. Its roots, a and e, are the "
            "events with no unprocessed prerequisite.")
     d.step("Phase 1 drains the non-tray roots: the bay transition a is applied to working_state and removed from the "
-           "copy. Removing a makes b a root. ctx->events is unchanged.")
+           "copy. Removing a makes b a root. ctx->event_dag is unchanged.")
     d.step("Phase 2 matches AGVs to the TrayMove roots b and e (BottleneckAssignment), calls SetAgvId on them and "
-           "removes them from the copy. Their approach, lift and lower events are added to ctx->events only.")
-    d.step("Round 2: no non-tray roots, so phase 2 matches c and f. Their AGV events go into ctx->events; d becomes "
+           "removes them from the copy. Their approach, lift and lower events are added to ctx->event_dag only.")
+    d.step("Round 2: no non-tray roots, so phase 2 matches c and f. Their AGV events go into ctx->event_dag; d becomes "
            "the only root.")
-    d.step("Round 3: d is applied and removed. The copy is empty and the loop ends; path repair, Reduce() and "
-           "AddDepsAfterAmiga then run on ctx->events.")
+    d.step("Round 3: d is applied and removed. The copy is empty and the loop ends; OrderAgvMovesAfterBlockingAgvs, "
+           "RemoveRedundantEdges() and OrderAllTransitionsAroundAgvLifts then run on ctx->event_dag.")
     GX = 96
     # ---- left: the copy
     W1 = 470
     d.rect(0, 0, W1, 262, rx=10, fill=T.card, stroke=T.amber, sw=1.3)
-    d.text(14, 18, "event_dag_copy (the work queue)", size=12.5, weight=600, fill=T.amber)
+    d.text(14, 18, "pending_events (the work queue)", size=12.5, weight=600, fill=T.amber)
     for k, (nodes, roots, title, code) in enumerate(S_):
         with d.only(k):
             d.text(14, 40, f"{title}: {code}", size=11, family="mono", fill=T.fg2)
@@ -415,11 +422,11 @@ def event_dag_copy_queue():
                     _node(d, 30 + c * GX, 96 + r * 58, n, state="gone")
             d.text(14, 230, "roots: " + (", ".join(sorted(roots)) if roots else "none (empty)"), size=S.small,
                    fill=T.fg)
-    # ---- right: ctx->events
+    # ---- right: ctx->event_dag
     X2 = W1 + 40
-    W2 = 640
+    W2 = 720
     d.rect(X2, 0, W2, 262, rx=10, fill=T.tint(T.sky, 0.05, T.bg), stroke=T.sky, sw=1.3)
-    d.text(X2 + 14, 18, "ctx->events: never shrinks, keeps every vertex index", size=12.5, weight=600, fill=T.sky)
+    d.text(X2 + 14, 18, "ctx->event_dag: never shrinks, keeps every vertex index", size=12.5, weight=600, fill=T.sky)
     _mini_dag(d, X2 + 30, 76, gx=GX)
     agv = {"b": ("AGV-1", 2), "e": ("AGV-2", 2), "c": ("AGV-1", 3), "f": ("AGV-3", 3)}
     for n, (who, k) in agv.items():
@@ -429,30 +436,30 @@ def event_dag_copy_queue():
                    anchor="middle")
     rows = [("b, e", "approach, lift, lower for b (AGV-1) and e (AGV-2), with edges", 2),
             ("c, f", "approach, lift, lower for c (AGV-1) and f (AGV-3), with edges", 3),
-            ("then", "EnsureAgvMovePathsClear, Reduce(), AddDepsAfterAmiga", 4)]
+            ("then", "OrderAgvMovesAfterBlockingAgvs, RemoveRedundantEdges(), OrderAllTransitionsAroundAgvLifts", 4)]
     d.text(X2 + 14, 204, "added AGV events:", size=S.small, weight=600, fill=T.fg2)
     for i, (who, txt, k) in enumerate(rows):
         with d.at(k):
             d.text(X2 + 130, 204 + i * 20, f"{who}: {txt}", size=S.small, fill=T.fg)
     with d.at(0, 1):
         d.text(X2 + 130, 204, "none yet", size=S.small, fill=T.muted)
-    d.text(0, 292, "Every SetAgvId(...) on a root of the copy is visible in ctx->events: both DAGs hold the same TrayMove "
-           "objects. New AGV events are added only to ctx->events, so they never become roots of the copy.",
+    d.text(0, 292, "Every SetAgvId(...) on a root of the copy is visible in ctx->event_dag: both DAGs hold the same TrayMove "
+           "objects. New AGV events are added only to ctx->event_dag, so they never become roots of the copy.",
            size=S.small, fill=T.muted)
-    frame(d, title="DoAgvAssignments consumes a shallow copy of the DAG",
+    frame(d, title="AssignAgvs consumes a shallow copy of the DAG",
           subtitle="The copy is a work queue (Kahn's algorithm in rounds): its roots are the events whose "
                    "prerequisites are all assigned. Phase 1 drains non-tray roots, phase 2 matches AGVs to the "
                    "TrayMove roots with BottleneckAssignment.",
           badge_key="illustrative",
           legend=[("box", T.green, "roots of the copy at this step"), ("dashbox", T.faint, "already removed from the copy"),
-                  ("box", T.sky, "ctx->events")],
+                  ("box", T.sky, "ctx->event_dag")],
           footnote="AGV numbers are illustrative; the matching depends on costs. In the code, unmatched TrayMove roots "
                    "stay in the copy for the next round.")
     return d
 
 
 # --------------------------------------------------------------------------------------
-# 67 — TrayMove::Apply branch by branch
+# 67 — TrayMove::ApplyTo branch by branch
 # --------------------------------------------------------------------------------------
 
 def _box(d: Doc, x, y, w, lines, col, *, title=None, dashed=False, h=None):
@@ -469,14 +476,14 @@ def _box(d: Doc, x, y, w, lines, col, *, title=None, dashed=False, h=None):
     return BBox(x, y, x + w, y + hh)
 
 
-@figure("67_traymove_apply", "What TrayMove::Apply does", DOC1)
+@figure("67_traymove_apply", "What TrayMove::ApplyTo does", DOC1)
 def traymove_apply():
-    d = Doc("67_traymove_apply", "What TrayMove::Apply does to a DiscreteGarageState",
-            "Flowchart of TrayMove::Apply: blank tray id, blank destination, occupied destination, no AGV, and "
+    d = Doc("67_traymove_apply", "What TrayMove::ApplyTo does to a DiscreteGarageState",
+            "Flowchart of TrayMove::ApplyTo: blank tray id, blank destination, occupied destination, no AGV, and "
             "AGV-carried cases.")
     QW, OW, GX = 300, 430, 110
     ox = QW + GX
-    start = _box(d, 0, 0, QW, ["const: changes only `state`"], T.sky, title="TrayMove::Apply(state)")
+    start = _box(d, 0, 0, QW, ["const: changes only `state`"], T.sky, title="TrayMove::ApplyTo(state)")
     qs = [
         ("tray id set?", "no", ["return {true, \"\"}: nothing changes", "(the bay a READY_FOR_INSERT fills",
                                  "still looks empty to later jobs)"], T.amber, "no-op"),
@@ -514,8 +521,8 @@ def traymove_apply():
                                         "heading is Wrap(dest + 180) if it faces opposite to the tray"], T.green,
                title="carried by the AGV")
     connect(d, [(60, prev.y1), (60, end.y0)], kind="flow", color=T.fg2, size=8)
-    frame(d, title="What TrayMove::Apply does to a DiscreteGarageState",
-          subtitle="planner_core/src/schedule_events.cpp. Job methods replay half-specified TrayMoves through this "
+    frame(d, title="What TrayMove::ApplyTo does to a DiscreteGarageState",
+          subtitle="planner_core/src/schedule_events.cpp. Job expansions replay half-specified TrayMoves through this "
                    "function, so the blank-field branches decide what later jobs see in working_state.",
           badge_key="as-built",
           legend=[("box", T.fg2, "question"), ("box", T.green, "tray moves"), ("box", T.amber, "nothing happens"),
@@ -531,7 +538,7 @@ def traymove_apply():
 def topological_priority():
     d = Doc("68_topological_priority", "How ScheduleEventDag::GetTopologicalOrdering picks the next event",
             "Kahn's algorithm with a min-priority queue on job index, step by step on the example DAG, compared with "
-            "the Boost DFS order DagBase would give.")
+            "the Boost DFS order Dag<T> would give.")
     d.text(0, 0, "Example DAG (job index: a, b, c, d = 0; e = 1; f = 2)", size=13, weight=600, fill=T.fg)
     steps = [("a:0  e:1", "a", "a"), ("b:0  e:1", "b", "a b"), ("c:0  e:1", "c", "a b c"),
              ("d:0  e:1", "d", "a b c d"), ("e:1", "e", "a b c d e"), ("f:2", "f", "a b c d e f")]
@@ -587,7 +594,7 @@ def topological_priority():
     d.text(0, cy, "Same DAG, two implementations", size=13, weight=600, fill=T.fg)
     rows = [("ScheduleEventDag::GetTopologicalOrdering()", "a b c d e f", T.green,
              "Kahn + min-heap on job index: job 0 first wherever the edges allow"),
-            ("DagBase<T>::GetTopologicalOrdering()", "e f a b c d", T.violet,
+            ("Dag<T>::GetTopologicalOrdering()", "e f a b c d", T.violet,
              "Boost topological_sort (DFS from vertex 0 upward), reversed: valid, but ignores jobs")]
     for i, (nm, order, col, why) in enumerate(rows):
         y = cy + 26 + i * 56
@@ -597,12 +604,12 @@ def topological_priority():
         d.text(886, y + 23, order, size=14, family="mono", weight=700, fill=T.fg, anchor="end")
     note(d, 0, cy + 26 + 2 * 56 + 14, 900,
          "Only the job index is compared, so among ready events of the same job the heap's internal order decides. "
-         "That order is deterministic for a DAG built the same way, but it is not 'vertex order'. Reduce() calls the "
-         "virtual GetTopologicalOrdering, so on a ScheduleEventDag it also uses the job-priority order.",
+         "That order is deterministic for a DAG built the same way, but it is not 'vertex order'. RemoveRedundantEdges() "
+         "calls the virtual GetTopologicalOrdering, so on a ScheduleEventDag it also uses the job-priority order.",
          title="Ties within one job", accent=T.sky)
     frame(d, title="How ScheduleEventDag::GetTopologicalOrdering picks the next event",
           subtitle="planner_core/src/event_dag.cpp overrides the Boost sort so that earlier jobs come first. "
                    "If some events never become ready (a cycle), the count falls short and the method returns nullopt.",
           badge_key="as-built",
-          legend=[("box", T.green, "ScheduleEventDag order"), ("box", T.violet, "generic DagBase order")])
+          legend=[("box", T.green, "ScheduleEventDag order"), ("box", T.violet, "generic Dag<T> order")])
     return d

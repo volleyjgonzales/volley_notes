@@ -3,16 +3,16 @@
 Doc 04-motion-planning.html, section "The single-agent searches and static filters".
 
 140  who calls which search: scheduler methods -> search functions -> environments -> SingleSourceSearch,
-     with GetStaticFilter feeding every search (static).
+     with BuildStaticObstacleFilter feeding every search (static).
 141  SingleSourceSearch (path_search.hpp) on a small abstract graph: open set, closed set, predecessors and
      the environment callbacks, step by step, beside the abridged A* loop (animated).
-142  GetStaticFilter (static_graph_filtering.cpp) for a TRAY footprint on the Pecos QA section: parked trays,
+142  BuildStaticObstacleFilter (static_graph_filtering.cpp) for a TRAY footprint on the Pecos QA section: parked trays,
      AGVs, a bay that is not READY_TO_RETRIEVE, a disabled node; the keep-out areas are plain rectangles with
      no buffer, the real sets come from CollisionTable::Query (animated).
 143  BlockingTraySearchEnvironment and OpenSpaceSearchEnvironment (blocking_tray_search.cpp): one expansion
      from tray T17 at P17, costs = edge length at an illustrative 1 m/s plus 30 s per tray newly crossed;
      the goal test decides where each environment stops (animated).
-144  HideAgvs (agv_hiding_search.cpp): one search per AGV at 1 s per edge, destinations in expansion order,
+144  FindAgvUnderTrayAssignment (agv_hiding_search.cpp): one search per AGV at 1 s per edge, destinations in expansion order,
      greedy with backtracking (animated).
 
 Geometry is the Pecos YAML; occupancy is hypothetical. The searches are recomputed here with the same
@@ -88,7 +88,7 @@ def _area(d, m, rect, color, *, k):
 def search_toolbox():
     d = Doc("140_search_toolbox", "The single-agent searches in motion_planner",
             "Static: which scheduler methods call which search function, which environment each search uses, and "
-            "how GetStaticFilter feeds all of them. Every search runs on the same SingleSourceSearch engine.")
+            "how BuildStaticObstacleFilter feeds all of them. Every search runs on the same SingleSourceSearch engine.")
     col_x = [0, 330, 690, 1080]
     col_w = [290, 320, 320, 300]
     heads = ["Called from (scheduler)", "Search function", "Search environment (goal and cost)",
@@ -99,26 +99,27 @@ def search_toolbox():
     def box(x, y, w, h, title, sub, *, col=T.border, title_col=T.fg, mono=True):
         d.rect(x, y, w, h, rx=9, fill=T.card, stroke=col, sw=1.4)
         d.text(x + 12, y + 20, title, size=13, family="mono" if mono else "sans", weight=600, fill=title_col)
+        step = 17 if len(sub) <= 3 else 14
         for i, ln in enumerate(sub):
-            d.text(x + 12, y + 40 + i * 17, ln, size=11.5, fill=T.fg2)
+            d.text(x + 12, y + 40 + i * step - (5 if len(sub) > 3 else 0), ln, size=11.5, fill=T.fg2)
         return BBox(x, y, x + w, y + h)
 
     rows = [  # (callers, function, environment)
-        (["GetJustMovingCost", "IsMovePossible, MoveAgvToTrayPose", "TryClearBlockedAgvMove",
-          "InitRetrievalHeadings"],
-         ("GetPosePath", ["shortest pose path for one AGV", "then ConvertPosePathToTrajectory"]),
+        (["ComputeTravelDuration", "ValidateMoveDestinationAndPath", "OrderAfterTraysOnPath",
+          "OrderAgvMoveAfterBlockerDeparture", "StorePreferredPayloadHeadingsForRetrieval"],
+         ("FindPosePath", ["shortest pose path for one AGV", "then ConvertPosePathToTrajectory"]),
          ("GarageGraphEnvironment", ["goal: the target vertex", "step: trapezoid time of the edge"])),
-        (["DoTrayAssignments", "(the blocking-tray loop)"],
+        (["AssignTrays", "(the blocking-tray loop)"],
          ("SingleSourceSearch", ["called directly"]),
          ("BlockingTraySearchEnvironment", ["goal: the target vertex", "step: time + 30 s per tray crossed"])),
-        (["FindOpenSpaceForRootTray", "TryFindBlockingTrayResolution"],
+        (["FindDestinationForRootTray", "FindBlockingTrayResolution"],
          ("SingleSourceSearch", ["called directly"]),
          ("OpenSpaceSearchEnvironment", ["goal: first free parking or", "EV-charge node that fits"])),
-        (["AssignTrayIdForEmptyMove"],
+        (["AssignEmptyTrayToMove"],
          ("SingleSourceSearch", ["called directly"]),
          ("EmptyTraySearchEnvironment", ["goal: first node holding", "a tray without a payload"])),
-        (["PlanCleanGarageJob"],
-         ("HideAgvs", ["one search per AGV,", "greedy with backtracking"]),
+        (["ExpandCleanGarageJob"],
+         ("FindAgvUnderTrayAssignment", ["one search per AGV,", "greedy with backtracking"]),
          ("AgvSearchEnvironment", ["no goal: explores everything", "step: 1 s per edge"])),
     ]
     y = 26
@@ -139,7 +140,7 @@ def search_toolbox():
         "one A* function template (path_search.hpp)", "open set: Fibonacci heap, lowest f first",
         "closed set and predecessors in one map", "zero heuristic here, so it is Dijkstra",
         "stops when OnExpansion returns true", "at most 5,000,000 expansions"], col=T.sky, title_col=T.sky)
-    flt = box(col_x[3], ey + 230, col_w[3], 190, "GetStaticFilter", [
+    flt = box(col_x[3], ey + 230, col_w[3], 190, "BuildStaticObstacleFilter", [
         "per footprint type: which poses and", "edges are usable, given parked trays,",
         "AGVs, bays not ready to retrieve,", "disabled nodes and node size",
         "-> GraphFilterProperties", "(two boolean masks)"], col=OFF, title_col=OFF)
@@ -381,7 +382,7 @@ def SSS_g(u):
 
 
 # ======================================================================================
-# 142 — GetStaticFilter
+# 142 — BuildStaticObstacleFilter
 # ======================================================================================
 
 F_TRAYS = {15: "K", 20: "T20"}        # parked, not ignored
@@ -407,14 +408,14 @@ F_STEPS = [
 F_OFF = {k: _off_by(v) for k, v in F_STEPS}
 
 
-@figure("142_static_filter", "GetStaticFilter: from garage state to graph masks (animated)", DOC)
+@figure("142_static_filter", "BuildStaticObstacleFilter: from garage state to graph masks (animated)", DOC)
 def static_filter():
-    d = Doc("142_static_filter", "GetStaticFilter, source by source",
+    d = Doc("142_static_filter", "BuildStaticObstacleFilter, source by source",
             "Animated: the filter for a TRAY footprint, built from one garage state in the four passes of the "
             "code. Each pass asks the CollisionTable where a tray cannot be because of something else and switches "
             "those poses and edges off.")
-    S0 = d.step("The garage state and the call: GetStaticFilter(TRAY, gg, dgs, ctable, ignore_trays = {T17}, "
-                "ignore_agvs = {}, ignore_bays = {}). Tray T17 is the one being moved, so it is ignored. "
+    S0 = d.step("The garage state and the call: BuildStaticObstacleFilter(TRAY, motion_graph, state, collision_table, "
+                "ignore_trays = {T17}, ignore_agvs = {}, ignore_bays = {}). Tray T17 is the one being moved, so it is ignored. "
                 "Trays K and T20 are parked, AGV-1 stands on W26, bay B21 is READY_TO_INSERT and node P24 is "
                 "disabled.")
     S1 = d.step("Pass 1, parked trays. For each tray not in ignore_trays, Query(tray footprint, TRAY, tray pose) "
@@ -429,7 +430,7 @@ def static_filter():
     S4 = d.step("Pass 4, disabled nodes. P24 is in disabled_nodes_ (or holds a disabled asset), so it is blocked at "
                 "its largest window, PAYLOAD + max_resource_size_index, for every heading of the node, whatever is "
                 "really there.")
-    S5 = d.step("Result: GraphFilterProperties(gg, disabled_poses, disabled_edges) starts with every vertex and "
+    S5 = d.step("Result: GraphFilterProperties(motion_graph, blocked_poses, blocked_edges) starts with every vertex and "
                 "edge enabled and sets the listed ones to false. A fifth pass runs only for payload footprints: "
                 "nodes whose largest window is too small are switched off too.")
     m = _qa_map(d)
@@ -457,7 +458,7 @@ def static_filter():
                 _xmark(d, m, n)
     with d.only(S1):
         x, y = m.P(17)
-        label_pill(d, x - 40, y - 34, "ignored: not an obstacle", color=T.amber, size=10.5, bg=T.bg_deep, border=T.amber)
+        label_pill(d, x + 12, y - 34, "ignored: not an obstacle", color=T.amber, size=10.5, bg=T.bg_deep, border=T.amber)
     # mask strip under the map
     all_poses = set().union(*[F_OFF[k][0] for k in F_OFF])
     all_edges = set().union(*[F_OFF[k][1] for k in F_OFF])
@@ -481,35 +482,35 @@ def static_filter():
     # code (right)
     cx = mb.x1 + 40
     cp = code_panel(d, cx, mb.y0, CODE_W + 60, [
-        "// static_graph_filtering.cpp, GetStaticFilter (abridged)",
-        "all_disabled_nodes = dgs.GetDisabledNodes();",
-        "for(const auto& [id, tray] : dgs.GetTrays()) {           // 1. parked trays",
-        "  if(tray.disabled) all_disabled_nodes.insert(tray.pose.node_id);",
-        "  if(ignore_trays.count(id)) continue;",
+        "// static_graph_filtering.cpp, BuildStaticObstacleFilter (abridged)",
+        "disabled_node_ids = state.GetDisabledNodes();",
+        "for(const auto& [tray_id, tray_state] : state.GetTrays()) {   // 1. parked trays",
+        "  if(tray_state.disabled) disabled_node_ids.insert(tray_state.pose.node_id);",
+        "  if(ignore_trays.contains(tray_id)) continue;",
         "  other = footprint of tray (TRAY_LEGS if collision_id is AGV);",
-        "  off += ctable.Query(other, collision_id, tray.pose);",
+        "  blocked += collision_table.Query(other, collision_id, tray_state.pose);",
         "}",
-        "for(const auto& [id, agv] : dgs.GetAgvs()) {             // 2. AGVs",
-        "  if(agv.disabled) all_disabled_nodes.insert(agv.pose.node_id);",
-        "  if(ignore_agvs.count(id)) continue;",
-        "  off += ctable.Query(AGV, collision_id >= AGV ? TRAY : collision_id, agv.pose);",
+        "for(const auto& [agv_id, agv_state] : state.GetAgvs()) {      // 2. AGVs",
+        "  if(agv_state.disabled) disabled_node_ids.insert(agv_state.pose.node_id);",
+        "  if(ignore_agvs.contains(agv_id)) continue;",
+        "  blocked += collision_table.Query(AGV, collision_id >= AGV ? TRAY : collision_id, ...);",
         "}",
-        "for(const auto& [id, bay] : dgs.GetBays()) {             // 3. bays",
-        "  if(bay.disabled) all_disabled_nodes.insert(id);",
-        "  if(ignore_bays.count(id) || bay.state == READY_TO_RETRIEVE) continue;",
-        "  off += ctable.Query(BAY_ODP, collision_id, {id, inbound heading});",
+        "for(const auto& [bay_id, bay_state] : state.GetBays()) {      // 3. bays",
+        "  if(bay_state.disabled) disabled_node_ids.insert(bay_id);",
+        "  if(ignore_bays.contains(bay_id) || state == READY_TO_RETRIEVE) continue;",
+        "  blocked += collision_table.Query(BAY_ODP, collision_id, {bay_id, inbound heading});",
         "}",
-        "for(auto node_id : all_disabled_nodes)                    // 4. disabled nodes",
-        "  for(auto head : node.headings)",
-        "    off += ctable.Query(PAYLOAD + max window (or TRAY), collision_id, {node_id, head});",
-        "if(collision_id >= PAYLOAD)                               // 5. node too small",
-        "  off += every pose whose max window < this size, with its in- and out-edges;",
-        "return GraphFilterProperties(gg, disabled_poses, disabled_edges);  // all true, listed false",
+        "for(auto node_id : disabled_node_ids)                         // 4. disabled nodes",
+        "  for(auto heading : garage_node.headings)",
+        "    blocked += collision_table.Query(PAYLOAD + max window (or TRAY), collision_id, ...);",
+        "if(collision_id >= PAYLOAD)                                    // 5. node too small",
+        "  blocked += every pose whose max window < this size, with its in- and out-edges;",
+        "return {motion_graph, blocked_poses, blocked_edges};  // GraphFilterProperties: listed ones false",
     ], title="one call per footprint type", size=11)
     for k, (a, b) in {S0: (0, 0), S1: (2, 7), S2: (8, 12), S3: (13, 17), S4: (18, 20), S5: (21, 23)}.items():
         with d.only(k):
             _hl_code(d, cp, a, b, size=11)
-    frame(d, title="GetStaticFilter: from garage state to graph masks",
+    frame(d, title="BuildStaticObstacleFilter: from garage state to graph masks",
           subtitle="Nothing is removed from the graph: the filter is two boolean masks over its vertices and edges. "
                    "Areas are plain rectangles with no buffer; the real sets come from CollisionTable::Query.",
           badge_key="yaml+hyp",
@@ -638,7 +639,7 @@ def blocking_tray_search():
          ["no tray on it, not an illegal pose, retrieval heading", "if asked, a VECS for an EV-charge car, height fits;",
           "a free waypoint too if allow_waypoint_stash"], pop_step[B_OPEN]),
         ("EmptyTraySearchEnvironment", "OnExpansion: a node holding a tray without a payload",
-         ["searches from the destination outward; see", "AssignTrayIdForEmptyMove (Task planning tab)"], None),
+         ["searches from the destination outward; see", "AssignEmptyTrayToMove (Task planning tab)"], None),
     ]
     ty = mb.y0 + 24
     for title, test, lines, k in tests:
@@ -685,7 +686,7 @@ def blocking_tray_search():
 
 
 # ======================================================================================
-# 144 — HideAgvs
+# 144 — FindAgvUnderTrayAssignment
 # ======================================================================================
 
 H_TRAYS = {23: "T23", 15: "T15", 17: "T17"}
@@ -713,26 +714,26 @@ H2_DEST = H2[2][0]
 assert H1_DEST == 23 and H2_DEST == 15, (H1_DEST, H2_DEST)
 
 
-@figure("144_hide_agvs", "HideAgvs: a hiding tray for every AGV (animated)", DOC)
+@figure("144_hide_agvs", "FindAgvUnderTrayAssignment: a hiding tray for every AGV (animated)", DOC)
 def hide_agvs():
-    d = Doc("144_hide_agvs", "HideAgvs, AGV by AGV",
+    d = Doc("144_hide_agvs", "FindAgvUnderTrayAssignment, AGV by AGV",
             "Animated: two AGVs are sent under trays before a CLEAN_GARAGE job. Each AGV gets one search that "
             "explores everything at 1 s per edge; the tray poses it reaches become its candidate list, nearest "
             "first. The first AGV takes its nearest candidate, and the next AGV searches again in the changed "
             "garage.")
     S0 = d.step("Input: the garage state. AGV-1 stands on W26 and AGV-2 on W22; trays T15, T17 and T23 are "
-                "parked. The goal: every enabled AGV under a tray, as a map from AGV id to pose.")
-    S1 = d.step("AGV-1: GetStaticFilter(AGV, ..., ignore_agvs = {AGV-1}). For an AGV, parked trays count only "
+                "parked. The goal: every enabled AGV under a tray, as an optional map from AGV id to pose.")
+    S1 = d.step("AGV-1: BuildStaticObstacleFilter(AGV, ..., ignore_agvs = {AGV-1}). For an AGV, parked trays count only "
                 "with their legs, so an AGV can drive under them; AGV-2 at W22 is an obstacle.")
     S2 = d.step("SingleSourceSearch with AgvSearchEnvironment: every edge costs 1 s and OnExpansion never stops "
                 "the search, so it closes every reachable pose. Each closed pose under a tray (same or reciprocal "
                 "heading) is appended to the candidate list, so the list is in order of edge count.")
     S3 = d.step(f"AGV-1 takes its first candidate, {_lab(H1_DEST)}. The move is applied to a copy of the garage "
-                "state (OnEvent(AgvPoseChanged)), and HideOneAgv recurses for the remaining AGVs.")
+                "state (OnEvent(AgvPoseChanged)), and FindRemainingAgvUnderTrayAssignment recurses for the other AGVs.")
     S4 = d.step(f"AGV-2 searches again in the changed copy: AGV-1 now stands at {_lab(H1_DEST)}, so that pose is "
                 f"blocked. The nearest remaining candidate is {_lab(H2_DEST)}.")
-    S5 = d.step("Every AGV has a pose: the recursion returns {AGV-1: " + _lab(H1_DEST) + ", AGV-2: "
-                + _lab(H2_DEST) + "}. Had AGV-2 found no candidate, the loop would have tried AGV-1's next "
+    S5 = d.step("Every AGV has a pose: the recursion returns the map {AGV-1: " + _lab(H1_DEST) + ", AGV-2: "
+                + _lab(H2_DEST) + "}; with no assignment it returns std::nullopt. Had AGV-2 found no candidate, the loop would have tried AGV-1's next "
                 "candidate, then the AGVs in another order: the first full assignment found is returned, not the "
                 "one with the fewest moves.")
     m = _qa_map(d)
@@ -748,7 +749,7 @@ def hide_agvs():
     with d.only(S1):
         x, y = m.P(H_AGVS["AGV-2"])
         d.circle(x, y, 20, fill="none", stroke=OFF, sw=2.4, layer="top")
-        label_pill(d, x + 70, y - 30, "obstacle for AGV-1", color=OFF, size=10.5, bg=T.bg_deep, border=OFF)
+        label_pill(d, x + 62, y - 30, "obstacle for AGV-1", color=OFF, size=10.5, bg=T.bg_deep, border=OFF)
     for k, (dist, order, dests), col in ((S2, H1, T.green), (S4, H2, T.violet)):
         with d.only(k):
             for n in order:
@@ -774,26 +775,26 @@ def hide_agvs():
     # code (right)
     cx = mb.x1 + 40
     cp = code_panel(d, cx, mb.y0, CODE_W, [
-        "// agv_hiding_search.cpp, HideOneAgv (abridged)",
-        "if(agvs_to_assign.empty()) return {true, {}};",
-        "for(uint16_t agv_id : agvs_to_assign) {           // unordered_set order",
-        "  auto filter = GetStaticFilter(AGV, gg, state, table, {}, {agv_id}, {});",
-        "  AgvSearchEnvironment env(state, gg, filter);       // 1 s per edge, never stops",
+        "// agv_hiding_search.cpp, FindRemainingAgvUnderTrayAssignment (abridged)",
+        "if(remaining_agv_ids.empty()) return std::unordered_map<uint16_t, GaragePoseMsg> {};",
+        "for(uint16_t agv_id : remaining_agv_ids) {        // unordered_set order",
+        "  auto filter = BuildStaticObstacleFilter(AGV, graph, base_state, table, {}, {agv_id}, {});",
+        "  AgvSearchEnvironment env(base_state, graph, filter);   // 1 s per edge, never stops",
         "  SingleSourceSearch(agv_pose, 0, env);",
         "  for(const auto& dest : env.GetSortedDestinations()) {",
-        "    auto working_state = state;  apply AGV move to dest;",
-        "    auto next = agvs_to_assign;  next.erase(agv_id);",
-        "    auto [ok, rest] = HideOneAgv(working_state, table, next);   // recurse",
-        "    if(ok) { rest[agv_id] = dest;  return {true, rest}; }",
+        "    auto working_state = base_state;  apply AGV move to dest;",
+        "    auto next = remaining_agv_ids;  next.erase(agv_id);",
+        "    auto rest = FindRemainingAgvUnderTrayAssignment(working_state, table, next);",
+        "    if(rest) { (*rest)[agv_id] = dest;  return rest; }",
         "  }",
         "}",
-        "return {false, {}};                                  // no assignment",
-    ], title="HideAgvs calls this with every enabled AGV", size=11)
+        "return std::nullopt;                                 // no assignment",
+    ], title="FindAgvUnderTrayAssignment calls this with every enabled AGV", size=11)
     for k, (a, b) in {S1: (3, 3), S2: (4, 6), S3: (7, 9), S4: (3, 9), S5: (10, 10)}.items():
         with d.only(k):
             _hl_code(d, cp, a, b, size=11)
-    frame(d, title="HideAgvs: a hiding tray for every AGV",
-          subtitle="Used by PlanCleanGarageJob for job index 0. Distances count edges, not time (a TODO in the "
+    frame(d, title="FindAgvUnderTrayAssignment: a hiding tray for every AGV",
+          subtitle="Used by ExpandCleanGarageJob for job index 0. Distances count edges, not time (a TODO in the "
                    "code); the order among equally near poses depends on the heap. Positions are hypothetical.",
           badge_key="yaml+hyp",
           legend=[("dot", T.green, "AGV-1: edges from its start"), ("dot", T.violet, "AGV-2: edges from its start"),
@@ -850,7 +851,7 @@ def uml_search_environments():
                     methods=["+ GetPath(goal): optional<vector<pair<State, Cost>>>", "+ GetTarget(), GetMetaData()"])
     ry = max(base.y1, sol.y1) + 120
     gge = uml_class(d, 0, ry, "GarageGraphEnvironment", accent=OTH,
-                    stereo="garage_graph_pathing.hpp · built by GetPosePath", size=UM,
+                    stereo="garage_graph_pathing.hpp · built by FindPosePath", size=UM,
                     attrs=["- graph_: const GarageGraph&", "- cost_model_: const MotionCostModel&",
                            "- target_: optional<Vertex>", "- filters_: optional<GraphFilterProperties>"],
                     methods=["+ OnExpansion: state == target_", "+ GetNeighbors: edge and target vertex enabled;",
@@ -865,7 +866,7 @@ def uml_search_environments():
                              "    cost = trapezoid + 30 s per new tray crossed", "+ GetHeuristic: zero (TODO)",
                              "# GetGraph(), GetTable(), GetBaseState(), ...", "  copy and move deleted"])
     agv = uml_class(d, bts.x1 + 50, ry, "AgvSearchEnvironment", accent=OTH,
-                    stereo="agv_hiding_search.hpp · built by HideOneAgv", size=UM,
+                    stereo="agv_hiding_search.hpp · built by FindAgvUnderTrayAssignment", size=UM,
                     attrs=["- base_state_: const DiscreteGarageState&", "- graph_: const GarageGraph&",
                            "- filters_: const GraphFilterProperties   // a copy",
                            "- valid_destinations_: vector<GaragePoseMsg>"],
@@ -898,7 +899,7 @@ def uml_search_environments():
                     stereo="static_graph_filtering.hpp", size=UM,
                     attrs=["- vertex_filter_: VertexVectorPropertyMap<bool>",
                            "- edge_filter_: EdgeVectorPropertyMap<bool>"],
-                    methods=["+ IsEnabled(vertex | edge): bool  // unchecked", "+ AddProperty(vertex | edge, bool)"])
+                    methods=["+ IsEnabled(vertex | edge): bool  // unchecked", "+ SetEnabled(vertex | edge, bool)"])
     # ---- relations
     bind = [(gge, "<Vertex, Duration>"), (bts, "<BlockingTrayState, Duration>"), (agv, "<GaragePoseMsg, Duration>"),
             (sip, "<SippState, Duration>")]
@@ -945,22 +946,23 @@ def uml_static_filters():
             "UML class diagram: the three filter functions, the inputs they read, the GraphFilterProperties they "
             "build, and where each kind of filter ends up.")
     FN, INP, RES, USE = T.red, T.fg2, T.red, T.teal
-    gde = uml_class(d, 440, 0, "GetDisabledEntitiesFilters", accent=FN, stereo="function · static_graph_filtering",
-                    size=UM, methods=["(gg, dgs, ctable)", "    : unordered_map<CollisionEntityId_t, Filter>",
+    gde = uml_class(d, 440, 0, "BuildKeepOutFilters", accent=FN, stereo="function · static_graph_filtering",
+                    size=UM, methods=["(motion_graph, state, collision_table)", "    : unordered_map<CollisionEntityId_t, Filter>",
                                       "  ignore every tray, AGV and bay that is", "  not disabled and not on a disabled node"])
-    gas = uml_class(d, gde.x1 + 70, 0, "GetAllStaticFilters", accent=FN, stereo="function · static_graph_filtering",
-                    size=UM, methods=["(gg, dgs, ctable, ignored_trays, ignored_agvs,", "    ignored_bays)",
+    gas = uml_class(d, gde.x1 + 70, 0, "BuildStaticObstacleFilters", accent=FN,
+                    stereo="function · static_graph_filtering",
+                    size=UM, methods=["(motion_graph, state, collision_table,", "    ignore_trays, ignore_agvs, ignore_bays)",
                                       "    : unordered_map<CollisionEntityId_t, Filter>",
-                                      "  AGV, TRAY, and each payload size in dgs"])
-    gsf = uml_class(d, gas.x1 + 70, 0, "GetStaticFilter", accent=FN, stereo="function · static_graph_filtering",
-                    size=UM, methods=["(collision_id, gg, dgs, ctable,", "    ignore_trays, ignore_agvs, ignore_bays)",
+                                      "  AGV, TRAY, and each payload size in state"])
+    gsf = uml_class(d, gas.x1 + 70, 0, "BuildStaticObstacleFilter", accent=FN, stereo="function · static_graph_filtering",
+                    size=UM, methods=["(collision_id, motion_graph, state, collision_table,", "    ignore_trays, ignore_agvs, ignore_bays)",
                                       "    : GraphFilterProperties",
                                       "  1 trays  2 AGVs  3 bays  4 disabled nodes", "  5 node size (payload ids)"])
     gfp = uml_class(d, gsf.x0, gsf.y1 + 90, "GraphFilterProperties", accent=RES, stereo="static_graph_filtering.hpp",
                     size=UM, attrs=["- vertex_filter_: VertexVectorPropertyMap<bool>",
                                     "- edge_filter_: EdgeVectorPropertyMap<bool>"],
-                    methods=["+ GraphFilterProperties(graph, disabled_poses,", "      disabled_edges)  // all true, listed false",
-                             "+ IsEnabled(vertex | edge): bool  // unchecked", "+ AddProperty(vertex | edge, bool)"])
+                    methods=["+ GraphFilterProperties(motion_graph, blocked_poses,", "      blocked_edges)  // all true, listed false",
+                             "+ IsEnabled(vertex | edge): bool  // unchecked", "+ SetEnabled(vertex | edge, bool)"])
     iy = gde.y1 + 60
     gg = uml_class(d, 0, iy, "GarageGraph", accent=INP, stereo="common_ros", size=UM, compact=True,
                    methods=["+ vertices = poses, edges = transitions", "+ MakeVertex/EdgeVectorPropertyMap<T>(init)"])
@@ -968,10 +970,11 @@ def uml_static_filters():
                     methods=["+ GetTrays(), GetAgvs(), GetBays()", "+ GetDisabledNodes()"])
     ct = uml_class(d, 0, dgs.y1 + 24, "CollisionTable", accent=INP, stereo="common_ros", size=UM, compact=True,
                    methods=["+ Query(other_id, collision_id, pose)", "    : {poses, edges} in conflict",
-                            "+ GetGraph(): layout MD5 must match gg"])
+                            "+ GetGraph(): layout MD5 must match motion_graph"])
     uy = max(ct.y1, gfp.y1) + 90
-    ctx = uml_class(d, gde.x0, uy, "ScheduleContext", accent=USE, stereo="scheduler · per Plan() call", size=UM,
-                    compact=True, attrs=["+ disabledness_filters: unordered_map<", "    CollisionEntityId_t, Filter>"])
+    ctx = uml_class(d, gde.x0, uy, "PlanContext", accent=USE, stereo="scheduler · per Plan() call", size=UM,
+                    compact=True, attrs=["+ keep_out_filter_by_footprint: unordered_map<", "    CollisionEntityId_t, Filter>",
+                                         "+ FindKeepOutFilter(id): stdx::Expected<Filter&>"])
     chg = uml_class(d, ctx.x1 + 40, uy, "Chugg", accent=USE, stereo="motion_planner", size=UM, compact=True,
                     attrs=["- constraints_: GraphConstraints", "  (same map type)"])
     sip = uml_class(d, chg.x1 + 40, uy, "SippEnvironment", accent=USE, stereo="motion_planner", size=UM, compact=True,
@@ -991,7 +994,7 @@ def uml_static_filters():
         d.line(b.x1, b.cy, bus, b.cy, stroke=INP, sw=1.4, dash="6 4")
     connect(d, [(bus, ct.cy), (bus, gde.y1 + 30), (gsf.x0 + 30, gde.y1 + 30), (gsf.x0 + 30, gsf.y1)], kind="dep",
             color=INP)
-    label_pill(d, gas.x0 + 40, gde.y1 + 16, "GetStaticFilter reads the graph, the state and the table", color=INP,
+    label_pill(d, gas.x0 + 40, gde.y1 + 16, "BuildStaticObstacleFilter reads the graph, the state and the table", color=INP,
                size=10.5, bg=T.bg, anchor="start")
     connect(d, [(gde.cx, gde.y1), (gde.cx, ctx.y0)], kind="dep", color=USE, label="fills (in Plan)",
             label_at=(gde.cx + 10, ctx.y0 - 30), label_anchor="start")
@@ -1040,7 +1043,7 @@ def state_and_cost():
     for x, h in zip(cols, heads):
         d.text(x + 4, y, h, size=12, family="mono", weight=600, fill=T.muted)
     rows = [
-        ("GarageGraphEnvironment", "GetPosePath",
+        ("GarageGraphEnvironment", "FindPosePath",
          ["State = GarageGraph::Vertex", "  (size_t index of one pose in the", "   Boost graph; a node with headings",
           "   0 and 90 has two vertices)", "example: the vertex of pose W22@90"],
          ["(vertex of P23@90, 2.9 s)", "cost = trapezoid time of the edge"],
@@ -1050,7 +1053,7 @@ def state_and_cost():
          ["({ vert: W13@90, blocking_trays: {K} }, 6 s)", "cost = trapezoid time", "     + 30 s per tray newly crossed",
           "(Figure 143, 1 m/s: 36 s at P15,", " 42 s at W13)"],
          ["vert is equal", "(blocking_trays is ignored by", " operator== and by the hash)"], "trays"),
-        ("AgvSearchEnvironment", "HideAgvs",
+        ("AgvSearchEnvironment", "FindAgvUnderTrayAssignment",
          ["State = GaragePoseMsg (ROS message)", "{ node_id: 23, heading: 90 }"],
          ["({ node_id: 19, heading: 90 }, 1 s)", "cost = 1 s for every edge"],
          ["node_id and heading are equal"], "pose"),

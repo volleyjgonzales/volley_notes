@@ -40,11 +40,11 @@ def uml_chugg_classes():
     hl = {"__dim__": ("(CBS)",)}
 
     sched = uml_class(d, 0, 0, "Scheduler", accent=SCH, stereo="scheduler · abridged", size=M,
-                      attrs=["- gg_: GarageGraph", "- table_: CollisionTable", "- cost_model_: MotionCostModel",
+                      attrs=["- motion_graph_: GarageGraph", "- collision_table_: CollisionTable", "- cost_model_: MotionCostModel",
                              "- layout_: shared_ptr<Layout>"],
                       methods=["+ PlanMotions(ctx) const", "    : optional<ContinuousState>",
-                               "+ ResponseFromTrajectories(ctx, state)", "    : pair<optional<vector<ActionNodeMsg>>,",
-                               "      string>"])
+                               "+ BuildActionGraph(ctx, final_state) const", "    : Expected<vector<interfaces::msg::",
+                               "      ActionNode>>"])
 
     R1 = sched.y1 + 150
     cs = uml_class(d, 0, R1, "ContinuousState", accent=DAT, stereo="motion_planner · continuous_state.hpp",
@@ -141,9 +141,9 @@ def uml_chugg_classes():
         x = b.x1 + 40
     ec = uml_class(d, x + 10, ext_y, "EdgeCosts, HeuristicMap", accent=EXT, stereo="type aliases · built per call",
                    size=M, attrs=["EdgeCosts = EdgeVectorPropertyMap<Duration>",
-                                  "  // GetEdgeDurations(gg, cost_model)",
+                                  "  // ComputeEdgeDurations(motion_graph, cost_model)",
                                   "HeuristicMap = vector<vector<Duration>>",
-                                  "  // GetAllPairsMinCost: Floyd-Warshall"])
+                                  "  // ComputeAllPairsShortestPathCosts: Floyd-Warshall"])
 
     # ---- relations ----
     note(d, sched.x1 + 60, sched.y0, 420,
@@ -258,7 +258,7 @@ def uml_sipp_classes():
                            "- filters_: optional<GraphFilterProperties>"],
                     methods=["+ OnExpansion / GetNeighbors  override", "+ GetHeuristic(): zero  (Dijkstra)"])
     note(d, gge.x0, gge.y1 + 20, gge.w,
-         "Used by GetPosePath and the task-planning searches; the same A* template serves both.",
+         "Used by FindPosePath and the task-planning searches; the same A* template serves both.",
          title="Second implementation")
     sy = env.y1 + 90
     st = uml_class(d, 0, sy, "SippState", accent=SIP, stereo="search node", size=M,
@@ -379,8 +379,8 @@ def uml_timeline_data():
                    size=M, attrs=["one of: AgvPoseChanged, AgvLiftChanged,", "BayStateChanged, VecsStateChanged,",
                                   "VrcStateChanged  (serialized)"])
     sch = uml_class(d, cs.x1 + 100, tr.y1 + 150, "all_motions", accent=SCH,
-                    stereo="scheduler · ResponseFromTrajectories · local", size=M,
-                    attrs=["std::set<Motion, MotionScheduleOrder>", "  // start, then action id, then hash"],
+                    stereo="scheduler · BuildActionGraph · local", size=M,
+                    attrs=["std::set<Motion, MotionScheduleOrder>", "  // start, action id, hash, then every field"],
                     methods=["CollectAndCollapseTrajectoryMotions(state, layout, all_motions)",
                              "BuildActionDagFromMotions(all_motions, ctx, ...)"])
     # relations
@@ -409,7 +409,7 @@ def uml_timeline_data():
                   ("box", SCH, "scheduler (Action graph tab)"), ("comp", DAT, "composition (owns)"),
                   ("dep", T.fg2, "dependency")],
           footnote="Abridged from continuous_state.hpp, trajectory.hpp and interval.hpp; all_motions and "
-                   "MotionScheduleOrder are in scheduler.cpp.")
+                   "MotionScheduleOrder are in the scheduler's action_graph.cpp.")
     return d
 
 
@@ -428,7 +428,7 @@ def seq_plan_motions():
              ("fn", "garage_graph_pathing", GEN), ("ch", ":Chugg", CH),
              ("a", "planners[a] : SippAgv", SIP), ("env", "env : SippEnvironment", SIP),
              ("astar", "SingleSourceSearch", GEN), ("b", "planners[b] : SippAgv", SIP),
-             ("tbl", "table_ : CollisionTable", EXT)]
+             ("tbl", "collision_table_ : CollisionTable", EXT)]
     sub = {"fn": "free functions", "a": "the event's AGV", "astar": "A*", "b": "every other AGV",
            "tbl": "common_ros"}
     gaps = {"cs": 250, "fn": 230, "ch": 250, "a": 300, "env": 230, "astar": 210, "b": 240, "tbl": 230}
@@ -505,13 +505,14 @@ def seq_plan_motions():
          "every graph edge, and the all-pairs cost table SIPP uses as its A* heuristic (Floyd-Warshall, recomputed "
          "on every call). The Chugg constructor takes a topological order of the event DAG and replays it once.")
     a0 = y
-    msg("sch", "cs", "ContinuousState(initial_state, table_, layout, start_time)")
-    msg("sch", "fn", "GetEdgeDurations(gg_, cost_model_)")
+    msg("sch", "cs", "ContinuousState(initial_state, collision_table_, layout, start_time)")
+    msg("sch", "fn", "ComputeEdgeDurations(motion_graph_, cost_model_)")
     msg("fn", "sch", "edge_durations", ret=True)
-    msg("sch", "fn", "GetAllPairsMinCost(gg_, edge_durations, 0, max)")
+    msg("sch", "fn", "ComputeAllPairsShortestPathCosts(motion_graph_, edge_durations, 0, max)")
     msg("fn", "sch", "heuristics  (Floyd-Warshall)", ret=True)
-    msg("sch", "ch", "Chugg(gg_, table_, ctx->events, init, edge_durations, heuristics, cost_model_)", dy=34)
-    selfmsg("ch", "InitializeEventOrder()", sub_text="GetTopologicalOrdering, replay every Apply; throws on failure")
+    msg("sch", "ch", "Chugg(motion_graph_, collision_table_, ctx->event_dag, init, edge_durations, heuristics, cost_model_)",
+        dy=34)
+    selfmsg("ch", "InitializeEventOrder()", sub_text="GetTopologicalOrdering, replay every ApplyTo; throws on failure")
     # ---------------- step 1 ----------------
     step("SolveSequential starts. SolveInitialization finds the movable AGVs and planning_start_, the trays, bays "
          "and VECS that have events, and builds constraints_: per footprint, the vertices and edges blocked by "
@@ -519,7 +520,7 @@ def seq_plan_motions():
     s1 = y
     msg("sch", "ch", "SolveSequential(audit_ptr)")
     selfmsg("ch", "SolveInitialization()",
-            sub_text="movable AGVs, planning_start_, dynamic entities, constraints_ = GetAllStaticFilters(...)")
+            sub_text="movable AGVs, planning_start_, dynamic entities, constraints_ = BuildStaticObstacleFilters(...)")
     msg("ch", "cs", "GetEndState()")
     msg("cs", "ch", "DiscreteGarageState at start_time", ret=True)
     # ---------------- step 2 ----------------
@@ -587,7 +588,7 @@ def seq_plan_motions():
             sub_text="AddMotion(transition of fixed duration); DeconflictAgvs(node, transition)")
     selfmsg("ch", "VecsTransition: AddMotion(vecs_transition seconds); DeconflictAgvs")
     alt_y1 = y - 18
-    selfmsg("ch", "event->Apply(working_state)")
+    selfmsg("ch", "event->ApplyTo(working_state)")
     loop_y1 = y - 16
     frags.append((loop_y0, loop_y1, xs["ch"] - 80, xs["tbl"] + 100, "loop",
                   "[PlanNodeSequential: for each event in event_order_]", 3))
@@ -603,7 +604,7 @@ def seq_plan_motions():
     selfmsg("ch", "GetUpdatedContinuousState(node)", sub_text="copy init_traj_, AddMotion every new motion")
     msg("ch", "sch", "optional<ContinuousState>", ret=True)
     a1 = y - 40
-    selfmsg("sch", "ResponseFromTrajectories(ctx, state)", sub_text="-> action DAG")
+    selfmsg("sch", "BuildActionGraph(ctx, final_state)", sub_text="-> action DAG")
     end_y = y + 10
 
     # lifelines and activations (always visible)
@@ -639,7 +640,7 @@ def seq_plan_motions():
           badge_key="as-built",
           legend=[("arrow", T.fg2, "synchronous call"), ("dep", T.muted, "return"),
                   ("box", CH, "activation"), ("dashbox", T.faint, "combined fragment (loop / alt)")],
-          footnote="From scheduler.cpp (PlanMotions), chugg_common.cpp, chugg_sequential.cpp, sipp_agv.cpp and "
+          footnote="From the scheduler's scheduler.cpp (PlanMotions), chugg_common.cpp, chugg_sequential.cpp, sipp_agv.cpp and "
                    "safe_interval_path_planning.cpp. Logging and the cost audit are left out; VrcTransition events "
                    "have no branch in the loop.")
     return d

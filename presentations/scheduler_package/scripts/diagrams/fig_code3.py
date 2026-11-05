@@ -59,44 +59,45 @@ def _hl_flow(d: Doc, pts, col=T.fg):
 
 
 # --------------------------------------------------------------------------------------
-# 27 — DoTrayAssignments decision flow
+# 27 — AssignTrays decision flow
 # --------------------------------------------------------------------------------------
 
-@figure("27_tray_assignment_flow", "DoTrayAssignments decision flow", DOC1)
+@figure("27_tray_assignment_flow", "AssignTrays decision flow", DOC1)
 def tray_flow():
-    d = Doc("27_tray_assignment_flow", "Inside DoTrayAssignments()",
+    d = Doc("27_tray_assignment_flow", "Inside AssignTrays()",
             "For every event in topological order: apply non-tray transitions, fill a missing tray id, fill a missing "
             "destination, or find the critical path and resolve blocking trays with two fallbacks.")
     # ---- steps: walk concrete events e0, e1, e2 (+ its blocker e4) through the loop
-    S0 = d.step("Start of DoTrayAssignments(): working_state is a copy of the initial state and freeing_moves is "
-                "empty. The loop visits the events in topological order: e0, e1, e2, ...")
-    S1 = d.step("e0 is a BayTransition (TO_RETRIEVE on B21), not a TrayMove. ApplyTransitionToFreeingMoves() "
-                "registers its pose in freeing_moves, applies it to working_state and the loop continues.")
-    S2 = d.step("e1 moves T21 out of bay B21 but has no destination. AssignDestForUntargetedMove() runs "
+    S0 = d.step("Start of AssignTrays(): a TrayAssignmentState holds a copy of the initial state (working_state) "
+                "and an empty occupancy_history. The loop visits the events in topological order: e0, e1, e2, ...")
+    S1 = d.step("e0 is a BayTransition (TO_RETRIEVE on B21), not a TrayMove. ApplyBayOrChargerTransition() "
+                "registers its pose in occupancy_history, applies it to working_state and the loop continues.")
+    S2 = d.step("e1 moves T21 out of bay B21 but has no destination. AssignDestinationAndUnblockingMoves() runs "
                 "ResolveBlockingTrays(T21): OpenSpaceSearch finds parking spot P23 in tier 1, then the loop continues.")
     S3 = d.step("e2 (T17: P17 -> B21) has a tray id and a destination. B21 is free in working_state because e1 already "
-                "ran. BlockingTraySearch walks the critical path P17 -> P15 -> W13 -> ... -> B21 and finds T15 on P15.")
+                "ran (ResolveDestinationHeading checks it). BlockingTraySearch walks the critical path P17 -> P15 -> W13 -> ... -> B21 and finds T15 on P15.")
     S4 = d.step("Blocking loop, first pass: ResolveBlockingTrays(T15) with T17 immobile and the critical path banned "
                 "finds P19 for T15.")
     S5 = d.step("The blocker move is emitted as a new event e4 (T15: P15 -> P19) with the edge e4 -> e2, plus edges "
-                "from freeing_moves for every pose on e4's path.")
+                "from occupancy_history (OrderAfterPriorOccupants) for every pose on e4's path.")
     S6 = d.step("Recompute the blocking trays on the remaining path: none are left, so the while loop ends.")
-    S7 = d.step("Finish e2: dependencies from freeing_moves for the destination and source (e1 -> e2, e0 -> e2), "
-                "Apply(e2) to working_state, record last_tray_event / first_tray_event for T17.")
+    S7 = d.step("Finish e2: OrderAfterPriorOccupants for the destination and source (e1 -> e2, e0 -> e2), "
+                "ApplyTo(e2) on working_state, then ChainTrayEvent records last_event_by_tray / first_event_by_tray "
+                "for T17.")
     S8 = d.step("What if ResolveBlockingTrays had found no spot for T15? Fallback 1 advances T17 one step along its "
                 "critical path and resolves again; fallback 2 retries without the critical-path ban, else it errors.")
-    S9 = d.step("A later event e5 that asks for 'any empty tray' has no tray id. AssignTrayIdForEmptyMove() runs "
+    S9 = d.step("A later event e5 that asks for 'any empty tray' has no tray id. AssignEmptyTrayToMove() runs "
                 "EmptyTraySearch from the destination (time + 30 s per blocker), then continues at 'has destination?'.")
-    S10 = d.step("After the last event the loop ends. Every TrayMove now has a tray id and a destination; Reduce() is "
-                 "deliberately not called here.")
+    S10 = d.step("After the last event the loop ends. Every TrayMove now has a tray id and a destination; "
+                 "RemoveRedundantEdges() is deliberately not called here.")
     cx = 250
     y = 0
-    loop = _box(d, cx - 230, y, 460, "for event : ctx->events.GetTopologicalOrdering()",
-                ["working_state = ctx->initial_state;  freeing_moves = {}"], col=T.sky, title_col=T.sky)
+    loop = _box(d, cx - 230, y, 460, "for event : event_dag.GetEventsInTopologicalOrder()",
+                ["state = {working_state = ctx->initial_state, occupancy_history}"], col=T.sky, title_col=T.sky)
     q1 = _diamond(d, cx, loop.y1 + 60, "TrayMove?", w=170)
     p_l_q1 = [(cx, loop.y1), (cx, q1.y0)]
     connect(d, p_l_q1, kind="flow", color=T.faint, size=7)
-    nt = _box(d, cx + 160, q1.cy - 34, 330, "ApplyTransitionToFreeingMoves()",
+    nt = _box(d, cx + 160, q1.cy - 34, 330, "ApplyBayOrChargerTransition()",
               ["bay / VECS transition: register its pose,", "apply it, continue"], col=BAYC, title_col=BAYC)
     p_q1_nt = [(q1.x1, q1.cy), (nt.x0, q1.cy)]
     connect(d, p_q1_nt, kind="flow", color=T.faint, size=7, label="no",
@@ -105,7 +106,7 @@ def tray_flow():
     p_q1_q2 = [(cx, q1.y1), (cx, q2.y0)]
     connect(d, p_q1_q2, kind="flow", color=T.faint, size=7, label="yes",
             label_at=(cx + 18, (q1.y1 + q2.y0) / 2))
-    a1 = _box(d, cx + 160, q2.cy - 34, 330, "AssignTrayIdForEmptyMove()",
+    a1 = _box(d, cx + 160, q2.cy - 34, 330, "AssignEmptyTrayToMove()",
               ["EmptyTraySearch from the destination: cheapest", "empty tray (time + 30 s per blocker)"], col=TRAY, title_col=TRAY)
     p_q2_a1 = [(q2.x1, q2.cy), (a1.x0, q2.cy)]
     connect(d, p_q2_a1, kind="flow", color=T.faint, size=7, label="no",
@@ -115,14 +116,15 @@ def tray_flow():
     connect(d, p_q2_q3, kind="flow", color=T.faint, size=7)
     p_a1_q3 = [(a1.cx, a1.y1), (a1.cx, a1.y1 + 14), (cx + 40, a1.y1 + 14), (cx + 40, q3.y0 + 6)]
     connect(d, p_a1_q3, kind="flow", color=T.faint, size=7)
-    a2 = _box(d, cx + 160, q3.cy - 44, 330, "AssignDestForUntargetedMove()",
+    a2 = _box(d, cx + 160, q3.cy - 44, 330, "AssignDestinationAndUnblockingMoves()",
               ["ResolveBlockingTrays(tray): OpenSpaceSearch", "tier 1 parking, tier 2 waypoint stash;",
                "adds blocker moves; then continue"], col=TRAY, title_col=TRAY)
     p_q3_a2 = [(q3.x1, q3.cy), (a2.x0, q3.cy)]
     connect(d, p_q3_a2, kind="flow", color=T.faint, size=7, label="no",
             label_at=((q3.x1 + a2.x0) / 2, q3.cy - 12))
-    s1 = _box(d, cx - 230, q3.y1 + 40, 460, "destination free?  then BlockingTraySearch",
-              ["critical path = tray pose -> dest; collect trays on it", "error if the destination is occupied/disabled"])
+    s1 = _box(d, cx - 230, q3.y1 + 40, 460, "ResolveDestinationHeading, BlockingTraySearch",
+              ["critical path = tray pose -> dest; collect trays on it",
+               "error if the destination is occupied/disabled"])
     p_q3_s1 = [(cx, q3.y1), (cx, s1.y0)]
     connect(d, p_q3_s1, kind="flow", color=T.faint, size=7, label="yes",
             label_at=(cx + 18, (q3.y1 + s1.y0) / 2))
@@ -150,7 +152,7 @@ def tray_flow():
     p_f1_f2 = [(f1.cx, f1.y1), (f2.cx, f2.y0)]
     connect(d, p_f1_f2, kind="flow", color=T.red, size=7, dash="4 3")
     r2 = _box(d, cx - 230, r1.y1 + 26, 460, "emit blocker TrayMoves as events (chained)",
-              ["edge: blocker move -> root move", "edges from freeing_moves for every path pose"], col=TRAY)
+              ["edge: blocker move -> root move", "OrderAfterPriorOccupants for every path pose"], col=TRAY)
     p_r1_r2 = [(cx, r1.y1), (cx, r2.y0)]
     connect(d, p_r1_r2, kind="flow", color=T.faint, size=7)
     r3 = _box(d, cx - 230, r2.y1 + 26, 460, "recompute blocking trays on the remaining path", [], col=TRAY)
@@ -159,14 +161,15 @@ def tray_flow():
     p_r3_r1 = [(r3.x0, r3.cy), (r3.x0 - 12, r3.cy), (r3.x0 - 12, r1.cy), (r1.x0, r1.cy)]
     connect(d, p_r3_r1, kind="flow", color=TRAY, size=7, radius=4)
     fin = _box(d, cx - 230, lf.y1 + 30, 460, "finish this TrayMove",
-               ["freeing_moves deps for dest + source; Apply(event);", "record last_tray_event / first_tray_event"],
+               ["OrderAfterPriorOccupants for dest + source; ApplyTo(event);",
+                "ChainTrayEvent: last_event_by_tray / first_event_by_tray"],
                col=T.green, title_col=T.green)
     p_r3_fin = [(cx, r3.y1), (cx, fin.y0)]
     connect(d, [(cx, lf.y1), (cx, fin.y0)], kind="flow", color=T.faint, size=7)
     with d.at(S10):
         nb = note(d, cx + 300, fin.y0 - 4, 350,
-                  "Reduce() is deliberately not called at the end: a source comment says reducing here breaks the "
-                  "following AGV assignment. Every TrayMove now has a tray id and a destination.",
+                  "RemoveRedundantEdges() is deliberately not called here: a comment in Plan() says calling it "
+                  "after tray assignment breaks AGV assignment. Every TrayMove now has a tray id and a destination.",
                   title="After the loop", accent=T.amber)
 
     # ---- per-step highlights: boxes on the current branch and the arrows taken
@@ -199,9 +202,9 @@ def tray_flow():
     d.text(cx - 216, py + 16, "current event", size=10.5, family="mono", weight=600, fill=T.muted)
     cur = {
         S0: ("before the first event", T.sky,
-             "working_state = initial state, freeing_moves = {}; order: e0, e1, e2, ..."),
+             "working_state = initial state, occupancy_history = {}; order: e0, e1, e2, ..."),
         S1: ("e0  BayTransition TO_RETRIEVE @ B21", BAYC,
-             "not a TrayMove -> register B21 in freeing_moves, Apply(e0), continue"),
+             "not a TrayMove -> register B21 in occupancy_history, ApplyTo(e0), continue"),
         S2: ("e1  TrayMove T21: B21 -> ?", TRAY,
              "tray id yes, destination no -> OpenSpaceSearch tier 1 picks P23; continue"),
         S3: ("e2  TrayMove T17: P17 -> B21", TRAY,
@@ -209,20 +212,20 @@ def tray_flow():
         S4: ("e2  blocker T15 on P15", TRAY,
              "ResolveBlockingTrays(T15, immobile = {T17}, illegal = critical path) -> P19"),
         S5: ("e2  emit e4: TrayMove T15: P15 -> P19", TRAY,
-             "edge e4 -> e2; freeing_moves adds edges for e4's path poses"),
+             "edge e4 -> e2; occupancy_history adds edges for e4's path poses"),
         S6: ("e2  recompute blockers", TRAY, "remaining path P15 -> ... -> B21 is clear -> leave the while loop"),
-        S7: ("e2  finish", T.green, "edges e1 -> e2, e0 -> e2 (B21); Apply(e2); last_tray_event[T17] = e2"),
+        S7: ("e2  finish", T.green, "edges e1 -> e2, e0 -> e2 (B21); ApplyTo(e2); last_event_by_tray[T17] = e2"),
         S8: ("what if: no spot for T15?", T.red,
              "fallback 1: move T17 one step, resolve again; fallback 2: allow the critical path; else error"),
         S9: ("e5  TrayMove ?: -> dest (empty tray wanted)", TRAY,
              "no tray id -> EmptyTraySearch from dest, cheapest empty tray; then 'has destination?'"),
-        S10: ("loop finished", T.green, "every TrayMove has a tray id and a destination; no Reduce() here"),
+        S10: ("loop finished", T.green, "every TrayMove has a tray id and a destination; no RemoveRedundantEdges() here"),
     }
     for k, (ev, col, what) in cur.items():
         with d.only(k):
             chip(d, cx - 216, py + 40, ev, col, size=11.5)
             d.text(cx - 216, py + 63, what, size=11, fill=T.fg2)
-    frame(d, title="Inside DoTrayAssignments()",
+    frame(d, title="Inside AssignTrays()",
           subtitle="One pass over the event DAG in topological order. Searches come from motion_planner "
                    "(EmptyTraySearch, OpenSpaceSearch, BlockingTraySearch) and all run through SingleSourceSearch.",
           badge_key="as-built",
@@ -232,17 +235,17 @@ def tray_flow():
 
 
 # --------------------------------------------------------------------------------------
-# 28 — freeing_moves: occupancy -> dependencies
+# 28 — occupancy_history: occupancy -> dependencies
 # --------------------------------------------------------------------------------------
 
-@figure("28_freeing_moves", "freeing_moves: occupancy becomes dependencies", DOC1)
+@figure("28_freeing_moves", "occupancy_history: occupancy becomes dependencies", DOC1)
 def freeing_moves():
-    d = Doc("28_freeing_moves", "freeing_moves: turning shared space into dependencies",
+    d = Doc("28_freeing_moves", "occupancy_history: turning shared space into dependencies",
             "GarageOccupancyChecker remembers which events used each pose. A later move through a pose depends on "
             "every earlier event whose footprint collides there.")
-    S0 = d.step("Start: freeing_moves (a GarageOccupancyChecker) is empty. T21 sits in bay B21, T15 on P15, T17 on "
+    S0 = d.step("Start: occupancy_history (a GarageOccupancyChecker in TrayAssignmentState) is empty. T21 sits in bay B21, T15 on P15, T17 on "
                 "P17, T20 on P20.")
-    S1 = d.step("e0, the BayTransition TO_RETRIEVE, is processed: ApplyTransitionToFreeingMoves() records e0 as an "
+    S1 = d.step("e0, the BayTransition TO_RETRIEVE, is processed: ApplyBayOrChargerTransition() records e0 as an "
                 "occupant of the bay pose B21. The dashed arrow previews the next event, e1 (T21 -> P23).")
     S2 = d.step("e1 (TrayMove T21 -> P23) is processed: its source pose B21 gets e1 as a second occupant. T21 now "
                 "stands on P23 in working_state.")
@@ -254,7 +257,7 @@ def freeing_moves():
                 "collides with T17's: edge e4 -> e2.")
     S6 = d.step("At the destination B21, GetBlockers returns e1, which took T21 out of the bay: edge e1 -> e2.")
     S7 = d.step("B21 also returns e0, the bay transition registered there: edge e0 -> e2. All three edges are "
-                "AddDependency() calls on the event DAG.")
+                "AddDependency() calls on the event DAG, made by OrderAfterPriorOccupants().")
     S8 = d.step("Finally e2 is applied (T17 now stands in B21 in working_state) and adds itself as an occupant of "
                 "every pose it uses, so later moves through P17, P15, ..., B21 will depend on e2.")
     s = 24
@@ -294,8 +297,8 @@ def freeing_moves():
     # table of the checker contents
     tx = mb.x1 + 36
     tw = 1060 - tx
-    d.text(tx, 12, "freeing_moves contents, filled as events are processed", size=12.5, weight=600, fill=T.fg)
-    rows = [("B21 (bay pose)", "e0  BayTransition TO_RETRIEVE", "ApplyTransitionToFreeingMoves", S1),
+    d.text(tx, 12, "occupancy_history contents, filled as events are processed", size=12.5, weight=600, fill=T.fg)
+    rows = [("B21 (bay pose)", "e0  BayTransition TO_RETRIEVE", "ApplyBayOrChargerTransition", S1),
             ("B21 (bay pose)", "e1  TrayMove T21 -> P23", "source pose of a move", S2),
             ("P23, W22, W41 ...", "e1  (path poses)", "every pose on e1's path", S3),
             ("P15", "e4  TrayMove T15 -> P19", "source pose of a move", S4),
@@ -327,20 +330,20 @@ def freeing_moves():
             d.text(tx + 92, y + 10, why, size=11.5, fill=T.fg2)
         y += 30
     cp = code_panel(d, 0, max(mb.y1, y) + 30, 1060, [
-        "// DoTrayAssignments(), for each pose on a move's path (simplified):",
-        "GarageOccupancyChecker<std::shared_ptr<ScheduleEvent>> freeing_moves(table_, gg_);  // Scheduler members",
-        "auto blockers_opt = freeing_moves.GetBlockers(pose, tray_collision_id);   // who used this space before?",
-        "for(auto& blocker : *blockers_opt) ctx->events.AddDependency(blocker, move);  // must happen first",
-        "freeing_moves.AddOccupant(pose, tray_collision_id, move, /*lifted=*/true);    // remember this move too",
+        "// AssignTrays() and OrderAfterPriorOccupants() (tray_assignment.cpp), for each pose on a move's path (simplified):",
+        "TrayAssignmentState state {.working_state = ctx->initial_state, .occupancy_history = {collision_table_, motion_graph_}};",
+        "auto blockers_or = state.occupancy_history.GetBlockers(pose, collision_id);  // who used this space before? (or error)",
+        "for(const auto& blocker : *blockers_or) ctx.event_dag.AddDependency(blocker, event);  // must happen first",
+        "state.occupancy_history.AddOccupant(pose, collision_id, event, /*lifted=*/true);    // remember this move too",
     ], title="the occupancy-to-edge pattern", size=11.5)
     for k, (a, b) in {S0: (1, 1), S1: (4, 4), S2: (4, 4), S3: (4, 4), S4: (4, 4), S5: (2, 3), S6: (2, 3),
                       S7: (2, 3), S8: (4, 4)}.items():
         with d.only(k):
             _hl_code(d, cp, a, b)
-    frame(d, title="freeing_moves: turning shared space into dependencies",
+    frame(d, title="occupancy_history: turning shared space into dependencies",
           subtitle="Collision checks use the CollisionTable, so a pose \"collides\" if the two footprints overlap, "
-                   "not only when node ids match. The same idea is reused on actions in ResponseFromTrajectories(). "
-                   "Redundant edges are pruned later by Reduce().",
+                   "not only when node ids match. The same idea is reused on actions in BuildActionGraph(). "
+                   "Redundant edges are pruned later by RemoveRedundantEdges().",
           badge_key="yaml+hyp",
           legend=[("route", TRAY, "e2: T17 -> B21"), ("dashbox", TRAY, "vacated by an earlier event"),
                   ("ring", T.sky, "pose with recorded occupants"), ("ring", T.fg, "pose being queried")])
@@ -354,11 +357,11 @@ def freeing_moves():
 @figure("29_agv_matching", "Matching AGVs to tray moves", DOC1)
 def agv_matching():
     d = Doc("29_agv_matching", "Matching AGVs to root tray moves",
-            "DoAgvAssignments builds an AGV-by-TrayMove cost table for the current root events and runs "
+            "AssignAgvs builds an AGV-by-TrayMove cost table for the current root events and runs "
             "BottleneckAssignment; infeasible pairs get no edge.")
-    S0 = d.step("One outer iteration of DoAgvAssignments: the root TrayMoves are e4 (T15 -> P19) and e1 (T21 -> "
+    S0 = d.step("One outer iteration of AssignAgvs: the root TrayMoves are e4 (T15 -> P19) and e1 (T21 -> "
                 "P23); the candidate AGVs are AGV-1, AGV-2 and AGV-3. The cost table is still empty.")
-    S1 = d.step("GetAgvToTrayAssignmentCost(AGV-1, e4): AGV-1 drives from W26 to T15 on P15 and lifts it, about 41 s.")
+    S1 = d.step("ComputeAgvAssignmentCost(AGV-1, e4): AGV-1 drives from W26 to T15 on P15 and lifts it, about 41 s.")
     S2 = d.step("AGV-1 -> e1: AGV-1 drives to T21 in bay B21, about 48 s.")
     S3 = d.step("AGV-2 -> e4: AGV-2 at W18 is close to P15, about 19 s, the cheapest pair.")
     S4 = d.step("AGV-2 -> e1: AGV-2 drives to B21, about 36 s.")
@@ -368,11 +371,11 @@ def agv_matching():
     S7 = d.step("Raise the limit to 36 s: AGV-2/e4 and AGV-2/e1 both need AGV-2, so still only one move can be matched.")
     S8 = d.step("At 41 s, AGV-1/e4 joins and {AGV-1/e4, AGV-2/e1} matches both moves; the threshold is 41 s. The "
                 "cheaper total {AGV-2/e4 19 s, AGV-1/e1 48 s} loses because its worst pair is 48 s.")
-    S9 = d.step("The matching goes to GetEventDag(), which orders matched AGVs whose paths would collide; then each "
+    S9 = d.step("The matching goes to BuildAgvOrderDag(), which orders matched AGVs whose paths would collide; then each "
                 "pair is expanded into AGV events (the green legs show the drives to the trays).")
     P1 = d.step("Playing the plan: AGV-1 drives from W26 to P15 and stops under T15, the tray of e4.")
     P2 = d.step("AGV-2 drives from W18 past W22 and W41 into bay B21 and stops under T21, the tray of e1. The two "
-                "drives share no node, so GetEventDag() adds no order between them.")
+                "drives share no node, so BuildAgvOrderDag() adds no order between them.")
     s = 22
     m = Map(d, 0, 0, s, QA_X, QA_Y)
     m.base(labels=True, zones=False, axes=False)
@@ -450,14 +453,14 @@ def agv_matching():
         _hl(d, AB[2], T.red, pad=4)
     with d.at(S5):
         for i, ln in enumerate(["no edges from AGV-3: it carries a different tray,",
-                                "so GetAgvToTrayAssignmentCost() returns nullopt"]):
+                                "so ComputeAgvAssignmentCost() returns nullopt"]):
             d.text(gx, gy + i * 16, ln, size=11, fill=T.muted)
     # matching status line
     sy = gy + 50
     status = {S6: ("threshold <= 19 s", T.sky, "usable: AGV-2/e4 -> max matching 1 of 2"),
               S7: ("threshold <= 36 s", T.sky, "usable: AGV-2/e4, AGV-2/e1 (both AGV-2) -> 1 of 2"),
               S8: ("threshold <= 41 s", AGV, "+ AGV-1/e4 -> {AGV-1/e4, AGV-2/e1}: 2 of 2"),
-              S9: ("matching", AGV, "{AGV-1/e4, AGV-2/e1}, threshold 41 s -> GetEventDag()")}
+              S9: ("matching", AGV, "{AGV-1/e4, AGV-2/e1}, threshold 41 s -> BuildAgvOrderDag()")}
     for k, (lab, col, txt) in status.items():
         with d.at(k, None if k == S9 else k):
             cb = chip(d, gx, sy, lab, col, size=11.5)
@@ -465,15 +468,15 @@ def agv_matching():
     with d.at(S8):
         nb = note(d, gx, sy + 26, 1080 - gx,
                   "Bottleneck matching minimises the worst single cost. {AGV-1/e4 41 s, AGV-2/e1 36 s} wins with a "
-                  "worst case of 41 s, although {AGV-2/e4 19 s, AGV-1/e1 48 s} has the lower total. GetAgvOccupiedDuration() "
-                  "still returns 0, so queued work is not yet modelled.", title="What gets optimised", accent=T.amber)
+                  "worst case of 41 s, although {AGV-2/e4 19 s, AGV-1/e1 48 s} has the lower total. busy_duration_by_agv "
+                  "starts at zero (a TODO), so work an AGV already has is not yet modelled.", title="What gets optimised", accent=T.amber)
     cp = code_panel(d, 0, max(mb.y1, nb.y1) + 30, 1080, [
-        "// DoAgvAssignments(), one outer iteration (simplified)",
-        "// cost(agv, move) = max(occupied(agv) - occupied(move), 0) + travel(agv.pose -> tray.pose) + lift_up",
-        "edge_costs[{agv_id, root_event}] = GetAgvToTrayAssignmentCost(agv_id, *tray_move, working_state, adjusted, filters);",
-        "auto [matching, threshold] = volley::BottleneckAssignment(edge_costs, agvs_to_assign, root_events,",
-        "                                                            Interval::Duration::max()).value();",
-        "auto agv_event_dag = GetEventDag(matching, working_state);   // order matched AGVs that would collide",
+        "// AssignAgvs() (agv_assignment.cpp), one outer iteration (simplified)",
+        "// cost(agv, move) = max(busy(agv) - earliest_start(move), 0) + travel(agv.pose -> tray.pose) + lift_up",
+        "edge_costs[{agv_id, root_event}] = ComputeAgvAssignmentCost(agv_id, *tray_move, working_state, agv_wait, path_filter);",
+        "auto assignment_opt = BottleneckAssignment(edge_costs, available_agv_ids, root_events, Interval::Duration::max());",
+        "const auto& [root_event_by_agv, bottleneck_threshold] = *assignment_opt;",
+        "auto agv_order_dag = BuildAgvOrderDag(root_event_by_agv, state.working_state);  // order matched AGVs that would collide",
     ], title="task_planner::BottleneckAssignment", size=11.5)
     for k in range(S1, S9 + 1):
         a, b = (1, 2) if k <= S5 else ((3, 4) if k <= S8 else (5, 5))
@@ -498,27 +501,27 @@ def agv_expansion():
     d = Doc("30_agv_event_expansion", "What one AGV assignment adds to the DAG",
             "Assigning AGV-1 to TrayMove e4 adds AgvMove(to tray), lift, sets agv_id on the TrayMove, and adds lower, "
             "with four kinds of dependency edges.")
-    S0 = d.step("Before: TrayMove e4 (T15: P15 -> P19) is a root of event_dag_copy with no AGV yet. "
+    S0 = d.step("Before: TrayMove e4 (T15: P15 -> P19) is a root of pending_events with no AGV yet. "
                 "BottleneckAssignment matched it to AGV-1.")
-    S1 = d.step("MoveAgvToTrayPose() adds an AgvMove that drives AGV-1 from W26 to the tray pose P15 (it is skipped "
+    S1 = d.step("ScheduleAgvMoveToPickup() adds an AgvMove that drives AGV-1 from W26 to the tray pose P15 (it is skipped "
                 "when the AGV is already there).")
-    S2 = d.step("AppendAgvLiftEvent(raised) adds an AgvMove that lifts T15 onto AGV-1, after the drive.")
+    S2 = d.step("ScheduleAgvLiftChange(raising) adds an AgvMove that lifts T15 onto AGV-1, after the drive.")
     S3 = d.step("SetAgvId(AGV-1) fills in the TrayMove itself: e4 now carries T15 to P19 on AGV-1, after the lift.")
-    S4 = d.step("AppendAgvLiftEvent(lowered) adds the lower at P19, so AGV-1 is free again after e4.")
-    S5 = d.step("Incoming edge 1: AGV-1's previous event (last_agv_event[AGV-1]) must finish before AGV-1 drives off: one chain "
+    S4 = d.step("ScheduleAgvLiftChange(lowering) adds the lower at P19, so AGV-1 is free again after e4.")
+    S5 = d.step("Incoming edge 1: AGV-1's previous event (last_event_by_agv[AGV-1], ChainAgvEvent) must finish before AGV-1 drives off: one chain "
                 "of events per AGV.")
     S6 = d.step("Incoming edge 2: if a tray stands on AGV-1's navigation path, that tray's first move "
-                "(ctx->first_tray_event) must clear it first.")
-    S7 = d.step("Incoming edge 3: AddNodeArrivalDeps() makes AGV-1's arrival at P15 wait until the previous AGV on that "
+                "(ctx->first_event_by_tray, OrderAfterTraysOnPath) must clear it first.")
+    S7 = d.step("Incoming edge 3: OrderArrivalAfterPriorOccupant() makes AGV-1's arrival at P15 wait until the previous AGV on that "
                 "node has left.")
-    S8 = d.step("Incoming edge 4: if agv_event_dag says another matched AGV (parent AGV-2) must go first, "
-                "its last_move_to_tray_event[AGV-2] precedes AGV-1's drive.")
+    S8 = d.step("Incoming edge 4: if agv_order_dag says another matched AGV (parent AGV-2) must go first, "
+                "its last_move_to_tray_event_by_agv[AGV-2] precedes AGV-1's drive.")
     S9 = d.step("Finally the assignment's event_cost (travel + lift_up + carry + lift_down) is propagated to the "
-                "children and added to agv_occupied_durations[AGV-1].")
+                "children (earliest_start_by_event) and added to busy_duration_by_agv[AGV-1].")
     W = 1060
     d.text(0, 0, "before", size=12.5, family="mono", weight=700, fill=T.muted)
     pre = event_box(d, 0, 16, "TrayMove e4", "T15: P15 -> P19   agv = ?", size=11.5)
-    d.text(pre.x1 + 30, pre.cy, "a root of event_dag_copy, matched to AGV-1 by BottleneckAssignment", size=11.5,
+    d.text(pre.x1 + 30, pre.cy, "a root of pending_events, matched to AGV-1 by BottleneckAssignment", size=11.5,
            fill=T.muted)
     with d.only(S0):
         _hl(d, pre, T.fg, pad=4)
@@ -526,9 +529,10 @@ def agv_expansion():
     d.text(0, y - 20, "after", size=12.5, family="mono", weight=700, fill=T.fg)
     bw = 210
     gx = 44
-    chain = [("AgvMove", "AGV-1: W26 -> P15", "MoveAgvToTrayPose()"), ("AgvMove", "AGV-1 lift", "AppendAgvLiftEvent(raised)"),
+    chain = [("AgvMove", "AGV-1: W26 -> P15", "ScheduleAgvMoveToPickup()"),
+             ("AgvMove", "AGV-1 lift", "ScheduleAgvLiftChange(true)"),
              ("TrayMove e4", "T15 -> P19, agv = AGV-1", "SetAgvId(AGV-1)"),
-             ("AgvMove", "AGV-1 lower", "AppendAgvLiftEvent(lowered)")]
+             ("AgvMove", "AGV-1 lower", "ScheduleAgvLiftChange(false)")]
     xs = [i * (bw + gx) for i in range(4)]
     B = []
     for i, ((k, t, sub), x) in enumerate(zip(chain, xs)):
@@ -543,10 +547,10 @@ def agv_expansion():
     # incoming edge kinds
     src_y = y + 170
     kinds = [
-        ("AGV-1's previous event", "last_agv_event[AGV-1]", AGV, 0, "chain per AGV"),
-        ("first move of a path tray", "ctx->first_tray_event[id]", TRAY, 0, "tray on AGV-1's nav path clears first"),
-        ("prior occupant of P15", "AddNodeArrivalDeps()", T.sky, 0, "previous AGV must leave the node"),
-        ("parent AGV in agv_event_dag", "last_move_to_tray_event[AGV-2]", T.violet, 0, "collision order among matches"),
+        ("AGV-1's previous event", "last_event_by_agv[AGV-1]", AGV, 0, "chain per AGV"),
+        ("first move of a path tray", "ctx->first_event_by_tray[id]", TRAY, 0, "tray on AGV-1's nav path clears first"),
+        ("prior occupant of P15", "OrderArrivalAfterPriorOccupant()", T.sky, 0, "previous AGV must leave the node"),
+        ("parent AGV in agv_order_dag", "last_move_to_tray_event_by_agv", T.violet, 0, "collision order among matches"),
     ]
     for i, (name, code, col, tgt, why) in enumerate(kinds):
         x = i * (bw + gx)
@@ -578,8 +582,8 @@ def agv_expansion():
             d.rect(x, cy + 14, w - 4, 30, rx=6, fill=T.tint(col, 0.35, T.bg), stroke=col, sw=1)
             d.text(x + 10, cy + 29, lab, size=11, family="mono", fill=T.fg)
             x += w
-        d.text(x + 10, cy + 29, "-> PropagateEventCostToChildren()", size=11.5, family="mono", fill=T.muted)
-        d.text(0, cy + 66, "GetJustMovingCost() and the cost model's lift times; agv_occupied_durations[AGV-1] += event_cost",
+        d.text(x + 10, cy + 29, "-> PropagateEarliestStartToChildren()", size=11.5, family="mono", fill=T.muted)
+        d.text(0, cy + 66, "ComputeTravelDuration() and ComputeAgvLiftDuration(); busy_duration_by_agv[AGV-1] += event_cost",
                size=11, fill=T.muted)
     frame(d, title="What one AGV assignment adds to the DAG",
           subtitle="Matching only picks pairs; the loop that follows turns each pair into real events and wires them "
@@ -590,27 +594,27 @@ def agv_expansion():
 
 
 # --------------------------------------------------------------------------------------
-# 31 — EnsureAgvMovePathsClear
+# 31 — OrderAgvMovesAfterBlockingAgvs
 # --------------------------------------------------------------------------------------
 
-@figure("31_agv_path_repair", "EnsureAgvMovePathsClear", DOC1)
+@figure("31_agv_path_repair", "OrderAgvMovesAfterBlockingAgvs", DOC1)
 def path_repair():
     d = Doc("31_agv_path_repair", "Repairing AGV paths after assignment",
-            "EnsureAgvMovePathsClear replays the DAG in topological order; if an AGV reposition is blocked only by "
+            "OrderAgvMovesAfterBlockingAgvs replays the DAG in topological order; if an AGV reposition is blocked only by "
             "another AGV's body, it gates the move on that AGV's next departure.")
-    S0 = d.step("RunAgvPathRepairPass() replays the DAG in topological order with exact AGV occupancy. At index k it "
+    S0 = d.step("AddNextMissingAgvMoveOrder() replays the DAG in topological order with exact AGV occupancy. At index k it "
                 "reaches the AgvMove that sends AGV-1 from W25 to W8.")
     S1 = d.step("Check 1: is AGV-1's path feasible when only AGV-1 itself is ignored? No: the path down past W13 is blocked, "
-                "so TryClearBlockedAgvMove() continues.")
+                "so OrderAgvMoveAfterBlockerDeparture() continues.")
     S2 = d.step("Check 2: ignoring every other AGV the path is clear, so the obstacle is an AGV, not a tray or a "
                 "disabled node.")
     S3 = d.step("Check 3: try each other AGV X and ignore only {AGV-1, X}. With X = AGV-2 the path clears: AGV-2, "
                 "parked on W13, is the blocker.")
     S4 = d.step("Check 4: FindAgvDepartureFromNode(AGV-2, W13) looks after index k for the event in which AGV-2 leaves "
                 "W13: AGV-2's AgvMove W13 -> P15 (dashed arrow).")
-    S5 = d.step("Check 5: AddDependency(departure, AGV-1's move), unless that would form a cycle. AGV-1 now waits until "
+    S5 = d.step("Check 5: AddDependency(departure, AGV-1's move), unless WouldCreateCycle() says it would form a cycle. AGV-1 now waits until "
                 "AGV-2 has left W13.")
-    S6 = d.step("The pass returns true (one edge added) and EnsureAgvMovePathsClear starts a fresh replay. It stops "
+    S6 = d.step("The pass returns true (one edge added) and OrderAgvMovesAfterBlockingAgvs starts a fresh replay. It stops "
                 "when a full replay adds nothing, on an error, or after 256 passes.")
     P1 = d.step("Playing the repaired order: AGV-2 departs first, driving from W13 into stall P15 under T15. W13 is "
                 "now free.")
@@ -674,7 +678,7 @@ def path_repair():
         "AddDependency(departure, move) unless it would form a cycle",
     ]
     yy = b.y1 + 34
-    d.text(rx, yy - 8, "TryClearBlockedAgvMove(), in order", size=12, weight=600, fill=T.fg)
+    d.text(rx, yy - 8, "OrderAgvMoveAfterBlockerDeparture(), in order", size=12, weight=600, fill=T.fg)
     for i, st in enumerate(steps, start=1):
         lines = wrap(st, rw - 30, 11.5, "mono")
         hgt = 16 * len(lines)
@@ -687,19 +691,19 @@ def path_repair():
                 d.text(rx + 26, yy + 14 + j * 16, ln, size=11.5, family="mono", fill=T.fg2)
         yy += hgt + 12
     cp = code_panel(d, 0, max(mb.y1, yy) + 24, 1060, [
-        "// Scheduler::EnsureAgvMovePathsClear(ctx): called at the end of DoAgvAssignments(), before Reduce()",
-        "for(size_t iter = 0; iter < 256; ++iter) {             // each productive pass adds exactly one edge",
-        "  auto added_edge = RunAgvPathRepairPass(ctx);          // stdx::Expected<bool>",
-        "  if(!added_edge.has_value()) return error;             // DAG could not be sorted",
-        "  if(!added_edge.value()) return {};                    // full replay needed no repair",
-        "}                                                       // cap hit: SanityCheckEvents is the backstop",
+        "// Scheduler::OrderAgvMovesAfterBlockingAgvs(ctx): at the end of AssignAgvs(), before RemoveRedundantEdges()",
+        "for(size_t pass = 0; pass < kMaxAgvMoveOrderPasses; ++pass) {  // 256; a productive pass adds one edge",
+        "  const auto is_edge_added = AddNextMissingAgvMoveOrder(ctx);  // stdx::Expected<bool>",
+        "  if(!is_edge_added.has_value()) return error;                 // unsortable DAG or a failed replay",
+        "  if(!*is_edge_added) return {};                               // full replay needed no repair",
+        "}                                                              // cap hit: ValidateEventSequence is the backstop",
     ], title="why a separate pass", size=11.5)
     with d.at(S0, S5):
         _hl_code(d, cp, 2)
     with d.only(S6):
         _hl_code(d, cp, 1, 5)
     frame(d, title="Repairing AGV paths after assignment",
-          subtitle="DoAgvAssignments orders events by its own serial assignment loop, which can differ from the final "
+          subtitle="AssignAgvs orders events by its own serial assignment loop, which can differ from the final "
                    "topological order. This pass replays the real order, where AGV occupancy is exact, and adds one "
                    "gating edge at a time. Trays and disabled nodes are not fixed here.",
           badge_key="yaml+hyp",

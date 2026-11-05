@@ -348,23 +348,23 @@ def layout_consumers():
     d.text(dx0, 0, "5  Readers", size=13.5, weight=600, fill=T.fg)
     TAG = {"L": ("Layout", LAY), "G": ("GarageGraph", GG), "C": ("CollisionTable", CT)}
     cards = [
-        ("Scheduler: task planning", "scheduler.cpp", [
-            ("L", "bay_prioritization_: PlanRetrieveJob walks it in reverse (B7"),
-            ("", "  first), ComputeBayRebalancingActions, InitRetrievalHeadings"),
-            ("L", "headings[0] + faces_reciprocal: bay and charger inbound heading"),
-            ("L", "node type AgvCharge: charger search in PlanAgvChargeJob"),
+        ("Scheduler: task planning", "scheduler.cpp, job_expansion.cpp, ...", [
+            ("L", "bay_prioritization_: FindBayForRetrieve walks it in reverse"),
+            ("", "  (B7 first), ComputeBayRebalancingActions, StorePreferred..."),
+            ("L", "headings[0] + faces_reciprocal: bay and charger inbound pose"),
+            ("L", "node type AgvCharge: charger search in ExpandAgvChargeJob"),
             ("L", "max_resource_size: bay fit (window length, width, height)"),
-            ("G", "node_retrieval_heading_: written by InitRetrievalHeadings,"),
-            ("", "  read by UseRetrievalHeading for park destinations"),
-            ("C", "GetStaticFilter, open-space and blocking-tray searches"),
-            ("L", "md5sum_ -> VersionInfo.layout_md5sum; name_ -> 576_eccles hack")]),
+            ("G", "node_retrieval_heading_: written by StorePreferredPayload-"),
+            ("", "  HeadingsForRetrieval, read by FindPreferredTrayHeading..."),
+            ("C", "BuildStaticObstacleFilter, open-space and blocking-tray searches"),
+            ("L", "md5sum_ -> VersionInfo.layout_md5sum")]),
         ("CHUGG / SIPP: motion planning", "motion_planner, cost_functions", [
             ("C", "pose and edge conflicts -> safe intervals per pose"),
             ("G", "Transition type + length -> edge duration (cost model speed)"),
             ("L", "max_resource_size_index, AgvCharge type -> GetTraversableEdges"),
-            ("L", "md5sum_: GetStaticFilter throws if graph and table differ"),
+            ("L", "md5sum_: BuildStaticObstacleFilter throws if graph, table differ"),
             ("L", "floors_ z, vrcs_ -> VRC travel time, run coalescing")]),
-        ("Action graph: InsertVrcActionsIntoDag", "scheduler utils.cpp", [
+        ("Action graph: InsertVrcActionsIntoDag", "scheduler action_graph.cpp", [
             ("L", "vrcs_ + node floor -> VRC commands around AGV moves that"),
             ("", "  enter or leave a VRC (none in Pecos)")]),
         ("GarageSafetyChecker", "common_ros", [
@@ -411,15 +411,15 @@ def layout_consumers():
     d.circle(L.x0 + 300, L.y0, 4, fill=LAY, layer="over")
     d.circle(ggb.x1, ggb.y0 + 30, 4, fill=GG, layer="over")
     d.circle(ctb.x1, ctb.y0 + 30, 4, fill=CT, layer="over")
-    label_pill(d, (cx + busL) / 2 - 40, top_y, "Layout (shared_ptr), also via gg.GetLayout()", color=LAY, size=10.5)
+    label_pill(d, (cx + busL) / 2 - 40, top_y, "Layout (shared_ptr), also via GarageGraph::GetLayout()", color=LAY, size=10.5)
     for tag, bus in (("L", busL), ("G", busG), ("C", busC)):
         col = TAG[tag][1]
         for ty in taps[tag]:
             d.circle(bus, ty, 3.5, fill=col, layer="over")
             connect(d, [(bus, ty), (dx0, ty)], kind="flow", color=col, size=7, sw=1.4)
-    d.text(cx, max(ctb.y1 + 80, 0), "PoseGraph has no reader of its own: the scheduler keeps pg_ only to build gg_,",
+    d.text(cx, max(ctb.y1 + 80, 0), "PoseGraph has no reader of its own: the scheduler builds a temporary one only",
            size=11, fill=T.muted)
-    d.text(cx, ctb.y1 + 96, "and every reader reaches the Layout through gg_.GetLayout() or layout_.", size=11,
+    d.text(cx, ctb.y1 + 96, "to build motion_graph_; readers reach the Layout via GetLayout() or layout_.", size=11,
            fill=T.muted)
 
     frame(d, title="Who reads the layout file",
@@ -431,7 +431,7 @@ def layout_consumers():
                   ("box", CT, "CollisionTable"), ("arrow", T.faint, "built from / read by")],
           footnote="Sources: layout.hpp, layout.cpp (Layout(YAML::Node) L82-344, GetGarageLayout), pose_graph.cpp, "
                    "garage_graph.cpp, collision_geometry.cpp (CollisionTable ctor, BuildEntityTable, GetCacheFilePath), "
-                   "scheduler_component.cpp, scheduler.cpp, static_graph_filtering.cpp, safe_interval_path_planning.cpp, "
+                   "scheduler_component.cpp, scheduler.cpp, job_expansion.cpp, static_graph_filtering.cpp, safe_interval_path_planning.cpp, "
                    "garage_safety_checker.cpp, tape_layout.cpp. md5 is computed here from the snapshot copy of the file; "
                    "GetMD5Sum itself is not in the snapshots. Pecos counts: 60 poses, 164 directed GarageGraph edges "
                    "(148 translations, 16 rotations).")
@@ -1037,7 +1037,7 @@ def inbound_heading():
     d = Doc("108_inbound_heading", "How faces_reciprocal sets the inbound heading of a bay and a charger",
             "Animated: bay 7 and chargers 10 and 14 of the Pecos YAML; GetInboundHeading adds 180 when "
             "faces_reciprocal is true and does not wrap; the bay pose, its outbound pose, the retrieval heading "
-            "cached on parking nodes, the charging poses, and the unwrapped comparison in PlanAgvChargeJob.")
+            "cached on parking nodes, the charging poses, and the unwrapped comparison that PR #1018 fixed.")
     BAD, OK = T.red, T.green
     s = 50
     m = Map(d, 0, 40, s, (20.1, 39.9), (9.4, 18.4))
@@ -1065,16 +1065,15 @@ def inbound_heading():
         "(31, -90), 4.902 m east, a LOCOMOTE along body +x. The header promises it is always LEFT; nothing in the "
         "snapshots calls it.",
         "The retrieval heading. bay_prioritization_ is [21, 7] (both values 0, ties to the higher id), so "
-        "InitRetrievalHeadings takes back() = bay 7, its inbound heading -90 and the reciprocal 90. It caches 90 on "
+        "StorePreferredPayloadHeadingsForRetrieval takes back() = bay 7, its inbound heading -90 and the reverse 90. It caches 90 on "
         "every Parking node that allows 90 and can reach (7, 90): all ten, P5 and P15 among them.",
         "Chargers. C10: faces_reciprocal false, 90 + 0 = 90, AGV-1 charges facing west. C14 (and C16): true, "
         "90 + 180 = 270, stored as pose (14, -90), AGV-2 charges facing east. Both are reached by a 0.61 m strafe: "
         "(9, 90) FORWARD -> (10, 90) and (15, -90) FORWARD -> (14, -90).",
-        "The unwrapped comparison. PlanAgvChargeJob (scheduler.cpp L1505) asks whether the AGV is already charging "
-        "with agv.pose.heading == GetInboundHeading(curr_node). For AGV-1 on C10 that is 90 == 90. For AGV-2 on C14 "
-        "it is -90 == 270: false, so AGV-2 is not recognised as charging. Read from the code, not observed: the "
-        "search that follows skips occupied chargers, C14 included, so it plans a move to another free charger or "
-        "reports none available. The destination pose at L1548 does wrap.",
+        "The unwrapped comparison, fixed in PR #1018. PlanAgvChargeJob asked whether the AGV was already charging "
+        "with agv.pose.heading == GetInboundHeading(curr_node): 90 == 90 for AGV-1 on C10, but -90 == 270 for "
+        "AGV-2 on C14, so AGV-2 was sent to another free charger. ExpandAgvChargeJob (job_expansion.cpp L624) now "
+        "compares agv.pose == MakeInboundPose(curr_node), which wraps: (14, -90) == (14, -90).",
     ]
     ks = [d.step(c) for c in caps]
     x7, y7 = m.P(7)
@@ -1124,7 +1123,7 @@ def inbound_heading():
         label_pill(d, x14, y14 + 46, "(14, -90): faces east", color=PG, bg=T.bg_deep, border=PG)
     with d.at(6):
         label_pill(d, x10 - 74, y10 - 40, "90 == 90: charging", color=OK, bg=T.bg_deep, border=OK, anchor="end")
-        label_pill(d, x14, y14 + 56, "-90 == 270: false", color=BAD, bg=T.bg_deep, border=BAD)
+        label_pill(d, x14, y14 + 56, "was -90 == 270: false; now fixed", color=BAD, bg=T.bg_deep, border=BAD)
         d.circle(x14, y14, 44, fill="none", stroke=BAD, sw=2, dash="5 4", layer="top")
 
     # ---------------- value table under the map ----------------
@@ -1192,17 +1191,19 @@ def inbound_heading():
             "  int16_t bay_heading = bay_node.headings.front();",
             "  if(bay_node.faces_reciprocal) bay_heading = Wrap(bay_heading + 180);",
             "  return GetNeighborPose({bay_id, bay_heading}, PoseNeighbor::LEFT);",
-            "// scheduler.cpp L342-384   InitRetrievalHeadings()",
-            "  retrieve_bay_id = bay_prioritization.back();           // 7",
-            "  retrieval_heading = ReciprocalAngle(GetBayInboundHeading(7));",
+            "// scheduler.cpp L97-136   StorePreferredPayloadHeadingsForRetrieval()",
+            "  preferred_retrieve_bay_id = bay_prioritization.back();          // 7",
+            "  preferred_retrieval_heading = ReverseHeading(GetBayInboundHeading(7));",
             "  for each Parking node allowing 90 with a path to (7, 90):",
-            "    gg_.SetRetrievalHeading(node.id, retrieval_heading);  // 90",
-            "// scheduler.cpp L1503-1506   PlanAgvChargeJob: already charging?",
-            "  if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &&",
-            "     agv.pose.heading == volley::GetInboundHeading(curr_node))",
-            "    return {true, \"\"};                     // -90 == 270 is false",
-            "// scheduler.cpp L1547-1548   pose of each free charger",
-            "  ConstructGaragePose(id, Wrap(GetInboundHeading(node)));  // wrapped"]
+            "    motion_graph_.SetRetrievalHeading(node.id, preferred_retrieval_heading);  // 90",
+            "// scheduler utils.cpp L54-56   MakeInboundPose(node)",
+            "  return ConstructGaragePose(node.id, Wrap(GetInboundHeading(node)));  // wrapped",
+            "// job_expansion.cpp L624-627   ExpandAgvChargeJob: already charging?",
+            "  if(current_node.type == GarageNode::TYPE_AGV_CHARGE &&",
+            "     agv.pose == MakeInboundPose(current_node))   // was: heading == GetInboundHeading",
+            "    return {};                        // (14, -90) == (14, -90); before: -90 == 270",
+            "// job_expansion.cpp L875   pose of each free charger",
+            "  charge_pose = MakeInboundPose(layout_->GetNodeById(charge_node_id).value());"]
     cw = 3 * pw + 20
     cy0 = pb.y1 + 18
     size = 10.5
@@ -1219,27 +1220,28 @@ def inbound_heading():
     hl([6], PG, 2)
     hl([8, 9, 10], PG, 3)
     hl([12, 13, 14, 15], T.amber, 4)
-    hl([2, 21], C_CHG, 5)
-    hl([18, 19], BAD, 6)
-    hl([21], OK, 6)
+    hl([2, 17, 23], C_CHG, 5)
+    hl([17, 19, 20, 21], OK, 6)
     with d.at(6):
         note(d, rx, pan.y1 + 16, cw,
-             "Consequence, read from the code and not observed: an AGV already charging on C14 or C16 is treated "
-             "as not charging; the charger loop then skips every occupied charger (GetAgvOnNode), its own included, "
-             "and plans a move to the cheapest other free charger, or fails with 'No available charge nodes'. "
-             "Charger 10 is unaffected. A scheduler-only fix: compare with Wrap(GetInboundHeading(curr_node)).",
-             size=11, accent=BAD, title="Issue: PlanAgvChargeJob compares an unwrapped heading")
+             "Before PR #1018 an AGV already charging on C14 or C16 was treated as not charging (-90 == 270); the "
+             "charger loop then skipped every occupied charger (GetAgvOnNode), its own included, and planned a move "
+             "to the cheapest other free charger, or failed. Charger 10 was unaffected. MakeInboundPose now wraps the "
+             "heading for this check, the charger search and the VECS transition pose (test "
+             "AgvChargeJob.AlreadyOnCharger).",
+             size=11, accent=OK, title="Fixed in PR #1018: the charge job compared an unwrapped heading")
 
     frame(d, title="How faces_reciprocal sets the inbound heading of a bay and a charger",
           subtitle="Step through bay 7 and chargers 10 and 14: the listed heading, the 180-degree flip that "
                    "faces_reciprocal adds, where the AGV's driving axis then points, the poses derived from it, and "
-                   "one place where the unwrapped value is compared with a stored heading.",
+                   "the one place that compared the unwrapped value with a stored heading (fixed in PR #1018).",
           badge_key="yaml",
           legend=[("arrow", PG, "inbound heading (facing, body +x)"), ("arrow", T.amber, "cached retrieval heading"),
                   ("arrow", C_LOC, "LOCOMOTE slot"), ("box", T.green, "AGV (schematic 2.2 x 1.1 m)"),
-                  ("dashbox", BAD, "comparison that fails")],
-          footnote="Code from layout.cpp, pose_graph.cpp and scheduler.cpp (line numbers inside each file of the "
-                   "snapshot). volley::Wrap is not in the snapshots; Wrap(270) = -90 follows the [-179, 180] range of "
-                   "GaragePose.msg and the explicit Wrap the scheduler applies at L1548. Scheduler::"
-                   "ApplyTransitionToFreeingMoves (VECS) also uses the unwrapped value; Pecos has no VECS node.")
+                  ("dashbox", BAD, "comparison that failed before PR #1018")],
+          footnote="Code from layout.cpp and pose_graph.cpp (common_ros) and the scheduler's scheduler.cpp, utils.cpp "
+                   "and job_expansion.cpp (line numbers inside each file of the snapshot). volley::Wrap is not in the "
+                   "snapshots; Wrap(270) = -90 follows the [-179, 180] range of GaragePose.msg and the Wrap in "
+                   "MakeInboundPose. Before PR #1018 the VECS transition pose in tray assignment also used the "
+                   "unwrapped value; Pecos has no VECS node.")
     return d

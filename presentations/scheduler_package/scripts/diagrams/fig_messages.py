@@ -12,13 +12,13 @@ Facts drawn, each from the snapshots:
   when jobs_active_ is non-empty (SplitSchedule call commented out); active_jobs = jobs_active_; planned_jobs never
   filled. PlanClientCallback rejects a response that lacks any base_schedule node unchanged.
   enable_overlapping_planning_ = false with no parameter, so ShouldCallPlanner refuses while jobs are active.
-* Scheduler::Plan reads request_data.id, base_state (ValidateBaseState), base_schedule (reservation loop) and
+* Scheduler::Plan reads request_data.id, base_state (ValidateBaseState), base_schedule (ExcludeCommittedResources) and
   pending_jobs; planned_jobs, active_jobs and outside_split are never read in src/.
 * DiscreteGarageState::Set (common_ros) rebuilds the state from existence events in the order: fault, AGVs
   (tray_id forced to 0), bays, VECS, VRCs, trays (tray.agv_id re-attaches), payloads (payload.tray_id sets the
-  tray's payload), disabled nodes. The message's hash is not checked. ValidateBaseState then checks payload
+  tray's payload), disabled nodes. The message's hash is not checked. ValidateBaseState (src/utils.cpp) then checks payload
   sizes against the layout's resource windows and that AGV and tray poses exist.
-* ActionNodeFromMotion (scheduler.cpp) writes guid, job_id, duration, type, the id and command of the type;
+* ToActionNode (action_graph.cpp) writes guid, job_id, duration, type, the id and command of the type;
   BuildScheduledActionsArray writes parents. status, outside_split and AgvCommand.id are left at defaults.
 The scenario (AGV-2, T15, B21, j0, j1) is the one of figure 116; times are illustrative.
 """
@@ -188,7 +188,7 @@ def plan_request_timeline():
         d.text(cx + 14, y + 29, "today:    n1..n5 only -> rejected", size=11.5, family="mono", fill=KEEP)
     with d.only(S6):
         d.text(cx + 14, y + 8, "today: base_schedule = [], active_jobs = []", size=11.5, family="mono", fill=T.sky)
-        d.text(cx + 14, y + 29, "the reservation loop has nothing to do", size=11.5, family="mono", fill=T.sky)
+        d.text(cx + 14, y + 29, "ExcludeCommittedResources has nothing to do", size=11.5, family="mono", fill=T.sky)
     frame(d, title="A PlanRequest on the time line",
           subtitle="Read from Dispatch::GetPlannerServiceRequest, ShouldCallPlanner and PlanClientCallback in the "
                    "central package. Lane colours: violet = assets busy in base_schedule. Durations are illustrative.",
@@ -228,7 +228,7 @@ def base_state_records():
     S5 = d.step("disabled_nodes become NodeDisablednessChanged events (none here). The message's hash is not "
                 "compared. Any failed event rejects the whole request: PlanResponse.success = false.")
     S6 = d.step("ValidateBaseState then checks the state against the layout: every payload fits some resource "
-                "window, and every AGV and tray pose exists. Only after that does the reservation loop run.")
+                "window, and every AGV and tray pose exists. Only after that does ExcludeCommittedResources run.")
     s = 22
     m = Map(d, 0, 0, s, QA_X, QA_Y)
     m.base(labels=True, zones=False, axes=False)
@@ -332,7 +332,7 @@ def scheduler_job_round_trip():
                             "allow_reciprocal: bool"], "Dispatch; only those of the job's type are read"),
         ("status in", DIS, ["state = STATE_UNPLANNED"], "Dispatch"),
         ("status out", SCH, ["state, state_name: EXECUTING | ERROR", "note: failure message",
-                             "retain_job: retry next call"], "Plan(): FailJob or the final loop"),
+                             "retain_job: retry next call"], "Plan(): MakeFailedJob or the final loop"),
         ("timestamps", SCH, ["time_planned"], "SchedulerRos, after Plan() returns"),
         ("never written", T.faint, ["time_completed", "seconds_to_bay_arrival", "needs_bay_in_retrieve"],
          "not set anywhere in scheduler src/"),

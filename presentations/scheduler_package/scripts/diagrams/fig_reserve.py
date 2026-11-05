@@ -2,15 +2,15 @@
 
 Doc 01-background.html.
 
-116 follows Scheduler::Plan (scheduler.cpp): the base_schedule loop (SetAgvDisabled, SetNodeDisabled on
-src and dst, SetBayDisabled, SetVecsDisabled), GetDisabledEntitiesFilters (static_graph_filtering.cpp), the
-`agv.disabled` check in PlanAgvMoveJob, the `disabledness_filters[...]` check in PlanReparkTrayJob and the skip of
-disabled AGVs in DoAgvAssignments / Chugg::GetMovableAgvs. Occupancy is hypothetical; geometry is the Pecos
+116 follows Scheduler::Plan (scheduler.cpp): ExcludeCommittedResources (SetAgvDisabled, SetNodeDisabled on
+src and dst, SetBayDisabled, SetVecsDisabled), BuildKeepOutFilters (static_graph_filtering.cpp), the
+`agv.disabled` check in ExpandAgvMoveJob, the FindKeepOutFilter check in CheckReparkDestination (job_expansion.cpp)
+and the skip of disabled AGVs in AssignAgvs / Chugg::GetMovableAgvs. Occupancy is hypothetical; geometry is the Pecos
 YAML. The keep-out overlay is drawn from the rule "a vertex or edge touching a reserved node's volume is
 off" and is illustrative: the real sets come from CollisionTable::Query.
 
-117 follows ScheduleEventDag::Apply (event_dag.cpp), AgvMove::Apply (schedule_events.cpp) and
-DiscreteGarageState::OnEvent(const AgvPoseChangedMsg&) (common_ros discrete_garage_state.cpp).
+117 follows ScheduleEventDag::ApplyEventsTo (event_dag.cpp), AgvMove::ApplyTo (schedule_events.cpp) and
+DiscreteGarageState::OnEvent(const AgvPoseChanged&) (common_ros discrete_garage_state.cpp).
 """
 from __future__ import annotations
 
@@ -66,17 +66,17 @@ def base_schedule_reservation():
     S1 = d.step("base_schedule: every action of Dispatch's schedule that is not completed yet. a1 moves AGV-2 "
                 "P15 -> P19, a2 moves it P19 -> P23 (carrying T15), a3 lowers T15 at P23, b1 sends B21 "
                 "TRANSITION_TO_RETRIEVE. The scheduler must assume all of them complete.")
-    S2 = d.step("The loop in Plan() reserves what they use: AGV-2 is disabled; P15, P19 and P23 (every source and "
+    S2 = d.step("ExcludeCommittedResources in Plan() reserves what they use: AGV-2 is disabled; P15, P19 and P23 (every source and "
                 "destination) and B21 go into disabled_nodes_; bay B21 is disabled. The snapshot is not advanced: "
                 "in initial_state AGV-2 is still at P15.")
-    S3 = d.step("GetDisabledEntitiesFilters builds the keep-out map once. Per footprint, a vertex or edge is off if "
+    S3 = d.step("BuildKeepOutFilters builds the keep-out map once. Per footprint, a vertex or edge is off if "
                 "it collides with a reserved entity, an entity standing on a reserved node, or a reserved node's "
                 "largest window at any heading. Free AGVs and trays are ignored here: they may move.")
-    S4 = d.step("Pending job j0, MOVE_AGV AGV-2 -> C14: PlanAgvMoveJob reads agvs_[2].disabled and fails the job with "
+    S4 = d.step("Pending job j0, MOVE_AGV AGV-2 -> C14: ExpandAgvMoveJob reads agvs_[2].disabled and fails the job with "
                 "\"Tried to move a disabled agv 2\". The message cannot tell a busy AGV from one taken out of service.")
-    S5 = d.step("Pending job j1, REPARK_TRAY T24 -> P20: P20 is on in disabledness_filters[TRAY], so a TrayMove "
+    S5 = d.step("Pending job j1, REPARK_TRAY T24 -> P20: P20 is on in the TRAY keep-out filter, so a TrayMove "
                 "T24 -> P20 is added to the event DAG.")
-    S6 = d.step("DoAgvAssignments offers only AGV-1 and AGV-3; AGV-2 is skipped. AGV-1 gets the move. CHUGG's "
+    S6 = d.step("AssignAgvs offers only AGV-1 and AGV-3; AGV-2 is skipped. AGV-1 gets the move. CHUGG's "
                 "GetMovableAgvs skips AGV-2 too: it stays a static obstacle at P15 and the reserved nodes stay "
                 "blocked for the whole new plan.")
     P1 = d.step("Execution. Dispatch keeps running a1 and a2 (AGV-2 carries T15 to P23) while the new plan starts: "
@@ -149,13 +149,13 @@ def base_schedule_reservation():
         ("a3  AGV_COMMAND  AGV-2  lower @P23", BUSY, S1),
         ("b1  BAY_COMMAND  B21  TRANSITION_TO_RETRIEVE", BUSY, S1)], accent=BUSY, k=S0)
     y = c1.y1 + 12
-    c2 = _card(d, tx, y, tw, "initial_state after the loop", [
+    c2 = _card(d, tx, y, tw, "initial_state after ExcludeCommittedResources", [
         ("agvs_[2].disabled = true", KEEP, S2),
         ("bays_[21].disabled = true", KEEP, S2),
         ("disabled_nodes_ = {15, 19, 23, 21}", KEEP, S2),
         ("agvs_[2].pose = P15@90  (not advanced)", T.fg2, S2)], accent=KEEP, k=S0)
     y = c2.y1 + 12
-    c3 = _card(d, tx, y, tw, "disabledness_filters  (one GraphFilterProperties per footprint)", [
+    c3 = _card(d, tx, y, tw, "keep_out_filter_by_footprint  (one GraphFilterProperties each)", [
         ("[AGV]   P15 P19 P23 B21 and their edges off", KEEP, S3),
         ("[TRAY], [PAYLOAD+k]: same rule, own footprint", KEEP, S3)], accent=KEEP, k=S0)
     y = c3.y1 + 12
@@ -169,20 +169,20 @@ def base_schedule_reservation():
             d.rect(bb.x0 - 4, bb.y0 - 4, bb.w + 8, bb.h + 8, rx=12, fill="none", stroke=col, sw=2.2, layer="under")
     cp_y = max(mb.y1, c4.y1) + 26
     cp = code_panel(d, 0, cp_y, tx + tw, [
-        "// Scheduler::Plan(), right after ValidateBaseState (abridged)",
-        "for(const auto& node : request_data.base_schedule.nodes) {",
-        "  if(node.type == ActionNodeMsg::TYPE_AGV_COMMAND) {",
-        "    initial_state.SetAgvDisabled(node.agv_id);                          // AGV-2",
-        "    initial_state.SetNodeDisabled(node.agv_command.src.pose.node_id);   // P15, P19",
-        "    initial_state.SetNodeDisabled(node.agv_command.dst.pose.node_id);   // P19, P23",
-        "  } else if(node.type == ActionNodeMsg::TYPE_BAY_COMMAND) {",
-        "    initial_state.SetBayDisabled(node.bay_id);                          // B21, also a disabled node",
-        "  } else if(node.type == ActionNodeMsg::TYPE_VECS_COMMAND) { initial_state.SetVecsDisabled(node.vecs_id); }",
+        "// scheduler.cpp, ExcludeCommittedResources(state, committed_actions), called by Plan() (abridged)",
+        "for(const auto& committed_action : committed_actions) {   // request_data.base_schedule.nodes",
+        "  switch(committed_action.type) { case ActionNode::TYPE_AGV_COMMAND:",
+        "    state.SetAgvDisabled(committed_action.agv_id);                          // AGV-2",
+        "    state.SetNodeDisabled(committed_action.agv_command.src.pose.node_id);   // P15, P19",
+        "    state.SetNodeDisabled(committed_action.agv_command.dst.pose.node_id);   // P19, P23",
+        "    break;  case ActionNode::TYPE_BAY_COMMAND:",
+        "    state.SetBayDisabled(committed_action.bay_id);   break;                 // B21, also a disabled node",
+        "  case ActionNode::TYPE_VECS_COMMAND: state.SetVecsDisabled(committed_action.vecs_id); break; ... }",
         "}",
-        "plan_ctx->disabledness_filters = volley::GetDisabledEntitiesFilters(gg_, plan_ctx->initial_state, table_);",
-        "if(agv_opt.value().disabled) return {false, \"Tried to move a disabled agv \" + ...};      // PlanAgvMoveJob",
-        "if(!ctx->disabledness_filters[collision_id].IsEnabled(dest_vert)) return {false, ...};  // repark check",
-        "for(const auto& [agv_id, agv_state] : working_state.GetAgvs()) { if(agv_state.disabled) continue; ... }",
+        "ctx->keep_out_filter_by_footprint = BuildKeepOutFilters(motion_graph_, ctx->initial_state, collision_table_);",
+        "if(agv.disabled) { return Fail(\"Tried to move a disabled agv {}\", agv_id); }        // ExpandAgvMoveJob",
+        "if(!keep_out_filter.IsEnabled(*dest_vertex_opt)) { return Fail(...); }  // CheckReparkDestination",
+        "for(const auto& [agv_id, agv_state] : state.working_state.GetAgvs()) { if(agv_state.disabled) continue; ...}",
     ], title="the reservation and three of its readers", size=11.5)
     for k, (a, b) in {S1: (1, 1), S2: (2, 9), S3: (10, 10), S4: (11, 11), S5: (12, 12), S6: (13, 13)}.items():
         with d.only(k):
@@ -204,11 +204,11 @@ def base_schedule_reservation():
 @figure("117_apply_call_chain", "Replaying one AgvMove: from the DAG to OnEvent (animated)", DOC)
 def apply_call_chain():
     d = Doc("117_apply_call_chain", "Replaying one AgvMove, call by call",
-            "UML sequence diagram, animated: ScheduleEventDag::Apply walks the topological order; each event's "
-            "virtual Apply picks the subclass, std::visit picks the variant alternative, and overload resolution "
+            "UML sequence diagram, animated: ScheduleEventDag::ApplyEventsTo walks the topological order; each event's "
+            "virtual ApplyTo picks the subclass, std::visit picks the variant alternative, and overload resolution "
             "picks the DiscreteGarageState::OnEvent that checks and changes the state.")
     CAL, DAG, EV, VIS, DGS = T.muted, T.sky, T.green, T.amber, T.violet
-    parts = [("cal", "Plan<Type>Job / any stage", CAL), ("dag", "ctx->events : ScheduleEventDag", DAG),
+    parts = [("cal", "Expand<Type>Job / any stage", CAL), ("dag", "ctx->event_dag : ScheduleEventDag", DAG),
              ("ev", "*event : AgvMove", EV), ("vis", "std::visit + lambda", VIS),
              ("dgs", "working_state : DiscreteGarageState", DGS)]
     sub = {"cal": "scheduler", "dag": "planner_core", "ev": "planner_core", "vis": "<variant>, compiler-generated",
@@ -283,22 +283,22 @@ def apply_call_chain():
          "working_state and asks the event DAG to replay itself onto that copy.")
     a0 = y
     selfmsg("cal", "working_state = ctx->initial_state;", sub_text="a value copy; the context is not touched")
-    msg("cal", "dag", "Apply(working_state)")
-    step("ScheduleEventDag::Apply computes a topological order and visits every event in it. Order matters: an "
+    msg("cal", "dag", "ApplyEventsTo(working_state)")
+    step("ScheduleEventDag::ApplyEventsTo computes a topological order and visits every event in it. Order matters: an "
          "AgvMove only succeeds if earlier events left the AGV where this one expects it.")
-    selfmsg("dag", "GetTopologicalOrdering()", sub_text="std::nullopt if the graph has a cycle -> {false, ...}")
+    selfmsg("dag", "GetEventsInTopologicalOrder()", sub_text="std::nullopt on a cycle -> \"The graph must be a DAG.\"")
     loop_y0 = y - 24
     y += 18
-    step("For one vertex the DAG holds a std::shared_ptr<ScheduleEvent>. Calling the pure-virtual Apply runs "
-         "AgvMove::Apply through the vtable: the first choice, made at run time from the object's class.")
-    msg("dag", "ev", "event->Apply(state)    // virtual")
-    step("AgvMove stores discrete_change_, a std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>. std::visit reads "
+    step("For one vertex the DAG holds a std::shared_ptr<ScheduleEvent>. Calling the pure-virtual ApplyTo runs "
+         "AgvMove::ApplyTo through the vtable: the first choice, made at run time from the object's class.")
+    msg("dag", "ev", "event->ApplyTo(state)    // virtual")
+    step("AgvMove stores discrete_change_, a std::variant<AgvLiftChanged, AgvPoseChanged>. std::visit reads "
          "which alternative it holds (index 1 here) and calls the lambda with that alternative: the second choice.")
     msg("ev", "vis", "std::visit(lambda, discrete_change_)")
-    selfmsg("vis", "index() == 1  ->  arg : const AgvPoseChangedMsg&", sub_text="the lambda was compiled once per "
+    selfmsg("vis", "index() == 1  ->  arg : const AgvPoseChanged&", sub_text="the lambda was compiled once per "
             "alternative; visit jumps to the right copy")
     step("The lambda body is one call, state.OnEvent(arg). The compiler already picked the overload for each "
-         "copy of the lambda: OnEvent(const AgvPoseChangedMsg&) here, OnEvent(const AgvLiftChangedMsg&) in the "
+         "copy of the lambda: OnEvent(const AgvPoseChanged&) here, OnEvent(const AgvLiftChanged&) in the "
          "other. This third choice costs nothing at run time.")
     msg("vis", "dgs", "state.OnEvent(arg)    // overload resolution")
     step("OnEvent checks the event against the state before changing it: the AGV exists, it is at node_id_curr@"
@@ -309,7 +309,7 @@ def apply_call_chain():
     selfmsg("dgs", "no other AGV on node_id_next", sub_text="checked after the tray was moved: a failure here leaves "
             "the tray moved")
     step("All checks pass: the AGV's pose becomes node_id_next@heading_next and OnEvent returns SucceededEvent(), "
-         "{true, \"\"}. The pair travels back unchanged through the lambda, visit and Apply.")
+         "{true, \"\"}. The BoolStringPair travels back unchanged through the lambda, visit and ApplyTo.")
     selfmsg("dgs", "agv.pose = next;  return {true, \"\"}")
     msg("dgs", "vis", "BoolStringPair", ret=True)
     msg("vis", "ev", "BoolStringPair", ret=True)
@@ -317,10 +317,10 @@ def apply_call_chain():
     loop_y1 = y - 14
     frags.append((loop_y0, loop_y1, xs["dag"] - 70, xs["dgs"] + 430, "loop", "[for each event in topological order]",
                   1))
-    step("The first failure stops the replay: ScheduleEventDag::Apply returns {false, \"Event <event>: <reason>\"} "
+    step("The first failure stops the replay: ApplyEventsTo returns stdx::Unexpected(\"Event <event>: <reason>\") "
          "and working_state keeps every change made before it. Callers must treat that copy as spoiled.")
     y += 10
-    msg("dag", "cal", "{true, \"\"}  or  {false, \"Event ...: a1 should be at ...\"}", ret=True)
+    msg("dag", "cal", "stdx::Result: {}  or  Unexpected(\"Event ...: a1 should be at ...\")", ret=True)
     a1 = y - 30
     end_y = y + 6
 
@@ -344,10 +344,10 @@ def apply_call_chain():
             d.text(fx0 + 8, y0 + 10, tag, size=11.5, family="mono", weight=700, fill=T.fg2)
             d.text(fx0 + tw + 16, y0 + 10, guard, size=11.5, family="mono", fill=T.muted)
     cp = code_panel(d, 0, end_y + 26, x_right, [
-        "BoolStringPair AgvMove::Apply(volley::DiscreteGarageState& state) const {   // const: the event never changes",
+        "BoolStringPair AgvMove::ApplyTo(volley::DiscreteGarageState& state) const {   // const: the event never changes",
         "  return std::visit(",
         "      [this, &state](auto&& arg) -> BoolStringPair { return state.OnEvent(arg); },  // generic lambda",
-        "      discrete_change_);   // std::variant<AgvLiftChangedMsg, AgvPoseChangedMsg>",
+        "      discrete_change_);   // std::variant<interfaces::msg::AgvLiftChanged, interfaces::msg::AgvPoseChanged>",
         "}",
     ], title="planner_core/src/schedule_events.cpp", size=11.5)
     for k, (a, b) in {2: (0, 0), 3: (1, 3), 4: (2, 2)}.items():
@@ -358,7 +358,7 @@ def apply_call_chain():
                    "change, and DiscreteGarageState owns the rule. Messages stay on screen; the highlighted band "
                    "is the current step.",
           badge_key="as-built",
-          legend=[("arrow", T.fg2, "call"), ("dep", T.muted, "return BoolStringPair")])
+          legend=[("arrow", T.fg2, "call"), ("dep", T.muted, "return (BoolStringPair inside, stdx::Result to the caller)")])
     return d
 
 
@@ -406,27 +406,27 @@ assert 26 not in G_POSES and (25, 26) in G_EDGES and (26, 27) in G_EDGES and (23
 def closing_a_node():
     d = Doc("122_closing_a_node", "What closing a node does",
             "Animated: two one-edge AGV commands in base_schedule, followed from the reservation loop through "
-            "DiscreteGarageState, GetStaticFilter and CollisionTable::Query to the boolean masks of "
+            "DiscreteGarageState, BuildStaticObstacleFilter and CollisionTable::Query to the boolean masks of "
             "GraphFilterProperties that every search reads. The last step shows the gap left by a command that "
             "spans several nodes.")
     S0 = d.step("base_schedule holds two commands for AGV-1, each one graph edge: c1 W26@90 -> W27@90 and c2 "
                 "W27@90 -> P24@90. Scheduler-built schedules always look like this: one CHUGG motion per edge, one "
                 "ActionNode per motion.")
-    S1 = d.step("The reservation loop: SetAgvDisabled(1) sets agvs_[1].disabled; SetNodeDisabled adds the source "
+    S1 = d.step("ExcludeCommittedResources: SetAgvDisabled(1) sets agvs_[1].disabled; SetNodeDisabled adds the source "
                 "and destination of each command to disabled_nodes_ (a std::set<uint32_t>). W27 is the end of c1 "
                 "and the start of c2, so the whole route is covered: {24, 26, 27}.")
-    S2 = d.step("GetStaticFilter(AGV, ...) copies disabled_nodes_ into all_disabled_nodes and adds the node of every "
+    S2 = d.step("BuildStaticObstacleFilter(AGV, ...) copies disabled_nodes_ into disabled_node_ids and adds the node of every "
                 "disabled entity (AGV-1 stands on W26). For each node it takes the largest window the node allows "
                 "(max_resource_size_index; XL here) as a footprint, PAYLOAD + index(XL).")
     S3 = d.step("For each heading of the node it asks the CollisionTable: Query(PAYLOAD + index(XL), AGV, {27, 90}) "
-                "returns every pose and edge where an AGV would overlap that window. Both go into disabled_poses "
-                "and disabled_edges.")
+                "returns every pose and edge where an AGV would overlap that window. Both go into blocked_poses "
+                "and blocked_edges.")
     S4 = d.step("All three nodes together: the route, both edges of it and every edge touching its stops are off, "
                 "plus any pose whose footprint reaches into a window. The graph itself is not edited: Layout, "
                 "PoseGraph, GarageGraph and CollisionTable stay as they are.")
-    S5 = d.step("GraphFilterProperties(gg_, disabled_poses, disabled_edges) builds two boolean masks over the "
-                "graph, all true, then false for each listed pose and edge. disabledness_filters keeps one per "
-                "footprint (AGV, TRAY, each payload window); CHUGG builds the same masks as constraints_.")
+    S5 = d.step("GraphFilterProperties(motion_graph, blocked_poses, blocked_edges) builds two boolean masks over "
+                "the graph, all true, then false for each listed pose and edge. keep_out_filter_by_footprint keeps "
+                "one per footprint (AGV, TRAY, each payload window); CHUGG builds the same masks as constraints_.")
     S6 = d.step("The gap, a different request: AGV-1 stands on W25 and its one command c W25@90 -> W27@90 passes "
                 "through W26. Only W25 and W27 are reserved. "
                 "Their windows block the edges W25-W26 and W26-W27, but the pose W26 and the edge P23-W26 stay on, "
@@ -517,27 +517,27 @@ def closing_a_node():
         cards[key] = BBox(tx, y, tx + tw, y + h)
         y += h + 9
 
-    card("bs", "PlanRequest.base_schedule : Schedule", "input, read once by the loop",
+    card("bs", "PlanRequest.base_schedule : Schedule", "input, read once by ExcludeCommittedResources",
          [("nodes[0]  c1  AGV-1  src {26, 90}  dst {27, 90}", S0, S5, 0),
           ("nodes[1]  c2  AGV-1  src {27, 90}  dst {24, 90}", S0, S5, 1),
           ("nodes[0]  c   AGV-1  src {25, 90}  dst {27, 90}  (via W26)", S6, S6, 0)], BUSY)
-    card("dgs", "initial_state : DiscreteGarageState", "common_ros; changed by the loop",
+    card("dgs", "initial_state : DiscreteGarageState", "common_ros; changed by ExcludeCommittedResources",
          [("agvs_[1].disabled = true", S1, S6, 0),
           ("disabled_nodes_ = {24, 26, 27}   // std::set<uint32_t>", S1, S5, 1),
           ("disabled_nodes_ = {25, 27}       // W26 is not added", S6, S6, 1)], KEEP)
-    card("loc", "GetStaticFilter locals", "motion_planner; built per call, per footprint",
-         [("all_disabled_nodes = {24, 26, 27}   // + nodes of disabled assets", S2, S5, 0),
-          ("all_disabled_nodes = {25, 27}       // AGV-1 stands on W25", S6, S6, 0),
+    card("loc", "BuildStaticObstacleFilter locals", "motion_planner; built per call, per footprint",
+         [("disabled_node_ids = {24, 26, 27}   // + nodes of disabled assets", S2, S5, 0),
+          ("disabled_node_ids = {25, 27}       // AGV-1 stands on W25", S6, S6, 0),
           ("footprint of a node = PAYLOAD + index(XL)", S2, S6, 1),
-          ("disabled_poses : unordered_set<GaragePose>", S2, S6, 2),
-          ("disabled_edges : unordered_set<array<GaragePose, 2>>", S2, S6, 3)], KEEP)
+          ("blocked_poses : unordered_set<CollisionTable::Pose>", S2, S6, 2),
+          ("blocked_edges : unordered_set<CollisionTable::Edge>", S2, S6, 3)], KEEP)
     card("gfp", "GraphFilterProperties", "one per footprint; what every search reads",
          [("vertex_filter_ : VertexVectorPropertyMap<bool>", S5, S6, 0),
           ("edge_filter_   : EdgeVectorPropertyMap<bool>", S5, S6, 1),
           ("IsEnabled(v) / IsEnabled(e): unchecked index", S5, S6, 2)], KEEP)
-    card("ctx", "ctx->disabledness_filters", "unordered_map<CollisionEntityId_t, GraphFilterProperties>",
+    card("ctx", "ctx->keep_out_filter_by_footprint", "unordered_map<CollisionEntityId_t, GraphFilterProperties>",
          [("[AGV], [TRAY], [PAYLOAD + k] for each car size present", S5, S6, 0),
-          ("CHUGG: constraints_ = GetAllStaticFilters(...) (same masks)", S5, S6, 1)], KEEP)
+          ("CHUGG: constraints_ = BuildStaticObstacleFilters(...) (same masks)", S5, S6, 1)], KEEP)
     hl = {S0: ["bs"], S1: ["dgs"], S2: ["loc"], S3: ["loc"], S4: ["loc"], S5: ["gfp", "ctx"], S6: ["dgs", "loc"]}
     for k, keys in hl.items():
         with d.only(k):
@@ -567,18 +567,18 @@ def closing_a_node():
             d.text(x0 + cw / 2, vy + 47, "true" if on6 else "false", size=11.5, family="mono", weight=700,
                    fill=(T.amber if nid == 26 else FREE) if on6 else KEEP, anchor="middle")
     cp = code_panel(d, tx + tw + 34, mb.y0, 820, [
-        "// motion_planner/src/static_graph_filtering.cpp, GetStaticFilter (abridged)",
-        "std::set<uint32_t> all_disabled_nodes(disabled_nodes.begin(), disabled_nodes.end());",
-        "for(const auto& [agv_id, agv] : dgs.GetAgvs()) if(agv.disabled) all_disabled_nodes.insert(agv.pose.node_id);",
-        "for(const auto& node_id : all_disabled_nodes) {",
-        "  auto node = gg.GetLayout()->GetNodeById(node_id).value();          // throws if the id is unknown",
-        "  auto footprint = node.max_resource_size_index > 0 ? PAYLOAD + node.max_resource_size_index : TRAY;",
-        "  for(auto head : node.headings) {",
-        "    auto [poses, edges] = ctable.Query(footprint, collision_id, ConstructGaragePose(node_id, head));",
-        "    disabled_poses.insert(poses.begin(), poses.end());  disabled_edges.insert(edges.begin(), edges.end());",
+        "// motion_planner/src/static_graph_filtering.cpp, BuildStaticObstacleFilter (abridged)",
+        "std::set<uint32_t> disabled_node_ids(state_disabled_nodes.begin(), state_disabled_nodes.end());",
+        "for(const auto& [agv_id, agv_state] : state.GetAgvs()) if(agv_state.disabled) disabled_node_ids.insert(...);",
+        "for(const auto& node_id : disabled_node_ids) {",
+        "  auto garage_node = motion_graph.GetLayout()->GetNodeById(node_id).value();  // checked: throws if unknown",
+        "  auto footprint = max_resource_size_index > 0 ? PAYLOAD + max_resource_size_index : TRAY;",
+        "  for(auto heading : garage_node.headings) {",
+        "    auto [poses, edges] = collision_table.Query(footprint, collision_id, ConstructGaragePose(node_id, heading));",
+        "    blocked_poses.insert(poses.begin(), poses.end());  blocked_edges.insert(edges.begin(), edges.end());",
         "  }",
         "}",
-        "return {gg, disabled_poses, disabled_edges};   // GraphFilterProperties: masks all true, listed ones false",
+        "return {motion_graph, blocked_poses, blocked_edges};   // GraphFilterProperties: all true, listed ones false",
     ], title="from closed nodes to masks", size=11)
     for k, (a, b) in {S2: (1, 5), S3: (6, 8), S4: (3, 10), S5: (11, 11), S6: (1, 2)}.items():
         with d.only(k):

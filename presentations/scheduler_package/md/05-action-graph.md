@@ -4,7 +4,7 @@
 
 A planner produces a *timed* plan: who moves where, and when. Robots never keep to those times exactly. An **action dependency graph** (ADG) keeps what matters for safety, the *order* in which robots use shared space, and drops the exact times. That lets a fleet execute a plan correctly while every robot runs early or late.
 
-This tab builds on the `ContinuousState` timeline from the Motion planning tab. Part I (sections [1](#ad-why-a-timed-plan-is-not-enough)–[5](#ad-beyond-the-basic-adg)) builds the idea from scratch: the graph theory it needs, the construction rule, how a dispatcher executes an ADG and why that is safe, and how timing works on it. Part II (sections [6](#ad-the-adg-in-our-software)–[8](#ad-references)) shows that the scheduler's response, `PlanResponse.schedule`, is an ADG: how `ResponseFromTrajectories` builds it, and where that code follows the textbook rule and where it differs; it ends with review questions and the references for the whole tab. Part III (sections [8](#bg-faq-design-questions)–[9](#bg-known-limitations-and-reading-checkpoint)) looks back over the whole pipeline: design notes, known limitations and a checkpoint before the proposal. The mathematics is light: sets, relations and one recurrence.
+This tab builds on the `ContinuousState` timeline from the Motion planning tab. Part I (sections [1](#ad-why-a-timed-plan-is-not-enough)–[5](#ad-beyond-the-basic-adg)) builds the idea from scratch: the graph theory it needs, the construction rule, how a dispatcher executes an ADG and why that is safe, and how timing works on it. Part II (sections [6](#ad-the-adg-in-our-software)–[8](#ad-references)) shows that the scheduler's response, `PlanResponse.schedule`, is an ADG: how `BuildActionGraph` builds it, and where that code follows the textbook rule and where it differs; it ends with review questions and the references for the whole tab. Part III (sections [8](#bg-faq-design-questions)–[9](#bg-known-limitations-and-reading-checkpoint)) looks back over the whole pipeline: design notes, known limitations and a checkpoint before the proposal. The mathematics is light: sets, relations and one recurrence.
 
 ## Why a timed plan is not enough
 
@@ -53,7 +53,7 @@ A **topological order** lists the vertices as v_1, v_2, \dots, v_n so that every
 
 - **A topological order exists if and only if the graph is a DAG.** If there is a cycle, its vertices cannot all point forward. If there is none, Kahn's algorithm builds one: repeatedly output a vertex with no remaining predecessors and delete it. A finite DAG always has such a vertex (otherwise you could walk backwards forever, and with finitely many vertices you would revisit one: a cycle).
 - **There are usually many.** Any two unordered vertices can be listed either way round. Which one an algorithm returns depends on its tie-breaking, which is why the refactor proposal pays attention to `AddEvent` order ([section 6.5](#pr-why-return-a-result-and-how-it-is-applied)).
-- `DagBase::GetTopologicalOrdering` uses `boost::topological_sort` (a depth-first search) and returns `std::nullopt` if the graph has a cycle. That is how the scheduler detects one.
+- `Dag::GetTopologicalOrdering` (in `planner_core`) uses `boost::topological_sort` (a depth-first search) and returns `std::nullopt` if the graph has a cycle. That is how the scheduler detects one. `ScheduleEventDag` overrides it with Kahn's algorithm, taking the ready event with the lowest job index first.
 
 ### Topological orders and parallelism
 
@@ -71,7 +71,7 @@ A topological order is a single sequence, so it is natural to worry that using o
 **Edges point forward; the stored indices point back.** A dependency always runs from parent to child, so in a topological order every edge points forward. That is the definition. The *wire format* stores each edge at its child end: `ActionNode.parents` lists the indices of the node's parents, which are earlier in the array. This is a representation choice, not a different kind of edge. An edge list, a parent list or a child list all describe the same graph; Boost's `bidirectionalS` keeps both in-edges and out-edges for the same reason. Storing parents suits this format for three reasons:
 
 - **Readiness is a question about parents.** "May this action start?" means "are all its parents finished?", so a node that carries its parents can answer by itself.
-- **The array can be written and read in one pass.** When `BuildScheduledActionsArray` writes a node, its parents have already been written, so their indices are known (`action_node_to_index`). Child indices would be forward references to entries not yet written.
+- **The array can be written and read in one pass.** When `BuildScheduledActionsArray` writes a node, its parents have already been written, so their indices are known (`position_by_action_guid`). Child indices would be forward references to entries not yet written.
 - **Acyclicity is checkable on receipt.** If every parent index is smaller than the node's own index, the graph cannot contain a cycle.
 
 A dispatcher that wants the other direction ("which actions might become ready when this one finishes?") inverts the parent lists into child lists once, in O(\|V\| + \|E\|).
@@ -79,7 +79,7 @@ A dispatcher that wants the other direction ("which actions might become ready w
 So what is a single topological order *for*? Every use is about processing the graph, never about executing it:
 
 - **Checking for cycles.** If no order exists, the graph has a cycle.
-- **One-pass computations.** Any value that depends only on predecessors (earliest start, the reachability matrix in `Reduce()`, depth levels) can be computed in a single sweep in topological order, because every predecessor has been handled before the vertex itself.
+- **One-pass computations.** Any value that depends only on predecessors (earliest start, the reachability matrix in `RemoveRedundantEdges()`, depth levels) can be computed in a single sweep in topological order, because every predecessor has been handled before the vertex itself.
 - **Serialising.** `Schedule.nodes` is written in topological order so that a receiver can rebuild the graph in one pass, with every parent already seen.
 - **Deciding in a fixed order.** Tray assignment and CHUGG walk the *event* DAG in topological order. That is the order they make decisions in, one event at a time, not the order robots move in. CHUGG plans events strictly one after another in that order ([section 21.1](#bg-inside-solvesequential)) but gives them times that overlap whenever the footprints allow, and the action DAG built from those times keeps the overlap.
 
@@ -96,7 +96,7 @@ Two consequences matter here:
 - **A builder may add implied edges freely** and reduce at the end; the order is the same. The scheduler's action DAG builder does exactly this.
 - **Two DAGs on the same vertices have the same order if and only if their reductions are equal.** That makes the reduced graph a good thing to compare in parity tests.
 
-`DagBase::Reduce()` computes it in three passes. It first takes a topological order. It then builds a reachability matrix by walking that order backwards, giving each vertex the union of its successors' reachable sets. Finally it drops an edge u \to v when another successor w of u already reaches v. The cost is O(\|V\| \cdot \|E\|) time and \|V\|^2 bits of memory: trivial for a few hundred actions, but worth knowing.
+`Dag::RemoveRedundantEdges()` (called `Reduce()` before PR \#1018) computes it in three passes and returns a `stdx::Result`: “The graph must be a DAG.” if there is a cycle. It first takes a topological order. It then builds a reachability matrix by walking that order backwards, giving each vertex the union of its successors' reachable sets. Finally it drops an edge u \to v when another successor w of u already reaches v. The cost is O(\|V\| \cdot \|E\|) time and \|V\|^2 bits of memory: trivial for a few hundred actions, but worth knowing.
 
 ## From a timed plan to an ADG
 
@@ -212,7 +212,7 @@ The middle part is robot 2's own Type 1 chain, since it must enter B before it c
 g++ -std=c++20 -O2 -Wall -Wextra -o space_time_to_adg examples/adg/space_time_to_adg.cpp && ./space_time_to_adg
 ```
 
-The graph type is the same shape as the scheduler's `DagBase`, with an `Action` bundle on each vertex and a `Dependency` bundle on each edge (the modern bundled-property style, the [Background](#doc-background) tab, [reading the type](#bg-reading-the-boost-adjacency-list-type)):
+The graph type is the same shape as the scheduler's `Dag`, with an `Action` bundle on each vertex and a `Dependency` bundle on each edge (the modern bundled-property style, the [Background](#doc-background) tab, [reading the type](#bg-reading-the-boost-adjacency-list-type)):
 
 ``` cpp
 // examples/adg/space_time_to_adg.cpp (excerpt; the file also has Step 2, AddVertices, and a demo main)
@@ -386,11 +386,11 @@ Four things to notice in the output:
 - The visits are kept in a `GarageOccupancyChecker` keyed by pose and by motion-graph edge, not by cell.
 - "Same cell" becomes "conflicting footprints", via the collision table.
 
-Because occupancy is never cleared, every earlier occupant becomes a predecessor, as in step 4a, and `Reduce()` removes the implied edges afterwards. A sweep version would add fewer edges and make `Reduce()` cheaper. It is harder there, though, because a footprint conflicts with a *set* of locations, so "the previous visitor" has to be tracked per conflict set rather than per cell.
+Because occupancy is never cleared, every earlier occupant becomes a predecessor, as in step 4a, and `RemoveRedundantEdges()` removes the implied edges afterwards. A sweep version would add fewer edges and make `RemoveRedundantEdges()` cheaper. It is harder there, though, because a footprint conflicts with a *set* of locations, so "the previous visitor" has to be tracked per conflict set rather than per cell.
 
 ### Cycles mean "only with perfect timing"
 
-Suppose three robots rotate around a triangle at the same instant: \mathrm{X} \to \mathrm{Y}, \mathrm{Y} \to \mathrm{Z}, \mathrm{Z} \to \mathrm{X}, all at t = 0. Each action leaves a location another one enters at the same time, and t \le t holds, so the rule adds three edges that form a cycle. Each robot waits for another to leave. The plan is only safe if all three move in perfect lockstep, which real robots cannot guarantee. Hönig et al. call such transitions unsafe, and point out that they show up as cycles in the ADG. A planner whose output must run on an ADG must therefore avoid them. In the scheduler, a cycle in the action DAG makes `GetTopologicalOrdering()` fail, and the response reports "Failed to get final ordering for action DAG!".
+Suppose three robots rotate around a triangle at the same instant: \mathrm{X} \to \mathrm{Y}, \mathrm{Y} \to \mathrm{Z}, \mathrm{Z} \to \mathrm{X}, all at t = 0. Each action leaves a location another one enters at the same time, and t \le t holds, so the rule adds three edges that form a cycle. Each robot waits for another to leave. The plan is only safe if all three move in perfect lockstep, which real robots cannot guarantee. Hönig et al. call such transitions unsafe, and point out that they show up as cycles in the ADG. A planner whose output must run on an ADG must therefore avoid them. In the scheduler, a cycle in the action DAG makes the next `RemoveRedundantEdges()` fail (“The graph must be a DAG.”; the final `GetTopologicalOrdering()`, with “Failed to get final ordering for action DAG!”, is the backstop), and every job fails with “Failed to build the action graph: ” followed by that message.
 
 ## Executing an ADG
 
@@ -468,7 +468,7 @@ Robots move in parallel only where the graph branches, at several roots or at a 
 
 **The rule.** Two actions can be in progress at the same time only if they are *unordered* (u \parallel v, [section 2.2](#ad-dags-are-partial-orders)). If u \prec v, there is a path u \to x_1 \to \dots \to v, and every edge on it forces "finish before start". A Type 1 edge allows the next action to be *queued* early, but the robot still runs its queue one action at a time. So v starts after u has finished, whatever the delays. Unordered actions *may* overlap; whether they do depends on durations and delays.
 
-**Refinement 1: judge the reduced graph, not the edges as built.** All actions are mutually ordered (a *total order*, a strict sequence) exactly when the transitive reduction is a single path. A vertex with two children is not enough to give parallelism if one child reaches the other: in panel 4 of [Figure 5](#ad-fig-89_adg_parallelism), a has edges to b and to c, but a \to c is implied by a \to b \to c. The scheduler's builder adds many such implied edges on purpose ([section 7.2](#ad-how-the-action-dag-is-built)), so look at the schedule *after* `Reduce()`.
+**Refinement 1: judge the reduced graph, not the edges as built.** All actions are mutually ordered (a *total order*, a strict sequence) exactly when the transitive reduction is a single path. A vertex with two children is not enough to give parallelism if one child reaches the other: in panel 4 of [Figure 5](#ad-fig-89_adg_parallelism), a has edges to b and to c, but a \to c is implied by a \to b \to c. The scheduler's builder adds many such implied edges on purpose ([section 7.2](#ad-how-the-action-dag-is-built)), so look at the schedule *after* `RemoveRedundantEdges()`.
 
 **Refinement 2: branches can start anywhere.** Several roots is one way to start parallel work: branches that begin at time 0. A fork at any vertex (out-degree 2 or more in the reduced graph) starts parallel branches later, and a join (in-degree 2 or more) ends them. Panel 2 has one root and one leaf, but its middle runs in parallel. Put together: the reduced ADG allows parallelism exactly when it is not a single path, that is, when it has two or more roots, or some vertex with two or more parents or children.
 
@@ -489,7 +489,7 @@ The ratio W / L is the average parallelism. It is 1 for a chain and grows with t
 **In the scheduler.** Parallel actions in `Schedule.nodes` come from AGVs, bays and VRCs whose motions neither overlap in footprint nor are linked through the event DAG. Things that serialise them:
 
 - **Shared space.** Every pair of actions with conflicting footprints is ordered, however far apart in time. That is required for safety, not a flaw.
-- **Event-level edges.** Each event-DAG edge orders *all* of one event's actions before *all* of the next one's. Edges added for CHUGG's benefit (`AddNodeArrivalDeps`, `EnsureAgvMovePathsClear`) therefore also serialise execution.
+- **Event-level edges.** Each event-DAG edge orders *all* of one event's actions before *all* of the next one's. Edges added for CHUGG's benefit (`OrderArrivalAfterPriorOccupant`, `OrderAgvMovesAfterBlockingAgvs`) therefore also serialise execution.
 - **The VECS chain quirk.** All VECS commands are chained into one sequence ([section 7.3](#ad-our-edges-versus-type-1-and-type-2)).
 - **The committed schedule.** Actions in `base_schedule` keep running in parallel with the new plan, but their AGVs and nodes are excluded from it ([section 7.5](#ad-persistent-planning-base-schedule-and-the-split)).
 
@@ -513,64 +513,83 @@ The ADG described so far has been extended in several directions since it was in
 
 ## The action DAG in the scheduler
 
-Of the two DAGs in the pipeline ([section 1](#bg-motion-planning-and-the-response)), only the action DAG is an ADG. `ResponseFromTrajectories(ctx, final_state)` builds it, as stage 5 of the pipeline, from the `ContinuousState` CHUGG returns ([section 4](#bg-continuousstate-the-timeline)).
+Of the two DAGs in the pipeline ([section 1](#bg-motion-planning-and-the-response)), only the action DAG is an ADG. `Scheduler::BuildActionGraph(ctx, final_state)` (`src/action_graph.cpp`, called `ResponseFromTrajectories` before PR \#1018) builds it, as stage 5 of the pipeline, from the `ContinuousState` CHUGG returns ([section 4](#bg-continuousstate-the-timeline)). It returns `stdx::Expected<std::vector<ActionNode>>`, the actions in topological order with their parents; `Plan()` puts them in the response.
 
 ### Two DAGs, two jobs
 
-The scheduler's pipeline holds two DAGs, both built on `DagBase`, and only one of them is an ADG. The table compares the event DAG and the action DAG row by row: what a vertex is, what an edge means, which times each carries, and which stage builds and consumes each graph.
+The scheduler's pipeline holds two DAGs, both built on `planner_core`'s `Dag`, and only one of them is an ADG. The table compares the event DAG and the action DAG row by row: what a vertex is, what an edge means, which times each carries, and which stage builds and consumes each graph.
 
 |               | Event DAG                                                                                          | Action DAG (the ADG)                                                                      |
 |---------------|----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
-| Type          | `ScheduleEventDag` (`DagBase<ScheduleEvent>`), in `ctx->events`                                    | `DagBase<ActionNodeMsg>`, local `final_actions_dag`; sent as `Schedule.nodes`             |
+| Type          | `ScheduleEventDag` (`Dag<ScheduleEvent>`), in `ctx->event_dag`                                     | `Dag<interfaces::msg::ActionNode>`, local `final_actions_dag`; sent as `Schedule.nodes`   |
 | A vertex is   | A planner event: `AgvMove`, `TrayMove`, `BayTransition`, …                                         | One command to one entity: an AGV move, lift or lower; a bay, VECS or VRC command         |
 | An edge means | "this event must be planned after that one" (job logic and assignment)                             | "this command may start only after that one has finished" (physical safety and job logic) |
 | Times         | None                                                                                               | Derived from CHUGG's trajectories, then dropped; only `ActionNode.duration` is kept       |
-| Built by      | Job expansion, tray assignment, AGV assignment ([section 13.6](#bg-how-the-dag-grows-during-plan)) | `ResponseFromTrajectories`, after motion planning                                         |
+| Built by      | Job expansion, tray assignment, AGV assignment ([section 13.6](#bg-how-the-dag-grows-during-plan)) | `BuildActionGraph`, after motion planning                                                 |
 | Consumed by   | CHUGG, as the order to plan in                                                                     | The dispatcher, as the order to execute in                                                |
 
 ### How the action DAG is built
 
-`ResponseFromTrajectories` turns CHUGG's timed trajectories into the action DAG through a fixed sequence of calls. The abridged code shows that sequence; the numbered list after it explains each step and identifies which of the scheduler's edges correspond to Type 1 and Type 2 edges.
+`BuildActionGraph` turns CHUGG's timed trajectories into the action DAG through a fixed sequence of calls, each a file-local function of `src/action_graph.cpp` except the two DAG methods. The abridged code shows that sequence; the numbered list after it explains each step and identifies which of the scheduler's edges correspond to Type 1 and Type 2 edges.
 
 ``` cpp
-// src/scheduler.cpp — Scheduler::ResponseFromTrajectories (abridged)
-std::set<Motion, MotionScheduleOrder> all_motions;              // by start time, then event, then hash
-CollectAndCollapseTrajectoryMotions(final_state, *layout_, all_motions);  // drop waits, merge floor runs
-volley::DagBase<ActionNodeMsg> final_actions_dag;
-volley::GarageOccupancyChecker<std::shared_ptr<ActionNodeMsg>> freeing_moves(table_, gg_);
-BuildActionDagFromMotions(all_motions, ctx, final_actions_dag, freeing_moves, event_start_end, logger_);
-final_actions_dag.Reduce();
-TransferEventDagDepsToActionDag(ctx, event_start_end, final_actions_dag, logger_);
-final_actions_dag.Reduce();
+// src/action_graph.cpp:501 — Scheduler::BuildActionGraph (abridged); `this` is the Scheduler
+std::set<Motion, MotionScheduleOrder> all_motions;    // start time, event, hash, then every other field
+if(const auto collected = CollectAndCollapseTrajectoryMotions(final_state, *layout_, all_motions);
+    !collected) {                                      // every step below is checked the same way:
+  LOG_ERROR(logger_, "{}", collected.error());        // logged once here, then returned to Plan()
+  return stdx::Unexpected(collected.error());
+}
+ActionSpanByEvent action_span_by_event;                // first and last action of each event
+Dag<interfaces::msg::ActionNode> final_actions_dag;
+GarageOccupancyChecker<std::shared_ptr<interfaces::msg::ActionNode>> occupancy_history(
+    collision_table_, motion_graph_);
+BuildActionDagFromMotions(all_motions, ctx, final_actions_dag, occupancy_history, action_span_by_event);
+final_actions_dag.RemoveRedundantEdges();
+TransferEventDagDepsToActionDag(ctx, action_span_by_event, final_actions_dag);
+final_actions_dag.RemoveRedundantEdges();
 InsertVrcActionsIntoDag(final_actions_dag, *layout_, ctx->initial_state, cost_model_);
-final_actions_dag.Reduce();
-auto final_ordering = final_actions_dag.GetTopologicalOrdering();   // fails if there is a cycle
-return BuildScheduledActionsArray(ctx, final_actions_dag, *final_ordering);
+final_actions_dag.RemoveRedundantEdges();
+const auto final_ordering = final_actions_dag.GetTopologicalOrdering();   // fails if there is a cycle
+auto scheduled_actions = BuildScheduledActionsArray(final_actions_dag, *final_ordering);   // copies
+WriteJobActionIndices(ctx, scheduled_actions);         // each job's node_indices
+return scheduled_actions;
 ```
 
-1.  **Collect motions.** Every entity's trajectory is merged into one set, ordered by start time (`MotionScheduleOrder`: start time, then the event's vertex, then a hash as a tie-break). Waits are dropped, and runs of consecutive floor-traversal motions are merged into one.
-2.  **One vertex per motion.** `ToActionNode` turns each motion into an `ActionNodeMsg` with a fresh GUID and the job's id. `event_start_end` records the first and last action of each event.
+1.  **Collect motions.** Every entity's trajectory is merged into one set, ordered by start time (`MotionScheduleOrder`: start time, then the event's vertex, then a hash, then every other field of the motion, its payload bytes included). Waits are dropped, and runs of consecutive floor-traversal motions are merged into one.
+2.  **One vertex per motion.** `ToActionNode` turns each motion into an `interfaces::msg::ActionNode` with a fresh GUID and the job's id, or returns an error with a message. `action_span_by_event` records the first and last action of each event.
 3.  **Same-entity chain.** Each action depends on the previous action of the same entity (`last_entity_action`). This is Type 1.
-4.  **Occupancy edges.** Before adding an action, `freeing_moves.GetBlockers(location, footprint, lifted)` returns every *earlier* action whose recorded occupancy conflicts with this action's location and footprint, and each one becomes a predecessor. Then the action is recorded as an occupant of every location its footprint conflicts with (`AddOccupant`). This is the scheduler's Type 2.
-5.  **Reduce**, because the occupancy rule adds many implied edges (the code comment says "overkill but pruned later by Reduce()").
+4.  **Occupancy edges.** Before adding an action, `occupancy_history.GetBlockers(location, footprint, lifted)` returns every *earlier* action whose recorded occupancy conflicts with this action's location and footprint, and each one becomes a predecessor. Then the action is recorded as an occupant of every location its footprint conflicts with (`AddOccupant`). This is the scheduler's Type 2.
+5.  **Remove redundant edges**, because the occupancy rule adds many implied edges (the code comment: "Every move into a space depends on every earlier occupant; RemoveRedundantEdges() prunes the excess").
 6.  **Event-level edges.** For every edge e \to e' of the event DAG, the last action of e must finish before the first action of e' starts. These carry job logic that geometry cannot see, such as "the tray must be at the bay before the bay processes the retrieve".
-7.  **Reduce, insert VRC commands, reduce again.** `InsertVrcActionsIntoDag` adds VRC moves where an AGV needs the carriage on another floor ([section 6.3](#bg-vrcs-lifts-between-floors)).
-8.  **Serialise.** Take a topological order. Each action's predecessors become indices into the output array (`parents`), and each job records the indices of its actions (`node_indices`). `BuildScheduledActionsArray` also re-adds the edge from the entity's previous action if `Reduce()` removed it. That edge is implied, so it does not change the order, but it makes every entity's chain explicit for the dispatcher.
+7.  **Remove redundant edges, insert VRC commands, remove them again.** `InsertVrcActionsIntoDag` adds VRC moves where an AGV needs the carriage on another floor ([section 6.3](#bg-vrcs-lifts-between-floors)).
+8.  **Serialise.** Take a topological order. `BuildScheduledActionsArray` copies each action out of the DAG and turns its predecessors into indices into the output array (`parents`). It also re-adds the edge from the entity's previous action if `RemoveRedundantEdges()` removed it. That edge is implied, so it does not change the order, but it makes every entity's chain explicit for the dispatcher. `WriteJobActionIndices` then records, for each job, the indices of its actions (`node_indices`). Before PR \#1018 the parents were pushed onto the action nodes held in the DAG, so building the response modified the action DAG; the copies leave it untouched.
 
 ![Motions to actions](figures/32_motions_to_actions.svg)
 
-From timed trajectories to `ActionNode[]`, steps 1–8 above, on the shape of the `RetrieveJob` test. Every motion with a delta becomes one action; waits are dropped. Times are illustrative.
+From timed trajectories to `ActionNode[]`, steps 1–8 above, on the shape of a single retrieve (as in the `RetrieveJob.FromStall` scenario). Every motion with a delta becomes one action; waits are dropped. Times are illustrative.
 
-Step 2 in detail: `ToActionNode` decides what command each motion becomes, from the type of its delta:
+Step 2 in detail: `ToActionNode` decides what command each motion becomes, from the type of its delta. It returns `stdx::Expected<ActionNode>`, with one message per failure: no delta, a delta that does not deserialise, a lift motion not at a pose, a bay change whose event is not a `BayTransition`, a charger state with no command, or an unknown delta type. Before PR \#1018 it returned a null pointer, without saying why.
 
 ``` cpp
-// Where: anonymous-namespace helper ToActionNode(const volley::Motion& motion, GuidMsg job_id,
-//        const std::shared_ptr<ScheduleEvent>& event) in src/scheduler.cpp
+// src/action_graph.cpp:246, file-local (no `this`):
+// stdx::Expected<interfaces::msg::ActionNode> ToActionNode(
+//     const Motion& motion, interfaces::msg::Guid job_id, const ScheduleEvent& event)
 //   motion.GetDelta() -> optional serialized discrete change; its .type names the ROS message type
-if(delta->type == "AgvPoseChanged") {
-  result->type = ActionNodeMsg::TYPE_AGV_COMMAND;
-  // An AGV motion whose collision id is NOT the bare AGV is carrying a tray, so lift = true on both ends.
-  result->agv_command.src.lift = motion.GetCollisionId() != common::EnumInteger(volley::CollisionEntityId::AGV);
+const auto& garage_event_opt = motion.GetDelta();
+if(!garage_event_opt) {
+  return stdx::Unexpected("Motion {} has no discrete change", std::to_string(motion));
+}
+const auto& type = garage_event_opt->type;
+if(type == "AgvPoseChanged") {
+  const auto pose_change = Deserialize<interfaces::msg::AgvPoseChanged>(*garage_event_opt);
+  if(!pose_change) {
+    return stdx::Unexpected("Cannot deserialize the {} of motion {}", type, std::to_string(motion));
+  }
+  action_node.type = interfaces::msg::ActionNode::TYPE_AGV_COMMAND;
+  // IsLiftedMotion: the collision id is not the bare AGV, so it carries a tray; lift = true on both ends.
+  action_node.agv_command.src.lift = IsLiftedMotion(motion);
+  action_node.agv_command.dst.lift = IsLiftedMotion(motion);
 }
 // "AgvLiftChanged" -> AGV command with src.lift != dst.lift; "BayStateChanged" -> TYPE_BAY_COMMAND using the
 // BayTransition's own command; "VecsStateChanged" -> start/stop charging; "VrcStateChanged" -> VRC move.
@@ -578,29 +597,29 @@ if(delta->type == "AgvPoseChanged") {
 
 ![The action DAG the scheduler builds](figures/87_adg_in_scheduler.svg)
 
-**An illustrative retrieve, end to end.** (1) The event DAG. (2) CHUGG's motions per entity. (3) The action DAG. Same-entity edges chain AGV-1's five actions. The occupancy edge `b1 → a3` exists because AGV-2's move swept W2, which AGV-1 enters later. The event edge `e1 → e3` becomes `a5 → c1`. The occupancy edge `a1 → a3` is implied by AGV-1's own chain and is removed by `Reduce()`. (4) The serialised `Schedule.nodes`, in one topological order, with parents as indices.
+**An illustrative retrieve, end to end.** (1) The event DAG. (2) CHUGG's motions per entity. (3) The action DAG. Same-entity edges chain AGV-1's five actions. The occupancy edge `b1 → a3` exists because AGV-2's move swept W2, which AGV-1 enters later. The event edge `e1 → e3` becomes `a5 → c1`. The occupancy edge `a1 → a3` is implied by AGV-1's own chain and is removed by `RemoveRedundantEdges()`. (4) The serialised `Schedule.nodes`, in one topological order, with parents as indices.
 
 ### The construction, step by step
 
-The figure below runs `ResponseFromTrajectories` on a small retrieve in the Pecos layout and shows every data structure it touches. AGV-2 first leaves W22; AGV-1 lifts the car's tray T23 at P23, carries it through W22 and W41 into bay B21 and lowers it; then the bay hands the car over.
+The figure below runs `BuildActionGraph` on a small retrieve in the Pecos layout and shows every data structure it touches. AGV-2 first leaves W22; AGV-1 lifts the car's tray T23 at P23, carries it through W22 and W41 into bay B21 and lowers it; then the bay hands the car over.
 
 ![Building the action DAG, motion by motion](figures/126_action_dag_construction.svg)
 
-**Building the action DAG, motion by motion.** Step through it: the motions are sorted and the wait is dropped; each motion becomes an action that is chained to its entity's previous action, depends on every earlier occupant of the space it needs, and then occupies that space; `Reduce()` removes the implied edge; the event edge from the lower to the hand-over is transferred; and one topological order is written out as `Schedule.nodes` with parent indices.
+**Building the action DAG, motion by motion.** Step through it: the motions are sorted and the wait is dropped; each motion becomes an action that is chained to its entity's previous action, depends on every earlier occupant of the space it needs, and then occupies that space; `RemoveRedundantEdges()` removes the implied edge; the event edge from the lower to the hand-over is transferred; and one topological order is written out as `Schedule.nodes` with parent indices.
 
 Five data structures carry the construction. Each has one job:
 
-| Data structure       | Type                                                          | Role                                                                                                                                                                                                                                                                                      |
-|----------------------|---------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `all_motions`        | `std::set<Motion, MotionScheduleOrder>`                       | Every non-wait motion of every entity, in the order actions are created: planned start time, then the event vertex (a motion's action id), then a hash so that distinct motions never compare equal                                                                                       |
-| `last_entity_action` | `unordered_map<GarageEntityIdMsg, shared_ptr<ActionNodeMsg>>` | The latest action of each AGV, bay, VECS or VRC; the source of the same-entity edge                                                                                                                                                                                                       |
-| `freeing_moves`      | `GarageOccupancyChecker<shared_ptr<ActionNodeMsg>>`           | For each location (pose or edge of the motion graph), which actions occupy it and which footprint types they block. `GetBlockers` reads it, `AddOccupant` writes it through the `CollisionTable`. Nothing is ever removed, so “occupant” means “has used this space at some earlier time” |
-| `event_start_end`    | `unordered_map<size_t, pair<ActionNode, ActionNode>>`         | For each event, its first and last action; used to turn event edges into action edges                                                                                                                                                                                                     |
-| `final_actions_dag`  | `DagBase<ActionNodeMsg>`                                      | The action DAG itself: shared action nodes as vertices, dependencies as edges, with `Reduce()` and `GetTopologicalOrdering()`                                                                                                                                                             |
+| Data structure         | Type                                                                     | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+|------------------------|--------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `all_motions`          | `std::set<Motion, MotionScheduleOrder>`                                  | Every non-wait motion of every entity, in the order actions are created: planned start time, then the event vertex (a motion's action id), then a hash, then every other field (end time, footprint, entity, location, delta type and bytes, idle flag), so that distinct motions never compare equal. Before PR \#1018 the order stopped at the hash, so two distinct motions whose hashes collided counted as one and the plan failed with “Failed to add … to set of all motions” |
+| `last_entity_action`   | `unordered_map<interfaces::msg::GarageEntityId, shared_ptr<ActionNode>>` | The latest action of each AGV, bay, VECS or VRC; the source of the same-entity edge                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `occupancy_history`    | `GarageOccupancyChecker<shared_ptr<ActionNode>>`                         | For each location (pose or edge of the motion graph), which actions occupy it and which footprint types they block. `GetBlockers` reads it, `AddOccupant` writes it through the `CollisionTable`. Nothing is ever removed, so “occupant” means “has used this space at some earlier time”                                                                                                                                                                                            |
+| `action_span_by_event` | `unordered_map<size_t, EventActionSpan>` (`first_action`, `last_action`) | For each event, its first and last action; used to turn event edges into action edges                                                                                                                                                                                                                                                                                                                                                                                                |
+| `final_actions_dag`    | `Dag<interfaces::msg::ActionNode>`                                       | The action DAG itself: shared action nodes as vertices, dependencies as edges, with `RemoveRedundantEdges()` and `GetTopologicalOrdering()`                                                                                                                                                                                                                                                                                                                                          |
 
-The loop body is short. For each motion in order, `ToActionNode` creates the action with a fresh guid and the job's id, and `event_start_end` records it as the first action of its event if the event has none yet, and as its last action in any case. The action then gets an edge from `last_entity_action[entity]`, which keeps each machine's commands in order. Next, `GetBlockers(location, collision_id, lifted)` returns every earlier action that occupies a location conflicting with this motion's footprint, and each becomes a predecessor. In the example that is how the hand-over of W22 from AGV-2 to AGV-1 appears: a0 → a2. Finally `AddOccupant` records the new action on every location its footprint conflicts with. `lifted` is true for every motion whose collision id is not the bare AGV, because a tray or car can only move on a lifted AGV. A tray standing on the ground is checked against an AGV through its legs only, so an empty AGV can still pass under it.
+The loop body is short. For each motion in order, `ToActionNode` creates the action with a fresh guid and the job's id (a failure ends the build with its message), and `action_span_by_event` records it as the first action of its event if the event has none yet, and as its last action in any case. The action then gets an edge from `last_entity_action[entity]`, which keeps each machine's commands in order. Next, `GetBlockers(location, collision_id, lifted)` returns every earlier action that occupies a location conflicting with this motion's footprint, and each becomes a predecessor. In the example that is how the hand-over of W22 from AGV-2 to AGV-1 appears: a0 → a2. Finally `AddOccupant` records the new action on every location its footprint conflicts with. `lifted` is true for every motion whose collision id is not the bare AGV, because a tray or car can only move on a lifted AGV. A tray standing on the ground is checked against an AGV through its legs only, so an empty AGV can still pass under it.
 
-Because occupancy is never cleared, a motion depends on *every* earlier user of its space, not just the last one. W22 is blocked for a3 by both a0 and a2. The first `Reduce()` removes the edges that such chains imply (a0 → a3 here). Geometry cannot express some orders, though: the bay's hand-over never shares space with the car's arrival in a way the code checks (bay transitions carry a TODO in this loop). `TransferEventDagDepsToActionDag` therefore adds, for every event edge e \to e', an edge from the last action of e to the first action of e', which gives a5 → a6. A second `Reduce()` follows, then VRC insertion (nothing to insert in Pecos) and a third `Reduce()`. `BuildScheduledActionsArray` takes one topological order and writes each action's in-edges as indices of earlier array entries. It re-adds the edge from the same entity's previous action if `Reduce()` removed it, and appends each action's index to its job's `node_indices`.
+Because occupancy is never cleared, a motion depends on *every* earlier user of its space, not just the last one. W22 is blocked for a3 by both a0 and a2. The first `RemoveRedundantEdges()` removes the edges that such chains imply (a0 → a3 here). Geometry cannot express some orders, though: the bay's hand-over never shares space with the car's arrival in a way the code checks. The loop's comment states the policy: bay and VECS motions carry their node without a heading, and the occupancy graph lacks some edges AGVs drive, so such a location “orders nothing and is ordered after nothing; that does not mean it cannot conflict, only that this graph cannot tell”. `TransferEventDagDepsToActionDag` therefore adds, for every event edge e \to e', an edge from the last action of e to the first action of e', which gives a5 → a6. A second `RemoveRedundantEdges()` follows, then VRC insertion (nothing to insert in Pecos) and a third `RemoveRedundantEdges()`. `BuildScheduledActionsArray` takes one topological order, copies each action, and writes its in-edges as indices of earlier array entries. It re-adds the edge from the same entity's previous action if `RemoveRedundantEdges()` removed it. `WriteJobActionIndices` then appends each action's index to its job's `node_indices`.
 
 ### VRC commands: lifts between floors
 
@@ -610,7 +629,7 @@ VRC commands are not planned by CHUGG; they are added to the action DAG after mo
 
 Conceptual VRC connecting two floors, as a side elevation. The Pecos YAML has no VRC; this shows general code-supported behaviour.
 
-VRCs are handled at the **action** level, after motion planning (step 7 above): `InsertVrcActionsIntoDag` (in `utils.cpp`) walks AGV actions in topological order, simulates the carriage floor per VRC, and inserts a `TYPE_VRC_COMMAND` *approach* when the carriage is on the wrong floor for the AGV's next action, plus a *move* command that replaces each cross-floor AGV action. Each command's duration is door close + carriage transit + door open. Consecutive cross-floor motions are first collapsed into one motion in `CollectAndCollapseTrajectoryMotions`. `VrcTransition` (in `planner_core`, [section 11](#bg-event-types-and-polymorphism)) exists, but the scheduler never creates one, and CHUGG's planning loop has no branch for it ([section 21.1](#bg-inside-solvesequential)).
+VRCs are handled at the **action** level, after motion planning (step 7 above): `InsertVrcActionsIntoDag` (file-local in `action_graph.cpp`) walks AGV actions in topological order, simulates the carriage floor per VRC, and inserts a `TYPE_VRC_COMMAND` *approach* when the carriage is on the wrong floor for the AGV's next action, plus a *move* command that replaces each cross-floor AGV action. Each command's duration is door close + carriage transit + door open. Consecutive cross-floor motions are first collapsed into one motion in `CollectAndCollapseTrajectoryMotions`. `VrcTransition` (in `planner_core`, [section 11](#bg-event-types-and-polymorphism)) exists, but the scheduler never creates one, and CHUGG's planning loop has no branch for it ([section 21.1](#bg-inside-solvesequential)).
 
 ### Our edges versus Type 1 and Type 2
 
@@ -628,27 +647,27 @@ The result is the transitive reduction of E\_{\text{entity}} \cup E\_{\text{occ}
 |-------------------------------------------|-------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Type 1: consecutive actions of a robot    | E\_{\text{entity}}: consecutive actions of an AGV, a bay or a VRC | Bays, VECS and VRCs are agents too. One quirk: `BuildScheduledActionsArray` keys its extra chain by AGV, bay or VRC id, and gives every VECS command the same empty key, so each VECS command is chained after the previous one, whichever VECS it is |
 | Type 2: s^i_k = g^j_l, the same grid cell | E\_{\text{occ}}: footprint conflict at poses *and* along moves    | AGVs and trays are rectangles of different sizes, and a move sweeps an area. Equal locations are not enough to detect a conflict                                                                                                                      |
-| Only between different robots             | Any earlier occupant, the same entity included                    | Simpler; the same-entity edges are implied by the chain, and `Reduce()` removes them                                                                                                                                                                  |
-| From the action that *leaves* a location  | From *every* earlier action that occupied a conflicting location  | Occupancy is never cleared, so the rule is conservative. The extra edges are implied by the chain of hand-overs, and `Reduce()` removes them                                                                                                          |
+| Only between different robots             | Any earlier occupant, the same entity included                    | Simpler; the same-entity edges are implied by the chain, and `RemoveRedundantEdges()` removes them                                                                                                                                                    |
+| From the action that *leaves* a location  | From *every* earlier action that occupied a conflicting location  | Occupancy is never cleared, so the rule is conservative. The extra edges are implied by the chain of hand-overs, and `RemoveRedundantEdges()` removes them                                                                                            |
 | No task-level edges                       | E\_{\text{event}} from the event DAG                              | Some orders are logical, not geometric. A bay must not start a retrieve before the tray arrives, even though they never share space                                                                                                                   |
 | Wait actions are vertices                 | Waits are dropped                                                 | As in Dunkel's streamlined ADG: a wait only delays, and dependencies already enforce every real wait                                                                                                                                                  |
 
-One consequence to keep in mind: the occupancy rule relates motions by *planned start time*, exactly as Hönig's t^i_k \le t^j_l does. If two conflicting motions have the same start time, the tie-break (the event's vertex, then a hash) decides which goes first. CHUGG should never produce such a pair, since it would mean the plan itself overlaps.
+One consequence to keep in mind: the occupancy rule relates motions by *planned start time*, exactly as Hönig's t^i_k \le t^j_l does. If two conflicting motions have the same start time, the tie-break (the event's vertex, then a hash, then the remaining fields) decides which goes first. CHUGG should never produce such a pair, since it would mean the plan itself overlaps.
 
 ### What goes over the wire
 
-`Schedule.msg` says it directly: "A schedule is a DAG. Nodes are provided in a topological order." Each `ActionNodeMsg` carries the ADG's data:
+`Schedule.msg` says it directly: "A schedule is a DAG. Nodes are provided in a topological order." Each `ActionNode` message carries the ADG's data:
 
-| ADG concept               | `ActionNodeMsg` field                                                  | Notes                                                                                                                                                       |
+| ADG concept               | `ActionNode` field                                                     | Notes                                                                                                                                                       |
 |---------------------------|------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Vertex identity           | `guid`                                                                 | Fresh per plan call (`CreateActionGuid`); VECS and VRC command ids are set from it                                                                          |
+| Vertex identity           | `guid`                                                                 | Fresh for every action (`GenerateNextActionGuid`, a counter that lives as long as the process); VECS and VRC command ids are set from it                    |
 | Incoming edges            | `parents`: indices into `Schedule.nodes`                               | Because the array is in topological order, every parent index is smaller than the node's own index: an invariant worth a test                               |
 | Which robot, which action | `type` plus `agv_id`/`agv_command`, `bay_id`/`bay_command`, …          | One of four command kinds                                                                                                                                   |
 | d(v)                      | `duration` (seconds)                                                   | Enough to recompute S, C and the critical path ([section 4.4](#ad-timing-critical-path-and-slack))                                                          |
 | Status                    | `status`: `STATUS_NOT_RECEIVED`, `STATUS_RECEIVED`, `STATUS_COMPLETED` | Close to staged, enqueued and finished. The comments define them as "not acknowledged as received by the entity", "acknowledged as received" and "complete" |
 | Task grouping             | `job_id`; `ScheduledJobData.node_indices`                              | Which job each action serves                                                                                                                                |
 
-After the response is built, `Plan()` marks every planned job `STATE_EXECUTING`, and for `TYPE_RETRIEVE` jobs records the bay and the `PROCESS_RETRIEVE` action in `bay_id` and `bay_arrival_node_guid`.
+After the action graph is built, `Plan()` marks every planned job `STATE_EXECUTING`, and for `TYPE_RETRIEVE` jobs records the bay and the `PROCESS_RETRIEVE` action in `bay_id` and `bay_arrival_node_guid`; the file-local `FindPayloadDeliveryAction` finds that action among the job's bay commands. A retrieve without one is logged as an error and still reported as executing (a TODO says it should fail). The scheduled jobs come back in request order; before PR \#1018 they came out in `unordered_map` order.
 
 The dispatcher, which executes this graph, is not in the snapshots, so its exact enqueue rule cannot be confirmed here. The questions to ask its owners are: does it send an action when its parents are `COMPLETED`, or when the same-entity parent is only `RECEIVED` (Hönig's rule)? And how does it treat an entity whose command is rejected?
 
@@ -659,19 +678,24 @@ The fleet keeps moving while `Plan()` runs, so a new schedule must fit around ac
 - `PlanRequest.base_schedule` is "the immutable portion of the current schedule". The scheduler "is to assume that all of these actions will be completed". Dispatch fills it with every incomplete action of its schedule; `active_jobs` lists their jobs.
 - `ActionNode.outside_split`: "this node is outside the split in the schedule while waiting on the plan call response and will not be sent".
 
-The design is that, while a plan call is in flight, the dispatcher keeps executing the actions before the split and holds back the rest. In the current Dispatch code the split is not applied (the `SplitSchedule` call is commented out), and with overlapping planning off no call is made while jobs are active. The scheduler does not add edges into the base schedule. Instead, `Plan()` makes every resource the base schedule uses unavailable:
+The design is that, while a plan call is in flight, the dispatcher keeps executing the actions before the split and holds back the rest. In the current Dispatch code the split is not applied (the `SplitSchedule` call is commented out), and with overlapping planning off no call is made while jobs are active. The scheduler does not add edges into the base schedule. Instead, `Plan()` makes every resource the base schedule uses unavailable, through a file-local function it calls right after validating the base state:
 
 ``` cpp
-// src/scheduler.cpp — Scheduler::Plan (abridged)
-for(const auto& node : request_data.base_schedule.nodes) {
-  if(node.type == ActionNodeMsg::TYPE_AGV_COMMAND) {
-    initial_state.SetAgvDisabled(node.agv_id);                         // the AGV cannot be assigned
-    initial_state.SetNodeDisabled(node.agv_command.src.pose.node_id);  // nor its start and goal nodes used
-    initial_state.SetNodeDisabled(node.agv_command.dst.pose.node_id);
+// src/scheduler.cpp:31 — ExcludeCommittedResources, called in Scheduler::Plan as
+//   ExcludeCommittedResources(validated_state.value(), request_data.base_schedule.nodes)
+for(const auto& committed_action : committed_actions) {
+  switch(committed_action.type) {
+  case interfaces::msg::ActionNode::TYPE_AGV_COMMAND:
+    state.SetAgvDisabled(committed_action.agv_id);                          // the AGV cannot be assigned
+    state.SetNodeDisabled(committed_action.agv_command.src.pose.node_id);   // nor its start and goal nodes used
+    state.SetNodeDisabled(committed_action.agv_command.dst.pose.node_id);
+    break;
+  case interfaces::msg::ActionNode::TYPE_BAY_COMMAND:  state.SetBayDisabled(committed_action.bay_id); break;
+  case interfaces::msg::ActionNode::TYPE_VECS_COMMAND: state.SetVecsDisabled(committed_action.vecs_id); break;
+  default: break;
   }
-  else if(node.type == ActionNodeMsg::TYPE_BAY_COMMAND)  { initial_state.SetBayDisabled(node.bay_id); }
-  else if(node.type == ActionNodeMsg::TYPE_VECS_COMMAND) { initial_state.SetVecsDisabled(node.vecs_id); }
 }
+return state;
 ```
 
 So the new ADG cannot conflict with the committed one, because they share no AGV, bay, VECS or start and goal node. The cost is that a busy AGV is unavailable for the whole new plan, even if it would be free a few seconds in. The Background tab traces every place the reservation is read and what could replace it ([section 14](#bg-the-base-schedule-reserved-assets-and-keep-out-filters)). VRC commands in the base schedule are not handled in this loop. Dispatch, for its part, expects the response to contain every base node unchanged and rebuilds its schedule from the response alone; the Dispatch tab describes that check ([section 4](#ds-what-dispatch-does-with-the-response)).
@@ -681,7 +705,7 @@ So the new ADG cannot conflict with the committed one, because they share no AGV
 The action DAG is the last stage before the response, so it reflects every change made upstream. The points below state what the refactor should expect to see change here, how to compare two responses for parity, and which invariants can be checked on every response.
 
 - **The action DAG is downstream of everything the refactor touches.** Tray and AGV assignment change the event DAG, CHUGG plans from it, and the action DAG is built from both. A change in assignment shows up here.
-- **Compare reduced graphs, not arrays.** GUIDs are fresh on every call, and the array is one of many topological orders. A parity test should match actions by content (entity, command, poses), then compare the reduced edge sets. Because the transitive reduction is unique ([section 2.4](#ad-transitive-reduction)), equal reduced sets mean an identical order. The [Verification](#doc-verification) tab describes the parity harness.
+- **Compare reduced graphs, not arrays.** GUIDs are fresh on every call, and the array is one of many topological orders. A parity test should match actions by content (entity, command, poses), then compare the reduced edge sets. Because the transitive reduction is unique ([section 2.4](#ad-transitive-reduction)), equal reduced sets mean an identical order. The scenario files added in PR \#1007 compare something stricter: the recorded `Schedule.nodes` array, with each GUID replaced by its position (checked when `SCHEDULER_CHECK_RECORDINGS=1`), so any change of topological order shows up as a diff even when the order of execution is the same. The [Verification](#doc-verification) tab describes the parity harness.
 - **A quirk to preserve, then question.** All VECS commands are chained into one sequence by `BuildScheduledActionsArray` ([section 7.3](#ad-our-edges-versus-type-1-and-type-2)). That serialises charging starts and stops across different VECS. Parity requires keeping it; whether it is intended is a question for the dispatcher owners.
 - **Cheap invariants to assert on every response:** every `parents` index is smaller than its own index; each entity's actions form a chain; recomputing C from `duration` gives a makespan close to CHUGG's.
 - **Names.** The naming catalogue ([section 15.9.4](#nm-jobs-plans-and-schedules)) proposes `action_indices` for `node_indices` and `parent_indices` for `parents`, because these index actions, not garage nodes.
@@ -700,7 +724,7 @@ a^3_1 now finishes at 4.5 instead of 2. Its slack is 1, so the end moves by 2.5 
 
 3\. The action DAG builder adds an edge from every earlier occupant, not just the last one. Why is that still correct, and what does it cost?
 
-Every extra edge points from an earlier action to a later one in a plan that was collision-free, so it never creates a cycle and only restates an order the plan already has. The cost is construction time and memory before `Reduce()`. `Reduce()` is O(\|V\| \cdot \|E\|), so many redundant edges make it slower.
+Every extra edge points from an earlier action to a later one in a plan that was collision-free, so it never creates a cycle and only restates an order the plan already has. The cost is construction time and memory before `RemoveRedundantEdges()`, which is O(\|V\| \cdot \|E\|), so many redundant edges make it slower.
 
 4\. Why can't the occupancy rule alone replace the event-level edges?
 
@@ -753,7 +777,7 @@ Open-RMF's `rmf_traffic` has no DAG; it is a database updated by events. The two
 Two nuances:
 
 - **Open-RMF is not entirely free of dependencies.** Its routes can declare them: `DependsOnCheckpoint` is a map where "the checkpoint in the value waits for the checkpoint in the key" ([API](https://openrmf.readthedocs.io/projects/rmf-traffic/en/latest/api/typedef_Route_8hpp_1a9125a240740855280a6356bbf1591153.html)). That is a precedence edge between plans.
-- **This scheduler is event-driven too, just one level up.** `Scheduler::Plan()` keeps no state between calls: everything lives in a fresh `ScheduleContext`. The live state and the job queue are held by Dispatch, which sends `base_state` (the garage now) and `base_schedule` (actions already executing; `Plan()` marks their AGVs, nodes, bays and VECS disabled) with every request. "A robot went down" or "a new car arrived" therefore means a new `PlanRequest`, not an edit to an old DAG. Dispatch is not in the snapshot, so when exactly it replans cannot be shown here.
+- **This scheduler is event-driven too, just one level up.** `Scheduler::Plan()` keeps no state between calls: everything lives in a fresh `PlanContext`. The live state and the job queue are held by Dispatch, which sends `base_state` (the garage now) and `base_schedule` (actions already executing; `Plan()` marks their AGVs, nodes, bays and VECS disabled) with every request. "A robot went down" or "a new car arrived" therefore means a new `PlanRequest`, not an edit to an old DAG. Dispatch is not in the snapshot, so when exactly it replans cannot be shown here.
 
 Why a DAG fits better here (opinion): the hard part of this garage is not two robots meeting in a corridor but chains like "to retrieve T17, first move T15 out of its way, which needs a free spot, which needs the bay to switch mode". Those are precedence constraints, and a DAG states them directly. A traffic database would still need something like it to express "this tray move must finish before that one starts".
 
@@ -768,9 +792,9 @@ A DAG is a partial order, so a topological order of it does not serialise execut
 Read it as a pipeline:
 
 1.  **Input: one DAG**, not several. The lanes are only a way of drawing it; the bay edges and the occupancy edge connect them. (Even a DAG with no edges between lanes would be fine: it would simply mean nothing waits for anything.)
-2.  **The topological sort produces a list**, `std::optional<VertexVec>`. It neither creates nor removes parallelism; it only guarantees that every node comes after its parents. The scheduler uses this list to replay events on a `DiscreteGarageState` and to number the actions.
+2.  **The topological sort produces a list**, `std::optional<std::vector<Vertex>>`. It neither creates nor removes parallelism; it only guarantees that every node comes after its parents. The scheduler uses this list to replay events on a `DiscreteGarageState` and to number the actions.
 3.  **The response keeps both the list and the edges.** `BuildScheduledActionsArray` walks the action DAG in topological order, gives each action its position in `Schedule.nodes`, and fills `parents` from its in-edges plus the previous action of the same AGV, bay or VRC. So the "sorted graph" is exactly this: a sorted array in which every node points back to its parents, always at smaller indices.
-4.  **Execution is driven by `parents`, not by array order** ([section 4](#ad-executing-an-adg) explains why that is safe). A node can start as soon as all its parents are done; nodes without a path between them run at the same time. The times themselves come from motion planning: in the `ContinuousStateToSchedule` test, AGV-1 and AGV-2 both have motions starting at `t = 0`. How Dispatch's executor consumes `parents` is outside this package.
+4.  **Execution is driven by `parents`, not by array order** ([section 4](#ad-executing-an-adg) explains why that is safe). A node can start as soon as all its parents are done; nodes without a path between them run at the same time. The times themselves come from motion planning: in the `SchedulerState.ContinuousStateToSchedule` test (`test/src/stages/scheduler_state_tests.cpp`), AGV-1 and AGV-2 both have motions starting at `t = 0`. How Dispatch's executor consumes `parents` is outside this package.
 
 Parallelism is still lost wherever an edge exists. Some edges are physical (one AGV does one thing at a time; a tray is in one place). Others are choices: rule B orders every step of a job even when two steps could overlap, and REBALANCE_GARAGE runs its bays one after another because they share a job index ([section 14.18](#bg-gotchas-2)). Those are fair targets for improvement.
 
@@ -780,29 +804,31 @@ Some of the complexity is forced by the problem and some is added by the code. T
 
 **What the problem forces.** Trays block each other, an AGV must fetch a tray before carrying it, bays and VECS have modes, and every job's plan depends on where earlier jobs leave things. Some precedence structure is unavoidable. Separating *what must happen in which order* (the event DAG) from *how and when robots move* (CHUGG) and from *in which order the robots may use shared space* (the action DAG) is a sound and common split: task planning, multi-agent path finding, then an action dependency graph for execution.
 
-**What the code adds** (evidence from `scheduler.cpp`):
+**What the code adds** (evidence from the stage files `job_expansion.cpp`, `tray_assignment.cpp` and `agv_assignment.cpp`):
 
 - **One mutable DAG, edited by three passes.** Job expansion leaves blanks (`T21 -> ?`), tray assignment fills them and adds blocker moves, AGV assignment adds approach, lift and lower events. To know what an event looks like you need to know which pass you are in.
-- **Edges come from many places.** `AddDependency` appears 28 times in `scheduler.cpp`, spread over ten `Scheduler` methods (`DoTrayAssignments` 7, `AssignDestForUntargetedMove` 5, `MoveAgvToTrayPose` 3, `PlanReparkTrayJob` 2, `DoAgvAssignments` 2, `AddDepsAfterAmiga` 2, and one each in `AppendAgvLiftEvent`, `AddNodeArrivalDeps`, `GetEventDag` and `TryClearBlockedAgvMove`), plus the two `ScheduleContext` helpers. An edge does not record why it was added, and `Reduce()` later removes the redundant ones, so the final DAG does not show where its edges came from.
-- **Repeated replay.** Almost every step copies `initial_state` and replays the whole DAG to know the current state.
-- **Implicit conventions.** `job_index` is a position in a list that only successful jobs enter; failed jobs can leave events behind ([section 14.18](#bg-gotchas-2)).
+- **Edges come from many places.** `AddDependency` on the event DAG appears 15 times in the three stage files, in eleven functions (`tray_assignment.cpp`: `AssignTrays` 2, `AssignDestinationAndUnblockingMoves` 2, `OrderAfterPriorOccupants` and `ChainTrayEvent` one each; `agv_assignment.cpp`: `OrderTransitionAroundAgvLifts` 2, and one each in `ChainAgvEvent`, `OrderArrivalAfterPriorOccupant`, `ScheduleAgvMoveToPickup`, `OrderAfterTraysOnPath` and `OrderAgvMoveAfterBlockerDeparture`; `job_expansion.cpp`: `OrderAfterBayAndChargerEvents` 2), plus the two `PlanContext` helpers (`ChainAfterLastEntityEvent`, `OrderAfterJobLeafEvents`). PR \#1018 gathered repeated patterns into these named helpers, so each name now says what kind of edge it adds; the edge itself still does not record why it was added, and `RemoveRedundantEdges()` later removes the redundant ones, so the final DAG does not show where its edges came from.
+- **Repeated replay.** Every expansion starts with `ComputeStateAfterPlannedEvents`, which copies `initial_state` and replays the whole DAG (`ApplyEventsTo`) to know the current state; tray assignment, AGV assignment and `ValidateEventSequence` each replay it again from `initial_state`.
+- **Implicit conventions.** `job_index` is a position in a list that only successful jobs enter. Failed jobs used to leave events behind ([section 14.18](#bg-gotchas-2)); since PR \#1018 `Plan()` restores the plan context when an expansion fails, so they leave none.
 
 **What would make it easier to follow** (suggestions, not plans): record a reason or kind on every edge; keep each kind of constraint in one function; check invariants after each pass (acyclic, every `TrayMove` complete, no leftover events); give each pass a narrow input and output. That last point is what the solver interfaces in the [Issue & proposal](#doc-proposal) tab start to do, and [section 2.2](#pr-is-task-planning-too-complex) there sorts this complexity into what the problem needs and what can go. Until then, the `debug/printdags` service ([section 22](#bg-debugging-and-testing)), which logs the DAG after each pass, is the best way to see what the code built.
 
 ## Known limitations and reading checkpoint
 
-Across the whole pipeline, limits of the code worth remembering: `GetAgvOccupiedDuration` returns zero; failed jobs can leave events in the DAG; any failure after expansion fails all jobs in the request, except CHUGG's exceptions, which nothing in the scheduler catches; `Reduce()` placement is load-bearing; `UseEvChargeHeading` contains a hard-coded site rule; CHUGG plans loaded moves at unloaded speed and three places disagree on wheel-turn time ([section 23.2](#bg-the-cost-model)); `PROCESS_RETRIEVE` is a hard-coded 60 s.
+Across the whole pipeline, limits of the code worth remembering: AGV assignment starts every AGV's busy time at zero (`busy_duration_by_agv`, with a TODO; it was `GetAgvOccupiedDuration`, which returned zero); any failure after expansion fails all jobs in the request, except CHUGG's exceptions, which nothing in the scheduler catches; `RemoveRedundantEdges()` placement is load-bearing; CHUGG plans loaded moves at unloaded speed and three places disagree on wheel-turn time ([section 23.2](#bg-the-cost-model)); `PROCESS_RETRIEVE` is a hard-coded 60 s; a retrieve whose `PROCESS_RETRIEVE` action is not found is still reported as executing.
+
+Fixed in PR \#1018, and listed here because older notes mention them: failed jobs no longer leave events in the DAG (`Plan()` restores the context); `UseEvChargeHeading`, the hard-coded rule for the decommissioned `576_eccles` site, is deleted; ignored failures are reported (event applications, AGV move durations, `ComputeStateBefore`, a missing keep-out filter, an AGV pickup-order cycle in `AssignAgvs`); the motion order breaks hash ties on every field; building the response no longer modifies the action DAG; and scheduled jobs come back in request order.
 
 **Before reading the [Issue & proposal](#doc-proposal) tab, check you can answer:**
 
 1.  What is the difference between a job, an event, a motion and an action, and which graph holds each?
 2.  Which DAG does CHUGG take as input, which DAG does Dispatch execute, and how do edges get from the first to the second?
 3.  In which order does CHUGG plan events, and why can adding one edge change the whole plan?
-4.  In `Scheduler::Plan`, what is `this`, what is `plan_ctx`, and why can a `const` method still change the plan?
-5.  Why does every `Plan<Type>Job` start by copying `ctx->initial_state` and calling `ctx->events.Apply`?
+4.  In `Scheduler::Plan`, what is `this`, what is `ctx`, and why can a `const` method still change the plan?
+5.  Why does every `Expand<Type>Job` start with `ComputeStateAfterPlannedEvents`, a copy of `ctx->initial_state` with `ctx->event_dag.ApplyEventsTo` applied?
 6.  What makes a `TrayMove` incomplete, and which stage completes each missing part?
 7.  What does an edge in `ScheduleEventDag` mean, and which three rules add edges during job expansion?
-8.  Why is `first_tray_event` recorded in tray assignment and read in AGV assignment?
+8.  Why is `first_event_by_tray` recorded in tray assignment and read in AGV assignment?
 9.  What does bottleneck matching optimise, and why might it not pick the lowest total cost?
 10. When does `Plan()` return `success == false`, and how do you tell which jobs really failed?
 11. How does a bay differ from a VECS and from a VRC in this code?

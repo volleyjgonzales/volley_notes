@@ -49,11 +49,11 @@ def planning_pipeline():
     Y = 230
     d.text(0, Y - 40, "The scheduler (Scheduler::Plan)", size=13, weight=600, fill=T.fg)
     ours = [
-        ("1  Event DAG", ["`ctx->events : ScheduleEventDag`", "built by Plan*Job, tray and", "AGV assignment, Reduce()",
+        ("1  Event DAG", ["`ctx->event_dag : ScheduleEventDag`", "built by Expand*Job, tray and", "AGV assignment, RemoveRedundantEdges()",
                           "WHAT happens, in which order;", "no times, no paths"], T.violet),
         ("2  CHUGG", ["`Chugg::SolveSequential`", "prioritized planning: events", "one at a time in a topological",
                       "order, each timed against the", "motions already planned (SIPP)"], T.amber),
-        ("3  Action DAG = ADG", ["`ResponseFromTrajectories`", "one ActionNode per motion with", "a delta; same-entity,",
+        ("3  Action DAG = ADG", ["`BuildActionGraph`", "one ActionNode per motion with", "a delta; same-entity,",
                                  "occupancy and event edges", "`-> PlanResponse.schedule.nodes`"], T.green),
         ("4  Dispatch", ["runs Schedule.nodes by", "parents (not in the", "snapshots)"], T.sky),
     ]
@@ -76,7 +76,7 @@ def planning_pipeline():
                size=10.5)
     note(d, 0, yb + 34, 4 * W + 3 * GAP,
          "The event DAG is not an ADG. It is also a DAG of discrete changes with "
-         "\"must happen before\" edges, and a few of its edges are spatial (AddNodeArrivalDeps, path repair), "
+         "\"must happen before\" edges, and a few of its edges are spatial (OrderArrivalAfterPriorOccupant, path repair), "
          "but it is a task-level precedence graph made before any timing. The ADG in the standard sense is "
          "step 3, built from CHUGG's output, and it inherits the event edges.", color=T.muted)
     frame(d, title="Two DAGs around one motion planner",
@@ -85,7 +85,8 @@ def planning_pipeline():
           badge_key="as-built",
           legend=[("box", T.violet, "task level: what, in which order"), ("box", T.amber, "motion planning: when, where"),
                   ("box", T.green, "execution graph (ADG)"), ("dashbox", T.sky, "outside the scheduler")],
-          footnote="Stages 1 and 3 are in scheduler.cpp (Plan, ResponseFromTrajectories); stage 2 is motion_planner "
+          footnote="Stage 1 is Plan() and the stage files job_expansion.cpp, tray_assignment.cpp, agv_assignment.cpp; stage 3 "
+                   "is action_graph.cpp (BuildActionGraph); stage 2 is motion_planner "
                    "(chugg_common.cpp, chugg_sequential.cpp), called from PlanMotions. Dispatch is not in the snapshots.")
     return d
 
@@ -97,9 +98,9 @@ def planning_pipeline():
 @figure("92_continuous_state", "What a ContinuousState holds", DOC1)
 def continuous_state():
     d = Doc("92_continuous_state", "A ContinuousState is a timeline per entity",
-            "The ContinuousStateToSchedule test drawn as swimlanes: AGV-1 drives 10->9->11 in six seconds; AGV-2 "
-            "waits at 6, then drives 6->9->12. Each bar is one Motion. The action DAG built from it orders AGV-2's "
-            "entry into node 9 after AGV-1 has left it.")
+            "The ContinuousStateToSchedule test drawn as swimlanes: AGV-1 drives 2132->2133->2134 in six seconds; "
+            "AGV-2 waits at 2117, then drives 2117->2133->2148. Each bar is one Motion. The action DAG built from it "
+            "orders AGV-2's entry into node 2133 after AGV-1 has left it.")
     X0, PX, LANE = 150, 52, 74
     T_MAX = 12
     # axis
@@ -111,8 +112,8 @@ def continuous_state():
         d.text(x, ay + 16, f"{t} s", size=11, family="mono", fill=T.muted, anchor="middle")
     d.text(X0 + T_MAX * PX + 14, ay, "time", size=11, fill=T.muted)
     lanes = [
-        ("AgvId(1)", T.green, [(0, 3, "10 -> 9", "edge", 0), (3, 6, "9 -> 11", "edge", 0)]),
-        ("AgvId(2)", T.sky, [(0, 6, "wait @ 6", "pose", 1), (6, 9, "6 -> 9", "edge", 1), (9, 12, "9 -> 12", "edge", 1)]),
+        ("AgvId(1)", T.green, [(0, 3, "2132 -> 2133", "edge", 0), (3, 6, "2133 -> 2134", "edge", 0)]),
+        ("AgvId(2)", T.sky, [(0, 6, "wait @ 2117", "pose", 1), (6, 9, "2117 -> 2133", "edge", 1), (9, 12, "2133 -> 2148", "edge", 1)]),
     ]
     bars = {}
     for k, (name, col, ms) in enumerate(lanes):
@@ -128,13 +129,13 @@ def continuous_state():
                    anchor="middle")
             d.text((x0 + x1) / 2, y + 39, f"action {act}", size=10, family="mono", fill=T.muted, anchor="middle")
             bars[(k, lab)] = BBox(x0, y + 6, x1, y + 50)
-    # occupancy dependency: AGV-1 leaves 9 (9 -> 11 ends at 6) before AGV-2 enters 9 (6 -> 9 starts at 6)
-    a, b = bars[(0, "9 -> 11")], bars[(1, "6 -> 9")]
+    # occupancy dependency: AGV-1 leaves 2133 (ends at 6) before AGV-2 enters 2133 (starts at 6)
+    a, b = bars[(0, "2133 -> 2134")], bars[(1, "2117 -> 2133")]
     connect(d, [(a.x1 - 30, a.y1), (a.x1 - 30, (a.y1 + b.y0) / 2), (b.x0 + 30, (a.y1 + b.y0) / 2), (b.x0 + 30, b.y0)],
             kind="flow", color=T.amber, size=8)
     label_pill(d, X0 + 12.4 * PX + 120, LANE - 2, "occupancy edge in the action DAG:", color=T.amber, size=10.5,
                family="sans")
-    label_pill(d, X0 + 12.4 * PX + 120, LANE + 16, "AGV-2 enters 9 after AGV-1 left it", color=T.amber, size=10.5,
+    label_pill(d, X0 + 12.4 * PX + 120, LANE + 16, "AGV-2 enters 2133 after AGV-1 left it", color=T.amber, size=10.5,
                family="sans")
     # legend-ish explanation of one Motion
     my = ay + 46
@@ -142,8 +143,8 @@ def continuous_state():
             "  entity        AgvId(2)",
             "  interval      [6 s, 9 s]            GetInterval().GetTimes()",
             "  collision_id  AGV (bare footprint)  AGV + tray of a size when loaded",
-            "  action_id     1                     vertex of the AgvMove in ctx->events",
-            "  location      Edge{6, 9}            a Pose for waits, lifts, state changes"]
+            "  action_id     1                     vertex of the AgvMove in ctx->event_dag",
+            "  location      Edge{2117, 2133}      a Pose for waits, lifts, state changes"]
     d.rect(0, my, 760, 22 + 18 * len(rows), rx=10, fill="#0B1222", stroke=T.border_soft, sw=1)
     for i, r in enumerate(rows):
         d.text(14, my + 20 + i * 18, r, size=11, family="mono", fill=T.fg if i == 0 else T.fg2)
@@ -153,8 +154,9 @@ def continuous_state():
           badge_key="as-built",
           legend=[("box", T.green, "AGV-1's motions"), ("box", T.sky, "AGV-2's motions"),
                   ("dashbox", T.sky, "wait (no delta: dropped from the action DAG)")],
-          footnote="Values from TEST(Scheduler, ContinuousStateToSchedule) in scheduler_tests.cpp. The test's comment "
-                   "calls the fourth argument \"JobId\"; ResponseFromTrajectories reads it as the event vertex.")
+          footnote="Values from TEST(SchedulerState, ContinuousStateToSchedule) in test/src/stages/scheduler_state_tests.cpp "
+                   "(275_sunrise_b, headings 90). The test's comment calls the fourth argument \"JobId\"; "
+                   "BuildActionGraph reads it as the event vertex.")
     return d
 
 
@@ -242,12 +244,12 @@ def chugg_sequential():
     # right: safe-interval table rows
     X0, PX = W + 150, 30
     ty = 0
-    d.text(X0 - 60, ty + 10, "AGV-2's SafeIntervalTable while planning its 6 -> 9 -> 12 move", size=12.5, weight=600,
+    d.text(X0 - 60, ty + 10, "AGV-2's SafeIntervalTable while planning its 2117 -> 2133 -> 2148 move", size=12.5, weight=600,
            fill=T.fg)
-    d.text(X0 - 60, ty + 30, "(the Figure 92 example; key = footprint AGV + vertex)", size=11, fill=T.muted)
-    rows = [("vertex 9", [(0, 6, "AGV-1 passes: carved for good", "res")], "safe from 6 s on"),
-            ("vertex 11", [(6, 13, "AGV-1 parked: frozen while planning", "tmp")], "safe until 6 s"),
-            ("vertex 12", [], "always safe (no entry)")]
+    d.text(X0 - 60, ty + 30, "(the Figure 92 example; key = footprint AGV + vertex of the pose at heading 90)", size=11, fill=T.muted)
+    rows = [("2133", [(0, 6, "AGV-1 passes: carved for good", "res")], "safe from 6 s on"),
+            ("2134", [(6, 13, "AGV-1 parked: frozen while planning", "tmp")], "safe until 6 s"),
+            ("2148", [], "always safe (no entry)")]
     ry = ty + 66
     for name, blocks, verdict in rows:
         d.text(X0 - 80, ry + 14, name, size=11.5, family="mono", fill=T.fg2)
@@ -262,9 +264,9 @@ def chugg_sequential():
     for t in (0, 3, 6, 9, 12):
         d.text(X0 + t * PX, ry - 10, f"{t} s", size=10, family="mono", fill=T.muted, anchor="middle")
     note(d, X0 - 60, ry + 14, 560,
-         "AGV-2 may enter 9 only after 6 s. Its goal is 12, and reaching 12 counts only because 12 stays safe "
+         "AGV-2 may enter 2133 only after 6 s. Its goal is 2148, and reaching 2148 counts only because 2148 stays safe "
          "forever afterwards. That rule plus the freeze is why an AGV that has not yet been planned to leave a "
-         "node blocks it for every event planned before its departure (AddNodeArrivalDeps).",
+         "node blocks it for every event planned before its departure (OrderArrivalAfterPriorOccupant).",
          color=T.muted)
     frame(d, title="SolveSequential: prioritized planning over the event DAG",
           subtitle="One pass in topological order, never revisited. Only AGV moves are searched; everything else gets "
@@ -371,7 +373,7 @@ def trapezoid_runs():
     bars = [("stop at every node: one trapezoid per edge (heuristic)", 3 * _trap(L, v, a), T.red),
             ("one trapezoid over the run (ConvertPosePathToTrajectory)", _trap(3 * L, v, a), T.green),
             ("SIPP: trapezoid for edge 1, then length / speed", _trap(L, v, a) + 2 * L / v, T.sky),
-            ("cruise time only (GetEdgeMarginalDurations)", 3 * L / v, T.violet)]
+            ("cruise time only (ComputeEdgeMarginalDurations)", 3 * L / v, T.violet)]
     for i, (lab, t, col) in enumerate(bars):
         y = by + i * 34
         d.rect(RX, y, sx(t) - RX, 20, rx=4, fill=T.tint(col, 0.35, T.bg), stroke=col, sw=1.2)

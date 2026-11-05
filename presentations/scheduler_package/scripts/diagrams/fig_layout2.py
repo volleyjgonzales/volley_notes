@@ -303,9 +303,9 @@ def resource_windows():
     uy = my_ + 52 + 2 * 30 + 16
     uses = [("SIPP GetTraversableEdges", "skips a target pose if collision id > PAYLOAD + index;"),
             ("", "on an AgvCharge node it also refuses every entity but the AGV"),
-            ("GetStaticFilter", "disables poses (and their edges) whose index < the payload's window"),
+            ("BuildStaticObstacleFilter", "disables poses (and their edges) whose index < the payload's window"),
             ("CalcOverlappingSizedPoses", "builds footprints for sizes 0..index only (buffered, see 3)"),
-            ("PlanRetrieveJob", "bay fit: payload length, width (and height) vs the bay's window"),
+            ("IsPayloadWithinBaySizeLimits", "bay fit for a retrieve: payload length, width (and height) vs the bay's window"),
             ("OpenSpaceSearch::OnExpansion", "payload height vs height_m of the node's window")]
     for i, (a_, b_) in enumerate(uses):
         y = uy + i * 18
@@ -317,7 +317,7 @@ def resource_windows():
     _title(d, 0, hy6, "6", "height_m: optional, and unset in Pecos")
     hl6 = [
         "Absent: height_m stays 0, which every reader treats as \"unconstrained\" "
-        "(GetSmallestEnclosingResourceSizeIndex, PlanRetrieveJob, OpenSpaceSearchEnvironment::OnExpansion).",
+        "(GetSmallestEnclosingResourceSizeIndex, IsPayloadWithinBaySizeLimits, OpenSpaceSearchEnvironment::OnExpansion).",
         "Present: it must be <= kBayHeight, or the parser throws \"Parking window '<name>' has height_m=<h> which "
         "exceeds the physical bay clearance kBayHeight=<k>\" (layout.cpp L102-108). kBayHeight's value is not in the "
         "snapshots.",
@@ -341,7 +341,7 @@ def resource_windows():
           footnote="Windows, buffer, node coordinates and max_resource_size from 5675_pecos_combined.yaml; parsing, "
                    "sorting and checks from layout.cpp L86-151; buffer from layout.cpp GetBufferedResourceWindowHelper; "
                    "consumers from polygon_utils.cpp, pose_graph.cpp, collision_geometry.hpp/.cpp, the motion planner "
-                   "(SIPP, static filtering, open-space search) and the scheduler (PlanRetrieveJob). 'No caller' is "
+                   "(SIPP, static filtering, open-space search) and the scheduler (IsPayloadWithinBaySizeLimits, job_expansion.cpp). 'No caller' is "
                    "from a search of all six snapshots; other packages may call it. Clearances are computed from the "
                    "YAML numbers (float32 storage changes them by micrometres).")
     return d

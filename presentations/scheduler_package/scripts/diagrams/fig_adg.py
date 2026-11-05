@@ -2,7 +2,7 @@
 
 84 why timestamps are not enough (delay), 85 building an ADG from a timed plan (Hönig et al. 2019
 construction), 86 timing on an ADG: earliest start, critical path, slack, 87 the ADG the scheduler
-builds in ResponseFromTrajectories (illustrative example, edge kinds as in src/scheduler.cpp).
+builds in BuildActionGraph (illustrative example, edge kinds as in src/action_graph.cpp).
 """
 from __future__ import annotations
 
@@ -574,10 +574,10 @@ def adg_critical_path():
 def adg_in_scheduler():
     d = Doc("87_adg_in_scheduler", "The action DAG the scheduler builds",
             "Illustrative retrieve: the event DAG, CHUGG's timed motions per entity, the action DAG with "
-            "same-entity, occupancy and event-level edges before and after Reduce, and the Schedule array.")
+            "same-entity, occupancy and event-level edges before and after RemoveRedundantEdges, and the Schedule array.")
     EV, CH = T.teal, T.sky
     # ---- 1. event DAG ----
-    d.text(0, 0, "1  Event DAG (ctx->events): what, and in which order", size=14, weight=600, fill=T.fg)
+    d.text(0, 0, "1  Event DAG (ctx->event_dag): what, and in which order", size=14, weight=600, fill=T.fg)
     e0 = vnode(d, 90, 60, "e0 AgvMove", "AGV-1 -> P1", EV, w=160)
     e1 = vnode(d, 300, 60, "e1 TrayMove", "T5 P1 -> B4 by AGV-1", EV, w=190)
     e3 = vnode(d, 520, 60, "e3 BayTransition", "B4 PROCESS_RETRIEVE", EV, w=190)
@@ -603,7 +603,7 @@ def adg_in_scheduler():
     _axis(d, x0, gy + 40 + 3 * 44 - 12, px, 0, 20, step=2, label="t [s]")
     # ---- 3. action DAG ----
     ay = 470
-    d.text(0, ay, "3  Action DAG (final_actions_dag): three kinds of edge, then Reduce()", size=14,
+    d.text(0, ay, "3  Action DAG (final_actions_dag): three kinds of edge, then RemoveRedundantEdges()", size=14,
            weight=600, fill=T.fg)
     yA, yB = ay + 90, ay + 200
     xs = [90, 260, 430, 600, 770, 940]
@@ -619,10 +619,10 @@ def adg_in_scheduler():
     arrow(d, b1, a3, T2, dash="7 4", via=[(b1.x1 + 30, b1.cy), (a3.cx, b1.cy)], label="occupancy: W2",
           label_at=((b1.x1 + a3.cx) / 2 + 20, b1.cy - 14))
     arrow(d, a5, c1, TE, dash="3 3", label="event e1 -> e3", label_at=((a5.x1 + c1.x0) / 2, yA - 40))
-    # redundant edge a1 -> a3 (occupancy, same entity), removed by Reduce
+    # redundant edge a1 -> a3 (occupancy, same entity), removed by RemoveRedundantEdges
     connect(d, [(a1.cx, a1.y0), (a1.cx, yA - 52), (a3.cx - 20, yA - 52), (a3.cx - 20, a3.y0)], kind="flow",
             color=RED, dash="4 3", size=8, sw=1.4)
-    d.text(a3.cx, yA - 46, "a1 -> a3 occupancy (P1), implied by a1 -> a2 -> a3: removed by Reduce()",
+    d.text(a3.cx, yA - 46, "a1 -> a3 occupancy (P1), implied by a1 -> a2 -> a3: pruned",
            size=11, fill=RED)
     # ---- 4. Schedule ----
     sy = yB + 70
@@ -639,15 +639,15 @@ def adg_in_scheduler():
         d.text(x + 10, yy + 34, f"TYPE_{ty}", size=10.5, family="mono", fill=T.muted)
         d.text(x + 10, yy + 50, f"parents {par}", size=11, family="mono", fill=T.fg2)
     frame(d, title="The action DAG the scheduler builds",
-          subtitle="ResponseFromTrajectories turns CHUGG's timed motions into an ADG: a chain per entity (Type 1), "
+          subtitle="BuildActionGraph turns CHUGG's timed motions into an ADG: a chain per entity (Type 1), "
                    "an edge from every earlier occupant of an overlapping footprint (Type 2), and an edge from the "
-                   "last action of each event to the first action of every event that depends on it. Reduce() "
-                   "removes implied edges; the result is sent as Schedule.nodes.",
+                   "last action of each event to the first action of every event that depends on it. "
+                   "RemoveRedundantEdges() removes implied edges after each step; the result is sent as Schedule.nodes.",
           badge_key="illustrative",
-          legend=[("arrow", T1, "same entity (last_entity_action)"), ("dasharrow", T2, "occupancy (freeing_moves)"),
+          legend=[("arrow", T1, "same entity (last_entity_action)"), ("dasharrow", T2, "occupancy (occupancy_history)"),
                   ("dasharrow", TE, "event-level (TransferEventDagDepsToActionDag)"),
                   ("dasharrow", RED, "redundant, removed")],
-          footnote="Illustrative names and times, not a Pecos run. Edge rules from src/scheduler.cpp: "
+          footnote="Illustrative names and times, not a Pecos run. Edge rules from src/action_graph.cpp: "
                    "BuildActionDagFromMotions, TransferEventDagDepsToActionDag, BuildScheduledActionsArray. The "
                    "event-level edge e0 -> e1 maps to a1 -> a2, which already exists. The order shown is one valid "
                    "topological order.")
@@ -744,13 +744,14 @@ def adg_parallelism():
     d.text(3 * P + 150, 80, "a has two children,", size=11.5, fill=RED)
     d.text(3 * P + 150, 96, "but a -> c is implied", size=11.5, fill=RED)
     d.text(3 * P + 150, 112, "by a -> b -> c:", size=11.5, fill=RED)
-    d.text(3 * P + 150, 128, "Reduce() removes it", size=11.5, fill=RED)
+    d.text(3 * P + 150, 128, "RemoveRedundantEdges()", size=11.5, fill=RED)
+    d.text(3 * P + 150, 144, "removes it", size=11.5, fill=RED)
     frame(d, title="Where parallelism comes from",
           subtitle="Two actions can run at the same time only if neither reaches the other. A graph whose "
                    "transitive reduction is one chain is a strict sequence, however many robots it involves.",
           badge_key="illustrative",
           legend=[("box", A1, "AGV-1"), ("box", A2, "AGV-2"), ("arrow", T.fg2, "dependency"),
-                  ("dasharrow", RED, "implied edge (removed by Reduce)")],
+                  ("dasharrow", RED, "implied edge (removed by RemoveRedundantEdges)")],
           footnote="Durations invented. Gantt charts are earliest-start schedules (every action starts as soon as "
                    "its predecessors finish). Width = largest set of pairwise unordered actions, computed by brute force.")
     return d

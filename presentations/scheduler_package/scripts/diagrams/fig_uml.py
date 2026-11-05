@@ -32,34 +32,44 @@ def gen_tree(doc: Doc, parent: BBox, children: list[BBox], color: str, bus_y: fl
 @figure("11_uml_existing_core", "Existing core planner classes", "01-software-background.html")
 def uml_core():
     d = Doc("11_uml_existing_core", "Existing core planner relationships",
-            "UML class diagram of Scheduler, ScheduleContext, ScheduleEventDag, DagBase, DiscreteGarageState "
+            "UML class diagram of Scheduler, PlanContext, ScheduleEventDag, Dag, DiscreteGarageState "
             "and the ScheduleEvent hierarchy.")
     ORCH, DATA, GRAPH, EV = T.sky, T.green, T.amber, T.violet
-    gap = 92
+    gap = 124
     spec = dict(
         sched=("Scheduler", dict(stereo="orchestrator", accent=ORCH,
-                                 attrs=["- layout_: GarageLayout", "- gg_: GarageGraph", "- table_: CollisionTable",
-                                        "- motion_cost_: MotionCostModel", "- logger_: rclcpp::Logger"],
-                                 methods=["+ Plan(request): PlanResponse", "+ DoTrayAssignments(ctx) const",
-                                          "+ DoAgvAssignments(ctx) const", "+ PlanMotions(ctx)"])),
-        ctx=("ScheduleContext", dict(stereo="mutable per-plan state", accent=DATA,
-                                     attrs=["+ initial_state: DiscreteGarageState", "+ events: ScheduleEventDag",
-                                            "+ scheduled_jobs: vector<ScheduledJobDataMsg>",
-                                            "+ last_entity_event: GarageEntityEventMap",
-                                            "+ first_tray_event: unordered_map<…>"],
-                                     methods=["+ PushBackScheduledJob(job)"])),
+                                 attrs=["- layout_: LayoutSPtr", "- motion_graph_: GarageGraph",
+                                        "- collision_table_: CollisionTable", "- cost_model_: MotionCostModel",
+                                        "- logger_: rclcpp::Logger"],
+                                 methods=["+ Plan(request, now): PlanResponse", "- ExpandJob(ctx, job) const",
+                                          "+ AssignTrays(ctx) const: stdx::Result",
+                                          "+ AssignAgvs(ctx) const: stdx::Result", "+ PlanMotions(ctx) const",
+                                          "+ BuildActionGraph(ctx, final_state) const"])),
+        ctx=("PlanContext", dict(stereo="mutable per-plan state", accent=DATA,
+                                 attrs=["+ request_id: Guid", "+ initial_state: DiscreteGarageState",
+                                        "+ event_dag: ScheduleEventDag",
+                                        "+ scheduled_jobs: vector<ScheduledJobData>",
+                                        "+ keep_out_filter_by_footprint: unordered_map<…>",
+                                        "+ last_event_by_entity: unordered_map<…>",
+                                        "+ first_event_by_tray: unordered_map<…>"],
+                                 methods=["+ AddScheduledJob(job)", "+ AddChainedEvent(event)",
+                                          "+ ChainAfterLastEntityEvent(entity, event)",
+                                          "+ OrderAfterJobLeafEvents(event)", "+ FindKeepOutFilter(collision_id)"])),
         dag=("ScheduleEventDag", dict(stereo="event dependency graph", accent=GRAPH,
-                                      methods=["+ AddEvent(event)", "+ GetEventFromVertex(v)", "+ Apply(state)"])),
-        base=("DagBase<T>", dict(stereo="Boost adjacency_list template", accent=GRAPH,
-                                 attrs=["  vertices hold shared_ptr<T>"],
-                                 methods=["+ Add(v)", "+ AddDependency(a, b)", "+ WouldCreateCycle(a, b)",
-                                          "+ Reduce()", "+ GetTopologicalOrdering()"])),
+                                      methods=["+ AddEvent(event)", "+ GetEvent(v)",
+                                               "+ GetEventsInTopologicalOrder()",
+                                               "+ ApplyEventsTo(state): stdx::Result"])),
+        base=("Dag<T>", dict(stereo="Boost adjacency_list template", accent=GRAPH,
+                             attrs=["  vertices hold shared_ptr<T>"],
+                             methods=["+ Add(node)", "+ AddDependency(parent, child)",
+                                      "+ WouldCreateCycle(parent, child)", "+ RemoveRedundantEdges(): stdx::Result",
+                                      "+ GetTopologicalOrdering()"])),
         state=("DiscreteGarageState", dict(stereo="world-state model", accent=DATA,
                                            attrs=["+ agvs, bays, trays, payloads, vrcs", "+ disabled_nodes, hash"],
                                            methods=["+ GetAgv(id)", "+ GetTray(id)", "+ OnEvent(change)"])),
         ev=("ScheduleEvent", dict(stereo="abstract base class", accent=EV, abstract=True,
-                                  attrs=["# type_: ScheduleEventType", "- job_idx_: size_t"],
-                                  methods=["+ Apply(state) const = 0", "+ GetGarageEntityId() const = 0"])),
+                                  attrs=["- type_: ScheduleEventType", "- job_index_: unsigned int"],
+                                  methods=["+ ApplyTo(state) const = 0", "+ GetGarageEntityId() const = 0"])),
     )
     size = {k: class_size(n, size=M, **{kk: vv for kk, vv in kw.items() if kk != "accent"}) for k, (n, kw) in spec.items()}
     colA = max(size["ctx"][0], size["state"][0], size["sched"][0])
@@ -76,7 +86,7 @@ def uml_core():
     sched = draw("sched", xA, 0, colA)
     # mental-model note to the right of Scheduler
     note(d, xB, 14, W - xB,
-         "Scheduler is the conductor, ScheduleContext the score being annotated, ScheduleEventDag the "
+         "Scheduler is the conductor, PlanContext the score being annotated, ScheduleEventDag the "
          "dependency structure of abstract work, and DiscreteGarageState the simulated world on which "
          "that work is replayed.", title="Shortest mental model", accent=T.border)
     y2 = sched.y1 + 76
@@ -104,7 +114,7 @@ def uml_core():
     connect(d, [(sched.cx, sched.y1), (sched.cx, ctx.y0)], kind="dep", color=ORCH,
             label="«create» one per Plan()", label_at=(sched.cx, my))
     connect(d, [(ctx.x1, dag.y0 + 60), (dag.x0, dag.y0 + 60)], kind="comp", color=DATA, mult_end="1",
-            label="events", label_at=((ctx.x1 + dag.x0) / 2 + 4, dag.y0 + 40))
+            label="event_dag", label_at=((ctx.x1 + dag.x0) / 2 + 4, dag.y0 + 40))
     connect(d, [(ctx.cx, ctx.y1), (state.cx, state.y0)], kind="comp", color=DATA,
             label="initial_state", label_at=(ctx.cx, (ctx.y1 + state.y0) / 2))
     connect(d, [(dag.x1, dag.y0 + 60), (base.x0, dag.y0 + 60)], kind="inh", color=GRAPH,
@@ -112,10 +122,10 @@ def uml_core():
     connect(d, [(dag.cx, dag.y1), (ev.cx, ev.y0)], kind="agg", color=GRAPH, mult_end="0..*",
             label="shared_ptr vertices", label_at=(dag.cx, (dag.y1 + ev.y0) / 2))
     connect(d, [(ev.x0, ev.cy), (state.x1, ev.cy)], kind="dep", color=EV,
-            label="Apply() mutates", label_at=((ev.x0 + state.x1) / 2, ev.cy - 20))
+            label="ApplyTo() mutates", label_at=((ev.x0 + state.x1) / 2, ev.cy - 20))
     frame(d, title="Existing core planner relationships",
           subtitle="What Scheduler::Plan works with today. Attributes are abridged; names follow scheduler.hpp, "
-                   "event_dag.hpp and schedule_events.hpp.",
+                   "plan_context.hpp, event_dag.hpp and schedule_events.hpp.",
           badge_key="as-built",
           legend=[("comp", DATA, "composition (owns member)"), ("agg", GRAPH, "shared ownership"),
                   ("inh", EV, "inheritance (is-a)"), ("dep", T.fg2, "dependency / «create»")])
@@ -133,27 +143,26 @@ def uml_events():
             "VecsTransition, VrcTransition (resource-state transitions).")
     BASE, MOVE, RES = T.sky, T.green, T.violet
     base_spec = dict(stereo="abstract base class", accent=BASE, abstract=True,
-                     attrs=["- type_: ScheduleEventType", "- job_idx_: unsigned int  // set once"],
-                     methods=["+ Apply(state) const = 0", "+ GetGarageEntityId() const = 0", "+ GetType() const",
+                     attrs=["- type_: ScheduleEventType", "- job_index_: unsigned int  // set once"],
+                     methods=["+ ApplyTo(state) const = 0", "+ GetGarageEntityId() const = 0", "+ GetType() const",
                               "+ GetJobIndex() const", "+ ToString() const  virtual", "+ ~ScheduleEvent()  virtual",
                               "  copy-constructible, not copy-assignable"])
     left = [
-        ("TrayMove", ["- tray_id_: optional<uint16_t>", "- dest_: optional<GaragePoseMsg>",
-                      "- agv_id_: optional<uint16_t>"],
-         ["+ Assigned() const", "+ Get/SetTrayId(id)", "+ Get/SetDest(dest)", "+ Get/SetAgvId(id)",
-          "+ Apply(state) const"]),
-        ("AgvMove", ["- discrete_change_: variant<", "    AgvLiftChangedMsg,", "    AgvPoseChangedMsg>"],
-         ["+ GetAgvId() const", "+ Get/SetDiscreteChange()", "+ GetSrc() / GetDest() const  // nullopt for lifts",
-          "+ Apply(state) const  // std::visit"]),
+        ("TrayMove", ["- tray_id_: optional<uint16_t>", "- agv_id_: optional<uint16_t>",
+                      "- dest_: optional<GaragePose>"],
+         ["+ Get/SetTrayId(id)", "+ Get/SetDest(dest)", "+ Get/SetAgvId(id)", "+ ApplyTo(state) const"]),
+        ("AgvMove", ["- discrete_change_: variant<", "    AgvLiftChanged,", "    AgvPoseChanged>"],
+         ["+ GetAgvId() const", "+ GetDiscreteChange() const", "+ GetSrc() / GetDest() const  // nullopt for lifts",
+          "+ ApplyTo(state) const  // std::visit"]),
     ]
     right = [
-        ("BayTransition", ["- src_state_: DiscreteBayStateMsg", "- command_: BayCommandMsg"],
-         ["+ GetBayId() / Get/SetSourceState()", "+ Get/SetCommand()", "+ Apply(state) const"]),
-        ("VecsTransition", ["- state_change_: VecsStateChangedMsg"],
-         ["+ GetVecsId() / Get/SetStateChange()", "+ Apply(state) const"]),
-        ("VrcTransition", ["- state_change_: VrcStateChangedMsg", "- from_vrc_node_id_: uint32_t",
+        ("BayTransition", ["- src_state_: DiscreteBayState", "- command_: BayCommand"],
+         ["+ GetBayId() / GetSourceState()", "+ GetCommand()", "+ ApplyTo(state) const"]),
+        ("VecsTransition", ["- state_change_: VecsStateChanged"],
+         ["+ GetVecsId() / GetStateChange()", "+ ApplyTo(state) const"]),
+        ("VrcTransition", ["- state_change_: VrcStateChanged", "- from_vrc_node_id_: uint32_t",
                            "- to_vrc_node_id_: uint32_t"],
-         ["+ GetVrcId() / GetRequestedFloor()", "+ GetFromVrcNodeId() / GetToVrcNodeId()", "+ Apply(state) const",
+         ["+ GetVrcId() / GetStateChange()", "+ ApplyTo(state) const",
           "  // not created by the scheduler package"]),
     ]
     lw = max(class_size(n, attrs=a, methods=m, size=M)[0] for n, a, m in left)
@@ -165,7 +174,7 @@ def uml_events():
     bw, bh = class_size("ScheduleEvent", size=M, **{k: v for k, v in base_spec.items() if k != "accent"})
     base = uml_class(d, spine_x - bw / 2, 0, "ScheduleEvent", size=M, **base_spec)
     note(d, base.x1 + 30, 6, W - base.x1 - 30,
-         "The DAG stores shared_ptr<ScheduleEvent>. During replay the concrete subclass's Apply(...) runs "
+         "The DAG stores shared_ptr<ScheduleEvent>. During replay the concrete subclass's ApplyTo(...) runs "
          "through virtual dispatch and mutates a DiscreteGarageState.", title="Runtime polymorphism")
     gy = base.y1 + 64
     # groups
@@ -223,10 +232,10 @@ def uml_solver():
                       methods=["+ Plan(request): PlanResponse", "  // Solve(), then tray_assignment::",
                                "  // ApplyTrayAssignment(*ctx, result)"])
     req = uml_class(d, sched.x1 + gap, 0, "Input", accent=NEW, stereo="struct · proposed · read-only", size=M,
-                    attrs=["+ initial_state: const DiscreteGarageState&", "+ events: const ScheduleEventDag&"])
+                    attrs=["+ initial_state: const DiscreteGarageState&", "+ event_dag: const EventDag&"])
     res = uml_class(d, req.x1 + 60, 0, "Result", accent=NEW, stereo="struct · proposed · returned", size=M,
                     attrs=["+ fills: vector<TrayFill>", "+ edits: vector<DagEdit>  (ordered)",
-                           "+ first_tray_event:", "    unordered_map<uint16_t, ScheduleEventSPtr>"])
+                           "+ first_event_by_tray:", "    unordered_map<uint16_t, ScheduleEventSPtr>"])
     iy = max(sched.y1, req.y1, res.y1) + 90
     iface = uml_class(d, sched.x0 + 30, iy, "Solver", accent=NEW, stereo="interface · tray_assignment",
                       abstract=True, size=M, center_x=False,
@@ -268,10 +277,10 @@ def uml_solver():
     connect(d, [(dflt.cx, dflt.y1), (dflt.cx, free.y0)], kind="dep", color=PURE, label="«call»",
             label_at=(dflt.cx, (dflt.y1 + free.y0) / 2))
     note(d, free.x1 + 50, free.y0, 330,
-         "Scheduler's job methods (PlanReadyForInsertJob, PlanChargePayloadJob, ...) call the same free "
+         "Scheduler's job expansions (ExpandReadyForInsertJob, ExpandChargePayloadJob, ...) call the same free "
          "functions with services_. No back-pointer to Scheduler is needed.", title="Shared with job planning")
     note(d, free.x1 + 50, free.y0 + 120, 330,
-         "GarageServices holds const references to gg_, table_, cost_model_ and the layout. Scheduler owns "
+         "GarageServices holds const references to motion_graph_, collision_table_, cost_model_ and the layout. Scheduler owns "
          "them and must outlive every solver.", title="Lifetime rule")
     frame(d, title="Proposed tray_assignment class structure",
           subtitle="Scheduler calls a stable interface. The solver reads an Input, returns stdx::Expected<Result>, "
@@ -293,7 +302,7 @@ def seq_tray():
             "Sequence: Scheduler builds Input, calls Solve; the solver reads the topological order, records blocker "
             "moves and dependencies in a Result and returns it; Scheduler applies the Result to the DAG.")
     parts = [("caller", ":SchedulerRos", T.muted), ("sched", ":Scheduler", T.sky),
-             ("solver", "tray_solver_ : tray_assignment::Solver", T.amber), ("dag", "ctx->events : ScheduleEventDag", T.violet)]
+             ("solver", "tray_solver_ : tray_assignment::Solver", T.amber), ("dag", "ctx->event_dag : ScheduleEventDag", T.violet)]
     xs = {"caller": 40, "sched": 230, "solver": 560, "dag": 960}
     head_y = 0
     for k, label, col in parts:
@@ -329,7 +338,7 @@ def seq_tray():
     y += step
     selfmsg("sched", "validate, expand jobs into ctx", y)
     y += step + 6
-    msg("sched", "solver", "Solve(Input{initial_state, events})", y_=y, col=T.amber)
+    msg("sched", "solver", "Solve(Input{initial_state, event_dag})", y_=y, col=T.amber)
     a_solver0 = y
     y += step
     msg("solver", "dag", "GetTopologicalOrdering()  const", y_=y, col=T.violet)
@@ -347,7 +356,7 @@ def seq_tray():
     y += 28
     opt_y1 = y + 14
     y += 40
-    selfmsg("solver", "result.first_tray_event[tray] = first move", y)
+    selfmsg("solver", "result.first_event_by_tray[tray] = first move", y)
     y += 40
     loop_y1 = y
     y += 30
@@ -386,7 +395,7 @@ def seq_tray():
         d.text(fx0 + inset + tw + 16, y0 + 10, guard, size=11.5, family="mono", fill=T.muted)
     frame(d, title="Proposed tray-solver interaction",
           subtitle="The solver only reads the DAG. Blocker moves and edges are recorded in the returned Result; "
-                   "Scheduler replays them into ctx->events in one step, so a failed Solve leaves ctx untouched.",
+                   "Scheduler replays them into ctx->event_dag in one step, so a failed Solve leaves ctx untouched.",
           badge_key="proposed",
           legend=[("arrow", T.fg2, "synchronous call"), ("dep", T.muted, "return"),
                   ("box", T.amber, "activation (executing)"), ("dashbox", T.faint, "combined fragment (loop / opt)")])

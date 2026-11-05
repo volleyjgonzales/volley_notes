@@ -71,9 +71,9 @@ def layout_vs_graph():
     # ---- construction chain (as-built, from the Scheduler constructor) ----
     chain = [("layout file (YAML)", "5675_pecos_combined.yaml", T.fg2),
              ("Layout", "layout_  · LayoutSPtr", T.sky),
-             ("PoseGraph", "pg_(layout_)", T.teal),
-             ("GarageGraph", "gg_(pg_)", T.green),
-             ("CollisionTable", "table_(gg_, logger)", T.amber)]
+             ("PoseGraph", "PoseGraph(layout_)", T.teal),
+             ("GarageGraph", "motion_graph_", T.green),
+             ("CollisionTable", "collision_table_", T.amber)]
     bw, gap = 196, 35
     boxes = []
     for i, (t, s, col) in enumerate(chain):
@@ -84,9 +84,11 @@ def layout_vs_graph():
         if i:
             connect(d, [(x - gap, 27), (x, 27)], kind="flow", color=T.faint, size=8)
         boxes.append(x)
-    d.text(0, 74, "Scheduler::Scheduler(): each member is built from the previous one, once, at start-up. "
-                  "InitRetrievalHeadings() then caches a retrieval heading per parking node in gg_.",
+    d.text(0, 74, "Scheduler::Scheduler(): motion_graph_(PoseGraph(layout_)), collision_table_(motion_graph_, logger): "
+                  "each member is built from the previous one, once, at start-up; the PoseGraph is a temporary.",
            size=11.5, fill=T.muted)
+    d.text(0, 92, "StorePreferredPayloadHeadingsForRetrieval() then caches a retrieval heading per parking node in "
+                  "motion_graph_.", size=11.5, fill=T.muted)
 
     # ---- left panel: Layout ----
     top = 112
@@ -116,7 +118,7 @@ def layout_vs_graph():
     from fig_garagemodel import VERT, allowed
     rx = pw + 40
     rw = W - rx
-    d.text(rx, top, "GarageGraph  (gg_)  — poses and moves", size=14, weight=600, fill=T.green)
+    d.text(rx, top, "GarageGraph  (motion_graph_)  — poses and moves", size=14, weight=600, fill=T.green)
     gs = rw / (CROP_X[1] - CROP_X[0])
     gm = Map(d, rx, top + 20, gs, CROP_X, CROP_Y)
     gb = gm.box
@@ -156,12 +158,12 @@ def layout_vs_graph():
             lx, ly = x, y - 19
         d.text(lx, ly, f"v{VERT[(nid, h)]}", size=10, family="mono", weight=700, fill=T.fg2, anchor="middle",
                halo=T.bg_deep, halo_w=3, layer="top")
-    gapi = ["gg_.GetVertexFromPose({node_id: 22, heading: 0}) -> Vertex 43",
-            "gg_.GetPoseFromVertex(v)        -> GaragePoseMsg",
-            "gg_.GarageNodeFromVertex(v)     -> layout node",
-            "gg_.GetOutEdges(v), gg_.EdgeFromPoses(a, b)",
-            "gg_.GetRetrievalHeading(node)   (cached at start-up)",
-            "GetPosePath(gg_, from, to, cost_model_), searches"]
+    gapi = ["motion_graph_.GetVertexFromPose({node_id: 22, heading: 0}) -> Vertex 43",
+            "motion_graph_.GetPoseFromVertex(v)      -> GaragePoseMsg",
+            "motion_graph_.GarageNodeFromVertex(v)   -> layout node",
+            "motion_graph_.GetOutEdges(v), .EdgeFromPoses(a, b)",
+            "motion_graph_.GetRetrievalHeading(node) (cached at start-up)",
+            "FindPosePath(motion_graph_, from, to, cost_model_), searches"]
     note_lines = ["Vertex = (node, heading). A pose whose heading the",
                   "node does not allow has no vertex: GetVertexFromPose",
                   "returns an empty optional."]
@@ -177,9 +179,9 @@ def layout_vs_graph():
     d.text(0, y, "Four structures, four questions", size=14, weight=600, fill=T.fg)
     rows = [("layout_", "Layout", "What is node 22? Where is it? Which bay is preferred? How big may a car be?",
              "static, from YAML", T.sky),
-            ("gg_", "GarageGraph", "Is pose (22, 0) allowed? Which poses can I move to from here? Path from A to B?",
+            ("motion_graph_", "GarageGraph", "Is pose (22, 0) allowed? Which poses can I move to from here? Path from A to B?",
              "static, derived", T.green),
-            ("table_", "CollisionTable", "Would footprint A at pose a overlap footprint B at pose b?",
+            ("collision_table_", "CollisionTable", "Would footprint A at pose a overlap footprint B at pose b?",
              "static, precomputed", T.amber),
             ("working_state", "DiscreteGarageState", "Where is tray 17 now? Which bay is READY_TO_RETRIEVE?",
              "changes every plan", T.violet)]
@@ -196,7 +198,7 @@ def layout_vs_graph():
     frame(d, title="Layout vs GarageGraph",
           subtitle="Both describe the same garage. The Layout answers questions about places (node ids, types, "
                    "positions, bays). The GarageGraph answers questions about motion: its vertices are poses "
-                   "(node + heading) and its edges are the moves between them. Searches and paths always run on gg_.",
+                   "(node + heading) and its edges are the moves between them. Searches and paths always run on motion_graph_.",
           badge_key="yaml",
           legend=[("dot", T.sky, "layout node (YAML)"), ("ring", T.green, "graph vertex = pose (arrow = heading); v42 = Vertex 42"),
                   ("line", T.green, "move between poses"), ("dash", T.pink, "rotation at a node")])
@@ -262,10 +264,10 @@ def collision_table():
     mb = m.box
     q = code_panel(d, 0, mb.y1 + 20, pw, [
         "// collision ids: CollisionEntityId_t (here both are tray footprints)",
-        "table_.Query(TRAY, TRAY, {node_id: 18, heading: 90},",
-        "             {node_id: 22, heading: 90})   // false: no overlap",
-        "table_.Query(TRAY, TRAY, {node_id: 18, heading: 90},",
-        "             {node_id: 22, heading: 0})    // true: they overlap",
+        "collision_table_.Query(TRAY, TRAY, {node_id: 18, heading: 90},",
+        "                       {node_id: 22, heading: 90})  // false: no overlap",
+        "collision_table_.Query(TRAY, TRAY, {node_id: 18, heading: 90},",
+        "                       {node_id: 22, heading: 0})   // true: overlap",
     ], title="bool CollisionTable::Query(id_a, id_b, pose_a, pose_b)", size=11)
     q2 = note(d, 0, q.y1 + 14, pw,
               "The same two nodes can conflict or not depending on the headings: a 5.8 m tray turned to heading 0 "
@@ -309,16 +311,16 @@ def collision_table():
     # ---- bottom: who asks ----
     y = max(q2.y1, ids.y1) + 34
     d.text(0, y, "Who uses it", size=14, weight=600, fill=T.fg)
-    uses = [("GetStaticFilter(id, gg_, working_state, table_, ...)",
+    uses = [("BuildStaticObstacleFilter(id, motion_graph_, state, ...)",
              "For one footprint, switch off the graph vertices and edges where it would conflict with what is in working_state "
              "(the id sets passed in are left out). Returns GraphFilterProperties; callers test filters.IsEnabled(v or e).", T.green),
-            ("GetDisabledEntitiesFilters(gg_, initial_state, table_)",
-             "Once per Plan(), from motion_planner: ctx->disabledness_filters, one GraphFilterProperties per collision id, "
-             "reflecting what initial_state marks as disabled.",
+            ("BuildKeepOutFilters(motion_graph_, initial_state, ...)",
+             "Once per Plan(), from motion_planner: ctx->keep_out_filter_by_footprint, one GraphFilterProperties per "
+             "collision id, reflecting what initial_state marks as disabled; read through ctx->FindKeepOutFilter(id).",
              T.violet),
-            ("table_.Query(...) in DoTrayAssignments",
+            ("collision_table_.Query(...) in AssignTrays",
              "Does another tray block the root tray's next pose on its critical path?", TRAY),
-            ("table_.Query(...) in AgvMatchingEventDeps",
+            ("collision_table_.Query(...) in FindAssignedAgvsBlockingPickup",
              "Would another AGV at its pose conflict with this AGV at the tray? Then order that AGV first.", AGV)]
     yy = y + 20
     for i, (c, t, col) in enumerate(uses):
@@ -331,7 +333,7 @@ def collision_table():
             d.text(440, yy + 15 + 16 * k, ln, size=11.5, fill=T.fg2)
         yy += h + 2
     frame(d, title="CollisionTable: precomputed footprint conflicts",
-          subtitle="table_ is built once from gg_ at start-up. Query(id_a, id_b, pose_a, pose_b) answers one "
+          subtitle="collision_table_ is built once from motion_graph_ at start-up. Query(id_a, id_b, pose_a, pose_b) answers one "
                    "question: would footprint id_a at pose_a overlap footprint id_b at pose_b? Everything that "
                    "decides 'blocked' or 'in the way' is built on it.",
           badge_key="yaml+concept",
@@ -467,17 +469,17 @@ def topological_ordering():
     bottom = max(yc, q.y1 + 34)
     cp = code_panel(d, 0, bottom + 10, W, [
         "// planner_core, as called from the scheduler (see the table in 'The operations')",
-        "std::optional<VertexVec> order = ctx->events.GetTopologicalOrdering();  // VertexVec = std::vector<Vertex>",
-        "if(!order.has_value()) return {false, \"Failed to get total ordering\"};     // the DAG has a cycle",
-        "for(Vertex v : order.value()) { auto event = ctx->events.GetEventFromVertex(v).value(); ... }",
-        "if(!ctx->events.WouldCreateCycle(a, b)) ctx->events.AddDependency(a, b);  // guard before risky edges",
+        "std::optional<std::vector<Vertex>> order = ctx->event_dag.GetTopologicalOrdering();",
+        "if(!order.has_value()) return stdx::Unexpected(\"Failed to get total ordering\");  // the DAG has a cycle",
+        "for(Vertex v : order.value()) { auto event = ctx->event_dag.GetEvent(v); ... }  // or GetEventsInTopologicalOrder()",
+        "if(!ctx->event_dag.WouldCreateCycle(a, b)) ctx->event_dag.AddDependency(a, b);  // guard before risky edges",
     ], title="In code", size=11)
     uses = note(d, 0, cp.y1 + 16, W,
-                "Every pass that needs 'what happens first' walks this order: events.Apply() when a job method "
-                "replays the DAG, DoTrayAssignments(), the AGV assignment loop, EnsureAgvMovePathsClear(), "
-                "SanityCheckEvents(), and the response builder. Because any valid order may be returned, "
-                "DoAgvAssignments adds node-arrival edges: its comment notes that CHUGG's topological sort can "
-                "interleave per-AGV chains and try to put two AGVs on one node.",
+                "Every pass that needs 'what happens first' walks this order: event_dag.ApplyEventsTo() when a job "
+                "method replays the DAG, AssignTrays(), the AGV assignment loop, OrderAgvMovesAfterBlockingAgvs(), "
+                "ValidateEventSequence(), and BuildActionGraph(). Because any valid order may be returned, "
+                "AssignAgvs adds node-arrival edges (OrderArrivalAfterPriorOccupant): otherwise a topological sort "
+                "could interleave per-AGV chains and put two AGVs on one node.",
                 title="Where the scheduler uses it", accent=T.green)
     frame(d, title="Topological ordering",
           subtitle="The event DAG says what must come before what. A topological order turns that partial order "
@@ -548,7 +550,7 @@ def partial_order_parallel():
     # ---------------- 2. sorted list + 3. parents ----------------
     order = ["Y1", "A1", "B1", "A2", "B2", "A3", "B3", "A4", "B4", "Y2"]
     pos = {k: i for i, k in enumerate(order)}
-    d.text(0, y1, "2 · events.GetTopologicalOrdering(): one flat list, every edge points right", size=13,
+    d.text(0, y1, "2 · event_dag.GetTopologicalOrdering(): one flat list, every edge points right", size=13,
            weight=600, fill=T.fg)
     d.text(0, y1 + 18, "That is all a topological sort returns: positions 0..9. No times, no 'parallel' marks.",
            size=11, fill=T.muted)

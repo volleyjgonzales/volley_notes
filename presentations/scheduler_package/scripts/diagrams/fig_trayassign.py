@@ -1,5 +1,5 @@
-"""Tray-assignment helpers drawn the same way as the job figures: AssignTrayIdForEmptyMove and
-AssignDestForUntargetedMove (with ResolveBlockingTrays)."""
+"""Tray-assignment helpers drawn the same way as the job figures: AssignEmptyTrayToMove and
+AssignDestinationAndUnblockingMoves (with ResolveBlockingTrays), src/tray_assignment.cpp."""
 from __future__ import annotations
 
 import fig_jobs as J
@@ -39,7 +39,7 @@ def wave(d, m, nid, n, *, dx=0, dy=-18, color=T.sky):
 
 
 # --------------------------------------------------------------------------------------
-@figure("55_assign_tray_id_empty", "AssignTrayIdForEmptyMove", DOC1)
+@figure("55_assign_tray_id_empty", "AssignEmptyTrayToMove", DOC1)
 def assign_tray_id():
     GENERAL["55_assign_tray_id_empty"] = [
         "An empty-tray move must at least say where the tray should go. Without a destination there is nothing "
@@ -54,8 +54,8 @@ def assign_tray_id():
         "Take the tray on the node the search reached and write its id into the existing event. The event "
         "object is edited in place; nothing is added to the DAG.",
         "Avoid a pointless rotation: if the tray already sits on the same axis as the destination heading, keep "
-        "the tray's heading (except on the 576_eccles EV-charging nodes).",
-        "Return. DoTrayAssignments then treats the event like any other complete move and runs the blocking-tray "
+        "the tray's heading.",
+        "Return. AssignTrays then treats the event like any other complete move and runs the blocking-tray "
         "loop for it.",
     ]
 
@@ -124,16 +124,16 @@ def assign_tray_id():
                        bg=T.bg_deep, border=T.sky)
 
     return job_figure(
-        "55_assign_tray_id_empty", heading="AssignTrayIdForEmptyMove: which empty tray?",
+        "55_assign_tray_id_empty", heading="AssignEmptyTrayToMove: which empty tray?",
         subtitle="A READY_FOR_INSERT job asked for 'an empty tray into bay B21' without saying which. This helper "
                  "searches outward from the bay for the nearest tray without a payload and writes its id into the "
                  "event.",
-        req=[("call", "AssignTrayIdForEmptyMove(*move, working_state)"),
+        req=[("call", "AssignEmptyTrayToMove(*move, state.working_state)"),
              ("move", "volley::TrayMove&: tray_id ?, dest {node_id: 21, heading: -90}"),
-             ("", "  created by PlanReadyForInsertJob (job 0)"),
+             ("", "  created by ExpandReadyForInsertJob (job 0)"),
              ("working_state", "const DiscreteGarageState&: the garage after all earlier events"),
-             ("called from", "DoTrayAssignments :2575, PlanReadyForInsertJob fill pass"),
-             ("returns", "BoolStringPair")],
+             ("called from", "AssignTrays (tray_assignment.cpp:63), AssignTraysToBayFillMoves"),
+             ("returns", "stdx::Result")],
         request_title="Input", region="qa", draw_map=draw,
         map_caption="search from B21 outward; numbers = order the nodes are reached (illustrative)",
         events=[("TrayMove", "tray_id ? -> {node_id: 21, heading: -90}", 0, "optional", "before: tray id blank"),
@@ -141,41 +141,42 @@ def assign_tray_id():
         edges=[],
         events_title="The event, before and after", events_sub="no events or edges are added by this helper",
         steps=[
-            ("if(!move.GetDest())\n  return {false, \"Can't resolve a tray move with no tray id or dest\"}",
+            ("if(!move.GetDest())\n  return stdx::Unexpected(\"Can't resolve a tray move with no tray id or dest\")",
              "dest = {node_id: 21, heading: -90}, the bay's inbound pose (heading 90, faces_reciprocal: true).", "passes", "ok"),
-            ("source.vert = gg_.GetVertexFromPose(move.GetDest().value())", "Start vertex = the one for {node_id: 21, heading: -90}.",
+            ("start_state.vert = motion_graph_.GetVertexFromPose(\n  move.GetDest().value())", "Start vertex = the one for {node_id: 21, heading: -90}.",
              "start = B21", "ok"),
-            ("trays = all tray ids; agvs = all AGV ids;\nfilters = GetStaticFilter(TRAY, gg_, working_state, "
-             "table_,\n  trays, agvs, {})", "All six trays and every AGV are left out of the filter.", "filter",
+            ("path_filter = BuildImmobileTrayFilter(TRAY, working_state, {})\n"
+             "  // BuildStaticObstacleFilter with every tray and AGV left out",
+             "All six trays and every AGV are left out of the filter.", "filter",
              "ok"),
-            ("EmptyTraySearchEnvironment env(gg_, table_, working_state,\n  cost_model_, filters);\n"
-             "solution = SingleSourceSearch(source, Duration(0), env)",
+            ("EmptyTraySearchEnvironment env(motion_graph_, collision_table_,\n  working_state, cost_model_, path_filter);\n"
+             "solution = SingleSourceSearch(start_state, Duration(0), env)",
              "Reached in order: W41, W22, then W25, W18 and P23. P23 holds T23, which carries no car.",
              "found P23", "ok"),
-            ("if(!solution.GetTarget()) return {false, \"Failed to find empty tray ...\"}", "A tray was found.",
+            ("if(!solution.GetTarget())\n  return stdx::Unexpected(\"Failed to find empty tray ...\")", "A tray was found.",
              "skipped", "skip"),
             ("tray_to_use = working_state.GetTrayOnNode(\n  GetPoseFromVertex(target.vert)\n    ->node_id).value();\n"
              "move.SetTrayId(tray_to_use.id)", "The event now reads T23: P23 -> B21.", "tray = 23", "event"),
-            ("if IsAngleOrReciprocal(tray.heading, dest.heading)\n  && tray.heading != dest.heading:\n"
-             "  dest.heading = tray.heading; UseEvChargeHeading(dest);\n  move.SetDest(dest)",
+            ("if IsSameOrOppositeHeading(tray.heading, dest.heading)\n  && tray.heading != dest.heading:\n"
+             "  dest.heading = tray.heading;\n  move.SetDest(dest)",
              "T23 faces 90, the destination asks for 90: nothing to change.", "no change", "skip"),
-            ("return {true, \"\"}", "Next: the blocking-tray loop for T23's path to B21 (P23 -> W22 -> W41 -> B21).",
+            ("return {};", "Next: the blocking-tray loop for T23's path to B21 (P23 -> W22 -> W41 -> B21).",
              "success", "ok"),
         ],
         notes=[("Why the destination is the start", "The job knows where a tray is needed but not which tray is "
                 "best. Searching from the destination finds the closest candidate, so the AGV carries an empty tray "
                 "as short a way as possible.", T.sky),
-               ("Not reserved", "Nothing marks T23 as taken. Later moves see it in B21 because DoTrayAssignments "
-                "applies each move to working_state before the next event. A TODO in the code suggests choosing a "
-                "tray that is a future blocker anyway.", T.amber),
-               ("Same helper, two callers", "PlanReadyForInsertJob calls it early (best effort, PlanReadyForInsertJob); "
-                "DoTrayAssignments calls it for every move still blank, with the full picture of all jobs.",
+               ("Not reserved", "Nothing marks T23 as taken. Later moves see it in B21 because AssignTrays "
+                "applies each move to working_state before the next event.", T.amber),
+               ("Same helper, two callers", "ExpandReadyForInsertJob calls it early through AssignTraysToBayFillMoves "
+                "(best effort: a failure defers the move); AssignTrays calls it for every move still blank, with the "
+                "full picture of all jobs.",
                 T.border)],
         legend_override=LEGEND, bw=330)
 
 
 # --------------------------------------------------------------------------------------
-@figure("56_assign_dest_untargeted", "AssignDestForUntargetedMove", DOC1)
+@figure("56_assign_dest_untargeted", "AssignDestinationAndUnblockingMoves", DOC1)
 def assign_dest():
     GENERAL["56_assign_dest_untargeted"] = [
         "A move without a destination must at least name its tray, and that tray must exist in the current "
@@ -196,10 +197,10 @@ def assign_dest():
         "Choose the heading (parking node: empty tray keeps its axis, loaded tray uses the preferred heading) and "
         "write the destination into the existing event.",
         "Turn the recorded blocker moves into real events: apply each, add it to the DAG, chain them in order, "
-        "chain per tray, and add edges from earlier moves that free or use the same space (freeing_moves).",
+        "chain per tray, and add edges from earlier moves that used the same space (occupancy_history).",
         "Apply the root move and make it wait for the last blocker move; update the per-tray chain and "
-        "first_tray_event.",
-        "Return. DoTrayAssignments skips its main blocking-tray loop for this event (continue), because its "
+        "first_event_by_tray.",
+        "Return. AssignTrays skips its main blocking-tray loop for this event (continue), because its "
         "blockers were handled here.",
     ]
 
@@ -279,19 +280,19 @@ def assign_dest():
                        bg=T.bg_deep, border=T.fg2)
 
     return job_figure(
-        "56_assign_dest_untargeted", heading="AssignDestForUntargetedMove: where should this tray go?",
+        "56_assign_dest_untargeted", heading="AssignDestinationAndUnblockingMoves: where should this tray go?",
         subtitle="A RETRIEVE job planned 'empty tray T21 out of bay B21' without saying where. This helper asks "
                  "ResolveBlockingTrays for a parking spot, which may first move other trays out of the way, then "
                  "turns those extra moves into events.",
-        req=[("call", "AssignDestForUntargetedMove(move, ctx, event, working_state,"),
-             ("", "  freeing_moves, last_tray_event)"),
-             ("move", "volley::TrayMove*: tray 21, dest ?  (created by PlanRetrieveJob)"),
-             ("event", "const std::shared_ptr<ScheduleEvent>&: the same event, as a DAG vertex"),
-             ("ctx", "ScheduleContextSPtr: events and first_tray_event are CHANGED"),
-             ("working_state", "DiscreteGarageState&: CHANGED, moves are applied"),
-             ("freeing_moves", "GarageOccupancyChecker<...>&: CHANGED"),
-             ("last_tray_event", "unordered_map<uint16_t, ScheduleEventSPtr>&: CHANGED"),
-             ("returns", "BoolStringPair")],
+        req=[("call", "AssignDestinationAndUnblockingMoves(ctx, state, event)"),
+             ("event", "const std::shared_ptr<ScheduleEvent>&: TrayMove tray 21, dest ?"),
+             ("", "  (created by ExpandRetrieveJob)"),
+             ("ctx", "PlanContextSPtr: event_dag and first_event_by_tray are CHANGED"),
+             ("state", "TrayAssignmentState&: CHANGED"),
+             ("", "  .working_state: moves are applied"),
+             ("", "  .occupancy_history: who used which pose"),
+             ("", "  .last_event_by_tray: per-tray chain"),
+             ("returns", "stdx::Result")],
         request_title="Input", region="qa", draw_map=draw,
         map_caption="1 = first search result, 2 = blocker pushed deeper, 3 = final destination (illustrative)",
         events=[("TrayMove", "T21: B21 -> ?", 0, "optional", "before: destination blank"),
@@ -299,41 +300,42 @@ def assign_dest():
                 ("TrayMove", "tray_id 21: B21 -> {node_id: 23, heading: 90}", 0, "solid", "after: same event as 1, dest set")],
         edges=[(2, 3, "A", "tray", "AddDependency(last_move, event)")],
         events_title="The DAG, before and after",
-        events_sub="one new event and one new edge (plus any freeing_moves edges)",
+        events_sub="one new event and one new edge (plus any occupancy edges)",
         steps=[
             ("if(!move->GetTrayId()) fail;\ntray_opt = working_state.GetTray(*move->GetTrayId())",
              "T21 is in B21.", "passes", "ok"),
-            ("enforce_retrieval_heading = working_state.GetPayload(\n  tray_opt->payload_id).has_value()",
-             "T21 is empty.", "false", "ok"),
-            ("auto [dest, required_moves] = ResolveBlockingTrays(\n  tray_id, job_index, working_state, {}, {},\n"
-             "  enforce_retrieval_heading)", "allow_waypoint_stash keeps its default, true.", "call", "call"),
-            ("FindOpenSpaceForRootTray(tray, entity, ws, immobile,\n  agvs, illegal, enforce, false)   // tier 1",
+            ("payload_opt = state.working_state.GetPayload(\n  tray_opt->payload_id)",
+             "T21 is empty.", "nullopt", "ok"),
+            ("auto [dest, required_moves] = ResolveBlockingTrays(\n  state.working_state, {.tray_id = 21,\n"
+             "  .is_retrieval_heading_enforced = false}, job_index)",
+             "is_waypoint_stash_allowed keeps its default, true.", "call", "call"),
+            ("FindDestinationForRootTray(working_state, request,\n  collision_entity)   // tier 1 first",
              "Every free spot near B21 is boxed in. Suppose the search returns P24 via P23, with T23 in the way "
              "(T9 sits on the W25 route).", "P24, 1 blocker", "ok"),
-            ("TryFindBlockingTrayResolution(T23, root = T21, ...)",
+            ("FindBlockingTrayResolution(working_state, request,\n  T23, illegal_poses, job_index)",
              "W41, W22 and P23 are now off-limits for T23, but the target P24 is allowed: T23 can move one step "
              "deeper.", "T23 -> P24", "ok"),
-            ("new_move = TrayMove(job_index); SetTrayId(23); SetDest(P24);\nnew_move->Apply(private copy);\n"
-             "required_moves.push_back({new_move, path})", "P23 is free in the private copy.", "recorded", "ok"),
-            ("loop: FindOpenSpaceForRootTray(...) again\n  no blocking trays -> dest = that pose",
+            ("new_move = MakeTrayMove(job_index, 23, P24);\nnew_move->ApplyTo(private copy);\n"
+             "required_moves.push_back({.move, .occupied_poses})", "P23 is free in the private copy.", "recorded", "ok"),
+            ("loop: FindDestinationForRootTray(...) again\n  no blocking trays -> dest = that pose",
              "The best spot is now P23, with nothing in the way.", "dest = P23", "ok"),
-            ("parking + empty tray: keep tray heading if same axis;\nUseEvChargeHeading(dest); move->SetDest(dest)",
+            ("parking + empty tray:\n  KeepTrayHeadingIfEquivalent(*dest, tray.heading);\nmove->SetDest(*dest)",
              "T21 faces 90 and so does P23.", "dest set", "event"),
-            ("for each required move: Apply(working_state); AddEvent;\n  AddDependency(last_move, m);\n"
-             "  last_tray_event / first_tray_event;\n  freeing_moves edges for every pose on its path",
-             "Adds event 2, T23: P23 -> P24. first_tray_event[23] = event 2.", "adds 1 event", "event"),
-            ("move->Apply(working_state);\nAddDependency(last_move, event);\nlast_tray_event[21] = event; "
-             "first_tray_event[21] = event", "Edge event 2 -> event 3: T23 must be gone before T21 arrives.",
+            ("for each required move: ApplyTo(working_state); AddEvent;\n  AddDependency(last_move, m);\n"
+             "  ChainTrayEvent(*ctx, state, tray, m);\n  OrderAfterPriorOccupants + AddOccupant per pose",
+             "Adds event 2, T23: P23 -> P24. first_event_by_tray[23] = event 2.", "adds 1 event", "event"),
+            ("move->ApplyTo(state.working_state);\nAddDependency(last_move, event);\n"
+             "ChainTrayEvent(*ctx, state, 21, event)", "Edge event 2 -> event 3: T23 must be gone before T21 arrives.",
              "adds 1 edge", "event"),
-            ("return {true, \"\"};   // DoTrayAssignments: continue", "The main blocking-tray loop is skipped "
+            ("return {};   // AssignTrays: continue", "The main blocking-tray loop is skipped "
              "for this event.", "success", "ok"),
         ],
-        notes=[("Why 'push deeper'", "The code comment: resolve blockers 'in the order of fewest extra blocking "
-                "moves ... This densifies nicely instead of reparking blocking trays halfway across the garage'. "
+        notes=[("Why 'push deeper'", "The code comment: resolve blocking trays 'one at a time, fewest extra moves "
+                "first ... This pushes them deeper instead of reparking them across the garage'. "
                 "Here the blocker moves one stall and the root tray takes its place.", T.green),
                ("Two copies of the garage", "Steps 4 to 7 work on ResolveBlockingTrays' own copy. Step 9 applies "
                 "the same moves again to the caller's working_state, which later events will see.", T.sky),
                ("Waypoint stash", "If no parking spot is reachable at all, tier 2 may return a waypoint (T9 on W25 "
-                "is such a leftover). A later CLEAN_GARAGE job puts stashed trays back (PlanCleanGarageJob).",
+                "is such a leftover). A later CLEAN_GARAGE job puts stashed trays back (ReparkWaypointStashedTrays).",
                 T.amber)],
         legend_override=LEGEND, bw=330)

@@ -1,5 +1,8 @@
 """Doc 04 (naming): one concept, many names today. Every spelling is from the source snapshots
-(sources/repomix-*.xml) or, for GarageServices, from doc 02's proposal."""
+(sources/repomix-*.xml; scheduler, planner_core and motion_planner at main a468657f) or, for
+GarageServices, from doc 02's proposal. PR #1018 renamed the scheduler's own members (gg_ to
+motion_graph_, table_ to collision_table_, disabledness_filters to keep_out_filter_by_footprint); the
+cards keep those rows, marked, because the other packages still use the old spellings."""
 from __future__ import annotations
 
 from components import frame
@@ -12,14 +15,17 @@ DOC4 = "04-naming.html"
 # (concept, accent, [(current spelling, where)], proposed)
 CARDS = [
     ("The motion-graph object", T.green, [
-        ("gg_", "Scheduler, CollisionTable, GarageOccupancyChecker"),
+        ("motion_graph_", "Scheduler (was gg_ before PR #1018)"),
+        ("gg_", "CollisionTable, GarageOccupancyChecker"),
+        ("graph_", "Chugg, SippAgv and the search environments"),
         ("graph", "GarageServices (proposal)"),
         ("base_graph_", "the Boost object inside it"),
         ("GarageGraph", "the class"),
     ], "motion_graph (MotionGraph)"),
     ("The collision-table object", T.amber, [
-        ("table_", "Scheduler"),
-        ("collision_table_", "GarageOccupancyChecker"),
+        ("collision_table_", "Scheduler, GarageOccupancyChecker"),
+        ("table_", "ContinuousState, BlockingTraySearchEnvironment"),
+        ("geometry_", "Chugg, SippAgv"),
         ("collisions", "GarageServices (proposal)"),
     ], "collision_table"),
     ("A footprint size class", T.sky, [
@@ -68,7 +74,8 @@ CARDS = [
         ("GarageEntityId, entity_type", "asset identity"),
         ("CollisionEntityId", "footprint shape for collisions"),
         ("resource", "SetResourceDisabledness.srv"),
-        ("disabledness", "messages, ScheduleContext"),
+        ("disabledness", "*DisablednessChanged messages"),
+        ("keep_out_filter_by_footprint", "PlanContext (was disabledness_filters)"),
     ], "AssetId, FootprintType, disabled"),
 ]
 
@@ -108,6 +115,9 @@ def naming_today():
           subtitle="Each card is one concept: its spellings today (mono, with where they appear) and the single "
                    "name proposed in this document. Widths are field types in the messages.",
           badge_key="as-built",
-          footnote="Spellings from sources/repomix-interfaces.xml, repomix-common-ros.xml, repomix-planner-core.xml "
-                   "and repomix-scheduler.xml; GarageServices from the refactor proposal.")
+          footnote="Spellings from sources/repomix-interfaces.xml, repomix-common-ros.xml, repomix-planner-core.xml, "
+                   "repomix-motion-planner.xml and repomix-scheduler.xml (main at a468657f); GarageServices from the "
+                   "refactor proposal. PR #1018 gave the scheduler's own members one name each (motion_graph_, "
+                   "collision_table_, keep_out_filter_by_footprint); the other spellings remain in common_ros, "
+                   "motion_planner, planner_core and the messages.")
     return d

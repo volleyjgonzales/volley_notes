@@ -18,7 +18,7 @@ TRAY, AGV, BAYC, VECS = T.amber, T.green, T.violet, T.pink
 @figure("20_system_context", "The scheduler node and its ROS interfaces", DOC1)
 def system_context():
     d = Doc("20_system_context", "The scheduler node and its ROS interfaces",
-            "Dispatch calls the plan service; SchedulerRos forwards to Scheduler::Plan. The scheduler calls back "
+            "Dispatch calls the plan service; SchedulerRos forwards to scheduler::Scheduler::Plan. The scheduler calls back "
             "into /central services to request follow-up jobs and publishes version info and a report every 5 s.")
     H_ROW = 40
     rows = [
@@ -33,7 +33,7 @@ def system_context():
         ("out", "/central/transition_bay_to_retrieve", "interfaces/srv/TransitionBayToRetrieve", "(supported)",
          T.amber),
         ("pub", "version_info", "VersionInfo · every 5 s", "release, git SHA, layout md5", T.green),
-        ("pub", "report", "SchedulerReport · every 5 s", "bay_readiness_ratio", T.green),
+        ("pub", "report", "SchedulerReport · every 5 s", "bay_readiness_ratio (old name kept)", T.green),
     ]
     ext_w = 168
     gap = 240
@@ -58,10 +58,10 @@ def system_context():
     d.text(ros_x + 128, top - 16, "scheduler_ros.cpp", size=10.5, family="mono", fill=T.faint)
     # Scheduler box
     sx = ros_x + ros_w + 130
-    sch = uml_class(d, sx, top - 34, "Scheduler", accent=T.sky, stereo="planning core · scheduler.cpp", size=11.5,
+    sch = uml_class(d, sx, top - 34, "Scheduler", accent=T.sky, stereo="planning core · scheduler.hpp", size=11.5,
                     w=nx1 - 18 - sx,
                     methods=["+ Plan(request, now)", "+ SetBayReadinessRatioCallback()", "+ GetVersionInfo()",
-                             "+ GetSchedulerReport()", "+ PrintDags()"],
+                             "+ GetSchedulerReport()", "+ ToggleDagPrinting()"],
                     attrs=["- clean_garage_request_fn_", "- rebalance_garage_request_fn_",
                            "- reset_bay_state_request_fn_"])
     for i, (dirn, name, typ, nt, col) in enumerate(rows):
@@ -115,11 +115,10 @@ def system_context():
 def runtime_objects():
     d = Doc("21_runtime_objects", "Who owns what, and for how long",
             "Node-lifetime objects (component, SchedulerRos, Scheduler and its graph/collision/cost members) versus "
-            "the per-call ScheduleContext created inside Plan().")
+            "the per-call PlanContext created inside Plan().")
     W = 1000
     # band 1: node lifetime
     b1y, b1h = 0, 440
-    d.rect(0, b1y, W, b1h, rx=12, fill=T.tint(T.sky, 0.03, T.bg), stroke=T.tint(T.sky, 0.4, T.bg), sw=1, dash="6 5")
     d.text(16, b1y + 20, "lives as long as the ROS node", size=12, family="mono", weight=600, fill=T.sky)
     comp = uml_class(d, 20, 44, "SchedulerComponent", accent=T.fg2, stereo="rclcpp component", size=11.5,
                      attrs=["- scheduler_node_: unique_ptr<SchedulerRos>"], compact=True)
@@ -128,28 +127,31 @@ def runtime_objects():
                     compact=True)
     connect(d, [(comp.x0 + 40, comp.y1), (ros.x0 + 40, ros.y0)], kind="comp", color=T.fg2)
     sch = uml_class(d, max(ros.x1, comp.x1) + 70, 44, "Scheduler", accent=T.sky, stereo="const planning service", size=11.5,
-                    attrs=["- layout_: LayoutSPtr", "- pg_: PoseGraph", "- gg_: GarageGraph", "- table_: CollisionTable",
-                           "- cost_model_: cost::MotionCostModel", "- bay_readiness_ratio_: atomic<float>",
-                           "- logger_: rclcpp::Logger"],
-                    methods=["+ Plan(request, now) const", "+ DoTrayAssignments(ctx) const",
-                             "+ DoAgvAssignments(ctx) const"])
+                    attrs=["- layout_: LayoutSPtr", "- motion_graph_: GarageGraph", "- collision_table_: CollisionTable",
+                           "- logger_: rclcpp::Logger", "- cost_model_: cost::MotionCostModel",
+                           "- target_insert_ready_bay_fraction_: atomic<float>",
+                           "- is_cost_audit_enabled_: const bool"],
+                    methods=["+ Plan(request, now) const", "+ AssignTrays(ctx) const",
+                             "+ AssignAgvs(ctx) const"])
     connect(d, [(ros.x1, ros.y0 + 50), (sch.x0, ros.y0 + 50)], kind="comp", color=T.fg2, label="shared_ptr",
             label_at=((ros.x1 + sch.x0) / 2, ros.y0 + 36))
     # construction order strip
     cx = sch.x1 + 40
     d.text(cx, 52, "constructor initialiser order", size=12, weight=600, fill=T.fg)
     steps = [("layout_", "Layout(layout_filepath)", "parse layout YAML"),
-             ("pg_", "PoseGraph(layout_)", "node x heading poses"),
-             ("gg_", "GarageGraph(pg_)", "search graph"),
-             ("table_", "CollisionTable(gg_, logger)", "pairwise conflicts"),
-             ("cost_model_", "MotionCostModel(params)", "speeds, lift, doors"),
-             ("gg_", "InitRetrievalHeadings()", "caches best parking heading")]
+             ("motion_graph_", "GarageGraph(PoseGraph(layout_))", "node x heading poses -> search graph"),
+             ("collision_table_", "CollisionTable(motion_graph_, logger)", "pairwise conflicts"),
+             ("cost_model_", "MotionCostModel(params.motion_cost)", "speeds, lift, doors"),
+             ("motion_graph_", "StorePreferredPayloadHeadingsForRetrieval()", "caches best parking heading")]
+    W = max(W, cx + max(text_width(c, 11.5, "mono") for _, c, _ in steps) + 50)
+    d.rect(0, b1y, W, b1h, rx=12, fill=T.tint(T.sky, 0.03, T.bg), stroke=T.tint(T.sky, 0.4, T.bg), sw=1, dash="6 5",
+           layer="bg")
     y = 72
     prev = None
     for i, (mem, ctor, why) in enumerate(steps, start=1):
         bb = BBox(cx, y, W - 16, y + 46)
         d.rect(bb.x0, bb.y0, bb.w, bb.h, rx=8, fill=T.card, stroke=T.border, sw=1)
-        num_badge(d, bb.x0, bb.y0 + 2, i, T.sky if i < 6 else T.amber, r=9)
+        num_badge(d, bb.x0, bb.y0 + 2, i, T.sky if i < len(steps) else T.amber, r=9)
         d.text(bb.x0 + 16, y + 17, ctor, size=11.5, family="mono", fill=T.fg)
         d.text(bb.x0 + 16, y + 35, why, size=11, fill=T.muted)
         if prev:
@@ -163,26 +165,27 @@ def runtime_objects():
     d.rect(0, b2y, W, b2h, rx=12, fill=T.tint(T.green, 0.03, T.bg), stroke=T.tint(T.green, 0.4, T.bg), sw=1,
            dash="6 5")
     d.text(16, b2y + 20, "lives for one Plan() call", size=12, family="mono", weight=600, fill=T.green)
-    ctx = uml_class(d, 20, b2y + 44, "ScheduleContext", accent=T.green, stereo="held as ScheduleContextSPtr ctx",
-                    size=11.5, attrs=["+ request_id: GuidMsg", "+ initial_state: DiscreteGarageState",
+    ctx = uml_class(d, 20, b2y + 44, "PlanContext", accent=T.green, stereo="held as PlanContextSPtr ctx",
+                    size=11.5, attrs=["+ request_id: msg::Guid", "+ initial_state: DiscreteGarageState",
                                       "+ start_time: Interval::Timepoint",
-                                      "+ disabledness_filters: map<CollisionEntityId_t, ...>",
-                                      "+ events: ScheduleEventDag", "+ scheduled_jobs: vector<ScheduledJobDataMsg>",
-                                      "+ last_entity_event: map<GarageEntityIdMsg, EventSPtr>",
-                                      "+ first_tray_event: map<uint16_t, EventSPtr>"], compact=True)
+                                      "+ keep_out_filter_by_footprint: map<CollisionEntityId_t, ...>",
+                                      "+ event_dag: ScheduleEventDag",
+                                      "+ scheduled_jobs: vector<msg::ScheduledJobData>",
+                                      "+ last_event_by_entity: map<msg::GarageEntityId, EventSPtr>",
+                                      "+ first_event_by_tray: map<uint16_t, EventSPtr>"], compact=True)
     connect(d, [(sch.cx, sch.y1), (sch.cx, b2y + 30), (ctx.cx, b2y + 30), (ctx.cx, ctx.y0)], kind="dep",
             color=T.green, label="«create» make_shared in Plan()", label_at=((sch.cx + ctx.cx) / 2, b2y + 30))
     nx = ctx.x1 + 40
     note(d, nx, b2y + 50, W - nx - 20,
          "Scheduler's planning methods are const: they never change the Scheduler. Everything that changes "
          "during planning lives in *ctx. A const method may still modify the object a shared_ptr argument "
-         "points to, which is how DoTrayAssignments(ctx) const edits ctx->events.", title="Why const methods can still plan")
+         "points to, which is how AssignTrays(ctx) const edits ctx->event_dag.", title="Why const methods can still plan")
     note(d, nx, b2y + 172, W - nx - 20,
          "The context is created at the start of Plan() and released when Plan() returns. Nothing persists "
          "between plan calls except the Scheduler members above.", title="No hidden state between calls")
     frame(d, title="Who owns what, and for how long",
           subtitle="Two lifetimes matter. The node keeps one Scheduler with its graphs and cost model; every plan "
-                   "request gets a fresh ScheduleContext that holds all mutable planning data.",
+                   "request gets a fresh PlanContext that holds all mutable planning data.",
           badge_key="as-built",
           legend=[("comp", T.fg2, "owns (member)"), ("dep", T.green, "creates per call"),
                   ("box", T.sky, "node-lifetime object"), ("box", T.green, "per-call object")])
@@ -202,19 +205,22 @@ def plan_flow():
     steps = [
         ("ValidateBaseState(request_data.base_state, *layout_)", "build DiscreteGarageState; check poses + payload sizes",
          "bad", "success = false · \"Invalid base state\" · no jobs touched"),
-        ("disable resources used by request_data.base_schedule", "AGVs, their src/dst nodes, bays, VECS in running actions",
+        ("ExcludeCommittedResources(state, base_schedule.nodes)",
+         "AGVs, their src/dst nodes, bays, VECS in running actions", None, None),
+        ("ctx = make_shared<PlanContext>(...)", "plus keep_out_filter_by_footprint = BuildKeepOutFilters(...)",
          None, None),
-        ("plan_ctx = make_shared<ScheduleContext>(...)", "plus disabledness_filters from the initial state", None, None),
-        ("for each job in pending_jobs: Plan<Type>Job(plan_ctx, ...)", "adds events to plan_ctx->events",
-         "job", "FailJob(job): STATE_ERROR, other jobs continue"),
-        ("plan_ctx->scheduled_jobs empty?", None, "empty", "success = true · \"No jobs succeeded to plan\""),
-        ("DoTrayAssignments(plan_ctx)", "every TrayMove gets a tray id and a destination", "all", None),
-        ("DoAgvAssignments(plan_ctx)", "AGVs matched; move / lift / lower events added", "all", None),
-        ("plan_ctx->events.Reduce()", "drop redundant edges", None, None),
-        ("SanityCheckEvents(plan_ctx)", "replay in topological order; every move must have a path", "all", None),
-        ("PlanMotions(plan_ctx)", "CHUGG: timed trajectories for every entity", "all", None),
-        ("ResponseFromTrajectories(plan_ctx, ...)", "action DAG -> ActionNode[] with parent indices", "all", None),
-        ("mark jobs STATE_EXECUTING; fill schedule.nodes", "RETRIEVE jobs get bay_id + bay_arrival_node_guid", "ok",
+        ("for each job in pending_jobs: copy *ctx; ExpandJob(ctx, job)",
+         "Expand<Type>Job adds events to ctx->event_dag", "job",
+         "restore the copy (no events left behind); MakeFailedJob(job, message, is_retryable): STATE_ERROR, "
+         "other jobs continue"),
+        ("ctx->scheduled_jobs empty?", None, "empty", "success = true · \"No jobs succeeded to plan\""),
+        ("AssignTrays(ctx)", "every TrayMove gets a tray id and a destination", "all", None),
+        ("AssignAgvs(ctx)", "AGVs matched; move / lift / lower events added", "all", None),
+        ("ctx->event_dag.RemoveRedundantEdges()", "drop redundant edges; fails on a cycle", "all", None),
+        ("ValidateEventSequence(ctx)", "replay in topological order; every move must have a path", "all", None),
+        ("PlanMotions(ctx)", "CHUGG: timed trajectories for every entity", "all", None),
+        ("BuildActionGraph(ctx, final_state)", "action DAG -> ActionNode[] with parent indices", "all", None),
+        ("mark jobs STATE_EXECUTING (request order)", "RETRIEVE jobs get bay_id + bay_arrival_node_guid", "ok",
          "success = true · schedule returned"),
     ]
     y = 0
@@ -222,7 +228,7 @@ def plan_flow():
     for i, (code, why, kind, out) in enumerate(steps):
         h = 54 if why else 38
         stage_col = T.amber if "Tray" in code else T.green if "Agv" in code else T.sky if "Motions" in code or \
-            "Response" in code else T.fg2
+            "ActionGraph" in code else T.fg2
         if kind == "empty" or code.endswith("?"):
             stage_col = T.fg2
         bb = BBox(x0, y, x0 + cw, y + h)
@@ -260,8 +266,8 @@ def plan_flow():
     d.line(bus_x, y0, bus_x, y1, stroke=T.red, sw=1.4, dash="5 4", layer="edges")
     my = (y0 + y1) / 2
     connect(d, [(bus_x, my), (ox, my)], kind="flow", color=T.red, size=8, sw=1.4, dash="5 4")
-    lines = wrap("Every pending job -> FailJob(job, message). PlanResponse.success stays TRUE; the stage name is in "
-                 "message. No partial schedule is returned.", ow - 24, 11.5)
+    lines = wrap("fail_all_jobs: every expanded job -> MakeFailedJob(job, message). PlanResponse.success stays "
+                 "TRUE; the stage name is in message. No partial schedule is returned.", ow - 24, 11.5)
     hh = 14 + len(lines) * 16
     d.rect(ox, my - hh / 2, ow, hh, rx=8, fill=T.tint(T.red, 0.10, T.bg), stroke=T.red, sw=1.2)
     for j, ln in enumerate(lines):
@@ -271,7 +277,7 @@ def plan_flow():
          "(STATE_EXECUTING vs STATE_ERROR) and job.note to see what really happened.",
          title="Reading a PlanResponse", accent=T.amber)
     frame(d, title="Scheduler::Plan() step by step",
-          subtitle="Job expansion fails jobs one at a time. Any failure after expansion fails every pending job "
+          subtitle="Job expansion fails jobs one at a time. Any failure after expansion fails every expanded job "
                    "at once, because the shared event DAG is no longer trustworthy.",
           badge_key="as-built",
           legend=[("box", T.amber, "tray stage"), ("box", T.green, "AGV stage"), ("box", T.sky, "motion stage"),
@@ -286,41 +292,41 @@ def plan_flow():
 @figure("24_job_recipes", "Cheat sheet: events per job type", DOC1)
 def job_recipes():
     d = Doc("24_job_recipes", "Cheat sheet: what each job type adds to the event DAG",
-            "For each SchedulerJob type, the ScheduleEvents its Plan<Type>Job method creates, in order. Dashed "
+            "For each SchedulerJob type, the ScheduleEvents its Expand<Type>Job method creates, in order. Dashed "
             "events are conditional.")
     T_ = TRAY
     rows = [
-        ("TYPE_MOVE_AGV", "PlanAgvMoveJob",
+        ("TYPE_MOVE_AGV", "ExpandAgvMoveJob",
          [("AgvMove", "pose -> dest", "s"), ("or", "", ""), ("TrayMove", "carried tray -> dest", "o")],
          "TrayMove if the AGV is already carrying a tray"),
-        ("TYPE_RETRIEVE", "PlanRetrieveJob",
+        ("TYPE_RETRIEVE", "ExpandRetrieveJob",
          [("VecsTransition", "stop charging", "o"), ("BayTransition", "TO_RETRIEVE", "o"),
           ("TrayMove", "bay tray -> ?", "o"), ("TrayMove", "payload tray -> bay", "s"),
-          ("BayTransition", "PROCESS_RETRIEVE", "s")], "bay chosen from GetBayPrioritization(), back first"),
-        ("TYPE_REPARK_TRAY / MOVE_TRAY", "PlanReparkTrayJob",
+          ("BayTransition", "PROCESS_RETRIEVE", "s")], "bay from FindBayForRetrieve(): GetBayPrioritization(), back first"),
+        ("TYPE_REPARK_TRAY / MOVE_TRAY", "ExpandReparkTrayJob",
          [("VecsTransition", "stop charging", "o"), ("TrayMove", "tray -> dest or ?", "s")],
          "heading may change to the cached retrieval heading"),
-        ("TYPE_INSERT", "PlanInsertJob",
+        ("TYPE_INSERT", "ExpandInsertJob",
          [("BayTransition", "TO_RETRIEVE (open door)", "s"), ("TrayMove", "loaded tray -> ?", "s"),
           ("async", "ask /central for READY_FOR_INSERT", "a")], "bay must be VEHICLE_INSERTED or READY_TO_RETRIEVE"),
-        ("TYPE_READY_FOR_INSERT", "PlanReadyForInsertJob",
+        ("TYPE_READY_FOR_INSERT", "ExpandReadyForInsertJob",
          [("recipe", "CHARGE_PAYLOAD", "o"), ("TrayMove", "? empty tray -> bay", "s"),
           ("BayTransition", "TO_INSERT", "s")], "bay must be READY_TO_RETRIEVE"),
-        ("TYPE_READY_FOR_RETRIEVE", "PlanReadyForRetrieveJob",
+        ("TYPE_READY_FOR_RETRIEVE", "ExpandReadyForRetrieveJob",
          [("BayTransition", "TO_RETRIEVE", "o"), ("TrayMove", "bay tray -> ?", "o"), ("or", "", ""),
           ("recipe", "CHARGE_PAYLOAD", "o")], "charge if the payload asked for EV charging"),
-        ("TYPE_CLEAN_GARAGE", "PlanCleanGarageJob",
+        ("TYPE_CLEAN_GARAGE", "ExpandCleanGarageJob",
          [("AgvMove", "hide AGVs (x n)", "o"), ("TrayMove", "unstash waypoint tray -> ? (x n)", "o")],
          "AGVs are hidden only when this is job index 0"),
-        ("TYPE_REBALANCE_GARAGE", "PlanRebalanceGarageJob",
+        ("TYPE_REBALANCE_GARAGE", "ExpandRebalanceGarageJob",
          [("recipe", "READY_FOR_INSERT per bay", "o"), ("recipe", "READY_FOR_RETRIEVE per bay", "o")],
          "bays chosen by ComputeBayRebalancingActions(); never fails"),
-        ("TYPE_CHARGE_AGV", "PlanAgvChargeJob",
+        ("TYPE_CHARGE_AGV", "ExpandAgvChargeJob",
          [("BayTransition", "TO_RETRIEVE", "o"), ("AgvMove", "-> fastest free charger", "s"),
           ("BayTransition", "TO_INSERT", "o")], "bay transitions only if the AGV is trapped in a bay"),
-        ("TYPE_TRANSITION_BAY_TO_*", "PlanBayTransitionJob", [("BayTransition", "TO_INSERT or TO_RETRIEVE", "s")],
+        ("TYPE_TRANSITION_BAY_TO_*", "ExpandBayTransitionJob", [("BayTransition", "TO_INSERT or TO_RETRIEVE", "s")],
          "rejected if the bay ODP area is occupied"),
-        ("TYPE_CHARGE_PAYLOAD", "PlanChargePayloadJob",
+        ("TYPE_CHARGE_PAYLOAD", "ExpandChargePayloadJob",
          [("TrayMove", "tray -> VECS", "o"), ("VecsTransition", "start charging", "s")],
          "VECS picked with ResolveBlockingTrays if the tray is not on one"),
     ]
@@ -331,8 +337,8 @@ def job_recipes():
     groups = [
         ([0, 2, 9], "Single-entity jobs: one event for the AGV, tray or bay the job names (a TrayMove for a "
                     "carried tray; a stop-charging VecsTransition first for a tray on a charging VECS). They are the "
-                    "building blocks: other job methods create their TrayMoves through PlanReparkTrayJob and reuse "
-                    "PlanAgvMoveJob and PlanBayTransitionJob."),
+                    "building blocks: the other expansions create their TrayMoves through ExpandReparkTrayJob, and "
+                    "CHARGE_AGV reuses ExpandAgvMoveJob."),
         ([1, 3], "Customer jobs through a bay. RETRIEVE switches the chosen bay to retrieve mode if needed, moves a "
                  "tray already in the bay out (destination '?'), brings the car's tray in and hands over with "
                  "PROCESS_RETRIEVE. INSERT opens the bay towards the garage, moves the loaded tray out to a spot "
@@ -354,7 +360,7 @@ def job_recipes():
         d.step(cap)
     d.step("The whole cheat sheet: every row is independent, read left to right in creation order. Dashed boxes "
            "appear only when needed, '+ recipe' calls another job method, and '?' is a blank for "
-           "DoTrayAssignments().")
+           "AssignTrays().")
     for k, (members, _) in enumerate(groups):
         with d.only(k):
             for i in range(len(rows)):
@@ -398,8 +404,8 @@ def job_recipes():
         d.text(lw, y + 66, note_, size=11, fill=T.muted)
     frame(d, title="Cheat sheet: what each job type adds to the event DAG",
           subtitle="One row per job type (rows are independent, not one scenario). Read a row left to right: the "
-                   "events that Plan<Type>Job appends, in creation order. A \"?\" is left empty for "
-                   "DoTrayAssignments() to fill. 'Job expansion' shows each row in a 2D garage example. Steps "
+                   "events that Expand<Type>Job appends, in creation order. A \"?\" is left empty for "
+                   "AssignTrays() to fill. 'Job expansion' shows each row in a 2D garage example. Steps "
                    "group the rows into families.",
           badge_key="as-built",
           legend=[("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),

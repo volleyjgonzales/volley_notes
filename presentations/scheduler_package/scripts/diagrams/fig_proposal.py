@@ -21,39 +21,39 @@ def _lane(d: Doc, x, y, w, h, title, color):
 
 
 # --------------------------------------------------------------------------------------
-# 58 — data flow: how ScheduleContext is read and written, today vs proposed
+# 58 — data flow: how PlanContext is read and written, today vs proposed
 # --------------------------------------------------------------------------------------
 
 @figure("58_tray_dataflow", "Tray assignment data flow, today vs proposed", DOC2)
 def tray_dataflow():
-    d = Doc("58_tray_dataflow", "How tray assignment reads and writes ScheduleContext",
-            "Today DoTrayAssignments writes ctx throughout its loop. Proposed: Solve reads an Input, returns a "
+    d = Doc("58_tray_dataflow", "How tray assignment reads and writes PlanContext",
+            "Today AssignTrays writes ctx throughout its loop. Proposed: Solve reads an Input, returns a "
             "Result, and ApplyTrayAssignment writes ctx once.")
     W = 1440
-    ctx_lines = ["initial_state", "events  (the DAG)", "first_tray_event"]
+    ctx_lines = ["initial_state", "event_dag", "first_event_by_tray"]
 
     # ---- lane 1: today ----
     y0 = 0
     _lane(d, 0, y0, W, 210, "today", T.muted)
-    c1 = card(d, 24, y0 + 48, 230, 140, title="ScheduleContext", accent=CTX, lines=ctx_lines,
-              sub="plan_ctx, owned by Plan()")
-    s1 = card(d, 580, y0 + 48, 340, 140, title="DoTrayAssignments(ctx)", accent=SOLVE, sub="Scheduler member",
-              lines=["~560-line loop + 9 helpers", "returns BoolStringPair"], mono_lines=False)
+    c1 = card(d, 24, y0 + 48, 230, 140, title="PlanContext", accent=CTX, lines=ctx_lines,
+              sub="ctx, owned by Plan()")
+    s1 = card(d, 580, y0 + 48, 340, 140, title="AssignTrays(ctx)", accent=SOLVE, sub="Scheduler member",
+              lines=["~280-line loop + 11 helpers", "returns stdx::Result"], mono_lines=False)
     connect(d, [(c1.x1, c1.y0 + 50), (s1.x0, c1.y0 + 50)], kind="flow", color=CTX,
-            label="ScheduleContextSPtr (shared, mutable)", label_at=((c1.x1 + s1.x0) / 2, c1.y0 + 34))
+            label="PlanContextSPtr (shared, mutable)", label_at=((c1.x1 + s1.x0) / 2, c1.y0 + 34))
     connect(d, [(s1.x0, c1.y0 + 104), (c1.x1, c1.y0 + 104)], kind="flow", color=WRITE,
             label="writes during the loop", label_at=((c1.x1 + s1.x0) / 2, c1.y0 + 88))
     note(d, s1.x1 + 30, y0 + 48, W - s1.x1 - 54,
-         "AddEvent, AddDependency, SetTrayId / SetDest on events, first_tray_event[...] happen inside the loop "
-         "and inside AssignDestForUntargetedMove. A failure halfway leaves ctx half-edited.",
+         "AddEvent, AddDependency, SetTrayId / SetDest on events, first_event_by_tray[...] happen inside the loop "
+         "and inside AssignDestinationAndUnblockingMoves. A failure halfway leaves ctx half-edited.",
          title="Writes are spread out", accent=WRITE)
 
     # ---- lane 2: proposed ----
     y1 = 250
     H2 = 330
     _lane(d, 0, y1, W, H2, "proposed", SOLVE)
-    c2 = card(d, 24, y1 + 52, 230, 140, title="ScheduleContext", accent=CTX, lines=ctx_lines,
-              sub="plan_ctx, owned by Plan()")
+    c2 = card(d, 24, y1 + 52, 230, 140, title="PlanContext", accent=CTX, lines=ctx_lines,
+              sub="ctx, owned by Plan()")
     # Solve box with nested Pass
     sx, sy, sw_, sh = 440, y1 + 52, 330, 232
     d.rect(sx, sy, sw_, sh, rx=10, fill=T.card, stroke=SOLVE, sw=1.5)
@@ -92,12 +92,12 @@ def tray_dataflow():
                                  ((r2.x1 + a2.x0) / 2, r2.y0 + 64)], 1):
         d.circle(x, y + 4, 10, fill=T.fg2, layer="top")
         d.text(x, y + 4.5, str(n), size=11, family="mono", weight=700, fill=T.bg, anchor="middle", layer="top")
-    frame(d, title="How tray assignment reads and writes ScheduleContext",
-          subtitle="Same work, different place for the writes. (1) Plan builds a read-only Input from plan_ctx. "
+    frame(d, title="How tray assignment reads and writes PlanContext",
+          subtitle="Same work, different place for the writes. (1) Plan builds a read-only Input from ctx. "
                    "(2) Solve returns everything it decided as a Result. (3) ApplyTrayAssignment writes it into "
-                   "plan_ctx in one step.",
+                   "ctx in one step.",
           badge_key="proposed",
-          legend=[("box", CTX, "ScheduleContext (owned by Plan)"), ("box", SOLVE, "solver / its return value"),
+          legend=[("box", CTX, "PlanContext (owned by Plan)"), ("box", SOLVE, "solver / its return value"),
                   ("box", PASS, "private mutable state"), ("box", PURE, "pure function"),
                   ("arrow", WRITE, "writes ctx")])
     return d
@@ -109,47 +109,49 @@ def tray_dataflow():
 
 BEFORE = [
     # (signature, [(write, color)], note, indent)
-    ("DoTrayAssignments(ScheduleContextSPtr ctx) const : BoolStringPair",
-     [("ctx->events", WRITE), ("ctx->first_tray_event", WRITE), ("TrayMove fields", WRITE)],
+    ("AssignTrays(PlanContextSPtr ctx) const : stdx::Result",
+     [("ctx->event_dag", WRITE), ("ctx->first_event_by_tray", WRITE), ("TrayMove fields", WRITE)],
      "the per-event loop; these blocks are written inline:", 0),
-    ("destination check", [], "", 1),
     ("critical-path search", [], "", 1),
-    ("fallback 1: advance the root tray", [("working_state", ARG), ("critical_path", ARG)], "", 1),
+    ("fallback 1: advance the root tray", [("state.working_state", ARG), ("root_path_illegal_poses", ARG)], "", 1),
     ("blocker re-scan", [("blocking_trays", ARG)], "", 1),
-    ("emit blocker moves  (2nd copy in AssignDest...)", [("ctx->events", WRITE), ("first_tray_event", WRITE)], "", 1),
-    ("root-move tail", [("ctx->events", WRITE), ("working_state", ARG)], "", 1),
-    ("ApplyTransitionToFreeingMoves(event, DiscreteGarageState& ws, GarageOccupancyChecker& freeing)",
-     [("working_state", ARG), ("freeing_moves", ARG)], "", 0),
-    ("AssignTrayIdForEmptyMove(TrayMove& move, const DiscreteGarageState& ws) : BoolStringPair",
-     [("TrayMove tray id, dest", WRITE)], "also called by PlanReadyForInsertJob", 0),
-    ("AssignDestForUntargetedMove(TrayMove* move, ScheduleContextSPtr ctx, const ScheduleEventSPtr& event,",
+    ("emit blocker moves  (2nd copy in AssignDestination...)", [("ctx->event_dag", WRITE),
+                                                                ("first_event_by_tray", WRITE)], "", 1),
+    ("root-move tail", [("ctx->event_dag", WRITE), ("state.working_state", ARG)], "", 1),
+    ("ApplyBayOrChargerTransition(TrayAssignmentState& state, const ScheduleEventSPtr& event) const : stdx::Result",
+     [("state.working_state", ARG), ("state.occupancy_history", ARG)], "", 0),
+    ("AssignEmptyTrayToMove(TrayMove& move, const DiscreteGarageState& ws) const : stdx::Result",
+     [("TrayMove tray id, dest", WRITE)], "also called by ExpandReadyForInsertJob", 0),
+    ("AssignDestinationAndUnblockingMoves(PlanContextSPtr ctx, TrayAssignmentState& state,", [], "", 0),
+    ("    const ScheduleEventSPtr& event) const : stdx::Result",
+     [("ctx->event_dag", WRITE), ("first_event_by_tray", WRITE), ("TrayMove dest", WRITE),
+      ("state.working_state", ARG), ("state.occupancy_history", ARG), ("state.last_event_by_tray", ARG)], "", 0),
+    ("OrderAfterPriorOccupants(PlanContext& ctx, const TrayAssignmentState& state, pose, ...) const : stdx::Result",
+     [("ctx.event_dag", WRITE)], "", 0),
+    ("ResolveBlockingTrays(const DiscreteGarageState& base_state, const ResolveRequest&, job_index) const",
      [], "", 0),
-    ("    DiscreteGarageState& ws, GarageOccupancyChecker& freeing, map& last_tray_event) : BoolStringPair",
-     [("ctx->events", WRITE), ("first_tray_event", WRITE), ("TrayMove dest", WRITE), ("working_state", ARG),
-      ("freeing_moves", ARG), ("last_tray_event", ARG)], "", 0),
-    ("ResolveBlockingTrays(tray_id, job_index, const DiscreteGarageState& base_state, immobile, illegal, ...)",
-     [("nothing (copies base_state)", PURE)], "also called by PlanChargePayloadJob", 0),
-    ("FindOpenSpaceForRootTray(...) const : optional<OpenSpaceSearchResult>", [("nothing", PURE)], "", 0),
-    ("TryFindBlockingTrayResolution(...) const : optional<BlockingTrayResolution>", [("nothing", PURE)], "", 0),
-    ("UsePreferredHeading(GaragePoseMsg& dest, payload, tray) const : void", [("dest", ARG)],
-     "also PlanAgvMoveJob, PlanReparkTrayJob", 0),
-    ("UseRetrievalHeading(GaragePoseMsg& dest, payload) const : void", [("dest", ARG)], "", 0),
-    ("UseEvChargeHeading(GaragePoseMsg& dest) const : bool", [("dest", ARG)], "also PlanChargePayloadJob", 0),
+    ("    : TrayDestinationPlan", [("nothing (copies base_state)", PURE)], "also called by ExpandChargePayloadJob", 0),
+    ("FindDestinationForRootTray(...) const : optional<OpenSpaceSearchResult>", [("nothing", PURE)], "", 0),
+    ("FindBlockingTrayResolution(...) const : optional<BlockingTrayResolution>", [("nothing", PURE)], "", 0),
+    ("ResolveDestinationHeading(path_filter, tray_id, dest) const : stdx::Expected<GaragePose>",
+     [("nothing", PURE)], "", 0),
+    ("FindPreferredTrayHeadingForRetrieval(node_id, payload) const : optional<int16_t>", [("nothing", PURE)],
+     "also ExpandAgvMoveJob, ExpandReparkTrayJob", 0),
 ]
 
 
 @figure("59_tray_tree_before", "Tray call tree today (UML)", DOC2)
 def tray_tree_before():
     d = Doc("59_tray_tree_before", "Tray call tree today",
-            "All functions are Scheduler members; chips show what each one writes: ScheduleContext (red), "
+            "All functions are Scheduler members; chips show what each one writes: PlanContext (red), "
             "an argument passed by reference (amber) or nothing (green).")
     W = 1180
-    # ScheduleContext + TrayMove on top
-    ctx = uml_class(d, 0, 0, "ScheduleContext", accent=CTX, stereo="struct · existing", size=M,
-                    attrs=["+ initial_state: DiscreteGarageState", "+ events: ScheduleEventDag",
-                           "+ first_tray_event: unordered_map<uint16_t, ScheduleEventSPtr>"])
-    tm = uml_class(d, ctx.x1 + 60, 0, "TrayMove", accent=CTX, stereo="planner_core · event in ctx->events", size=M,
-                   methods=["+ SetTrayId(uint16_t)", "+ SetDest(GaragePoseMsg)"])
+    # PlanContext + TrayMove on top
+    ctx = uml_class(d, 0, 0, "PlanContext", accent=CTX, stereo="struct · existing", size=M,
+                    attrs=["+ initial_state: DiscreteGarageState", "+ event_dag: ScheduleEventDag",
+                           "+ first_event_by_tray: unordered_map<uint16_t, ScheduleEventSPtr>"])
+    tm = uml_class(d, ctx.x1 + 60, 0, "TrayMove", accent=CTX, stereo="planner_core · event in ctx->event_dag",
+                   size=M, methods=["+ SetTrayId(uint16_t)", "+ SetDest(GaragePose)"])
     # Scheduler box
     y0 = max(ctx.y1, tm.y1) + 90
     head = 46
@@ -186,16 +188,18 @@ def tray_tree_before():
     connect(d, [(tm.cx, sched.y0), (tm.cx, tm.y1)], kind="dep", color=WRITE, label="«writes»  (red chips)",
             label_at=(tm.cx, (tm.y1 + sched.y0) / 2))
     note(d, tm.x1 + 40, 0, W - tm.x1 - 40,
-         "Nothing in the signatures separates the 3 green helpers from the rest: all are members, all can reach "
-         "every Scheduler field, and 4 of them are also called by job planning.", title="What the shape hides")
+         "Nothing in the signatures separates the 5 green helpers from the rest: all are members, all can reach "
+         "every Scheduler field, and 3 of them are also called by job expansion.", title="What the shape hides")
     frame(d, title="Tray call tree today",
           subtitle="Every function is a Scheduler member. Chips list what each one writes. Red: something in "
-                   "ScheduleContext (the DAG, the hand-off map, or an event's fields). Amber: an argument passed by "
-                   "reference. Green: nothing.",
+                   "PlanContext (the DAG, the hand-off map, or an event's fields). Amber: an argument passed by "
+                   "reference or a local. Green: nothing.",
           badge_key="as-built",
-          legend=[("box", WRITE, "writes ScheduleContext"), ("box", ARG, "writes an argument / local"),
+          legend=[("box", WRITE, "writes PlanContext"), ("box", ARG, "writes an argument / local"),
                   ("box", PURE, "writes nothing"), ("dep", WRITE, "«writes»")],
-          footnote="Signatures abridged. Line numbers and full parameter lists: Task planning tab, Tray assignment and AGV assignment.")
+          footnote="Signatures abridged; all in src/tray_assignment.cpp at main a468657f (TrayAssignmentState and the "
+                   "file-local ChainTrayEvent are defined there too). Line numbers and full parameter lists: Task planning "
+                   "tab, Tray assignment.")
     return d
 
 
@@ -237,13 +241,14 @@ def tray_tree_after():
             "UML of the proposed module: Solver interface, DefaultSolver with Pass nested inside, Input and Result, "
             "pure free functions grouped by header, and ApplyTrayAssignment as the only writer of PlanContext.")
     GAP = 40
-    # ---- outside the module: Scheduler and ScheduleContext ----
+    # ---- outside the module: Scheduler and PlanContext ----
     sched = uml_class(d, 0, 0, "Scheduler", accent=CTX, stereo="existing · abridged", size=M,
                       attrs=["- services_: scheduler_core::GarageServices", "- tray_solver_: unique_ptr<tray_assignment::Solver>"],
                       methods=["+ Plan(request): PlanResponse", "  // Solve(), then ApplyTrayAssignment()",
-                               "- Expand<Type>Job(...)  (today Plan<Type>Job)"])
-    ctx = uml_class(d, sched.x1 + 60, 0, "PlanContext", accent=CTX, stereo="struct · today ScheduleContext", size=M,
-                    attrs=["+ initial_state: DiscreteGarageState", "+ event_dag: EventDag  // today events",
+                               "- Expand<Type>Job(...)  (as today)"])
+    ctx = uml_class(d, sched.x1 + 60, 0, "PlanContext", accent=CTX, stereo="struct · existing (plan_context.hpp)", size=M,
+                    attrs=["+ initial_state: DiscreteGarageState",
+                           "+ event_dag: EventDag  // today ScheduleEventDag",
                            "+ first_event_by_tray: unordered_map<uint16_t, ScheduleEventSPtr>"])
     top = max(sched.y1, ctx.y1) + 80
 
@@ -262,11 +267,11 @@ def tray_tree_after():
         d, 24, y2,
         dict(name="DefaultSolver", accent=SOLVE, stereo="class · default_solver.hpp",
              attrs=["- services_: const GarageServices&"],
-             methods=["+ Solve(input) const : stdx::Expected<Result>", "  // was DoTrayAssignments(ctx)"]),
+             methods=["+ Solve(input) const : stdx::Expected<Result>", "  // was AssignTrays(ctx)"]),
         dict(name="Pass", accent=PASS, stereo="private nested class · src/task_planning/tray_assignment/pass.hpp",
              attrs=["- working_state_: DiscreteGarageState  // copy", "- freeing_moves_: GarageOccupancyChecker<...>",
                     "- last_event_by_tray_: unordered_map<...>", "- result_: Result  // returned by Solve"],
-             methods=["+ RecordStateChange(event): stdx::Result", "  // was ApplyTransitionToFreeingMoves",
+             methods=["+ RecordStateChange(event): stdx::Result", "  // was ApplyBayOrChargerTransition",
                       "+ Fill(event, tray_id, destination)", "  // was SetTrayId / SetDest on the input",
                       "+ EmitMoveChain(moves, ...)", "  // was the 2 copies of the emission block",
                       "+ CommitRootMove(event, resolved): stdx::Result", "  // was the root-move tail",
@@ -278,13 +283,13 @@ def tray_tree_after():
     fy = app.y1 + 30
     et = uml_class(d, fx, fy, "empty_tray.hpp", accent=PURE, stereo="public · pure", size=M,
                    methods=["+ ChooseEmptyTray(services, state, destination)", "    : stdx::Expected<TrayChoice>",
-                            "  // was AssignTrayIdForEmptyMove"])
+                            "  // was AssignEmptyTrayToMove"])
     bt = uml_class(d, fx, et.y1 + 20, "blocking_trays.hpp", accent=PURE, stereo="public · pure", size=M,
                    methods=["+ ResolveBlockingTrays(services, request)", "    : stdx::Expected<BlockingResolution>",
                             "+ ChooseParkingSpot(services, state, tray, job)", "    : stdx::Expected<ParkingPlan>",
-                            "  // was 1st half of AssignDestForUntargetedMove",
-                            "- detail::FindOpenSpace(...)  // was FindOpenSpaceForRootTray",
-                            "- detail::TryResolveBlocker(...)", "  // was TryFindBlockingTrayResolution"])
+                            "  // was 1st half of AssignDestinationAndUnblockingMoves",
+                            "- detail::FindOpenSpace(...)  // was FindDestinationForRootTray",
+                            "- detail::TryResolveBlocker(...)", "  // was FindBlockingTrayResolution"])
     cp = uml_class(d, fx, bt.y1 + 20, "critical_path.hpp", accent=PURE, stereo="private (src/) · pure", size=M,
                    methods=["+ CheckDestinationUsable(...): stdx::Result", "+ FindCriticalPath(...)",
                             "    : stdx::Expected<CriticalPath>", "+ TryAdvanceRoot(...): optional<PlannedTrayMove>",
@@ -301,9 +306,10 @@ def tray_tree_after():
                    attrs=["+ motion_graph: const MotionGraph&", "+ collision_table: const CollisionTable&",
                           "+ cost_model: const MotionCostModel&", "+ layout: const Layout&", "+ logger: rclcpp::Logger"])
     hd = uml_class(d, gs.x1 + GAP, cy0 + 44, "headings.hpp", accent=PURE, stereo="public · pure · shared", size=M,
-                   methods=["+ PreferredHeading(services, destination, payload): Pose", "  // was UsePreferredHeading",
-                            "+ RetrievalHeading(services, destination, payload): Pose", "  // was UseRetrievalHeading",
-                            "+ EvChargeHeading(layout, node): optional<int16_t>", "  // was UseEvChargeHeading"])
+                   methods=["+ FindPreferredTrayHeadingForRetrieval(services, node, payload)", "    : optional<int16_t>",
+                            "+ KeepTrayHeadingIfEquivalent(dest&, tray_heading)",
+                            "  // EvChargeHeading is gone: PR #1018 deleted",
+                            "  // the Eccles heading exception"])
     cbottom = max(gs.y1, hd.y1) + 24
     _package(d, 0, cy0, right, cbottom - cy0, "scheduler/core", T.teal, "namespace volley::scheduler_core")
 
@@ -383,10 +389,10 @@ def naming_boundary():
         return max(bx.y1 for bx in boxes) + 24
     y1 = 0
     b_if = _box(d, 24, y1 + 46, 700, "interfaces  (ROS messages)", "used by every node; renames wait for one versioned change",
-                ["GaragePoseMsg, GarageEntityIdMsg, GuidMsg",
-                 "SchedulerJobMsg, ScheduledJobDataMsg",
-                 "PlanRequest / PlanResponse, ActionNodeMsg",
-                 "DiscreteAgvStateMsg, BayCommandMsg, ...  // inside DGS and events"], T.sky)
+                ["interfaces::msg::GaragePose, GarageEntityId, Guid",
+                 "SchedulerJob, ScheduledJobData",
+                 "PlanRequest / PlanResponse, ActionNode",
+                 "DiscreteAgvState, BayCommand, ...  // inside DGS and events"], T.sky)
     b_cr = _box(d, 760, y1 + 46, 716, "common_ros", "used by many packages; renames deferred",
                 ["GarageGraph, PoseGraph, CollisionTable, Layout",
                  "CollisionEntityId(_t), VertexCollisionIdMap",
@@ -398,17 +404,19 @@ def naming_boundary():
     b_sr = _box(d, 24, y2 + 46, 340, "scheduler_ros.cpp", "existing ROS node: services, timers",
                 ["Plan service -> Scheduler::Plan()", "the only rclcpp code besides", "  the logger"], BND)
     b_cv = _box(d, 388, y2 + 46, 440, "ros/convert.hpp", "messages <-> internal types; edge code only",
-                ["ToAssetId(GarageEntityIdMsg)", "ToMsg(AssetId) -> GarageEntityIdMsg",
-                 "ToMsg(ScheduledJob) -> ScheduledJobDataMsg", "rclcpp::Time -> Interval::Timepoint"], BND)
+                ["ToAssetId(msg::GarageEntityId)", "ToMsg(AssetId) -> msg::GarageEntityId",
+                 "ToMsg(ScheduledJob) -> msg::ScheduledJobData", "rclcpp::Time -> Interval::Timepoint"], BND)
     b_vo = _box(d, 852, y2 + 46, 624, "core/vocabulary.hpp", "aliases and thin wrappers; zero run-time cost",
-                ["using MotionGraph = GarageGraph;", "using Pose = GaragePoseMsg;",
+                ["using MotionGraph = GarageGraph;", "using Pose = interfaces::msg::GaragePose;",
                  "using FootprintId = CollisionEntityId_t;", "transition_type::RIDE_VRC = VRC_TRANSITION"], BND)
     e2 = lane_for(y2, [b_sr, b_cv, b_vo], "boundary · new files in scheduler", BND)
     # ---- band 3: inside ----
     y3 = e2 + 70
-    b_sc = _box(d, 24, y3 + 46, 804, "scheduler", "renamed now (catalogue rows for scheduler)",
-                ["PlanContext   // was ScheduleContext", "motion_graph_, collision_table_",
-                 "Expand<Type>Job, last_event_by_asset", "ScheduledJob, AssetId  // core/types.hpp"], INS)
+    b_sc = _box(d, 24, y3 + 46, 804, "scheduler", "catalogue rows for scheduler; most were renamed in PR #1018",
+                ["PlanContext, motion_graph_, collision_table_  // done in PR #1018",
+                 "Expand<Type>Job, AssignTrays, AssignAgvs      // done in PR #1018",
+                 "last_event_by_asset  // today last_event_by_entity",
+                 "ScheduledJob, AssetId  // core/types.hpp"], INS)
     b_ta = _box(d, 852, y3 + 46, 384, "tray_ / agv_assignment", "new modules, written with the new names",
                 ["GarageServices{motion_graph, ...}", "Input{initial_state, event_dag}",
                  "Result{fills, edits,", "       first_event_by_tray}", "no ros/ include"], INS)
@@ -475,7 +483,7 @@ def module_layout():
                "uses planner_core, motion_planner searches,",
                "     task_planner (BottleneckAssignment)"], TP)
     m1 = _box(d, 688, ry, 380, "motion_planning/", "stage 4: adapter around CHUGG",
-              ["PlanMotions(event_dag, state, ...)", "  -> ContinuousState", "about 60 lines today",
+              ["PlanMotions(event_dag, state, ...)", "  -> ContinuousState", "about 30 lines today",
                "uses motion_planner (CHUGG)"], MP)
     a1 = _box(d, 1092, ry, 384, "action_graph/", "stage 5: timed motions -> action DAG",
               ["BuildActionDag(...)", "CopyEventDependencies", "InsertVrcActions",
@@ -531,7 +539,9 @@ def module_layout():
                   ("box", MP, "motion planning (stage 4)"), ("box", AG, "action graph (stage 5)"),
                   ("box", CORE, "shared core"), ("arrow", T.fg2, "calls"), ("dep", T.fg2, "depends on")],
           footnote="Proposed in Issue & proposal (module layout section). Folder paths are under scheduler/include/scheduler/, "
-                   "scheduler/src/ and scheduler/test/.")
+                   "scheduler/src/ and scheduler/test/. Since PR #1018 each stage is already one file in scheduler/src/ "
+                   "(job_expansion, tray_assignment, agv_assignment, validation, action_graph .cpp); Option 1 turns "
+                   "those files into folders.")
     return d
 
 

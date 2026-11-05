@@ -39,13 +39,13 @@ cpp:
     from: common-ros
     file: include/common_ros/garage_graph.hpp
     parts: ["using BoostPoseGraph", "struct Transition {"]
-  # inside the DAG section, `Vertex` is DagBase's vertex, not GarageGraph's
+  # inside the DAG section, `Vertex` is Dag's vertex, not GarageGraph's
   - names: [Vertex, Edge]
     only_h2: [bg-directed-acyclic-graphs-then-scheduleeventdag]
-    title: "DagBase<T>::Vertex"
+    title: "Dag<T>::Vertex"
     from: planner-core
     file: include/planner_core/event_dag.hpp
-    parts: ["using DagT = ", "using Vertex = typename DagT", "using Edge = typename DagT"]
+    parts: ["using Graph = boost::adjacency_list", "using Vertex = typename Graph", "using Edge = typename Graph"]
   - names: [Vertex, "GarageGraph::Vertex", "std::optional<Vertex>", "GarageGraph::Edge"]
     title: "GarageGraph::Vertex"
     from: common-ros
@@ -116,19 +116,19 @@ cpp:
     from: planner-core
     file: include/planner_core/schedule_events.hpp
     parts: ["class VrcTransition : public ScheduleEvent"]
-  - names: [DagBase, "DagBase<T>"]
+  - names: [Dag, "Dag<T>", DagBase, "DagBase<T>"]
     from: planner-core
     file: include/planner_core/event_dag.hpp
-    parts: ["class DagBase {"]
+    parts: ["class Dag {"]
   - names: [ScheduleEventDag, "volley::ScheduleEventDag", "ScheduleEventDag&", EventDag]
     from: planner-core
     file: include/planner_core/event_dag.hpp
-    parts: ["class ScheduleEventDag : public DagBase<ScheduleEvent>"]
+    parts: ["class ScheduleEventDag : public Dag<ScheduleEvent>"]
   # ---- scheduler
-  - names: [ScheduleContext, ScheduleContextSPtr, "std::shared_ptr<ScheduleContext>", PlanContext, PlanContextSPtr]
+  - names: [PlanContext, PlanContextSPtr, "std::shared_ptr<PlanContext>", ScheduleContext, ScheduleContextSPtr]
     from: scheduler
-    file: include/scheduler/scheduler.hpp
-    parts: ["class ScheduleContext {", "using ScheduleContextSPtr"]
+    file: include/scheduler/plan_context.hpp
+    parts: ["struct PlanContext {", "using PlanContextSPtr"]
   - names: [SchedulerParams]
     from: scheduler
     file: include/scheduler/scheduler.hpp
@@ -137,11 +137,6 @@ cpp:
     from: scheduler
     file: include/scheduler/scheduler.hpp
     parts: ["class Scheduler {"]
-  - names: [CollistionFilterMap, GarageEntityEventMap]
-    title: "ScheduleContext aliases"
-    from: scheduler
-    file: include/scheduler/scheduler.hpp
-    parts: ["using CollistionFilterMap", "using GarageEntityEventMap"]
   - names: [OpenSpaceSearchResult]
     from: scheduler
     file: include/scheduler/scheduler.hpp
@@ -161,20 +156,20 @@ cpp:
   - names: [SchedulerComponent]
     from: scheduler
     file: src/scheduler_component.cpp
-    parts: ["static void ReadParams(", "class SchedulerComponent : public volley::Component {"]
+    parts: ["static void ReadMotionCostParams(", "class SchedulerComponent : public Component {"]
+  - names: [JobFailure, "stdx::Expected<void, JobFailure>", Fail]
+    title: "JobFailure and Fail"
+    from: scheduler
+    file: include/scheduler/job_failure.hpp
+    parts: ["struct JobFailure {", "template <typename... Args>"]
   - names: [MotionScheduleOrder]
     from: scheduler
-    file: src/scheduler.cpp
-    parts: ["struct MotionScheduleOrder {"]
+    file: src/action_graph.cpp
+    parts: ["class MotionScheduleOrder {"]
   - names: [ScheduleEventType]
     from: planner-core
     file: include/planner_core/schedule_events.hpp
     parts: ["enum class ScheduleEventType"]
-  - names: [VertexVec]
-    title: "DagBase<T>::VertexVec"
-    from: planner-core
-    file: include/planner_core/event_dag.hpp
-    parts: ["using VertexVec"]
   - names: ["CollisionTable::Edge", "CollisionTable::Pose", PoseOrEdge, EdgeSet, PoseSet, ResMap, PosePoseMap, PoseEdgeMap, EdgePoseMap, EdgeEdgeMap]
     title: "CollisionTable aliases"
     from: common-ros
@@ -260,21 +255,21 @@ cpp:
     from: motion-planner
     file: include/motion_planner/blocking_tray_search.hpp
     parts: ["class EmptyTraySearchEnvironment : public"]
-  - names: [HideAgvs, "volley::HideAgvs", AgvSearchEnvironment]
-    title: "HideAgvs"
+  - names: [FindAgvUnderTrayAssignment, "volley::FindAgvUnderTrayAssignment", HideAgvs, AgvSearchEnvironment]
+    title: "FindAgvUnderTrayAssignment"
     from: motion-planner
     file: include/motion_planner/agv_hiding_search.hpp
-    parts: ["std::pair<bool, std::unordered_map<uint16_t, GaragePoseMsg>> HideAgvs(", "class AgvSearchEnvironment : public"]
-  - names: [GetPosePath, "volley::GetPosePath", ConvertPosePathToTrajectory, "volley::ConvertPosePathToTrajectory", GarageGraphEnvironment]
-    title: "GetPosePath, ConvertPosePathToTrajectory"
+    parts: ["std::optional<std::unordered_map<uint16_t, interfaces::msg::GaragePose>> FindAgvUnderTrayAssignment(", "class AgvSearchEnvironment : public"]
+  - names: [FindPosePath, "volley::FindPosePath", GetPosePath, ConvertPosePathToTrajectory, "volley::ConvertPosePathToTrajectory", GarageGraphEnvironment]
+    title: "FindPosePath, ConvertPosePathToTrajectory"
     from: motion-planner
     file: include/motion_planner/garage_graph_pathing.hpp
-    parts: ["std::vector<GaragePoseMsg> GetPosePath(", "Trajectory ConvertPosePathToTrajectory("]
-  - names: [GetEdgeDurations, "volley::GetEdgeDurations", GetEdgeMarginalDurations, "volley::GetEdgeMarginalDurations", GetAllPairsMinCost, "volley::GetAllPairsMinCost"]
+    parts: ["std::vector<interfaces::msg::GaragePose> FindPosePath(", "Trajectory ConvertPosePathToTrajectory("]
+  - names: [ComputeEdgeDurations, "volley::ComputeEdgeDurations", ComputeEdgeMarginalDurations, "volley::ComputeEdgeMarginalDurations", ComputeAllPairsShortestPathCosts, "volley::ComputeAllPairsShortestPathCosts", GetEdgeDurations, GetAllPairsMinCost]
     title: "Edge durations and the all-pairs heuristic"
     from: motion-planner
     file: include/motion_planner/garage_graph_pathing.hpp
-    parts: ["volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeDurations(", "volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeMarginalDurations(", {start: "std::vector<std::vector<Cost>> GetAllPairsMinCost(", lines: 3}]
+    parts: ["volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> ComputeEdgeDurations(", "volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> ComputeEdgeMarginalDurations(", {start: "std::vector<std::vector<Cost>> ComputeAllPairsShortestPathCosts(", lines: 3}]
   - names: [CoalesceTrajectory]
     from: motion-planner
     file: include/motion_planner/coalesce_trajectory.hpp
@@ -283,11 +278,11 @@ cpp:
     from: motion-planner
     file: include/motion_planner/static_graph_filtering.hpp
     parts: ["class GraphFilterProperties {"]
-  - names: [GetStaticFilter, "volley::GetStaticFilter", GetAllStaticFilters, GetDisabledEntitiesFilters, "volley::GetDisabledEntitiesFilters"]
+  - names: [BuildStaticObstacleFilter, "volley::BuildStaticObstacleFilter", BuildStaticObstacleFilters, BuildKeepOutFilters, "volley::BuildKeepOutFilters", GetStaticFilter, GetDisabledEntitiesFilters]
     title: "Static filters"
     from: motion-planner
     file: include/motion_planner/static_graph_filtering.hpp
-    parts: ["GraphFilterProperties GetStaticFilter(", "std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetAllStaticFilters(", "std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetDisabledEntitiesFilters("]
+    parts: ["GraphFilterProperties BuildStaticObstacleFilter(", "std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> BuildStaticObstacleFilters(", "std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> BuildKeepOutFilters("]
 
   # ---- cost_functions (sources/repomix-cost-functions.xml)
   - names: [MotionCostModel, "cost::MotionCostModel", "volley::cost::MotionCostModel", "const cost::MotionCostModel&"]
@@ -324,7 +319,7 @@ cpp:
   # sketches are reconstructed from call sites, so they show only what is seen in use.
   - names: [BoolStringPair]
     file: "shared utility library (not supplied)"
-    note: "Inferred from use: every Plan* helper returns std::make_pair(bool, std::string)."
+    note: "Inferred from use (removed from the scheduler in PR #1018): Plan* helpers returned std::make_pair(bool, std::string)."
     sketch: |
       using BoolStringPair = std::pair<bool, std::string>;   // {success, message}
   - names: ["stdx::Expected", "stdx::Expected<T>", "stdx::Expected<bool>", "stdx::Result", "stdx::Unexpected", Expected]
@@ -404,7 +399,7 @@ cpp:
     from: content
     file: 07-issue-and-proposal.html
     only_prefix: "pr-"
-    parts: ["using Pose                = GaragePoseMsg"]
+    parts: ["using Pose                = interfaces::msg::GaragePose"]
   - names: [BayStateChange]
     title: "BayStateChange (proposed rename)"
     from: content

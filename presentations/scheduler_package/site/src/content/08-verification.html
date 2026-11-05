@@ -15,11 +15,11 @@
     highlighting are added at build time.
 -->
 <h1>08 — Verification: regression parity and benchmarks</h1>
-<p>This tab says how to prove the refactor in the <a href="#doc-proposal">Issue &amp; proposal</a> tab changed nothing, and how to measure it. It starts with what the existing tests already cover (computed from <code>sources/repomix-scheduler.xml</code>), then defines the parity comparison and the benchmark method.</p>
+<p>This tab says how to prove the refactor in the <a href="#doc-proposal">Issue &amp; proposal</a> tab changed nothing, and how to measure it. It starts with what the tests cover today (read from <code>main</code> at <code>a468657f</code>, 2026-11-05), then describes the parity comparison as it is built, the scenario recordings, and the benchmark method, which is still a proposal.</p>
 <h2 data-num id="vr-two-separate-goals">Two separate goals</h2>
-<p><strong>Behavioural equivalence</strong> asks whether the extracted default solver makes the same decisions and adds the same constraints as the old <code>Scheduler</code> method. <strong>Performance benchmarking</strong> asks whether run time or resource use changes for comparable inputs. A passing GoogleTest is neither: it shows the code still meets that test's assertions, not that output is identical or equally fast.</p>
+<p><strong>Behavioural equivalence</strong> asks whether the extracted default solver makes the same decisions and adds the same constraints as the old <code>Scheduler</code> method. <strong>Performance benchmarking</strong> asks whether run time or resource use changes for comparable inputs. A passing GoogleTest on its own is neither: it shows the code still meets that test's assertions, not that output is identical or equally fast. The recorded part of each scenario file (<a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>) answers the first question when it is compared; nothing yet answers the second.</p>
 <h2 data-num id="vr-what-the-existing-tests-cover">What the existing tests cover</h2>
-<p>The package has <strong>72 active <code>TEST</code> cases</strong> in four files (a 73rd, <code>DoubleRetrieveDodgeAgv</code>, sits inside a <code>/* … */</code> block). <a class="ref" href="#vr-fig-35_test_entry_points">Figure 1</a> places each one under the earliest pipeline stage it calls directly.</p>
+<p>The <code>scheduler</code> package has <strong>99 <code>TEST</code> cases in 19 files</strong>, one gtest suite and one binary per file. PR #1007 (SW2-1126) replaced the four old test files (72 active tests) with them and moved every planning test onto a <strong>scenario file</strong>; PR #1018 (SW2-1135) added five tests, turned one advanced test into a scenario and removed one test whose function is gone (<a href="#vr-where-the-old-tests-went">Where the old tests went</a>). <a class="ref" href="#vr-fig-35_test_entry_points">Figure 1</a> places each test under the earliest pipeline stage it calls directly.</p>
 <figure id="vr-fig-35_test_entry_points">
   <img src="figures/35_test_entry_points.svg" alt="Where the existing tests enter the scheduler">
   <figcaption><strong>Test entry points.</strong> Columns follow the <code>Plan()</code> pipeline from <a class="ref" href="#bg-one-plan-call-step-by-step">section 10</a>. A card's colour stripe shows its file; "+n" means the test also calls n later stages directly.</figcaption>
@@ -27,63 +27,89 @@
 <table>
   <thead>
     <tr>
-      <th>File</th>
-      <th>Active tests</th>
+      <th>Folder (under <code>test/src/</code>)</th>
+      <th>Files (tests)</th>
       <th>Style</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td><code>scheduler_insert_orientation_tests.cpp</code></td>
-      <td>4</td>
-      <td>Full <code>Plan()</code> on <code>1355_fulton</code>; checks the tray heading after an insert</td>
+      <td><code>jobs/</code>: 10 files, 54 tests</td>
+      <td><code>move_job</code> (5), <code>repark_tray_job</code> (6), <code>repark_tray_job_charger</code> (5), <code>retrieve_job</code> (10), <code>retrieve_job_charger</code> (3), <code>charge_payload_job</code> (4), <code>insert_job</code> (6), <code>bay_job</code> (5), <code>agv_charge_job</code> (6), <code>clean_garage_job</code> (4)</td>
+      <td>Full <code>Scheduler::Plan</code> per job type: <code>scenarios::Plan()</code> loads the test's plan scenario, plans it and checks the file; the test then asserts job states, commands and poses. Each suite has a <code>Deterministic</code> test that plans every scenario of the suite twice. CMake timeout 240 s</td>
     </tr>
     <tr>
-      <td><code>scheduler_jobs_tests.cpp</code></td>
-      <td>30</td>
-      <td>Full <code>Plan()</code> per job type; checks job state, notes and node indices. CMake timeout 240 s</td>
+      <td><code>stages/</code>: 5 files, 22 tests</td>
+      <td><code>tray_assignment</code> (5), <code>agv_assignment</code> (7), <code>assignment_cost</code> (3), <code>sanity_check</code> (3), <code>scheduler_state</code> (4)</td>
+      <td>A hand-built <code>PlanContext</code> on an initial-state file; one stage or helper called directly. The tray and AGV assignment tests record the event DAG before and after the stage</td>
     </tr>
     <tr>
-      <td><code>scheduler_tests.cpp</code></td>
-      <td>25</td>
-      <td>Mostly calls one stage directly on a hand-built <code>ScheduleContext</code></td>
-    </tr>
-    <tr>
-      <td><code>utils_tests.cpp</code></td>
-      <td>13</td>
-      <td>Pure functions in <code>utils.cpp</code>: state validation, bay classification, rebalancing</td>
+      <td><code>utils/</code>: 4 files, 23 tests</td>
+      <td><code>bay_rebalancing</code> (10), <code>base_state_validation</code> (4), <code>empty_tray_count</code> (1), <code>scenario_yaml</code> (8)</td>
+      <td>Pure functions (<code>ClassifyBay(s)</code>, <code>CalculateDesiredBaySplit</code>, <code>ComputeBayRebalancingActions</code>, <code>ValidateBaseState</code>, <code>CountEmptyTrays</code>) and the scenario files' YAML decoding</td>
     </tr>
   </tbody>
 </table>
-<p>By stage: 37 tests enter through <code>Plan()</code>, 5 through tray assignment, 11 through AGV assignment (including the four cost-helper tests), 4 through sanity/motion/response, and 15 through utilities and context helpers. The layouts used are <code>tiny_lot</code> (37 references), <code>1355_fulton</code> (9), <code>576_eccles_half</code> (7) and <code>triple_pick_lot</code> (3).</p>
+<p>By stage: 54 tests enter through <code>Plan()</code> (eight of them the <code>Deterministic</code> checks), 5 through tray assignment (one calls <code>ResolveBlockingTrays</code> directly, two continue into AGV assignment and motion planning), 7 through AGV assignment, 3 through the AGV cost helpers (<code>ComputeTravelDuration</code>, <code>ComputeAgvPickupDuration</code>, <code>ComputeAgvAssignmentCost</code>), 3 through <code>ValidateEventSequence</code>, 4 through scheduler state (the readiness-fraction service twice, <code>ChainAfterLastEntityEvent</code>, and <code>BuildActionGraph</code> on a hand-built continuous state), 15 through utilities, and 8 test the scenario loader itself.</p>
+<p><strong>Scenario files.</strong> The inputs live in <code>test/scenarios/</code> (its <code>README.md</code> is the reference): 50 plan scenarios in <code>plan/&lt;suite&gt;/&lt;Name&gt;[.&lt;suffix&gt;].yaml</code>, 13 stage scenarios in <code>task_planning/{tray_assignment,agv_assignment}/</code>, and 63 initial states in <code>initial_states/&lt;layout&gt;/&lt;name&gt;.yaml</code>, shared between scenarios. A scenario names its test, describes it in a few sentences, names an initial state and holds the request (plan scenarios) or nothing more (stage scenarios, whose test builds the event DAG in code); below that comes the recorded part. The 63 scenario files run on three sites and one synthetic lot: <code>275_sunrise_b</code> (30), <code>5675_pecos_combined</code> (16: bays, AGV chargers, the sanity checks), <code>38_gramercy</code> (14: the EV-charger scenarios; its bay is the car lift BL26 on floor 1, so its retrieves ride the VRC) and <code>tiny_lot</code> (3: the two blocking-tray fallbacks, which need a full lot with nowhere to go, and one two-tray move). <code>576_eccles*</code>, <code>1355_fulton</code> and <code>triple_pick_lot</code> are no longer used by these tests. The tool <code>tools/view_scheduler_tests</code> (<code>poe scheduler-test-viewer</code>) renders every scenario into one HTML page: the garage drawn to scale with the initial state and the goals, the input as tables and the event DAG, and on request the planned moves and the action graph.</p>
+<p><strong>Other packages.</strong> Three more packages test code that a plan call runs, without scenario files:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Package</th>
+      <th>Tests</th>
+      <th>What they cover</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>planner_core</code></td>
+      <td>22 in 2 files</td>
+      <td><code>EventDagTests</code> (10: topological order, <code>RemoveRedundantEdges</code>, a cycle rejected, an unknown vertex throws) and <code>ScheduleEventTests</code> (12: <code>ApplyTo</code> for each event type, VRC teleports)</td>
+    </tr>
+    <tr>
+      <td><code>motion_planner</code></td>
+      <td>69 in 13 files</td>
+      <td>Blocking-tray and open-space search (14), static filters (10), safe intervals and SIPP (14), CHUGG (4), AGV hiding (6), trajectories, intervals and coalescing (13), paths and continuous state (8); on <code>tiny_lot</code>, <code>triple_pick_lot</code> and a test layout</td>
+    </tr>
+    <tr>
+      <td><code>scheduler_advanced_tests</code></td>
+      <td>3 in 3 files</td>
+      <td>Full <code>Plan()</code> regressions: <code>CrossFloorPathing.RetrieveBehindThreeTrays</code> and <code>VrcInsertionCycle.CrossFloorRetrieve</code> on <code>550_w21st</code>, <code>ChokepointPathing.CleanGarage</code> on <code>175_e82nd</code>. Garage states are inline YAML; no recordings</td>
+    </tr>
+  </tbody>
+</table>
 <h3 id="vr-how-a-stage-level-test-is-built">How a stage-level test is built</h3>
-<p>Read this before writing parity tests; the new tests will look the same, with the solver call swapped in.</p>
-<pre><code class="language-cpp">// test/scheduler_tests.cpp — inside TEST(Scheduler, AmigaStash) (abridged); all names are test locals
-volley::DiscreteGarageState state;                         // garage snapshot
-auto [success, msg] = state.Set(YAML::Load(R"YML(...)YML"));  // inline YAML: AGVs, trays, bays, payloads
+<p>Read this before changing a stage; a solver's tests will look the same, with the solver call swapped in.</p>
+<pre><code class="language-cpp">// test/src/stages/agv_assignment_tests.cpp — TEST(AgvAssignment, ChainsThreeMovesAcrossTwoAgvs) (abridged);
+// namespace volley::scheduler::test; all names are test locals
+const auto garage = scenarios::Stage("agv_assignment").initial;      // task_planning/agv_assignment/ChainsThreeMovesAcrossTwoAgvs.yaml
+                                                                      // names 275_sunrise_b/two_agvs_three_empty_trays
+const auto scheduler = scenarios::SharedScheduler(garage.layout_path, SchedulerParams {});  // shared_ptr&lt;const Scheduler>, one per layout per binary
+interfaces::msg::Guid request_id = MakeGuid(0, 0xDEADBEEF);
+const auto ctx = std::make_shared&lt;PlanContext>(request_id, garage.state, scenarios::kNow);  // PlanContextSPtr
 
-Scheduler scheduler(layout_filepath, logger, params);      // the object under test; loads tiny_lot
-ScheduleContextSPtr ctx =                                  // std::shared_ptr&lt;ScheduleContext>
-    std::make_shared&lt;ScheduleContext>(request_id, state, rclcpp::Time());
-
-auto tray_move_1 = std::make_shared&lt;TrayMove>(0u);         // std::shared_ptr&lt;volley::TrayMove>, job_index 0
+const auto tray_move_1 = std::make_shared&lt;TrayMove>(0u);            // job_index 0
 tray_move_1->SetTrayId(2);
-GaragePoseMsg end_pose;                                    // interfaces message: node_id + heading
-end_pose.node_id = 5;
-end_pose.heading = 0;
+interfaces::msg::GaragePose end_pose;                                 // node_id + heading
+end_pose.node_id = 2064;
+end_pose.heading = 90;
 tray_move_1->SetDest(end_pose);
-ctx->events.AddEvent(tray_move_1);
-// ...tray_move_2 (tray 1) and tray_move_3 (tray 2 again), chained with AddDependency
+ctx->event_dag.AddEvent(tray_move_1);
+// ...tray_move_2 (tray 1 to P2067) and tray_move_3 (tray 2 into B2068), chained with AddDependency
 
-std::tie(success, msg) = scheduler.DoAgvAssignments(ctx);  // mutates ctx->events and the TrayMove objects
-EXPECT_EQ(tray_move_1->GetAgvId().value(), 1);             // read results back through the same shared_ptrs
+const auto dag_before_agv = scenarios::Dag(*ctx);                     // canonical DAG: the recording's input
+const auto agv_assignment = scheduler->AssignAgvs(ctx);               // stdx::Result; mutates ctx->event_dag and the TrayMoves
+scenarios::ExpectStage("agv_assignment", dag_before_agv, *ctx);       // checks the file; compares output.dag when asked
+EXPECT_TRUE(agv_assignment) &lt;&lt; agv_assignment.error();
+EXPECT_EQ(tray_move_1->GetAgvId().value(), 1);                        // read results back through the same shared_ptrs
 EXPECT_EQ(tray_move_2->GetAgvId().value(), 1);
-EXPECT_EQ(tray_move_3->GetAgvId().value(), 8);             // hand-over to a second AGV
-EXPECT_FALSE(ctx->events.HasDependency(tray_move_1, tray_move_2));  // direct edge removed by Reduce()
+EXPECT_EQ(tray_move_3->GetAgvId().value(), 8);                        // hand-over to a second AGV
+EXPECT_FALSE(ctx->event_dag.HasDependency(tray_move_1, tray_move_2)); // direct edge removed by RemoveRedundantEdges()
 </code></pre>
-<p>Note the last line: the test checks that <code>Reduce()</code> <em>removed</em> an edge it added itself, which is exactly the kind of detail a parity check must preserve. The test keeps its own <code>shared_ptr</code> to each event, so it can inspect the event after the algorithm has changed it. A parity harness can use the same trick on both the old and the new path.</p>
+<p>Note the last line: the test checks that the transitive reduction at the end of <code>AssignAgvs</code> <em>removed</em> an edge the test added itself, which is exactly the kind of detail a parity check must preserve. The test keeps its own <code>shared_ptr</code> to each event, so it can inspect the event after the algorithm has changed it. <code>scenarios::Dag</code> turns the context's DAG into the canonical document of <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>; <code>ExpectStage</code> checks that the file exists, names this test and holds a recorded part, and compares that part when <code>SCHEDULER_CHECK_RECORDINGS</code> is set. A job test is shorter still: <code>const auto run = scenarios::Plan();</code> builds the request from the file, plans it on the shared scheduler and checks the recorded response, and the test asserts on <code>run.response</code>.</p>
 <h3 id="vr-tests-most-relevant-to-the-two-solvers">Tests most relevant to the two solvers</h3>
-<p>Of the 72 active tests, the ones below exercise tray assignment and AGV assignment, the two stages that the refactor moves into separate solvers. For each test the table gives the layout and what it asserts; note how many assert only that the stage succeeded, a weakness taken up under the gaps that follow.</p>
+<p>The tests below exercise tray assignment and AGV assignment, the two stages that the refactor moves into separate solvers. For each test the table gives the layout and what it asserts; several still assert only that the stage succeeded, but every one with a scenario file also records the stage's output DAG or the whole response, which the comparison checks (gap 1 below).</p>
 <table>
   <thead>
     <tr>
@@ -94,78 +120,118 @@ EXPECT_FALSE(ctx->events.HasDependency(tray_move_1, tray_move_2));  // direct ed
   </thead>
   <tbody>
     <tr>
-      <td><code>TrayAssignmentTest</code></td>
-      <td><code>tiny_lot</code></td>
+      <td><code>TrayAssignment.FillsBlankDestination</code></td>
+      <td><code>275_sunrise_b</code></td>
       <td>One <code>TrayMove</code> with a tray but no destination; asserts only success</td>
     </tr>
     <tr>
-      <td><code>TrayAssignmentTestComplexDag</code></td>
-      <td><code>triple_pick_lot</code></td>
-      <td>"Moving t13 to b1, lots of cycles"; tray, AGV and motion planning all succeed</td>
+      <td><code>TrayAssignment.ResolvesManyBlockersThenAssignsAgvs</code></td>
+      <td><code>275_sunrise_b</code></td>
+      <td>Tray 13 out of a full block into B2068; tray and AGV assignment, motion planning and the action graph all succeed; both stages recorded</td>
     </tr>
     <tr>
-      <td><code>UnblockingTrayMoveTest</code></td>
-      <td><code>tiny_lot</code></td>
-      <td>Tray to bay with a blocker; asserts only success</td>
+      <td><code>TrayAssignment.MovesOneBlocker</code></td>
+      <td><code>275_sunrise_b</code></td>
+      <td>Tray to bay with one blocker; asserts only success (the recording holds the added move and its edge)</td>
     </tr>
     <tr>
-      <td><code>ResolveBlockingTraysRecursivelyUnblocksChain</code></td>
-      <td><code>triple_pick_lot</code></td>
-      <td>Calls <code>ResolveBlockingTrays</code> directly; ≥ 2 required moves, every move has a destination, all destinations distinct</td>
+      <td><code>TrayAssignment.ResolvesBlockerChainRecursively</code></td>
+      <td><code>275_sunrise_b</code></td>
+      <td>Calls <code>ResolveBlockingTrays</code> directly; ≥ 2 required moves, every move has a destination, all destinations distinct. No scenario file</td>
     </tr>
     <tr>
-      <td><code>TrayAndAgvAssignments</code></td>
-      <td><code>tiny_lot</code></td>
-      <td>Both stages; topological order exists; final continuous state computable</td>
+      <td><code>TrayAssignment.ThenAgvAssignment</code></td>
+      <td><code>275_sunrise_b</code></td>
+      <td>Both stages; topological order exists; <code>PlanMotions</code> succeeds</td>
     </tr>
     <tr>
-      <td><code>MiAmigaEsSuAmiga</code></td>
-      <td><code>tiny_lot</code></td>
-      <td>Closer AGV is disabled; AGV-1 is assigned</td>
+      <td><code>AgvAssignment.SkipsDisabledAgv</code></td>
+      <td><code>275_sunrise_b</code></td>
+      <td>Closer AGV is disabled; AGV 1 is assigned</td>
     </tr>
     <tr>
-      <td><code>AmigaSaysNo</code></td>
-      <td><code>tiny_lot</code></td>
+      <td><code>AgvAssignment.FailsWhenDisabledAgvBlocksPath</code></td>
+      <td><code>275_sunrise_b</code></td>
       <td>Disabled AGV blocks the other's path; assignment fails, no AGV set</td>
     </tr>
     <tr>
-      <td><code>AmigaStash</code></td>
-      <td><code>tiny_lot</code></td>
-      <td>Three chained tray moves get AGVs 1, 1 and 8; the original tray-to-tray edges are gone after <code>Reduce()</code> because longer chains imply them; applying all events reaches the expected state</td>
+      <td><code>AgvAssignment.ChainsThreeMovesAcrossTwoAgvs</code></td>
+      <td><code>275_sunrise_b</code></td>
+      <td>Three chained tray moves get AGVs 1, 1 and 8; the original tray-to-tray edges are gone after the reduction because longer chains imply them; applying all events reaches the expected state</td>
     </tr>
     <tr>
-      <td><code>NoAmigas</code></td>
-      <td><code>tiny_lot</code></td>
+      <td><code>AgvAssignment.FailsWithNoAvailableAgv</code></td>
+      <td><code>275_sunrise_b</code></td>
       <td>No feasible AGV; fails, no edge added, still 2 vertices</td>
     </tr>
     <tr>
-      <td><code>AmigaBaySos</code> / <code>AmigaBaySo</code></td>
-      <td><code>tiny_lot</code></td>
+      <td><code>AgvAssignment.FailsWhenBayTransitionTrapsAgv</code> / <code>UsesAgvFreedByBayTransition</code></td>
+      <td><code>275_sunrise_b</code></td>
       <td>A <code>BayTransition</code> root traps or frees the AGV; edge bay → tray move present</td>
     </tr>
     <tr>
-      <td><code>TrayLiftBayTransitionDependencyTest</code></td>
-      <td><code>tiny_lot</code></td>
+      <td><code>AgvAssignment.OrdersLiftsAroundBayTransitions</code></td>
+      <td><code>275_sunrise_b</code></td>
       <td>The bay transition has the AGV lift move as an out-edge</td>
     </tr>
     <tr>
-      <td><code>CleanGarageUnstashesTrayFromWaypoint</code></td>
+      <td><code>CleanGarageJob.UnstashesTrayFromWaypoint</code></td>
+      <td><code>275_sunrise_b</code></td>
+      <td>Through <code>Plan()</code>: one job, <code>STATE_EXECUTING</code>, a lifted move from W2070 to a stall exists</td>
+    </tr>
+    <tr>
+      <td><code>RetrieveJob.AdvancesRootTray</code> / <code>ParksBlockerOnCriticalPath</code></td>
       <td><code>tiny_lot</code></td>
-      <td>Through <code>Plan()</code>: one job, <code>STATE_EXECUTING</code>, an unstash move exists</td>
+      <td>Through <code>Plan()</code>: the two blocking-tray fallbacks (advance the root tray one step; park the blocker on the critical path) succeed; one job, executing</td>
+    </tr>
+    <tr>
+      <td><code>MoveJob.TwoTrayMovesWithAgvUnderOneTray</code></td>
+      <td><code>tiny_lot</code></td>
+      <td>Through <code>Plan()</code>: two tray moves that must share and order both AGVs; both jobs executing, each with actions</td>
     </tr>
   </tbody>
 </table>
+<h3 id="vr-where-the-old-tests-went">Where the old tests went</h3>
+<p>Older notes, tickets and this pack's figures name the tests as they were before PR #1007. Each old test became the test on its right, with its inline YAML moved to an initial-state file and, except the four noted, its fixture moved from <code>tiny_lot</code>, <code>triple_pick_lot</code>, <code>1355_fulton</code> or <code>576_eccles_half</code> to a current site.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Old test (file)</th>
+      <th>Today</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>TrayAssignmentTest</code>, <code>TrayAssignmentTestComplexDag</code>, <code>UnblockingTrayMoveTest</code>, <code>ResolveBlockingTraysRecursivelyUnblocksChain</code>, <code>TrayAndAgvAssignments</code> (<code>scheduler_tests.cpp</code>)</td><td><code>TrayAssignment.</code> <code>FillsBlankDestination</code>, <code>ResolvesManyBlockersThenAssignsAgvs</code>, <code>MovesOneBlocker</code>, <code>ResolvesBlockerChainRecursively</code>, <code>ThenAgvAssignment</code></td></tr>
+    <tr><td><code>MiAmigaEsSuAmiga</code>, <code>AmigaSaysNo</code>, <code>AmigaStash</code>, <code>NoAmigas</code>, <code>AmigaBaySos</code>, <code>AmigaBaySo</code>, <code>TrayLiftBayTransitionDependencyTest</code></td><td><code>AgvAssignment.</code> <code>SkipsDisabledAgv</code>, <code>FailsWhenDisabledAgvBlocksPath</code>, <code>ChainsThreeMovesAcrossTwoAgvs</code>, <code>FailsWithNoAvailableAgv</code>, <code>FailsWhenBayTransitionTrapsAgv</code>, <code>UsesAgvFreedByBayTransition</code>, <code>OrdersLiftsAroundBayTransitions</code></td></tr>
+    <tr><td><code>GetJustMovingCost</code>, <code>GetAgvCurrentPoseToTrayMoveCost</code>, <code>GetAgvToTrayAssignmentCost</code>; <code>GetAgvOccupiedDuration</code></td><td><code>AssignmentCost.</code> <code>JustMoving</code>, <code>AgvCurrentPoseToTrayMove</code>, <code>AgvToTrayAssignment</code>; the last was removed in PR #1018 with the function, which always returned 0</td></tr>
+    <tr><td><code>SanityCheckEventsDisabledDest</code>, <code>SanityCheckEventsCantApply</code>, <code>SanityCheckEventsCantFindPathThruOdp</code></td><td><code>SanityCheck.</code> <code>RejectsDisabledDestination</code>, <code>RejectsMoveThatCannotApply</code>, <code>RejectsMoveWithoutPath</code></td></tr>
+    <tr><td><code>SetBayReadinessRatioService</code>, <code>UpdateLastEntityEvent</code>, <code>ContinuousStateToSchedule</code></td><td><code>SchedulerState.</code> <code>SetBayReadinessRatioService</code>, <code>ChainAfterLastEntityEvent</code>, <code>ContinuousStateToSchedule</code></td></tr>
+    <tr><td><code>CleanGarageAgvInTheWay</code>, <code>CleanGarageDontMoveAgvsUnderTrays</code>, <code>CleanGarageUnstashesTrayFromWaypoint</code></td><td><code>CleanGarageJob.</code> <code>AgvInTheWay</code>, <code>DoesNotMoveAgvsUnderTrays</code>, <code>UnstashesTrayFromWaypoint</code></td></tr>
+    <tr><td><code>DoubleRetrieveDodgeAgv</code> (commented out, with the only file in <code>test/garage_states/</code>)</td><td>Removed in PR #1007 with that folder; no scenario replaces it (<code>RetrieveJob.BackToBack</code> plans two retrieves in one call)</td></tr>
+    <tr><td><code>MoveAgvJob</code>, <code>MoveAgvJobAlreadyAtDest</code> (<code>scheduler_jobs_tests.cpp</code>)</td><td><code>MoveJob.</code> <code>AgvToBay</code>, <code>AgvAlreadyAtDestination</code></td></tr>
+    <tr><td><code>ReparkTrayJob</code>, <code>ReparkTrayJobAdvanceToWaypoint</code>, <code>ReparkUnplugVecs</code>, <code>ReparkUnplugVecsMoveAgvFirst</code>; <code>ReparkTrayJobGoodVecs</code>, <code>…BadVecs</code>, <code>…ChargingVecs</code>, <code>…BadVecsDest</code>, <code>…GoodVecsAtDest</code></td><td><code>ReparkTrayJob.</code> <code>ToBay</code>, <code>AdvancesBlockersToWaypoint</code>, <code>UnplugsCharger</code>, <code>UnplugsChargerAgvMovesFirst</code>; <code>FromReadyCharger</code>, <code>FromUnavailableCharger</code>, <code>WhileCharging</code>, <code>ToUnavailableCharger</code>, <code>ToReadyCharger</code> (<code>repark_tray_job_charger_tests.cpp</code>)</td></tr>
+    <tr><td><code>RetrieveJob</code>, <code>RetrieveJobDisabledNode</code>, <code>RetrieveJobBayTransition</code>, <code>BackToBackRetrieve</code>, <code>WeirdFultonRetrieve</code>; <code>RetrieveJobGoodVecs</code>, <code>…BadVecs</code>, <code>…ChargingVecs</code></td><td><code>RetrieveJob.</code> <code>FromStall</code>, <code>FromDisabledNode</code>, <code>WithBayTransition</code>, <code>BackToBack</code>, <code>WithCleanGarage</code>; <code>FromReadyCharger</code>, <code>FromUnavailableCharger</code>, <code>WhileCharging</code> (<code>retrieve_job_charger_tests.cpp</code>)</td></tr>
+    <tr><td><code>ChargePayloadJob</code>, <code>ChargePayloadJobNoVecs</code>, <code>ChargePayloadJobWrongPayload</code></td><td><code>ChargePayloadJob.</code> <code>FromBayToCharger</code>, <code>WithoutCharger</code>, <code>WrongPayload</code></td></tr>
+    <tr><td><code>InsertJob</code>; <code>FultonInsertBay{1,2}TrayHeading{0,180}</code> (<code>scheduler_insert_orientation_tests.cpp</code>)</td><td><code>InsertJob.</code> <code>WithCleanGarage</code>; <code>FromBay7TrayHeading90</code>, <code>FromBay7TrayReversed</code>, <code>FromBay21TrayHeading90</code>, <code>FromBay21TrayReversed</code> (Pecos bays 7 and 21 instead of Fulton bays 1 and 2)</td></tr>
+    <tr><td><code>ReadyForRetrieveJob</code>, <code>TransitionBay</code>, <code>CantTransitionDisabledBay</code></td><td><code>BayJob.</code> <code>ReadyForRetrieve</code>, <code>Transitions</code>, <code>CannotTransitionDisabledBay</code></td></tr>
+    <tr><td><code>AgvChargeJob</code>, <code>AgvChargeJobMVP454</code>, <code>AgvChargeJobInBay</code>, <code>DontGoToDisabledChargeNode</code></td><td><code>AgvChargeJob.</code> <code>ToNearestCharger</code>, <code>TwoAgvsDistinctChargers</code>, <code>FromInsideBay</code>, <code>SkipsDisabledChargers</code></td></tr>
+    <tr><td><code>ValidDGS</code>, <code>DuplicateTrays</code>, <code>PayloadDoesntFit</code>, <code>WhatNodeIsThat</code>, <code>CountEmptyTrays</code> (<code>utils_tests.cpp</code>)</td><td><code>ValidateBaseState.</code> <code>AcceptsAConsistentState</code>, <code>RejectsDuplicateTrayIds</code>, <code>RejectsOversizedPayload</code>, <code>RejectsAgvOnUnknownNode</code>; <code>CountEmptyTrays.CountsEmptyEnabledTrays</code></td></tr>
+    <tr><td><code>ClassifyBay</code>, <code>DisabledMeansNotUsable</code>, <code>ClassifyBaysViaFullState</code>, <code>CalculateDesiredBaySplit</code>, <code>ComputeBayRebalancingActions</code>, <code>TrivialBayBalancing</code>, <code>OneDisabledBay</code>, <code>BayInFlightIsNotRecommanded</code></td><td><code>BayRebalancing.*</code> (10 tests, with the bay classifications renamed in PR #1018)</td></tr>
+  </tbody>
+</table>
+<p>New since the old files: <code>BayJob.ReadyForInsert</code>, <code>MoveJob.BaseScheduleReservesAgvAndNodes</code> and the two <code>tiny_lot</code> fallbacks (PR #1007); a <code>Deterministic</code> test per job suite and the eight <code>ScenarioYaml</code> tests of the loader; and in PR #1018 <code>RetrieveJob.FailedJobReportedOnce</code>, <code>RetrieveJob.FailedJobLeavesNoEvents</code>, <code>ReparkTrayJob.ReturnsTrayAfterEarlierRepark</code>, <code>AgvChargeJob.AlreadyOnCharger</code> and <code>SchedulerState.RejectsNonFiniteBayReadinessRatio</code>, which guard the bugs that PR fixed. PR #1018 also deleted the four Eccles files of <code>scheduler_advanced_tests</code> (six tests on <code>576_eccles</code>, <code>576_eccles_half</code> and <code>1355_fulton</code>); the one test among them on <code>tiny_lot</code>, <code>OverlappingAgvAssignmentFailureTest2</code>, became <code>MoveJob.TwoTrayMovesWithAgvUnderOneTray</code>, and the three remaining files were renamed for what they guard.</p>
 <h3 id="vr-gaps">Gaps</h3>
-<p>The existing tests leave several weaknesses that limit how far they can serve as evidence that the refactor preserves behaviour. Each item below names one and, where relevant, what the parity work must add to cover it.</p>
+<p>The tests still leave several weaknesses that limit how far they can serve as evidence that the refactor preserves behaviour. Each item below names one and, where relevant, what the parity work must add to cover it.</p>
 <ol>
-  <li><strong>Assertions are mostly success flags.</strong> Four of the five tray tests do not check which tray moved where. They will not catch a behaviour change; the parity harness in <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a> must.</li>
-  <li><strong>No direct tests</strong> for <code>EnsureAgvMovePathsClear</code>, <code>AddDepsAfterAmiga</code> or <code>InsertVrcActionsIntoDag</code>. They run only inside larger tests, so a regression there shows up (if at all) as a downstream failure.</li>
-  <li><strong><code>DoubleRetrieveDodgeAgv</code> is commented out.</strong> It uses the only YAML fixture in <code>test/garage_states/</code> and <code>576_eccles_half</code>. Find out why before relying on that scenario.</li>
-  <li><strong>Layout-specific code.</strong> <code>UseEvChargeHeading</code> checks <code>strstr(layout_->GetName().c_str(), "576_eccles")</code> and forces heading 0 on nodes 46 and 47. Benchmarks on that layout exercise a branch others never reach.</li>
-  <li><strong>No benchmark code.</strong> Nothing in the snapshot times the solvers, and no Google Benchmark target exists in <code>CMakeLists.txt</code>.</li>
+  <li><strong>Assertions are mostly success flags, and the recordings are checked only on request.</strong> Four of the five tray tests do not assert which tray moved where. Their scenario files record it, but CI runs without <code>SCHEDULER_CHECK_RECORDINGS</code>, so a behaviour change passes CI unless someone turns the comparison on (<a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>). Every refactor pull request must run it.</li>
+  <li><strong>No direct tests</strong> for <code>OrderAgvMovesAfterBlockingAgvs</code>, <code>OrderAllTransitionsAroundAgvLifts</code> or <code>InsertVrcActionsIntoDag</code>. They run inside larger tests (<code>AgvAssignment.OrdersLiftsAroundBayTransitions</code>, the <code>38_gramercy</code> retrieves through the car lift, and the advanced tests <code>ChokepointPathing</code>, <code>CrossFloorPathing</code> and <code>VrcInsertionCycle</code>), so a regression there shows up as a downstream failure or a recording difference.</li>
+  <li><strong>A plan scenario records the response only.</strong> The event DAG that a plan call builds is not recorded, so a change in tray or AGV assignment that happens to give the same action graph passes. The stage scenarios record the DAG, but only for the 13 hand-built cases.</li>
+  <li><strong>Some decisions depend on hash-map order.</strong> <code>ExpectDeterministic</code> shows that a plan repeats within one process, and PR #1018 made <code>MotionScheduleOrder</code> break ties on every field. Choices that iterate an <code>std::unordered_map</code> are still fixed only for a given standard library; the chokepoint test checks an invariant instead of one plan for that reason. A recording may therefore move with a toolchain upgrade.</li>
+  <li><strong>No benchmark code.</strong> Nothing times the solvers, and no Google Benchmark target exists in any <code>CMakeLists.txt</code> of the planner.</li>
 </ol>
+<p>Two gaps listed here before PR #1018 are closed: the commented-out <code>DoubleRetrieveDodgeAgv</code> was deleted with its fixture, and the layout-name branch for <code>576_eccles</code> (<code>UseEvChargeHeading</code>) was removed with the Eccles tests.</p>
 <h2 data-num id="vr-proposed-benchmark-dataset-requirements-not-completed-scenarios">Proposed benchmark dataset (requirements, not completed scenarios)</h2>
-<p>The parent ticket requires <strong>at least 10 scenarios based on real customer site layouts for each solver</strong>. The matrix below is coverage to aim for, <strong>not</strong> a claim that the cases exist. Each row needs an approved real-site fixture or a documented, anonymized derivative of one. <code>tiny_lot</code> and <code>triple_pick_lot</code> are test layouts and do not count; <code>576_eccles_half</code> and <code>1355_fulton</code> look site-derived, but record their provenance first.</p>
+<p>The parent ticket requires <strong>at least 10 scenarios based on real customer site layouts for each solver</strong>. The matrix below is coverage to aim for, <strong>not</strong> a claim that the cases exist as benchmarks. The scenario files already run on three real sites (<code>275_sunrise_b</code>, <code>5675_pecos_combined</code>, <code>38_gramercy</code>); <code>tiny_lot</code> is a test layout and does not count, and <code>576_eccles*</code> and <code>1355_fulton</code> are decommissioned and not to be used. Each row still needs an approved fixture with recorded provenance.</p>
 <table>
   <thead>
     <tr>
@@ -180,196 +246,201 @@ EXPECT_FALSE(ctx->events.HasDependency(tray_move_1, tray_move_2));  // direct ed
       <td>01</td>
       <td>Low occupancy, short move</td>
       <td>One nearby feasible AGV</td>
-      <td><code>TrayAssignmentTest</code>, <code>MiAmigaEsSuAmiga</code></td>
+      <td><code>TrayAssignment.FillsBlankDestination</code>, <code>AgvAssignment.SkipsDisabledAgv</code></td>
     </tr>
     <tr>
       <td>02</td>
       <td>Occupied destination, repark</td>
       <td>Several candidates, distance tie</td>
-      <td><code>ReparkTrayJob</code></td>
+      <td><code>ReparkTrayJob.ToBay</code></td>
     </tr>
     <tr>
       <td>03</td>
       <td>Single blocking tray</td>
       <td>Candidate with a raised lift</td>
-      <td><code>UnblockingTrayMoveTest</code></td>
+      <td><code>TrayAssignment.MovesOneBlocker</code></td>
     </tr>
     <tr>
       <td>04</td>
       <td>Recursive chain of blockers</td>
       <td>Closer candidate disabled</td>
-      <td><code>ResolveBlockingTraysRecursivelyUnblocksChain</code></td>
+      <td><code>TrayAssignment.ResolvesBlockerChainRecursively</code></td>
     </tr>
     <tr>
       <td>05</td>
       <td>Narrow aisle with cycles</td>
       <td>AGV trapped in a bay</td>
-      <td><code>TrayAssignmentTestComplexDag</code>, <code>AmigaBaySos</code></td>
+      <td><code>TrayAssignment.ResolvesManyBlockersThenAssignsAgvs</code>, <code>AgvAssignment.FailsWhenBayTransitionTrapsAgv</code></td>
     </tr>
     <tr>
       <td>06</td>
       <td>High occupancy, no repark spot</td>
       <td>AGV route unreachable</td>
-      <td><code>AmigaSaysNo</code></td>
+      <td><code>RetrieveJob.AdvancesRootTray</code>, <code>RetrieveJob.ParksBlockerOnCriticalPath</code>, <code>AgvAssignment.FailsWhenDisabledAgvBlocksPath</code></td>
     </tr>
     <tr>
       <td>07</td>
       <td>Waypoint-stash fallback (tier 2)</td>
       <td>Non-tray root gates a tray root</td>
-      <td><code>CleanGarageUnstashesTrayFromWaypoint</code> (the reverse step), <code>AmigaBaySo</code></td>
+      <td><code>CleanGarageJob.UnstashesTrayFromWaypoint</code> (the reverse step), <code>AgvAssignment.UsesAgvFreedByBayTransition</code></td>
     </tr>
     <tr>
       <td>08</td>
       <td>Different payload footprints</td>
       <td>Node-arrival ordering between AGVs</td>
-      <td><code>CleanGarageAgvInTheWay</code></td>
+      <td><code>CleanGarageJob.AgvInTheWay</code></td>
     </tr>
     <tr>
       <td>09</td>
       <td>Several jobs, independent moves</td>
       <td>Bottleneck matching across many roots</td>
-      <td><code>BackToBackRetrieve</code></td>
+      <td><code>RetrieveJob.BackToBack</code>, <code>MoveJob.TwoTrayMovesWithAgvUnderOneTray</code></td>
     </tr>
     <tr>
       <td>10</td>
       <td>One tray moved several times</td>
       <td>Same AGV across a chain, then a hand-over</td>
-      <td><code>AmigaStash</code></td>
+      <td><code>AgvAssignment.ChainsThreeMovesAcrossTwoAgvs</code></td>
     </tr>
   </tbody>
 </table>
-<p>Each fixture records: site/layout identifier, layout file hash, initial <code>DiscreteGarageState</code> (YAML), request (<code>PlanRequestMsg</code> or the hand-built DAG), expected result, code SHA, and whether it is anonymized.</p>
+<p>A scenario file already records the layout (through its initial state's folder), the initial <code>DiscreteGarageState</code>, the request (<code>interfaces::msg::PlanRequest</code> jobs and base schedule) or the hand-built DAG, and the result. A benchmark fixture also needs the layout file hash, the code SHA of its recording, and whether it is anonymized; the scenario files do not record these.</p>
 <h2 data-num id="vr-compare-meaning-not-pointers-or-guids">Compare meaning, not pointers or GUIDs</h2>
-<p>Events have no stable id across runs: a <code>shared_ptr</code> address changes every run, and GUIDs come from a static counter. Compare a canonical description instead. For each scenario <span class="math">k\in\{1,\ldots,K\}</span>, where <span class="math">K\in\mathbb N</span> is the number of scenarios, capture:</p>
+<p>Events have no stable id across runs: a <code>shared_ptr</code> address changes every run, and GUIDs come from a static counter. A comparison therefore needs a canonical description. The recorded part of each scenario file is that description, written by the test support in <code>test/src/scenarios/</code> (<code>stage.cpp</code>, <code>plan.cpp</code>, <code>recording.cpp</code>):</p>
 <ul>
-  <li>Success flag and a stable error class (compare raw message strings separately).</li>
-  <li>For each <code>TrayMove</code>: tray id, destination node and heading, assigned AGV id, job index.</li>
-  <li>Event identity as (type, job index, entity id, destination, occurrence number among identical events).</li>
-  <li>The edge set after <code>Reduce()</code> (the transitive reduction is unique for a DAG, <a class="ref" href="#ad-transitive-reduction">section 2.4</a>), plus reachability between every pair of events.</li>
-  <li><code>first_tray_event</code> mapped to canonical event identities.</li>
-  <li>The final <code>DiscreteGarageState</code> after applying all events to <code>initial_state</code>.</li>
-  <li>For end-to-end tests: the <code>ScheduledJobDataMsg</code> list and the action DAG, with actions matched by content (entity, command, poses) and compared as reduced edge sets (<a class="ref" href="#ad-what-this-means-for-the-refactor">section 6.7</a>).</li>
+  <li><strong>An event DAG</strong> (stage scenarios: <code>input.dag</code> before the stage, <code>output.dag</code> after it) has <code>events</code>, one string per event, <code>ScheduleEvent::ToString()</code> (task index, type, tray or entity, destination, AGV) plus <code>#n</code> to number identical strings, sorted; <code>edges</code>, <code>[from, to]</code> positions in that list, sorted; and <code>first_event_by_tray</code>, tray id to position.</li>
+  <li><strong>A response</strong> (plan scenarios: <code>output.response</code>) is the <code>PlanResponse</code> as <code>interfaces::msg::to_yaml</code> prints it, with each action GUID replaced by <code>MakeGuid(0, position + 1)</code> (also in the charger and conveyor command ids and in <code>bay_arrival_node_guid</code>), <code>scheduled_jobs</code> sorted by job GUID, and the document compacted: fields at their default are left out, a GUID is one scalar, short maps go on one line. Action nodes stay in schedule order. The success flag, job states and error messages are part of the response, so they are compared as text.</li>
 </ul>
-<p>Let <span class="math">e_k\in\{0,1\}</span> be 1 only when every rule above passes for scenario <span class="math">k</span>. The pass proportion <span class="math">p\in[0,1]</span> is:</p>
+<p>The comparison runs on the emitted text of both sides and fails with the first differing line. It runs when <code>SCHEDULER_CHECK_RECORDINGS=1</code> is set; <code>RECORD_REFERENCE_OUTPUT=1</code> rewrites the recorded part instead. It is off by default because a change to what the planner is configured with (a cost, a speed, a site layout) moves every recording, while the assertions must hold across such a change.</p>
+<p>Compared with the description this tab proposed before PR #1007, the recordings leave out three things: reachability between every pair of events, the final <code>DiscreteGarageState</code> after applying all events, and, for plan scenarios, the event DAG (gap 3). Edges are compared as the stage left them: <code>AssignAgvs</code> ends with <code>RemoveRedundantEdges()</code>, so its output is reduced (the transitive reduction is unique for a DAG, <a class="ref" href="#ad-transitive-reduction">section 2.4</a>); <code>AssignTrays</code> does not reduce, so its output edges are compared as added. Action graphs are compared in schedule order rather than matched by content (<a class="ref" href="#ad-what-this-means-for-the-refactor">section 6.7</a>), which relies on <code>MotionScheduleOrder</code> being a total order.</p>
+<p>For each scenario <span class="math">k\in\{1,\ldots,K\}</span>, where <span class="math">K\in\mathbb N</span> is the number of scenario files (63 today), let <span class="math">e_k\in\{0,1\}</span> be 1 only when its recorded part matches. The pass proportion <span class="math">p\in[0,1]</span> is:</p>
 <div class="math">p=\frac{1}{K}\sum_{k=1}^{K}e_k.</div>
-<p>The release gate is <span class="math">p=1</span>, with every deviation investigated. If a stage is non-deterministic (for example, ties in <code>BottleneckAssignment</code> broken by hash-map order), define the accepted equivalence classes <strong>before</strong> measuring, not after a difference appears.</p>
-<p>A parity check could look like this. <code>Canonicalize</code> and <code>CanonicalDag</code> are <strong>proposed</strong> helpers, not existing code:</p>
-<pre><code class="language-cpp">// PROPOSED — test/solver_parity_tests.cpp
-// reference_ctx, candidate_ctx : ScheduleContextSPtr built from the same YAML state and the same events
-//                                (events cloned, not shared — otherwise both paths mutate the same objects)
-// scheduler                    : volley::Scheduler (old path)
-// tray_solver                  : tray_assignment::DefaultSolver (new path, built from the scheduler's GarageServices)
-auto [ref_ok, ref_msg] = scheduler.DoTrayAssignments(reference_ctx);           // BoolStringPair (old API)
-stdx::Result cand = tray_solver.Solve({candidate_ctx->initial_state, candidate_ctx->events})  // stdx::Expected&lt;Result>
-                        .and_then([&amp;](const tray_assignment::Result&amp; r) {
-                          return tray_assignment::ApplyTrayAssignment(*candidate_ctx, r);
-                        });
-ASSERT_EQ(ref_ok, cand.has_value()) &lt;&lt; ref_msg &lt;&lt; " vs " &lt;&lt; (cand ? std::string{} : cand.error());
-if(!ref_ok) { EXPECT_EQ(ref_msg, cand.error()); }   // error text reaches clients through FailJob
-
-CanonicalDag ref  = Canonicalize(*reference_ctx);   // sorted events + reduced edge set + first_tray_event
-CanonicalDag cand = Canonicalize(*candidate_ctx);
-EXPECT_EQ(ref.events, cand.events);                 // tray ids, destinations, AGV ids, job indices
-EXPECT_EQ(ref.edges, cand.edges);                   // after Reduce() on a copy
-EXPECT_EQ(ref.first_tray_event, cand.first_tray_event);
-EXPECT_EQ(ref.final_state, cand.final_state);
+<p>The release gate is <span class="math">p=1</span>, with every deviation investigated: a test run with <code>SCHEDULER_CHECK_RECORDINGS=1</code> that passes is <span class="math">p=1</span>. If a stage is non-deterministic, define the accepted equivalence classes <strong>before</strong> measuring, not after a difference appears; <code>TEST(&lt;Suite&gt;, Deterministic)</code> in each job binary plans every scenario of its suite twice and expects the same response, whether or not the comparison is on.</p>
+<p>For the solver extraction no second harness is needed: the solver goes behind <code>AssignTrays</code> or <code>AssignAgvs</code>, and the stage and plan scenarios are run with the comparison on. The old path does not have to run in the same test, because its output is stored. Two checks remain <strong>proposed</strong>:</p>
+<pre><code class="language-cpp">// PROPOSED — test/src/stages/tray_solver_tests.cpp (sketch)
+// ctx_a, ctx_b : PlanContextSPtr built independently from the same scenario and the same events
+//                (events cloned, not shared — otherwise both calls see the other's changes)
+// tray_solver  : tray_assignment::DefaultSolver, built from the scheduler's GarageServices
+// dag_before   : scenarios::Dag(*ctx_a), taken before the first Solve
+const auto first  = tray_solver.Solve({ctx_a->initial_state, ctx_a->event_dag});   // stdx::Expected&lt;Result>
+const auto second = tray_solver.Solve({ctx_b->initial_state, ctx_b->event_dag});
+ASSERT_EQ(first.has_value(), second.has_value());
+EXPECT_EQ(*first, *second);                                    // Solve is deterministic
+EXPECT_EQ(scenarios::Emit(scenarios::Dag(*ctx_a)), scenarios::Emit(dag_before));  // and changes nothing in its input
 </code></pre>
-<p>Note the comment on cloning: because the DAG holds <code>shared_ptr</code>s (<a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">section 6.5</a>), the two contexts must be built independently from the same inputs. <code>Solve</code> itself changes nothing, but <code>ApplyTrayAssignment</code> and the old <code>DoTrayAssignments</code> both set fields on the event objects. A second, cheaper check needs no clone: call <code>Solve</code> twice on the same <code>Input</code> and assert the two <code>Result</code>s are equal and the input events are unchanged (invariant 9, <a class="ref" href="#pr-key-invariants-to-maintain">section 10</a>).</p>
+<p>Note the comment on cloning: because the DAG holds <code>shared_ptr</code>s (<a class="ref" href="#pr-why-return-a-result-and-how-it-is-applied">section 6.5</a>), two contexts must be built independently from the same inputs. The recordings avoid the problem by comparing documents, not objects. The sketch checks invariant 9 (<a class="ref" href="#pr-key-invariants-to-maintain">section 10</a>): <code>Solve</code> changes nothing, and the stage's apply step is the only writer to the event objects. The second proposed check adds the final <code>DiscreteGarageState</code> to the stage recordings, which closes part of gap 3.</p>
 <h2 data-num id="vr-benchmark-method">Benchmark method</h2>
-<p>Time the solver call alone, after fixture construction, and separately time <code>Scheduler::Plan</code> end to end. Keep layout loading, YAML parsing, ROS component start-up and <code>debug/printdags</code> output out of solver timings. Use the same optimized build flags, hardware, ROS distribution, dependency versions and thread count for every run.</p>
+<p>This section is a proposal; nothing in the repository implements it yet. Time the solver call alone, after fixture construction, and separately time <code>Scheduler::Plan</code> end to end. Keep layout loading, the collision-table parse (seconds for <code>275_sunrise_b</code>, whose cached table is 281 MB of JSON; <code>scenarios::SharedScheduler</code> already does it once per binary), YAML parsing, ROS component start-up and <code>debug/printdags</code> output out of solver timings. Use the same optimized build flags, hardware, ROS distribution, dependency versions and thread count for every run.</p>
 <p>Let <span class="math">t_{k,r}\in\mathbb R_{\ge0}</span> [ms] be the duration of scenario <span class="math">k</span> on repetition <span class="math">r\in\{1,\ldots,R\}</span>, where <span class="math">R\in\mathbb N</span> is the repetition count. For each scenario record the median <span class="math">\widetilde t_k\in\mathbb R_{\ge0}</span> [ms], the 95th percentile <span class="math">t_{k,0.95}</span> [ms] when there are enough repetitions, and the baseline median <span class="math">\widetilde t_k^{(0)}</span> [ms] from the original code. The runtime ratio <span class="math">q_k\in\mathbb R_{\ge0}</span> is:</p>
 <div class="math">q_k=\frac{\widetilde t_k}{\widetilde t_k^{(0)}}.</div>
 <p><span class="math">q_k</span> is defined only when <span class="math">\widetilde t_k^{(0)}>0</span> [ms]; a value above 1 means the candidate is slower. Agree on a threshold with the team after measuring run-to-run variance, not before. Save raw timings as CSV or JSON:</p>
 <pre><code class="language-text">solver,scenario_id,site_fixture,layout_hash,code_sha,build_type,host,iteration,elapsed_ms,success,event_count,edge_count,work_s,span_s,width,semantic_hash
 </code></pre>
-<p><code>semantic_hash</code> is a hash of the canonical description from <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, never of pointer values or hash-map iteration order. <code>work_s</code>, <code>span_s</code> and <code>width</code> describe the parallelism of the action DAG in the response (<a class="ref" href="#ad-where-parallelism-comes-from">section 4.5</a>); they show whether a solver change made the plan more or less parallel even when the timing is unchanged.</p>
+<p><code>semantic_hash</code> is a hash of the canonical description from <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a> (the emitted recorded part), never of pointer values or hash-map iteration order. <code>work_s</code>, <code>span_s</code> and <code>width</code> describe the parallelism of the action DAG in the response (<a class="ref" href="#ad-where-parallelism-comes-from">section 4.5</a>); they show whether a solver change made the plan more or less parallel even when the timing is unchanged.</p>
 <h2 data-num id="vr-build-and-run-commands">Build and run commands</h2>
-<p>Inside the configured ROS 2 container and workspace:</p>
-<pre><code class="language-bash">colcon build --packages-up-to scheduler scheduler_advanced_tests --event-handlers console_direct+
-colcon test --packages-select planner_core scheduler scheduler_advanced_tests --event-handlers console_direct+
-colcon test-result --verbose
+<p>Inside the devcontainer, from the workspace root (<code>poe build-pkg</code> is <code>colcon build --packages-up-to</code>; <code>poe test-pkg</code> is <code>colcon test --packages-up-to</code> followed by <code>colcon test-result --verbose</code>):</p>
+<pre><code class="language-bash">poe build-pkg scheduler_advanced_tests                  # builds planner_core, motion_planner and scheduler too
+poe test-pkg scheduler                                   # the assertions only, as CI runs them
+SCHEDULER_CHECK_RECORDINGS=1 poe test-pkg scheduler      # also compare every recorded part
+poe test-pkg scheduler_advanced_tests
+poe scheduler-test-viewer                                # artifacts/scheduler-tests.html: every scenario drawn
 </code></pre>
-<p>To run one test under a debugger, use the gtest binary in the build tree, for example <code>build/scheduler/scheduler_tests --gtest_filter=Scheduler.AmigaStash</code>. If the workspace uses wrappers (<code>poe</code>, <code>.colcon</code> profiles, a virtual environment), follow them. A successful build does not mean the tests ran; read <code>colcon test-result</code> and the logs.</p>
+<p>Each test file is its own binary in the build tree; run one directly with gtest's flags, for example <code>build/scheduler/agv_assignment_tests --gtest_filter=AgvAssignment.ChainsThreeMovesAcrossTwoAgvs</code>, also under a debugger. The binaries read the scenario files from the source tree (<code>SCHEDULER_SCENARIO_DIR</code>), so <code>RECORD_REFERENCE_OUTPUT=1 build/scheduler/retrieve_job_tests</code> rewrites the files in place, and <code>git diff</code> shows what changed. The binaries print only errors; <code>SCHEDULER_TEST_LOG=1</code> brings the log back. A successful build does not mean the tests ran; read <code>colcon test-result</code> and the logs.</p>
 <h2 data-num id="vr-system-level-checks-in-simulation">System-level checks in simulation</h2>
-<p>The fixtures above test the scheduler on hand-built inputs. The simulator runs the real stack against a simulated garage, and Dispatch already publishes every plan request and response for recording. That gives two more checks, described in the Simulation tab (<a class="ref" href="#sm-checking-the-refactor">section 9</a>): <strong>replay</strong>, which feeds recorded plan calls from baseline runs to the refactored scheduler and applies the canonical comparison of <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, on every pull request; and <strong>closed-loop runs</strong> of a scenario catalogue on the candidate, compared with the baseline on collisions, job outcomes and durations, before a stage is merged.</p>
+<p>The scenario files test the scheduler on hand-built inputs. The simulator runs the real stack against a simulated garage, and Dispatch already publishes every plan request and response for recording. That gives two more checks, described in the Simulation tab (<a class="ref" href="#sm-checking-the-refactor">section 9</a>): <strong>replay</strong>, which feeds recorded plan calls from baseline runs to the refactored scheduler and applies the canonical comparison of <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, on every pull request; and <strong>closed-loop runs</strong> of a scenario catalogue on the candidate, compared with the baseline on collisions, job outcomes and durations, before a stage is merged. Both are proposals.</p>
 
 <h2 data-num id="vr-test-layers-and-baselines">Test layers, and how baselines are computed and stored</h2>
-<p>The 72 existing tests are GoogleTest cases in <code>scheduler/test/</code>. They run as ordinary C++ test binaries, without ROS nodes and without the simulator: each builds a garage state in code or inline YAML, loads a named test layout, and calls <code>Plan()</code> or one stage (<a class="ref" href="#vr-what-the-existing-tests-cover">section 2</a>). They test correctness only in the sense of their own assertions, which are mostly success flags. They cannot show that a refactor left the plans unchanged. Three further layers are proposed; only the last needs the simulator.</p>
+<p>The 99 scheduler tests are GoogleTest cases in <code>scheduler/test/src/</code>. They run as ordinary C++ test binaries, without ROS nodes and without the simulator: each loads an initial-state file, builds a request from its scenario or a context in code, and calls <code>Plan()</code> or one stage (<a class="ref" href="#vr-what-the-existing-tests-cover">section 2</a>). Their assertions show correctness in their own terms; the recorded parts show that a refactor left the outputs unchanged. Of the four layers below, the first two exist; the last two are proposed, and only the last needs the simulator.</p>
 <table>
   <thead><tr><th>Layer</th><th>Inputs</th><th>What is compared</th><th>Simulator</th><th>When it runs</th></tr></thead>
   <tbody>
-    <tr><td>1. Existing GoogleTest cases (72)</td><td>Hand-built states on <code>tiny_lot</code>, <code>1355_fulton</code>, <code>576_eccles_half</code>, <code>triple_pick_lot</code></td><td>Per-test assertions</td><td>No</td><td>Every build</td></tr>
-    <tr><td>2. Parity tests (new)</td><td>Fixture files: garage state, jobs, layout, parameters</td><td>The canonical result of <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, against a stored golden file</td><td>No</td><td>Every pull request</td></tr>
-    <tr><td>3. Replay (new)</td><td>Plan requests extracted from simulation recordings, stored as fixtures of layer 2</td><td>As layer 2, on realistic inputs</td><td>Only to record them, once</td><td>Every pull request</td></tr>
-    <tr><td>4. Closed-loop runs (new)</td><td>The scenario catalogue of the Simulation tab</td><td>Collisions, job outcomes and durations, over repeated runs</td><td>Yes</td><td>Before a phase is merged; nightly</td></tr>
+    <tr><td>1. Test assertions (99 in <code>scheduler</code>, 3 in <code>scheduler_advanced_tests</code>, plus <code>planner_core</code> and <code>motion_planner</code>)</td><td>Initial-state files on <code>275_sunrise_b</code>, <code>5675_pecos_combined</code>, <code>38_gramercy</code>, <code>tiny_lot</code>; inline YAML in the advanced tests</td><td>Per-test assertions</td><td>No</td><td>Every build (CI)</td></tr>
+    <tr><td>2. Recorded parts (built, PR #1007)</td><td>The 63 scenario files: initial state, request or hand-built DAG</td><td>The canonical result of <a class="ref" href="#vr-compare-meaning-not-pointers-or-guids">section 4</a>, against the recorded part of the same file</td><td>No</td><td>With <code>SCHEDULER_CHECK_RECORDINGS=1</code>: on every refactor pull request (not in CI by default)</td></tr>
+    <tr><td>3. Replay (proposed)</td><td>Plan requests extracted from simulation recordings, stored as plan scenarios of layer 2</td><td>As layer 2, on realistic inputs</td><td>Only to record them, once</td><td>Every pull request</td></tr>
+    <tr><td>4. Closed-loop runs (proposed)</td><td>The scenario catalogue of the Simulation tab</td><td>Collisions, job outcomes and durations, over repeated runs</td><td>Yes</td><td>Before a phase is merged; nightly</td></tr>
   </tbody>
 </table>
-<p>Benchmarks (<a class="ref" href="#vr-benchmark-method">section 5</a>) reuse the inputs of layers 2 and 3 and time them; they do not need the simulator either.</p>
+<p>Benchmarks (<a class="ref" href="#vr-benchmark-method">section 5</a>) would reuse the inputs of layers 2 and 3 and time them; they do not need the simulator either.</p>
 
 <h3 data-num id="vr-computing-a-baseline">Computing a baseline</h3>
-<p>A baseline is the canonical result of each fixture as produced by the code before the refactor, stored so that every later commit can be compared with it. The steps below produce it once, at a pinned commit, without changing the scheduler sources in <code>src/</code>.</p>
+<p>A baseline is the canonical result of each scenario as produced by the code before the refactor, stored so that every later commit can be compared with it. PR #1007 produced it in the way this section proposed, with test-only code and without changing the scheduler sources in <code>src/</code>:</p>
 <ol>
-  <li><strong>Pin the baseline commit</strong> and tag it, for example <code>scheduler-parity-baseline</code>. Every golden file records this commit.</li>
-  <li><strong>Add the capture code first, as test-only code.</strong> The current code has no canonical output, so the first pull request adds <code>Canonicalize</code>, a fixture loader and a capture test under <code>test/parity/</code>, on top of the pinned commit, without touching <code>src/</code>. Its only effect is to write files.</li>
-  <li><strong>Run every fixture through the current code.</strong> End-to-end fixtures call <code>Plan()</code>; stage fixtures build the context up to the stage and call <code>DoTrayAssignments</code> or <code>DoAgvAssignments</code>. Each result is canonicalized and written as JSON.</li>
-  <li><strong>Commit the JSON files</strong> next to their inputs. From then on, the parity test runs the same fixtures on the branch under review and compares its canonical result with the stored one, field by field, printing the difference on failure.</li>
+  <li><strong>The capture code came first, as test-only code.</strong> The loader, the canonical forms and the comparison (<code>test/src/scenarios/</code>) were added as a static library that every test binary links.</li>
+  <li><strong>Every scenario was run through the code of that commit</strong> with <code>RECORD_REFERENCE_OUTPUT=1</code>: plan scenarios through <code>Plan()</code>, stage scenarios through <code>AssignTrays</code> or <code>AssignAgvs</code> on the DAG their test builds. The results were written into the recorded part of each file, "bugs included".</li>
+  <li><strong>The files were committed</strong> next to their inputs, in the same file. From then on any branch can run the same scenarios with the comparison on, and a failure names the file and the first differing line.</li>
 </ol>
+<p>The baseline commit is therefore the merge of PR #1007 (<code>28f69008</code>, with the viewer in <code>6d4ae5b5</code>). PR #1018 kept every recording except the new scenarios and the two <code>FromUnavailableCharger</code> messages, whose error text it reworded on purpose; the Eccles removal changed behaviour only on decommissioned layouts, which no scenario uses. What is not done: tagging the baseline commit, and recording the code SHA in the files.</p>
 
 <h3 data-num id="vr-where-results-are-stored">Where fixtures and results are stored</h3>
-<p>Each fixture keeps its input and its golden file together in one folder of the scheduler package, so that a reviewer sees an input and its expected result side by side. The tree below shows the proposed layout; it is followed by an example golden file and a summary of what is kept inside and outside the repository.</p>
-<pre><code>scheduler/test/parity/
-├── fixtures/
-│   ├── tray_empty_bay_pecos_qa/
-│   │   ├── input.yaml        # garage state, jobs, layout name, parameters, plan time
-│   │   └── expected.json     # canonical result at the baseline commit
-│   ├── replay_550_w21st_0042/ # extracted from a simulation recording
-│   │   ├── input.yaml
-│   │   └── expected.json
-│   └── ...
-├── canonicalize.{hpp,cpp}    # proposed helpers of section 4
-└── parity_tests.cpp          # one parameterized test per fixture folder</code></pre>
-<p>A canonical result is small and readable, so a changed decision appears as a reviewable diff:</p>
-<pre><code class="language-json">{
-  "baseline_commit": "&lt;sha&gt;",
-  "success": true,
-  "tray_moves": [
-    {"tray": 15, "to_node": 21, "heading": 0, "agv": 1, "job": 0}
-  ],
-  "events": ["bay_transition:B21:retrieve#0", "tray_move:T15:21#0", "..."],
-  "edges_after_reduce": [[0, 1], [1, 2]],
-  "final_state_hash": "&lt;hash of the canonical final DiscreteGarageState&gt;"
-}</code></pre>
+<p>Each scenario keeps its input and its recorded result together in one file of the scheduler package, so that a reviewer sees an input and its expected result side by side. Initial states are separate files, shared between scenarios:</p>
+<pre><code>scheduler/test/scenarios/
+├── README.md                          # the format, the canonical forms, how to record
+├── initial_states/
+│   ├── 275_sunrise_b/                 # the folder is the layout's name
+│   │   ├── car_at_p2066_bay_ready_to_retrieve.yaml
+│   │   └── ...                        # 33 files
+│   └── 5675_pecos_combined/, 38_gramercy/, tiny_lot/   # 16, 11 and 3 files
+├── plan/                              # through Scheduler::Plan; one folder per job test file
+│   ├── retrieve_job/FromStall.yaml    # RetrieveJob.FromStall
+│   ├── bay_job/Transitions.to_insert.yaml   # a suffix tells apart several scenarios of one test
+│   └── ...                            # 50 files
+└── task_planning/                     # one stage alone
+    ├── tray_assignment/               # 4 files
+    └── agv_assignment/                # 9 files</code></pre>
+<p>A recorded part is small and readable, so a changed decision appears as a reviewable diff. A stage scenario, <code>task_planning/tray_assignment/MovesOneBlocker.yaml</code>:</p>
+<pre><code class="language-yaml">test: TrayAssignment.MovesOneBlocker
+description: >-
+  Scenario: On 275_sunrise_b, AGV 1 waits at P2075 and empty trays stand at P2067, P2066 and
+  P2077; ... Expected: The stage adds one move that parks tray 2 out of the way, chains it
+  before the root move, and reports success.
+initial_state: 275_sunrise_b/empty_trays_at_p2066_p2067_p2077
+input:
+  dag:
+    events:
+      - "Task ID: 0 TRAY_MOVE Tray ID: 1 Dest: 2068@0 Agv ID: Unassigned #0"
+    edges: []
+    first_event_by_tray: {}
+output:
+  dag:
+    events:
+      - "Task ID: 0 TRAY_MOVE Tray ID: 1 Dest: 2068@0 Agv ID: Unassigned #0"
+      - "Task ID: 0 TRAY_MOVE Tray ID: 2 Dest: 2061@90 Agv ID: Unassigned #0"
+    edges:
+      - [1, 0]
+    first_event_by_tray:
+      1: 0
+      2: 1</code></pre>
 <p>What is kept where:</p>
 <ul>
-  <li><strong>In the repository:</strong> fixture inputs and golden files. They are kilobytes each and change only by review.</li>
-  <li><strong>Outside the repository:</strong> simulation recordings (mcap files, often hundreds of megabytes) and raw benchmark timings (the CSV of <a class="ref" href="#vr-benchmark-method">section 5</a>), in CI artifacts or a shared bucket, each keyed by commit and host. A replay fixture names the recording it came from and its hash, so it can be traced back.</li>
+  <li><strong>In the repository:</strong> scenario files, initial states and their recordings. They are kilobytes each and change only by review.</li>
+  <li><strong>Outside the repository:</strong> the viewer's page (<code>artifacts/scheduler-tests.html</code>, generated), simulation recordings (mcap files, often hundreds of megabytes) and raw benchmark timings (the CSV of <a class="ref" href="#vr-benchmark-method">section 5</a>), in CI artifacts or a shared bucket, each keyed by commit and host. A replay scenario should name the recording it came from and its hash, so it can be traced back.</li>
 </ul>
 
-<h3 data-num id="vr-updating-a-golden-file">Updating a golden file</h3>
-<p>During the refactor, golden files are not updated: a difference is a defect, and the exit criterion of every phase is that all of them still match. After the refactor, a change that is meant to alter plans (a new solver, a tuned cost) regenerates them with an explicit switch, for example <code>UPDATE_GOLDEN=1 colcon test --packages-select scheduler</code>. The pull request then shows the JSON diff, and the closed-loop runs of layer 4 show whether the new plans are better.</p>
+<h3 data-num id="vr-updating-a-golden-file">Updating a recording</h3>
+<p>During the refactor, recordings are not updated: a difference is a defect, and the exit criterion of every phase is that all of them still match. A change that is meant to alter plans (a new solver, a tuned cost, a fix) re-records the scenarios it affects with <code>RECORD_REFERENCE_OUTPUT=1</code>, then runs the tests again with <code>SCHEDULER_CHECK_RECORDINGS=1</code>. The pull request shows the YAML diff, and says why it is expected; PR #1018 did this for its two reworded error messages. A new scenario is a file with the authored part only; its first recording adds the rest. The closed-loop runs of layer 4 would show whether new plans are better.</p>
 
 <h3 data-num id="vr-testing-without-the-simulator">Testing the algorithm without the simulator</h3>
-<p>Layers 1 to 3 already do. The solver interfaces make it simpler: a test builds an <code>Input</code> (a garage state and an event DAG) directly, without a <code>Scheduler</code>, and checks the returned <code>Result</code>. Beyond fixed fixtures, the same entry point allows <strong>property tests</strong> on generated inputs: random occupancy on a test layout, then checks that hold for any input, such as an acyclic event DAG, every tray move with exactly one AGV, a valid final state, and an unchanged input (the invariants of the Issue &amp; proposal tab, <a class="ref" href="#pr-key-invariants-to-maintain">section 7</a>).</p>
+<p>Layers 1 and 2 already do, and layer 3 would. The proposed solver interfaces make it simpler still: a test builds an <code>Input</code> (a garage state and an event DAG) directly, without a <code>Scheduler</code>, and checks the returned <code>Result</code>. Beyond fixed scenarios, the same entry point allows <strong>property tests</strong> on generated inputs, which do not exist yet: random occupancy on a site layout, then checks that hold for any input, such as an acyclic event DAG, every tray move with exactly one AGV, a valid final state, and an unchanged input (the invariants of the Issue &amp; proposal tab, <a class="ref" href="#pr-key-invariants-to-maintain">section 7</a>).</p>
 
 <h3 data-num id="vr-where-the-simulator-fits">Where the simulator fits</h3>
-<p>The simulator has two roles. It is a <strong>source of realistic inputs</strong>: a recorded run on a real-site layout contains every plan request Dispatch sent, and those requests become replay fixtures. And it is the <strong>system check</strong>: the closed-loop runs show the effect of a changed decision on later requests, on collisions and on job durations. Because simulation runs are not repeatable request for request (<a class="ref" href="#sm-determinism-and-what-to-compare">Simulation tab, section 8.3</a>), they are compared statistically, never against golden files.</p>
-<p class="small">The build commands of <a class="ref" href="#vr-build-and-run-commands">section 6</a> also name a <code>scheduler_advanced_tests</code> package. It is not in the snapshots, so its contents are unknown; it should be inspected before the baseline is pinned.</p>
+<p>The simulator has two roles. It is a <strong>source of realistic inputs</strong>: a recorded run on a real-site layout contains every plan request Dispatch sent, and those requests could become replay scenarios. And it is the <strong>system check</strong>: the closed-loop runs show the effect of a changed decision on later requests, on collisions and on job durations. Because simulation runs are not repeatable request for request (<a class="ref" href="#sm-determinism-and-what-to-compare">Simulation tab, section 8.3</a>), they are compared statistically, never against recordings.</p>
+<p class="small">The build commands of <a class="ref" href="#vr-build-and-run-commands">section 6</a> also name the <code>scheduler_advanced_tests</code> package. Its three tests plan inline garage states on <code>550_w21st</code> and <code>175_e82nd</code> and have no recordings; turning them into plan scenarios would bring two more sites, and the VRC path on a second site, under the comparison.</p>
 
 <h2 data-num id="vr-acceptance-checklist">Acceptance checklist</h2>
-<p>The refactor is accepted when every item below holds. The list gathers the conditions set out in the preceding sections: a captured baseline, parity of both default solvers, ported tests, real-site benchmark scenarios with stored baselines, and the simulation checks of <a class="ref" href="#vr-system-level-checks-in-simulation">section 7</a>.</p>
+<p>The refactor is accepted when every item below holds. The list gathers the conditions set out in the preceding sections: a captured baseline, parity of both default solvers, ported tests, real-site benchmark scenarios with stored baselines, and the simulation checks of <a class="ref" href="#vr-system-level-checks-in-simulation">section 7</a>. The first is done.</p>
 <ul class="contains-task-list">
-  <li class="task-list-item"><input type="checkbox" disabled> Baseline captured: all 72 active tests pass on the pinned commit; canonical outputs saved for every fixture.</li>
-  <li class="task-list-item"><input type="checkbox" disabled> Default tray solver gives the same canonical result as <code>DoTrayAssignments</code> on every fixture.</li>
-  <li class="task-list-item"><input type="checkbox" disabled> Default AGV solver does the same, including non-tray root draining, node-arrival edges, path repair and the AMIGA dependencies.</li>
+  <li class="task-list-item"><input type="checkbox" disabled checked> Baseline captured: the recorded part of every scenario file (PR #1007), kept by PR #1018 apart from two reworded messages.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Default tray solver behind <code>AssignTrays</code>: every <code>tray_assignment</code> and plan scenario passes with <code>SCHEDULER_CHECK_RECORDINGS=1</code>.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Default AGV solver does the same, including non-tray root draining (<code>ApplyNonTrayRootEvents</code>), node-arrival edges (<code>OrderArrivalAfterPriorOccupant</code>), path repair (<code>OrderAgvMovesAfterBlockingAgvs</code>) and the AGV-lift dependencies (<code>OrderAllTransitionsAroundAgvLifts</code>).</li>
   <li class="task-list-item"><input type="checkbox" disabled> Both solvers can be constructed in a test without a <code>Scheduler</code>.</li>
-  <li class="task-list-item"><input type="checkbox" disabled> Direct tests added for <code>EnsureAgvMovePathsClear</code> and <code>AddDepsAfterAmiga</code> (gap 2).</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Direct tests added for <code>OrderAgvMovesAfterBlockingAgvs</code> and <code>OrderAllTransitionsAroundAgvLifts</code> (gap 2).</li>
   <li class="task-list-item"><input type="checkbox" disabled> <code>Scheduler::Plan</code> uses only the new interfaces for both assignment phases.</li>
-  <li class="task-list-item"><input type="checkbox" disabled> The 4 direct <code>DoTrayAssignments</code> and 9 direct <code>DoAgvAssignments</code> call sites in <code>scheduler_tests.cpp</code> ported; legacy methods removed.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> The 4 direct <code>AssignTrays</code> and 9 direct <code>AssignAgvs</code> call sites in <code>test/src/stages/</code> ported; the stage methods reduced to calls of the solvers.</li>
   <li class="task-list-item"><input type="checkbox" disabled> At least 10 approved real-site scenarios for <strong>each</strong> solver, with recorded provenance.</li>
-  <li class="task-list-item"><input type="checkbox" disabled> Baselines from the original code stored with code SHA, environment and raw samples.</li>
-  <li class="task-list-item"><input type="checkbox" disabled> Unit tests, advanced scenarios and applicable system tests pass.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Benchmark baselines from the original code stored with code SHA, environment and raw samples.</li>
+  <li class="task-list-item"><input type="checkbox" disabled> Unit tests, the three advanced tests and applicable system tests pass.</li>
   <li class="task-list-item"><input type="checkbox" disabled> Plan calls recorded from the simulation scenario catalogue on the baseline replay with <span class="math">p=1</span> on the candidate.</li>
   <li class="task-list-item"><input type="checkbox" disabled> Closed-loop simulation runs on the candidate: no collision, the same job outcomes as the baseline, durations within the baseline's spread.</li>
 </ul>
 <h2 data-num id="vr-evidence-limits">Evidence limits</h2>
-<p>Six snapshots were used (the Simulation tab adds <code>sim</code> and <code>vis</code>): the <code>scheduler</code> package (<code>sources/repomix-scheduler.xml</code>), the sources of <code>planner_core</code> (<code>sources/repomix-planner-core.xml</code>: the event classes and the event DAG, without <code>test/event_dag_tests.cpp</code> and <code>test/schedule_events_tests.cpp</code>) the sources of <code>common_ros</code> (<code>sources/repomix-common-ros.xml</code>, without tests), the message definitions of <code>interfaces</code> (<code>sources/repomix-interfaces.xml</code>), the sources of <code>motion_planner</code> (<code>sources/repomix-motion-planner.xml</code>: CHUGG, SIPP, the searches and filters, without tests) and of <code>cost_functions</code> (<code>sources/repomix-cost-functions.xml</code>: the trapezoid model, <code>MotionCostModel</code> and motion runs, without tests). <code>common</code>, <code>task_planner</code> and <code>scheduler_advanced_tests</code> are referenced but not included, so statements about them come from call sites and need checking. Customer-site geometry and AGV dimensions are not in the snapshots; the 2D figures use illustrative coordinates. No timing in this tab is a measured value.</p>
+<p>The test inventory is read from the live repository on <code>main</code> at <code>a468657f</code> (2026-11-05): <code>scheduler/test/</code> (sources, scenario files and their README), <code>scheduler_advanced_tests/test/</code>, <code>planner_core/test/</code> and <code>motion_planner/test/</code>, counted by reading the files, and the commit messages of PRs #1007 and #1018. The <code>scheduler</code> snapshot (<code>sources/repomix-scheduler.xml</code>) holds the sources, the test sources and the initial states at that commit, but not the plan and stage scenario files; the <code>planner_core</code> and <code>motion_planner</code> snapshots are at the same commit, without tests. The other snapshots are unchanged: <code>common_ros</code> (<code>sources/repomix-common-ros.xml</code>, without tests), the message definitions of <code>interfaces</code>, and <code>cost_functions</code> (the trapezoid model, <code>MotionCostModel</code> and motion runs, without tests); the Simulation tab adds <code>sim</code> and <code>vis</code>. <code>common</code> and <code>task_planner</code> are referenced but not included, so statements about them come from call sites and need checking. Customer-site geometry and AGV dimensions are not in the snapshots; the 2D figures use illustrative coordinates. No timing in this tab is a measured value, and the recordings were not re-run for this tab.</p>

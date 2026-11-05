@@ -15,8 +15,8 @@ Facts checked against sources/*.xml:
               PlanEventSequential(VrcTransition) door close + transit + door open), continuous_state.cpp
               (stationary VRC motion, TRAY_LEGS placeholder), CMakeLists (SHARED DIRECTORY src).
   cost_functions  vrc_transit {0.254 m/s, 0.2 m/s^2}, vrc_door_open/close 3 s defaults, Trapezoid.
-  scheduler   scheduler.cpp (CollectAndCollapseTrajectoryMotions, PlanMotions, ResponseFromTrajectories),
-              utils.cpp (InsertVrcActionsIntoDag at file line 366, VrcFloorTransitDuration),
+  scheduler   scheduler.cpp (PlanMotions), action_graph.cpp (CollectAndCollapseTrajectoryMotions, BuildActionGraph,
+              InsertVrcActionsIntoDag at file line 76, IsAgvMotionBetweenFloors, ComputeVrcFloorTransitSeconds),
               scheduler_component.cpp / scheduler_ros.cpp / CMakeLists / package.xml.
 """
 from __future__ import annotations
@@ -112,14 +112,16 @@ def vrc_support_status():
                       "No VRC tests in common_ros."]),
         dict(name="Task planning", pkg="scheduler stages 1-3 · planner_core", status="no",
              sub="floors handled only implicitly",
-             exists=["planner_core VrcTransition (ScheduleEventType VRC_TRANSITION = 5): Apply runs "
+             exists=["planner_core VrcTransition (ScheduleEventType VRC_TRANSITION = 5): ApplyTo runs "
                      "IDLE -> MOVING -> IDLE and teleports the AGV (and its trays) to the other VRC node.",
-                     "ApplyCommand(TYPE_VRC_COMMAND) is a no-op (\"handled via VrcTransition events\")."],
-             runs=["No VrcTransition is ever created: job expansion, tray and AGV assignment and SanityCheckEvents "
-                   "contain no VRC code.",
+                     "The unused ActionNode ApplyCommand, whose TYPE_VRC_COMMAND case was a no-op, was deleted "
+                     "in PR #1018."],
+             runs=["No VrcTransition is ever created: job expansion, tray and AGV assignment and "
+                   "ValidateEventSequence contain no VRC code.",
                    "A tray or AGV on another floor is reachable and costed like any move, because the searches run "
-                   "on gg_, which contains the VRC edges.",
-                   "The only floor rule: bay retrieve takes system_floors[0] (\"Pick the first floor for now\")."],
+                   "on motion_graph_, which contains the VRC edges.",
+                   "The only floor rule: a bay transition to retrieve takes system_floors[0] "
+                   "(GetFirstSystemFloor)."],
              missing=["Tray, parking and AGV choice ignore floors and the carriage.",
                       "No job type targets a floor; insert_floor is never read.",
                       "The Charge job's trapped-in-bay check tests TYPE_BAY only, so a BLift is missed."]),
@@ -136,14 +138,14 @@ def vrc_support_status():
              missing=["Ride time leaves out the doors (3 s + 3 s by default) and the empty carriage's trip to the "
                       "AGV's floor: planned times are optimistic.",
                       "The carriage is not an agent and is never reserved.",
-                      "A VrcTransition, if one appeared, would still be Applied: a teleport with no motion."]),
-        dict(name="Action graph", pkg="scheduler.cpp · utils.cpp", status="partial",
+                      "A VrcTransition, if one appeared, would still be applied (ApplyTo): a teleport with no motion."]),
+        dict(name="Action graph", pkg="scheduler action_graph.cpp", status="partial",
              sub="where VRC commands are made",
-             exists=["CollectAndCollapseTrajectoryMotions (scheduler.cpp) and InsertVrcActionsIntoDag "
-                     "(utils.cpp:366), called from ResponseFromTrajectories."],
+             exists=["CollectAndCollapseTrajectoryMotions and InsertVrcActionsIntoDag "
+                     "(action_graph.cpp:76), called from BuildActionGraph."],
              runs=["Each run of floor-traversal motions becomes one motion (first source pose to the next motion's "
                    "source pose).",
-                   "After the second Reduce, AGV actions are walked in topological order with a simulated floor per "
+                   "After the second RemoveRedundantEdges, AGV actions are walked in topological order with a simulated floor per "
                    "VRC: an approach TYPE_VRC_COMMAND is added if the carriage is on the wrong floor, and each "
                    "cross-floor AGV action is Replaced by a VRC move command (door close + transit + door open), "
                    "chained per VRC."],
@@ -151,7 +153,8 @@ def vrc_support_status():
                       "The collapsed motion borrows the next motion's action id.",
                       "Chain edges that would close a cycle are skipped; VRC commands in base_schedule are ignored "
                       "when seeding the floor.",
-                      "No direct tests."]),
+                      "No direct tests; two 38_gramercy retrieve scenarios (RetrieveJob.FromReadyCharger, "
+                      "WhileCharging) record VRC commands in their output."]),
         dict(name="Dispatch and safety", pkg="garage_safety_checker · interfaces · Dispatch",
              status="partial", sub="Dispatch is not in the snapshots",
              exists=["GarageSafetyChecker::IsSafe blocks a VRC command while any BLift bay on that VRC is not "
@@ -210,7 +213,7 @@ def vrc_support_status():
     frame(d, title="VRC support across the pipeline",
           subtitle="The graph layer and motion planning treat a VRC ride as one more edge the AGV drives; the VRC "
                    "commands appear only when the action graph is built. Task planning has no VRC logic and the "
-                   "carriage is never planned as an agent. Nothing in the snapshots tests the path end to end.",
+                   "carriage is never planned as an agent. Only two 38_gramercy retrieve scenarios ride a VRC end to end.",
           badge_key="as-built",
           legend=[("dot", T.sky, "code that exists"), ("dot", T.green, "runs on every plan call"),
                   ("dot", T.red, "gap or risk"), ("fill", T.green, "yes"), ("fill", T.amber, "partial"),
@@ -218,7 +221,7 @@ def vrc_support_status():
           footnote="From layout.cpp, pose_graph.cpp, garage_graph.cpp, collision_geometry.cpp and "
                    "garage_safety_checker.cpp (common_ros); schedule_events.cpp (planner_core); chugg_sequential.cpp "
                    "and continuous_state.cpp (motion_planner); motion_cost_model.hpp defaults (cost_functions); "
-                   "scheduler.cpp and utils.cpp (scheduler); BayCommand.msg (interfaces). Dispatch is not in the "
+                   "scheduler.cpp and action_graph.cpp (scheduler); BayCommand.msg (interfaces). Dispatch is not in the "
                    "snapshots: its row lists only what the messages and the safety checker say.")
     return d
 
@@ -291,7 +294,7 @@ def vrc_ride():
         "with that next motion's action id. Each motion then becomes an AGV command.",
         "Action graph, part 2. InsertVrcActionsIntoDag simulates the carriage floor: it adds an approach VRC "
         "command to floor 0 before W2 -> L3, replaces the ride L3 -> L13 with a VRC move command to floor 1 "
-        "(3 + 13.87 + 3 = 19.87 s each) and chains the VRC's users: approach, W2 -> L3, move, L13 -> W12.",
+        "(3 + 13.87 + 3 = 19.87 s each, ComputeVrcFloorTransitSeconds) and chains the VRC's users: approach, W2 -> L3, move, L13 -> W12.",
         "The gaps: the written VrcTransition planner is never called, SIPP's ride time is optimistic, the carriage "
         "is not an agent, a ride at the end of a trajectory is dropped, and task planning is not floor-aware.",
     ]
@@ -438,7 +441,7 @@ def vrc_ride():
         _bullets(d, RX + 350, 40, RW - 350, [
             "Stages 1-3 (job expansion, tray assignment, AGV assignment) see a tray on P1 and a destination P11. "
             "No code in them reads a floor, a VRC or the carriage.",
-            "Costs come from single-agent searches on gg_, which contains the VRC edges: P11 is reachable and costed "
+            "Costs come from single-agent searches on motion_graph_, which contains the VRC edges: P11 is reachable and costed "
             "like any parking spot, with the ride counted as 13.87 s.",
             "planner_core's VrcTransition would run IDLE -> MOVING -> IDLE and teleport the AGV and its trays to the "
             "other VRC node, but nothing creates one.",
@@ -484,15 +487,15 @@ def vrc_ride():
     with d.only(3):
         _panel_head(d, RX, 0, 3, "Action graph: collapse the floor traversal", VRC)
         code_panel(d, RX, 34, RW, [
-            "// CollectAndCollapseTrajectoryMotions (scheduler.cpp), per entity trajectory",
+            "// CollectAndCollapseTrajectoryMotions (action_graph.cpp), per entity trajectory",
             "for motion in traj:",
-            "  if IsFloorTraversalMotion(motion):        // AgvPoseChanged, node floors differ",
+            "  if IsAgvMotionBetweenFloors(motion):      // AgvPoseChanged, node floors differ",
             "    first = first or motion;  continue",
             "  elif first:                               // the run ended at this motion",
             "    insert Motion(motion.entity, [first.begin, motion.begin),",
             "                  motion.collision_id, motion.action_id,",
             "                  {first.source_pose, motion.source_pose});  first = none",
-            "  if waiting or idle: continue              // waits are dropped",
+            "  if no delta or idle: continue             // waits get no action node",
             "  insert motion",
             "// no flush after the loop: a trajectory that ends in a run loses its ride",
         ], size=11)
@@ -501,12 +504,12 @@ def vrc_ride():
             "several motions and leaves as one.",
             "The merged motion borrows the collision id and action id of the next motion (L13@90 -> W12@90), which "
             "may belong to a different event.",
-            "BuildActionDagFromMotions then turns every motion into an AGV command; the DAG is reduced twice before "
-            "VRC commands are added.",
+            "BuildActionDagFromMotions then turns every motion into an AGV command; RemoveRedundantEdges runs twice "
+            "before VRC commands are added.",
         ], size=11.5)
     # step 4: InsertVrcActionsIntoDag
     with d.only(4):
-        _panel_head(d, RX, 0, 4, "Action graph: InsertVrcActionsIntoDag (utils.cpp:366)", VRC)
+        _panel_head(d, RX, 0, 4, "Action graph: InsertVrcActionsIntoDag (action_graph.cpp:76)", VRC)
         items = [
             "Walk the AGV commands in topological order. The simulated floor of r1 starts at the base state's "
             "current_floor (1), or at the required floor if the base state has no r1.",
@@ -632,8 +635,8 @@ def vrc_ride():
           footnote="Ride numbers use the cost_functions defaults (vrc_transit 0.254 m/s, 0.2 m/s²; doors 3 s each); "
                    "the scheduler node reads the real values from ROS parameters (vrc.performance_limits.transit.*, "
                    "vrc.door.*). LOCOMOTE costs are not computed here. Sources: layout.cpp, pose_graph.cpp, "
-                   "garage_graph.cpp, collision_geometry.cpp, chugg_sequential.cpp, scheduler.cpp "
-                   "(CollectAndCollapseTrajectoryMotions), utils.cpp (InsertVrcActionsIntoDag).")
+                   "garage_graph.cpp, collision_geometry.cpp, chugg_sequential.cpp, action_graph.cpp "
+                   "(CollectAndCollapseTrajectoryMotions, InsertVrcActionsIntoDag).")
     return d
 
 
@@ -688,7 +691,7 @@ def motion_planner_deployment():
     c1 = _small(d, IX0 + 14, y1 + 32, cw, 110, "services (default callback group)",
                 ["plan            interfaces/srv/Plan", "set_bay_readiness_ratio", "debug/printdags (Trigger)"], ROS,
                 title_mono=False)
-    _small(d, c1.x1 + 14, y1 + 32, cw, 110, "publishers (pub_cb_group_)",
+    _small(d, c1.x1 + 14, y1 + 32, cw, 110, "publishers (publication timer group)",
            ["version_info    every 5 s", "report          every 5 s", "own MutuallyExclusive group:",
             "a long Plan() cannot block them"], T.green, title_mono=False)
     _small(d, c1.x1 + cw + 28, y1 + 32, cw, 110, "clients into /central",
@@ -697,12 +700,12 @@ def motion_planner_deployment():
     # Scheduler
     y2 = ros.y1 + 44
     sch = _layer_box(d, IX0, y2, IW, 176, "Scheduler", "libscheduler.so · volley_add_library(scheduler SHARED "
-                     "src/scheduler.cpp src/utils.cpp)", SCH, sub="no ROS transport: only rclcpp::Logger, rclcpp::Time")
+                     "+ nine src/*.cpp)", SCH, sub="no ROS transport: only rclcpp::Logger, rclcpp::Time")
     _small(d, IX0 + 14, y2 + 32, 250, 130, "built once, in the constructor",
-           ["layout_     Layout (YAML)", "pg_         PoseGraph", "gg_         GarageGraph", "table_      CollisionTable",
-            "cost_model_ MotionCostModel"], SCH, title_mono=False)
-    chips = [("ValidateBaseState", T.fg2), ("stages 1-3", T.amber), ("SanityCheckEvents", T.fg2),
-             ("PlanMotions", SCH), ("ResponseFromTrajectories", T.fg2)]
+           ["layout_          Layout (YAML)", "motion_graph_    GarageGraph", "  (from a temporary PoseGraph)",
+            "collision_table_ CollisionTable", "cost_model_      MotionCostModel"], SCH, title_mono=False)
+    chips = [("ValidateBaseState", T.fg2), ("stages 1-3", T.amber), ("ValidateEventSequence", T.fg2),
+             ("PlanMotions", SCH), ("BuildActionGraph", T.fg2)]
     CX0 = IX0 + 282
     d.text(CX0, y2 + 47, "Plan(request_data, now): one call, one thread, start to finish", size=11.5,
            weight=600, fill=SCH)
@@ -719,7 +722,7 @@ def motion_planner_deployment():
     tpb = cb["stages 1-3"]
     d.text(tpb.cx, tpb.y0 - 10, "task planning", size=10.5, fill=T.amber, anchor="middle")
     d.text(cb["PlanMotions"].cx, tpb.y0 - 10, "motion planning", size=10.5, fill=SCH, anchor="middle")
-    d.text(cb["ResponseFromTrajectories"].cx, tpb.y0 - 10, "action DAG", size=10.5, fill=T.fg2, anchor="middle")
+    d.text(cb["BuildActionGraph"].cx, tpb.y0 - 10, "action DAG", size=10.5, fill=T.fg2, anchor="middle")
     # motion_planner
     y3 = sch.y1 + 92
     mp = _layer_box(d, IX0, y3, IW, 206, "libmotion_planner.so", "volley_add_library(motion_planner SHARED "
@@ -729,14 +732,14 @@ def motion_planner_deployment():
            "classes", size=11, fill=T.fg2)
     sw_ = (IW - 3 * 14) / 2
     srch = _small(d, IX0 + 14, y3 + 34, sw_, 130, "single-agent searches (called many times by task planning)",
-                  ["SingleSourceSearch, GetPosePath     path_search, garage_graph_pathing",
-                   "GetStaticFilter, GetDisabledEntitiesFilters   static_graph_filtering",
-                   "HideAgvs                             agv_hiding_search",
-                   "BlockingTraySearchEnvironment        blocking_tray_search"], MP, title_mono=False, size=10.5)
+                  ["SingleSourceSearch, FindPosePath   path_search, garage_graph_pathing",
+                   "BuildStaticObstacleFilter, BuildKeepOutFilters  static_graph_filtering",
+                   "FindAgvUnderTrayAssignment         agv_hiding_search",
+                   "BlockingTraySearchEnvironment      blocking_tray_search"], MP, title_mono=False, size=10.5)
     chg = _small(d, srch.x1 + 14, y3 + 34, sw_, 130, "CHUGG (called once per plan by PlanMotions)",
-                 ["GetEdgeDurations, GetAllPairsMinCost  per call",
-                  "ContinuousState init(initial_state, table_, layout, t0)",
-                  "Chugg(gg_, table_, events, init, ...)  fresh per call",
+                 ["ComputeEdgeDurations, ComputeAllPairsShortestPathCosts  per call",
+                  "ContinuousState init(initial_state, collision_table_, layout, t0)",
+                  "Chugg(motion_graph_, collision_table_, event_dag, ...)  per call",
                   "SolveSequential(audit) -> optional<ContinuousState>",
                   "  SippAgv, SippEnvironment, SafeIntervalTable, ..."], MP, title_mono=False, size=10.5)
     # process frame (drawn last so it encloses everything)
@@ -788,7 +791,7 @@ def motion_planner_deployment():
     num_badge(d, xb + 16, sch.y1 + 76, 5, T.green, r=10)
     label_pill(d, xb + 32, sch.y1 + 76, "optional<ContinuousState>", color=T.green, size=10.5, anchor="start")
     # 6: response
-    rf = cb["ResponseFromTrajectories"]
+    rf = cb["BuildActionGraph"]
     num_badge(d, rf.x1 + 16, rf.cy, 6, T.fg2, r=10)
 
     # ---------- bottom: package dependencies + library vs node ----------
@@ -824,7 +827,7 @@ def motion_planner_deployment():
     TW = PX1 - TX
     d.text(TX, by, "Library today vs a separate motion-planner node", size=14, weight=600, fill=T.fg)
     rows = [
-        ("Call", "a C++ call on the plan-service thread; gg_, table_, the event DAG and edge costs passed by const "
+        ("Call", "a C++ call on the plan-service thread; motion_graph_, collision_table_, the event DAG and edge costs passed by const "
                  "reference", "a service or action call per plan, with a timeout"),
         ("Data", "nothing is copied or serialised", "ScheduleEventDag and ContinuousState are C++ classes, not "
                  "messages: new .msg types or a serialiser; the node keeps its own Layout, GarageGraph and "
@@ -867,7 +870,7 @@ def motion_planner_deployment():
                   ("dasharrow", T.amber, "async request to Dispatch"), ("dep", T.fg2, "package depends on"),
                   ("box", ROS, "ROS layer"), ("box", SCH, "scheduler library"), ("box", MP, "motion_planner")],
           footnote="From scheduler_component.cpp, scheduler_ros.cpp, scheduler.cpp (Scheduler::Scheduler, Plan, "
-                   "PlanMotions), the scheduler and motion_planner CMakeLists.txt and package.xml. Dispatch is not in "
+                   "PlanMotions), action_graph.cpp (BuildActionGraph), the scheduler and motion_planner CMakeLists.txt and package.xml. Dispatch is not in "
                    "the snapshots; its role is inferred from comments and client names. The right-hand column of the "
                    "table is a design assessment, not existing code.")
     return d

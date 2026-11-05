@@ -186,7 +186,7 @@ def vrc():
                border=T.violet, anchor="start", size=11.5)
     # state strip
     sy = floors["F1"] + fh + slab + 74
-    d.text(0, sy - 24, "VrcTransition::Apply  (discrete-state simulation)", size=12.5, family="mono", fill=T.muted)
+    d.text(0, sy - 24, "VrcTransition::ApplyTo  (discrete-state simulation)", size=12.5, family="mono", fill=T.muted)
     steps = [("VRC state", "IDLE at F1", VR), ("VRC state", "MOVING", VR), ("VRC state", "IDLE at F2", VR),
              ("AGVs + trays", "source node -> F2 node", T.green)]
     x = 0

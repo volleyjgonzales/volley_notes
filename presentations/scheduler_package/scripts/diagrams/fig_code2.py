@@ -32,29 +32,30 @@ def _ghost(d: Doc, m: Map, nid: int, text: str, color=TRAY):
 @figure("23_working_state_replay", "working_state: replaying the DAG", DOC1)
 def working_state():
     d = Doc("23_working_state_replay", "How each job sees the garage: working_state",
-            "Every Plan<Type>Job copies ctx->initial_state and replays all events planned so far, so a later job "
+            "Every Expand<Type>Job copies ctx->initial_state and replays all events planned so far, so a later job "
             "sees the garage as earlier jobs will leave it.")
     W = 1040
     S0 = d.step("Job 0 (REPARK_TRAY) has already been planned: it added event 0, which moves T15 from P15 to P23. "
-                "The request's snapshot ctx->initial_state still shows T15 at P15. Now PlanRetrieveJob starts "
+                "The request's snapshot ctx->initial_state still shows T15 at P15. Now ExpandRetrieveJob starts "
                 "job 1.")
-    S1 = d.step("(1) PlanRetrieveJob copies ctx->initial_state into a local working_state. At this point the copy "
+    S1 = d.step("(1) ExpandRetrieveJob copies ctx->initial_state into a local working_state. At this point the copy "
                 "is identical: T15 is still at P15. The dashed arrow previews what replaying event 0 will do.")
-    S2 = d.step("(2) ctx->events.Apply(working_state) replays every event planned so far. Event 0 moves T15 "
-                "discretely to P23, so working_state now shows the garage as job 0 will leave it.")
+    S2 = d.step("(2) ctx->event_dag.ApplyEventsTo(state) replays every event planned so far (a failure fails the "
+                "job). Event 0 moves T15 discretely to P23, so working_state now shows the garage as job 0 will "
+                "leave it.")
     S3 = d.step("(3) The job reads the payload on T17 from working_state, not from the request. Any choice it "
                 "makes (free spots, blockers) already accounts for T15 sitting at P23.")
     S4 = d.step("Job 1 adds its own events: first a TrayMove that brings T17 from P17 to bay B21.")
     S5 = d.step("Then a BayTransition B21 -> PROCESS_RETRIEVE, ordered after the tray move. The next job will "
-                "replay all three events. Apply() is discrete: no paths, AGVs or timing yet.")
+                "replay all three events. ApplyTo() is discrete: no paths, AGVs or timing yet.")
     size = 11.5
     cp = code_panel(d, 0, 0, W, [
-        "// Inside Scheduler::PlanRetrieveJob(ScheduleContextSPtr ctx, const GuidMsg& payload_id, size_t job_index) const",
-        "// `this` is the Scheduler (const); ctx is the per-call ScheduleContext created in Plan().",
-        "volley::DiscreteGarageState working_state = ctx->initial_state;  // (1) copy the request's snapshot",
-        "auto [success, message] = ctx->events.Apply(working_state);      // (2) replay every event planned so far",
-        "auto payload_opt = working_state.GetPayload(payload_id);         // (3) read the garage as it WILL be",
-    ], title="the pattern at the top of every Plan<Type>Job", size=size)
+        "// Inside Scheduler::ExpandRetrieveJob(PlanContextSPtr ctx, const Guid& payload_id, size_t job_index) const",
+        "// `this` is the Scheduler (const); ctx is the per-call PlanContext. ComputeStateAfterPlannedEvents(*ctx) does:",
+        "auto state = ctx.initial_state;             // (1) copy the request's snapshot",
+        "ctx.event_dag.ApplyEventsTo(state);         // (2) replay every event planned so far; a failure fails the job",
+        "auto payload_opt = working_state.GetPayload(payload_id);  // (3) back in the job: read the garage as it WILL be",
+    ], title="the pattern at the top of every Expand<Type>Job", size=size)
     # current code line highlight
     for k, li in ((S1, 2), (S2, 3), (S3, 4)):
         ly = cp.y0 + 14 + 24 + size / 2 + li * size * 1.5
@@ -94,7 +95,7 @@ def working_state():
         d.text(130, y2 - 18, "= copy of ctx->initial_state (identical for now)", size=11.5, fill=T.muted)
     with d.at(S2):
         _ghost(d, mB, 15, "T15 was here")
-        d.text(130, y2 - 18, "= initial_state + Apply(e0) — what PlanRetrieveJob reads", size=11.5, fill=T.muted)
+        d.text(130, y2 - 18, "= initial_state + ApplyTo(e0) — what ExpandRetrieveJob reads", size=11.5, fill=T.muted)
     with d.only(S3):
         x17, yy17 = mB.P(17)
         w17, h17 = (STALL_L - 0.5) * s + 12, (STALL_W - 0.32) * s + 12
@@ -108,19 +109,19 @@ def working_state():
         label_pill(d, ax + 12, (y1 + mh + y2 - 30) / 2, "working_state = ctx->initial_state", color=T.sky,
                    anchor="start", size=11.5)
     with d.at(S2):
-        label_pill(d, ax + 12, (y1 + mh + y2 - 30) / 2, "ctx->events.Apply(working_state)", color=T.sky,
+        label_pill(d, ax + 12, (y1 + mh + y2 - 30) / 2, "ctx->event_dag.ApplyEventsTo(state)", color=T.sky,
                    anchor="start", size=11.5)
     # right column: the event DAG as seen at that moment
     rx = mw + 60
     rw = W - rx
-    d.text(rx, y1 - 18, "ctx->events while planning job 1", size=13, family="mono", weight=700, fill=T.fg)
+    d.text(rx, y1 - 18, "ctx->event_dag while planning job 1", size=13, family="mono", weight=700, fill=T.fg)
     d.rect(rx, y1, rw, y2 + mh - y1, rx=12, fill=T.bg_deep, stroke=T.border_soft, sw=1, layer="bg")
     e0 = event_box(d, rx + 22, y1 + 40, "TrayMove · job 0", "T15: P15 -> P23", n=0, w=rw - 44)
     d.text(rx + 22, y1 + 30, "already planned by job 0 (REPARK_TRAY)", size=11, fill=T.muted)
     with d.only(S2):
         d.rect(e0.x0 - 4, e0.y0 - 4, e0.w + 8, e0.h + 8, rx=11, fill="none", stroke=T.sky, sw=1.6, layer="over")
     with d.at(S2):
-        d.text(rx + 22, e0.y1 + 22, "replayed by Apply() into working_state", size=11, fill=T.sky)
+        d.text(rx + 22, e0.y1 + 22, "replayed by ApplyEventsTo() into working_state", size=11, fill=T.sky)
     yy = e0.y1 + 70
     with d.at(S4):
         d.text(rx + 22, yy - 10, "added now by job 1 (RETRIEVE payload on T17)", size=11, fill=T.muted)
@@ -130,10 +131,10 @@ def working_state():
                        style="new")
         flow(d, e1, e2, side="v")
         note(d, rx + 22, e2.y1 + 30, rw - 44,
-             "Apply() moves entities discretely: the tray simply appears at its destination. Paths, AGVs and timing "
+             "ApplyTo() moves entities discretely: the tray simply appears at its destination. Paths, AGVs and timing "
              "do not exist yet; they are added by the later stages.", title="Discrete, not physical")
     frame(d, title="How each job sees the garage: working_state",
-          subtitle="Every Plan<Type>Job starts the same way: copy ctx->initial_state, then replay the whole event DAG "
+          subtitle="Every Expand<Type>Job starts the same way: copy ctx->initial_state, then replay the whole event DAG "
                    "built so far. Job 1 therefore plans against the garage that job 0 will leave behind, not the "
                    "garage in the request.",
           badge_key="yaml+hyp",
@@ -149,42 +150,43 @@ def working_state():
 @figure("25_dependency_rules", "How job expansion adds DAG edges", DOC1)
 def dependency_rules():
     d = Doc("25_dependency_rules", "Where the edges come from during job expansion",
-            "UpdateLastEntityEvent chains events that touch the same garage asset; UpdateLeafDependencies orders events "
+            "ChainAfterLastEntityEvent chains events that touch the same garage asset; OrderAfterJobLeafEvents orders events "
             "within one job; tray moves into a bay depend on that bay's last event.")
     S0 = d.step("Start: job 0 retrieves the payload on T17 into bay B21, which still holds the empty tray T21. "
-                "The DAG is empty and last_entity_event has no entries.")
+                "The DAG is empty and last_event_by_entity has no entries.")
     S1 = d.step("Event 0, BayTransition B21 -> TO_RETRIEVE. Rule A finds no earlier B21 event and rule B finds no "
-                "earlier leaf of job 0, so no edge is added. last_entity_event[B21] = 0.")
+                "earlier leaf of job 0, so no edge is added. last_event_by_entity[B21] = 0.")
     S2 = d.step("Event 1 moves T21 out of the bay (destination still open). Rule B: event 0 is a leaf of job 0, so "
-                "0 -> 1. last_entity_event[T21] = 1.")
+                "0 -> 1. last_event_by_entity[T21] = 1.")
     S3 = d.step("Event 2 moves T17 into B21. Rule B: the only job-0 leaf is now event 1, so 1 -> 2. Rule C: the "
                 "destination is a bay, so the move waits for the bay's last event: 0 -> 2.")
     S4 = d.step("Event 3, BayTransition B21 -> PROCESS_RETRIEVE. Rule A chains it to B21's last event (0 -> 3); "
-                "rule B adds 2 -> 3. last_entity_event[B21] = 3.")
+                "rule B adds 2 -> 3. last_event_by_entity[B21] = 3.")
     S5 = d.step("Job 1 reparks T21 to P24 (event 4). Rule B finds no leaf of job 1, so it adds nothing; rule A "
                 "links it to T21's last event: 1 -> 4. That shared tray is the only link between the two jobs.")
     W = 1040
     hw = (W - 24) / 2
     c1 = code_panel(d, 0, 0, hw, [
-        "// ScheduleContext::UpdateLastEntityEvent",
-        "void UpdateLastEntityEvent(const GarageEntityIdMsg& id,",
-        "                           ScheduleEventSPtr new_event) {",
-        "  if(last_entity_event.find(id) != last_entity_event.end())",
-        "    events.AddDependency(last_entity_event.at(id), new_event);",
-        "  // id = one AGV, tray, bay or VECS",
-        "  last_entity_event[id] = new_event;",
+        "// PlanContext::ChainAfterLastEntityEvent",
+        "void ChainAfterLastEntityEvent(",
+        "    const interfaces::msg::GarageEntityId& entity,",
+        "    const ScheduleEventSPtr& event) {",
+        "  auto& last_event = last_event_by_entity[entity];",
+        "  if(last_event != nullptr)  // entity = AGV, tray, bay, VECS",
+        "    event_dag.AddDependency(last_event, event);",
+        "  last_event = event;",
         "}",
     ], title="rule A · per-asset chain", size=11.5)
     c2 = code_panel(d, hw + 24, 0, hw, [
-        "// ScheduleContext::UpdateLeafDependencies",
-        "void UpdateLeafDependencies(const ScheduleEventSPtr& child,",
-        "                            size_t job_index) {",
-        "  for(const auto& leaf : events.GetLeafEvents()) {",
-        "    if(leaf == child) continue;",
-        "    if(leaf->GetJobIndex() == job_index)   // same job only",
-        "      events.AddDependency(leaf, child);   // leaf = no out-edges",
-        "  }",
+        "// PlanContext::OrderAfterJobLeafEvents",
+        "void OrderAfterJobLeafEvents(const ScheduleEventSPtr& event) {",
+        "  for(const auto& leaf : event_dag.GetLeafEvents()) {",
+        "    if(leaf != event &&",
+        "       leaf->GetJobIndex() == event->GetJobIndex())",
+        "      event_dag.AddDependency(leaf, event);  // same job only",
+        "  }   // leaf = no out-edges",
         "}",
+        "// AddChainedEvent(event) = event_dag.AddEvent + rule A",
     ], title="rule B · in-job ordering", size=11.5)
     LEAF, ENT, BAYR = T.fg2, T.violet, T.violet
     # which rule panel adds an edge at each step
@@ -246,15 +248,15 @@ def dependency_rules():
     state = {S0: ("{ }", "{ }"), S1: ("{ B21: 0 }", "{ 0 }"), S2: ("{ B21: 0, T21: 1 }", "{ 1 }"),
              S3: ("{ B21: 0, T21: 1, T17: 2 }", "{ 2 }"), S4: ("{ B21: 3, T21: 1, T17: 2 }", "{ 3 }"),
              S5: ("{ B21: 3, T21: 4, T17: 2 }", "{ 3, 4 }")}
-    d.text(0, sy, "last_entity_event", size=11.5, family="mono", weight=600, fill=T.muted)
+    d.text(0, sy, "last_event_by_entity", size=11.5, family="mono", weight=600, fill=T.muted)
     d.text(xs[2], sy, "leaf events", size=11.5, family="mono", weight=600, fill=T.muted)
     for k, (le, lv) in state.items():
         with d.only(k) if k != S5 else d.at(S5):
             d.text(150, sy, le, size=12, family="mono", fill=T.fg)
             d.text(xs[2] + 100, sy, lv, size=12, family="mono", fill=T.fg)
     frame(d, title="Where the edges come from during job expansion",
-          subtitle="Each Plan<Type>Job adds an event, then calls one or both ScheduleContext helpers. Rule C lives in "
-                   "PlanReparkTrayJob. The letters A, B, C are this guide's names, not the code's. The result is a "
+          subtitle="Each Expand<Type>Job adds an event, then calls one or both PlanContext helpers. Rule C is "
+                   "OrderAfterBayAndChargerEvents, called by ExpandReparkTrayJob. The letters A, B, C are this guide's names, not the code's. The result is a "
                    "partial order, not a sequence.",
           badge_key="as-built",
           legend=[("arrow", ENT, "rule A: same asset (bay)"), ("arrow", TRAY, "rule A: same asset (tray)"),
@@ -284,7 +286,7 @@ def retrieve_walkthrough():
             "three bands show the event DAG after expansion, tray assignment and AGV assignment.")
     S0 = d.step("The request: one TYPE_RETRIEVE job for the payload on T17. Bay B21 is READY_TO_INSERT and still "
                 "holds the empty tray T21; AGV-1 is idle at W26. No events exist yet.")
-    S1 = d.step("Job expansion (PlanRetrieveJob) writes the intent as four events: switch B21 to TO_RETRIEVE, move "
+    S1 = d.step("Job expansion (ExpandRetrieveJob) writes the intent as four events: switch B21 to TO_RETRIEVE, move "
                 "T21 out of the bay (destination unknown), bring T17 into B21, then PROCESS_RETRIEVE.")
     S2 = d.step("Tray assignment gives T21 a destination: P23. Event 1 becomes concrete; the other job events are "
                 "unchanged.")
@@ -292,10 +294,11 @@ def retrieve_walkthrough():
                 "T17's move into the bay now waits for it.")
     S4 = d.step("AGV assignment wraps every TrayMove in move -> lift -> carry -> lower. In this order AGV-1 first "
                 "drives to P15 and moves the blocker T15 to P19. The dashed arrow previews its first drive.")
-    S5 = d.step("Next AGV-1 drives to B21 and moves T21 to P23. An AddDepsAfterAmiga edge makes lifting T21 wait for "
+    S5 = d.step("Next AGV-1 drives to B21 and moves T21 to P23. An OrderTransitionAroundAgvLifts edge makes lifting T21 wait for "
                 "the bay's TO_RETRIEVE transition (event 0).")
-    S6 = d.step("Finally AGV-1 fetches T17 at P17 and carries it into B21; after the lower, AddDepsAfterAmiga lets "
-                "PROCESS_RETRIEVE (event 3) start. The DAG is now ready for Reduce() and the sanity check.")
+    S6 = d.step("Finally AGV-1 fetches T17 at P17 and carries it into B21; after the lower, OrderTransitionAroundAgvLifts "
+                "lets PROCESS_RETRIEVE (event 3) start. The DAG is now ready for RemoveRedundantEdges() and "
+                "ValidateEventSequence().")
     P1 = d.step("Playing the plan: AGV-1 drives from W26 to P15 and stops under the blocker T15 (first row of band 3).")
     P2 = d.step("AGV-1 lifts T15, carries it to the free stall P19 and lowers it (event 4). P15 is now free.")
     P3 = d.step("Meanwhile B21 has switched to READY_TO_RETRIEVE (event 0). AGV-1 drives P19 -> W18 -> W22 -> W41 "
@@ -376,14 +379,14 @@ def retrieve_walkthrough():
         return top
 
     # band 1: after job expansion
-    t1 = band("1 · after PlanRetrieveJob()", "T21 has no destination yet; transitive edges omitted (see the edge-rules figure)", 112,
+    t1 = band("1 · after ExpandRetrieveJob()", "T21 has no destination yet; transitive edges omitted (see the edge-rules figure)", 112,
               T.fg2, S1, S1)
     with d.at(S1):
         _chain(d, 16, t1 + 6, [("BayTransition", "B21: TO_RETRIEVE", 0, "solid"),
                                ("TrayMove", "T21 -> ?", 1, "solid"), ("TrayMove", "T17 -> B21", 2, "solid"),
                                ("BayTransition", "B21: PROCESS_RETRIEVE", 3, "solid")], gap=40)
     # band 2: after tray assignment
-    t2 = band("2 · after DoTrayAssignments()", "T21 gets a destination; blocker T15 on T17's critical path is moved first",
+    t2 = band("2 · after AssignTrays()", "T21 gets a destination; blocker T15 on T17's critical path is moved first",
               120, TRAY, S2, S3)
     with d.at(S2):
         b2 = _chain(d, 16, t2 + 10, [("BayTransition", "B21: TO_RETRIEVE", 0, "faded"),
@@ -394,7 +397,7 @@ def retrieve_walkthrough():
         connect(d, [(e4.cx, e4.y1), (e4.cx, e4.y1 + 14), (b2[2].cx + 30, e4.y1 + 14), (b2[2].cx + 30, b2[2].y1)],
                 kind="flow", color=TRAY, size=8, sw=1.6)
     # band 3: after AGV assignment
-    t3 = band("3 · after DoAgvAssignments()", "AGV-1 gets move -> lift -> carry -> lower around every TrayMove (one valid order)",
+    t3 = band("3 · after AssignAgvs()", "AGV-1 gets move -> lift -> carry -> lower around every TrayMove (one valid order)",
               268, AGV, S4, S6)
     bw3 = 138
     rows = [
@@ -426,7 +429,7 @@ def retrieve_walkthrough():
         with d.at(k):
             connect(d, [(a.cx, a.y1), (a.cx, a.y1 + 11), (b.cx, a.y1 + 11), (b.cx, b.y0)], kind="flow", color=AGV,
                     size=8, sw=1.5)
-    # bay transition must precede lifting T21 inside the bay (AddDepsAfterAmiga)
+    # bay transition must precede lifting T21 inside the bay (OrderTransitionAroundAgvLifts)
     with d.at(S5):
         connect(d, [(e0b.x1, e0b.cy), (rb[1][1].x0 - 8, e0b.cy), (rb[1][1].x0 - 8, rb[1][1].cy - 30),
                     (rb[1][1].cx, rb[1][1].cy - 30), (rb[1][1].cx, rb[1][1].y0)], kind="flow", color=BAYC, size=8,
@@ -437,5 +440,5 @@ def retrieve_walkthrough():
                    "path, AGV assignment adds who does it. The last six steps play the plan on the map.",
           badge_key="yaml+hyp",
           legend=[("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),
-                  ("ring", T.muted, "added in this pass"), ("dasharrow", BAYC, "AddDepsAfterAmiga edge")])
+                  ("ring", T.muted, "added in this pass"), ("dasharrow", BAYC, "OrderTransitionAroundAgvLifts edge")])
     return d

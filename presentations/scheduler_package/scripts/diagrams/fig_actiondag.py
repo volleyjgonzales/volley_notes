@@ -1,13 +1,14 @@
 """fig_actiondag: building the action DAG, motion by motion (126).
 
-Doc 05-action-graph.html. Follows Scheduler::ResponseFromTrajectories (scheduler.cpp):
+Doc 05-action-graph.html. Follows Scheduler::BuildActionGraph (src/action_graph.cpp, main at a468657f):
 CollectAndCollapseTrajectoryMotions (waits dropped, std::set<Motion, MotionScheduleOrder>: start time, then
-action id = event vertex, then hash), BuildActionDagFromMotions (ToActionNode, event_start_end,
-last_entity_action chain, GarageOccupancyChecker<shared_ptr<ActionNodeMsg>> freeing_moves: GetBlockers then
-AddOccupant; lifted = collision id != AGV), Reduce, TransferEventDagDepsToActionDag (last action of e ->
-first action of e' for each event edge), Reduce, InsertVrcActionsIntoDag (no VRC in Pecos), Reduce,
-GetTopologicalOrdering, BuildScheduledActionsArray (parents as indices, extra same-entity chain edge,
-node_indices per job). Times and the occupied-location lists are illustrative; the real sets come from
+action id = event vertex, then hash, then every other field), BuildActionDagFromMotions (ToActionNode ->
+stdx::Expected, action_span_by_event, last_entity_action chain,
+GarageOccupancyChecker<shared_ptr<interfaces::msg::ActionNode>> occupancy_history: GetBlockers then AddOccupant;
+lifted = collision id != AGV), RemoveRedundantEdges, TransferEventDagDepsToActionDag (last action of e ->
+first action of e' for each event edge), RemoveRedundantEdges, InsertVrcActionsIntoDag (no VRC in Pecos),
+RemoveRedundantEdges, GetTopologicalOrdering, BuildScheduledActionsArray (local copies, parents as indices,
+extra same-entity chain edge), WriteJobActionIndices (node_indices per job). Times and the occupied-location lists are illustrative; the real sets come from
 CollisionTable::Query.
 """
 from __future__ import annotations
@@ -34,15 +35,15 @@ def _hl_code(d, panel, first, last=None, *, size=11, col=T.sky):
 @figure("126_action_dag_construction", "Building the action DAG, motion by motion (animated)", DOC)
 def action_dag_construction():
     d = Doc("126_action_dag_construction", "Building the action DAG, motion by motion",
-            "Animated: ResponseFromTrajectories on a small retrieve. Motions are taken in start-time order; each "
+            "Animated: BuildActionGraph on a small retrieve. Motions are taken in start-time order; each "
             "becomes an ActionNode, is chained to its entity's previous action, depends on every earlier occupant "
-            "of the space it needs, and then occupies that space. Event edges and two Reduce() passes finish the "
-            "DAG, which is written out as Schedule.nodes.")
+            "of the space it needs, and then occupies that space. Event edges and two RemoveRedundantEdges() "
+            "passes finish the DAG, which is written out as Schedule.nodes.")
     S0 = d.step("Input: CHUGG's trajectories and the event DAG. AGV-2 must leave W22 (event f1). AGV-1 stands "
                 "under T23 at P23; it lifts (e1), carries the car to bay B21 (e2, three edges), lowers (e3), and "
                 "the bay hands the car over (e4). AGV-1 waits 3-5 s for AGV-2.")
     S1 = d.step("CollectAndCollapseTrajectoryMotions merges every entity's trajectory into one std::set ordered by "
-                "MotionScheduleOrder: start time, then the event vertex, then a hash. Waits and idle motions are "
+                "MotionScheduleOrder: start time, then the event vertex, then a hash, then every other field. Waits and idle motions are "
                 "dropped (AGV-1's wait disappears); runs of floor-traversal motions would be merged into one.")
     S2 = d.step("Motion 1, AGV-2 W22 -> W18 (event f1). ToActionNode makes a0 (TYPE_AGV_COMMAND, fresh guid, "
                 "job_id = job B). AGV-2 has no previous action. GetBlockers finds nothing. AddOccupant records a0 "
@@ -54,19 +55,19 @@ def action_dag_construction():
                 "GetBlockers on the edge P23-W22 returns {a0, a1}: a0 still 'owns' W22, because occupancy is "
                 "never cleared. New edge a0 -> a2 (blue): the hand-over of W22 from AGV-2 to AGV-1.")
     S5 = d.step("Motion 4, W22 -> W41 (event e2). Chain a2 -> a3. Blockers {a0, a2}: the edge a0 -> a3 is added "
-                "although a0 -> a2 -> a3 already implies it ('overkill but pruned later by Reduce()').")
-    S6 = d.step("Motion 5, W41 -> B21 (event e2). Chain a3 -> a4; blockers {a3}. event_start_end[e2] is now "
+                "although a0 -> a2 -> a3 already implies it ('RemoveRedundantEdges() prunes the excess').")
+    S6 = d.step("Motion 5, W41 -> B21 (event e2). Chain a3 -> a4; blockers {a3}. action_span_by_event[e2] is now "
                 "(a2, a4): first and last action of the event.")
     S7 = d.step("Motion 6, AGV-1 lowers T23 in B21 (event e3): a5, chained after a4, blocked by {a4}.")
     S8 = d.step("Motion 7, B21 PROCESS_RETRIEVE (event e4): a6, the bay's first action. No geometric edge "
-                "orders it after the car's arrival (the code marks bay transitions with a TODO).")
-    S9 = d.step("Reduce() keeps only the edges not implied by others: a0 -> a3 goes (a0 -> a2 -> a3 remains).")
+                "orders it after the car's arrival: a bay motion's location has no heading, so by policy it orders nothing.")
+    S9 = d.step("RemoveRedundantEdges() keeps only the edges not implied by others: a0 -> a3 goes (a0 -> a2 -> a3 remains).")
     S10 = d.step("TransferEventDagDepsToActionDag: for each event edge e -> e', last action of e -> first action "
                  "of e'. e3 -> e4 adds a5 -> a6 (amber): the order that only job logic knows. The others (f1 -> e2 "
-                 "as a0 -> a2, e1 -> e2, e2 -> e3) exist already. Reduce() again; no VRC in this layout.")
-    S11 = d.step("BuildScheduledActionsArray: one topological order becomes Schedule.nodes. Each in-edge becomes a "
-                 "parent index; the entity's previous action is re-added if Reduce() removed it; each job "
-                 "collects its node_indices. This array is the response.")
+                 "as a0 -> a2, e1 -> e2, e2 -> e3) exist already. RemoveRedundantEdges() again; no VRC in this layout.")
+    S11 = d.step("BuildScheduledActionsArray: one topological order becomes Schedule.nodes, built from copies (the "
+                 "DAG is not modified). Each in-edge becomes a parent index; the entity's previous action is re-added "
+                 "if RemoveRedundantEdges() removed it; WriteJobActionIndices then gives each job its node_indices.")
     s = 26
     m = Map(d, 0, 0, s, (20.4, 41.6), (18.1, 23.3))
     m.base(labels=True, zones=False, axes=False)
@@ -146,16 +147,16 @@ def action_dag_construction():
         y += h + 10
         return bb
 
-    p_last = panel("last_entity_action", "unordered_map<GarageEntityId, shared_ptr<ActionNodeMsg>>", [
+    p_last = panel("last_entity_action", "unordered_map<GarageEntityId, shared_ptr<ActionNode>>", [
         ("AGV-2 -> a0", 0, S2, S11, A2C),
         ("AGV-1 -> a1", 1, S3, S3, A1C), ("AGV-1 -> a2", 1, S4, S4, A1C), ("AGV-1 -> a3", 1, S5, S5, A1C),
         ("AGV-1 -> a4", 1, S6, S6, A1C), ("AGV-1 -> a5", 1, S7, S11, A1C),
         ("B21   -> a6", 2, S8, S11, BAYC)], 3)
-    p_ev = panel("event_start_end", "unordered_map<event vertex, pair<first action, last action>>", [
+    p_ev = panel("action_span_by_event", "unordered_map<event vertex, EventActionSpan{first_action, last_action}>", [
         ("f1 -> (a0, a0)", 0, S2, S11, A2C), ("e1 -> (a1, a1)", 1, S3, S11, A1C),
         ("e2 -> (a2, a2)", 2, S4, S4, A1C), ("e2 -> (a2, a3)", 2, S5, S5, A1C), ("e2 -> (a2, a4)", 2, S6, S11, A1C),
         ("e3 -> (a5, a5)", 3, S7, S11, A1C), ("e4 -> (a6, a6)", 4, S8, S11, BAYC)], 5)
-    p_occ = panel("freeing_moves.occupancy_state_ (excerpt)",
+    p_occ = panel("occupancy_history.occupancy_state_ (excerpt)",
                   "location (pose or edge) -> occupant -> blocked collision ids; never cleared", [
         ("W22@90          -> a0", 0, S2, S3, T.fg2), ("W22@90          -> a0, a2", 0, S4, S4, T.fg2),
         ("W22@90          -> a0, a2, a3", 0, S5, S11, T.fg2),
@@ -172,7 +173,7 @@ def action_dag_construction():
 
     # ---- the action DAG
     gy0 = max(y, list_bottom) + 34
-    d.text(0, gy0 - 14, "final_actions_dag : DagBase<ActionNodeMsg>", size=12, family="mono", weight=700,
+    d.text(0, gy0 - 14, "final_actions_dag : Dag<interfaces::msg::ActionNode>", size=12, family="mono", weight=700,
            fill=T.fg)
     pos = {"a0": (40, gy0 + 22), "a1": (40, gy0 + 96), "a2": (170, gy0 + 59), "a3": (300, gy0 + 59),
            "a4": (430, gy0 + 59), "a5": (560, gy0 + 59), "a6": (690, gy0 + 59)}
@@ -211,7 +212,7 @@ def action_dag_construction():
     edge("a0", "a3", GONE, S9, S9, dash="4 4", bend=-40)
     edge("a5", "a6", EVT, S10)
     with d.only(S9):
-        label_pill(d, 235, gy0 + 0, "removed by Reduce()", color=GONE, size=10.5, bg=T.bg)
+        label_pill(d, 235, gy0 + 0, "removed by RemoveRedundantEdges()", color=GONE, size=10.5, bg=T.bg)
     with d.at(S10):
         label_pill(d, 625, gy0 + 32, "event e3 -> e4", color=EVT, size=10.5, bg=T.bg)
 
@@ -237,17 +238,17 @@ def action_dag_construction():
                             "of [6];  job B node_indices = [0]", size=11, family="mono", fill=T.fg2)
     # ---- code panel
     cp = code_panel(d, rx + rw + 34, 0, 820, [     # third column, beside the map and the state panels
-        "for(const auto& motion : all_motions) {                       // start time, event vertex, hash",
-        "  auto action_node = ToActionNode(motion, job_guid, event);    // fresh guid, job_id, command",
-        "  event_start_end[event] = {first or unchanged, action_node};",
+        "for(const auto& motion : all_motions) {                       // start time, event vertex, hash, ...",
+        "  auto action_node = ToActionNode(motion, job_guid, *event);   // Expected: fresh guid, job_id, command",
+        "  action_span_by_event[event] = {first or unchanged, action_node};",
         "  final_actions_dag.AddDependency(last_entity_action[entity], action_node);   // same entity",
-        "  for(auto& blocker : *freeing_moves.GetBlockers(motion.GetLocation(), collision_id, lifted))",
+        "  for(auto& blocker : *occupancy_history.GetBlockers(motion.GetLocation(), collision_id, is_lifted))",
         "    final_actions_dag.AddDependency(blocker, action_node);      // every earlier occupant",
-        "  freeing_moves.AddOccupant(motion.GetLocation(), collision_id, action_node, lifted);",
+        "  occupancy_history.AddOccupant(motion.GetLocation(), collision_id, action_node, is_lifted);",
         "}",
-        "final_actions_dag.Reduce();  TransferEventDagDepsToActionDag(...);  Reduce();  InsertVrcActionsIntoDag(...);",
-        "return BuildScheduledActionsArray(ctx, final_actions_dag, *final_actions_dag.GetTopologicalOrdering());",
-    ], title="Scheduler::ResponseFromTrajectories -> BuildActionDagFromMotions (abridged)", size=11)
+        "RemoveRedundantEdges();  TransferEventDagDepsToActionDag(...);  RemoveRedundantEdges();  InsertVrc...;",
+        "actions = BuildScheduledActionsArray(final_actions_dag, *final_ordering);  WriteJobActionIndices(ctx, actions);",
+    ], title="Scheduler::BuildActionGraph -> BuildActionDagFromMotions (abridged, action_graph.cpp)", size=11)
     hl = {S1: (0, 0), S2: (1, 6), S3: (1, 6), S4: (3, 5), S5: (4, 5), S6: (2, 3), S7: (3, 6), S8: (1, 6),
           S9: (8, 8), S10: (8, 8), S11: (9, 9)}
     for k, (a, b) in hl.items():
@@ -258,6 +259,6 @@ def action_dag_construction():
                    "earlier occupant blocks it. Times and occupied-location lists are illustrative; the real sets "
                    "come from the CollisionTable.",
           badge_key="yaml+hyp",
-          legend=[("arrow", CHAIN, "same entity (last_entity_action)"), ("arrow", OCC, "occupancy (freeing_moves)"),
-                  ("arrow", EVT, "event DAG edge"), ("dasharrow", GONE, "removed by Reduce()")])
+          legend=[("arrow", CHAIN, "same entity (last_entity_action)"), ("arrow", OCC, "occupancy (occupancy_history)"),
+                  ("arrow", EVT, "event DAG edge"), ("dasharrow", GONE, "removed by RemoveRedundantEdges()")])
     return d

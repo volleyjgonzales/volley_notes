@@ -9,27 +9,29 @@
 #          whose source definition the hover window also shows when the link is a plain-text phrase
 #
 # A term is not linked inside the section it points to.
+# Names from before PR #1018 (SW2-1135) are kept as extra `code` spellings where the pack still quotes them,
+# mostly in the Issue & proposal tab's history and rename tables.
 
-- term: ScheduleContext
-  decl: "ScheduleContext"
-  code: [ScheduleContext, ScheduleContextSPtr, plan_ctx]
+- term: PlanContext
+  decl: "PlanContext"
+  code: [PlanContext, PlanContextSPtr, "volley::scheduler::PlanContext", ScheduleContext, ScheduleContextSPtr, plan_ctx]
   to: bg-schedulecontext-the-per-call-workspace
-  def: All mutable data for one Plan() call; created at the start of Plan() and freed when it returns.
+  def: "All mutable data for one Plan() call (plan_context.hpp; ScheduleContext before PR #1018); created at the start of Plan() and freed when it returns."
 
 - term: initial_state
   code: [initial_state, ctx->initial_state]
   to: bg-the-definition-annotated
   def: "The garage at request time, with everything used by base_schedule marked disabled (reserved). Never changed after construction."
 
-- term: disabledness_filters
-  code: [disabledness_filters, "ctx->disabledness_filters", GetDisabledEntitiesFilters]
+- term: keep_out_filter_by_footprint
+  code: [keep_out_filter_by_footprint, "ctx->keep_out_filter_by_footprint", FindKeepOutFilter, BuildKeepOutFilters, disabledness_filters, "ctx->disabledness_filters", GetDisabledEntitiesFilters]
   to: bg-disabledness-filters-the-keep-out-map
-  def: "Keep-out map built once per Plan() call: per footprint type, the graph vertices and edges that reserved or disabled assets and nodes make unusable."
+  def: "Keep-out map built once per Plan() call by BuildKeepOutFilters: per footprint type, the graph vertices and edges that reserved or disabled assets and nodes make unusable (disabledness_filters before PR #1018)."
 
 - term: base_schedule reservation
-  code: [SetAgvDisabled, SetNodeDisabled, SetBayDisabled, SetVecsDisabled]
+  code: [ExcludeCommittedResources, SetAgvDisabled, SetNodeDisabled, SetBayDisabled, SetVecsDisabled]
   to: bg-the-base-schedule-reserved-assets-and-keep-out-filters
-  def: "Plan() marks every AGV, bay, VECS and AGV-command source and destination node of the running base_schedule as disabled, so the new plan never uses them."
+  def: "ExcludeCommittedResources marks every AGV, bay, VECS and AGV-command source and destination node of the running base_schedule as disabled, so the new plan never uses them."
 
 - term: OnEvent
   code: [OnEvent, "state.OnEvent", "DiscreteGarageState::OnEvent"]
@@ -37,40 +39,40 @@
   def: "DiscreteGarageState's overloaded event handlers (common_ros): one per garage event message; each checks the event against the state, then changes it, and returns a BoolStringPair."
 
 - term: scheduled_jobs
-  code: [scheduled_jobs, plan_ctx->scheduled_jobs, ctx->scheduled_jobs, result.scheduled_jobs]
+  code: [scheduled_jobs, ctx->scheduled_jobs, result.scheduled_jobs, AddScheduledJob]
   to: bg-scheduled_jobs-in-detail
-  def: Jobs that planned successfully, in planning order; entry k is the job whose events carry job_index k.
+  def: "Jobs that expanded successfully, in request order; entry k is the job whose events carry job_index k. A job that fails expansion leaves no entry and no events."
 
 - term: job_index
-  code: [job_index, GetJobIndex(), GetJobIndex]
+  code: [job_index, job_index_, GetJobIndex(), GetJobIndex]
   to: bg-scheduled_jobs-in-detail
   def: Position of a job in ctx->scheduled_jobs, stamped on every event the job creates.
 
 - term: ScheduledJobData
   decl: "ScheduledJobDataMsg"
-  code: [ScheduledJobDataMsg, ScheduledJobData, "ScheduledJobData[]", node_indices, bay_arrival_node_guid]
+  code: [ScheduledJobDataMsg, ScheduledJobData, "interfaces::msg::ScheduledJobData", "ScheduledJobData[]", node_indices, bay_arrival_node_guid]
   to: bg-scheduledjobdatamsg-what-one-entry-holds
   def: One per pending job in the response - the job with its status, its action indices, and for a retrieve the bay-arrival action.
 
-- term: FailJob
-  code: [FailJob]
+- term: MakeFailedJob
+  code: [MakeFailedJob, JobFailure, FailJob]
   to: bg-scheduled_jobs-in-detail
-  def: Builds the response entry of a failed job - STATE_ERROR, the failure note and retain_job.
+  def: "Builds the response entry of a failed job - STATE_ERROR, the failure message and retain_job (JobFailure::is_retryable). FailJob before PR #1018."
 
-- term: last_entity_event
-  code: [last_entity_event, ctx->last_entity_event]
+- term: last_event_by_entity
+  code: [last_event_by_entity, ctx->last_event_by_entity, last_entity_event, ctx->last_entity_event]
   to: bg-last_entity_event-in-detail
-  def: The last event that touched each AGV, tray, bay or VECS; used by rule A during job expansion.
+  def: "The last event that touched each AGV, tray, bay or VECS; used by rule A during job expansion (last_entity_event before PR #1018)."
 
-- term: first_tray_event
-  code: [first_tray_event, ctx->first_tray_event]
+- term: first_event_by_tray
+  code: [first_event_by_tray, ctx->first_event_by_tray, first_tray_event, ctx->first_tray_event]
   to: bg-first_tray_event-in-detail
-  def: The first move of each tray, filled by tray assignment and read by AGV assignment.
+  def: "The first event of each tray, filled by tray assignment and read by AGV assignment (first_tray_event before PR #1018)."
 
 - term: helper methods
-  code: [UpdateLastEntityEvent, UpdateLeafDependencies, PushBackScheduledJob]
+  code: [ChainAfterLastEntityEvent, AddChainedEvent, OrderAfterJobLeafEvents, UpdateLastEntityEvent, UpdateLeafDependencies, PushBackScheduledJob]
   to: bg-the-three-helper-methods
-  def: The three ScheduleContext methods - push a planned job, apply rule A, apply rule B.
+  def: "The PlanContext methods that add edges - ChainAfterLastEntityEvent and AddChainedEvent apply rule A, OrderAfterJobLeafEvents applies rule B; AddScheduledJob records a planned job."
 
 - term: Rules A, B and C
   text: [rule A, rule B, rule C, Rule A, Rule B, Rule C]
@@ -98,63 +100,63 @@
 
 - term: Event subclasses
   decl: "ScheduleEvent"
-  code: [TrayMove, AgvMove, BayTransition, VecsTransition, VrcTransition, "TrayMove::Apply", "volley::TrayMove"]
+  code: [TrayMove, AgvMove, BayTransition, VecsTransition, VrcTransition, "TrayMove::ApplyTo", "volley::TrayMove", "TrayMove::Apply"]
   to: bg-the-subclasses-and-what-apply-does
-  def: The concrete ScheduleEvent types and what each one's Apply does.
+  def: The concrete ScheduleEvent types and what each one's ApplyTo does.
 
 - term: ScheduleEventDag
   decl: "ScheduleEventDag"
-  code: [ScheduleEventDag, "volley::ScheduleEventDag", "DagBase<T>", DagBase, ctx->events, plan_ctx->events]
+  code: [ScheduleEventDag, "volley::ScheduleEventDag", "Dag<T>", Dag, event_dag, ctx->event_dag, "DagBase<T>", DagBase, ctx->events]
   to: bg-the-class-dagbaset-and-scheduleeventdag
-  def: The event DAG - a Boost graph of shared_ptr<ScheduleEvent>; an edge u -> v means u finishes first.
+  def: "The event DAG - a Boost graph of shared_ptr<ScheduleEvent> (class Dag<T>, DagBase<T> before PR #1018); an edge u -> v means u finishes first."
 
 - term: DAG operations
-  code: [AddEvent, AddDependency, WouldCreateCycle, GetRootEvents, GetLeafEvents, GetEventFromVertex]
+  code: [AddEvent, AddDependency, WouldCreateCycle, GetRootEvents, GetLeafEvents, GetEvent, GetNode, ApplyEventsTo, GetEventFromVertex]
   to: bg-the-operations
   def: The ScheduleEventDag operations used by every stage.
 
 - term: Topological ordering
-  code: [GetTopologicalOrdering, GetTopologicalOrdering()]
+  code: [GetTopologicalOrdering, GetTopologicalOrdering(), GetEventsInTopologicalOrder]
   text: [topological ordering, topological order]
   to: bg-what-a-topological-ordering-is-in-plain-words
   def: An order of the events in which every event comes after everything it depends on.
 
-- term: Reduce()
-  code: [Reduce(), "ctx->events.Reduce()", Reduce]
+- term: RemoveRedundantEdges()
+  code: [RemoveRedundantEdges(), RemoveRedundantEdges, "ctx->event_dag.RemoveRedundantEdges()", Reduce(), "ctx->events.Reduce()", Reduce]
   to: bg-reduce-fewer-edges-same-order
-  def: Removes edges implied by longer paths (transitive reduction); the order constraints stay the same.
+  def: "Removes edges implied by longer paths (transitive reduction); the order constraints stay the same. Fails on a cycle. Reduce() before PR #1018."
 
 - term: Plan()
   code: [Plan(), "Scheduler::Plan", Plan]
   to: bg-one-plan-call-step-by-step
-  def: The one entry point - validate, expand jobs, assign trays and AGVs, check, plan motions, build the response.
+  def: The one entry point - validate, expand jobs, assign trays and AGVs, check, plan motions, build the action graph and the response.
 
 - term: Job expansion
-  code: [PlanRetrieveJob, PlanInsertJob, PlanReparkTrayJob, PlanAgvMoveJob, PlanBayTransitionJob, PlanChargePayloadJob, PlanReadyForInsertJob, PlanReadyForRetrieveJob, PlanAgvChargeJob, PlanCleanGarageJob, PlanRebalanceGarageJob]
+  code: [ExpandJob, ExpandRetrieveJob, ExpandInsertJob, ExpandReparkTrayJob, ExpandAgvMoveJob, ExpandBayTransitionJob, ExpandChargePayloadJob, ExpandReadyForInsertJob, ExpandReadyForRetrieveJob, ExpandAgvChargeJob, ExpandCleanGarageJob, ExpandRebalanceGarageJob, ReparkWaypointStashedTrays, AddBayTransitionToRetrieve]
   to: bg-the-shape-of-every-job-method
-  def: The Plan*Job methods - each turns one SchedulerJob into events and edges in ctx->events.
+  def: "The Expand*Job methods (job_expansion.cpp), dispatched by ExpandJob - each turns one SchedulerJob into events and edges in ctx->event_dag or returns a JobFailure. Plan*Job before PR #1018."
 
 - term: SchedulerJob
   decl: "SchedulerJobMsg"
-  code: [SchedulerJob, SchedulerJobMsg, pending_jobs, request_data.pending_jobs]
+  code: [SchedulerJob, SchedulerJobMsg, "interfaces::msg::SchedulerJob", pending_jobs, request_data.pending_jobs]
   to: bg-schedulerjob-what-to-do-and-what-happened
   def: A requested outcome such as TYPE_RETRIEVE; arrives in PlanRequest.pending_jobs.
 
 - term: PlanRequest / PlanResponse
   decl: "PlanRequestMsg"
-  code: [PlanRequest, PlanResponse, PlanRequestMsg, PlanResponseMsg, request_data, base_schedule, base_state]
+  code: [PlanRequest, PlanResponse, PlanRequestMsg, PlanResponseMsg, "interfaces::msg::PlanRequest", "interfaces::msg::PlanResponse", request_data, base_schedule, base_state]
   to: bg-planrequest-one-moment-in-a-running-schedule
   def: The Plan service's request and response messages.
 
 - term: ActionNode
   decl: "ActionNodeMsg"
-  code: [ActionNode, ActionNodeMsg, "ActionNode[]", Schedule.nodes]
+  code: [ActionNode, ActionNodeMsg, "interfaces::msg::ActionNode", "ActionNode[]", Schedule.nodes]
   to: bg-schedule-and-actionnode-commands-in-and-out
   def: One executable command with parent indices into Schedule.nodes; the only thing Dispatch executes.
 
 - term: node, heading, pose
   decl: "GaragePoseMsg"
-  code: [GarageNodeMsg, GaragePoseMsg, GaragePose, GeometricPoseMsg, GeometricPose, SizedPoseMsg, heading, node_id]
+  code: [GarageNodeMsg, GaragePoseMsg, GaragePose, "interfaces::msg::GaragePose", GeometricPoseMsg, GeometricPose, SizedPoseMsg, heading, node_id]
   to: bg-node-heading-pose-vertex-the-words-for-places
   def: A node is a layout place; a heading is the direction faced (degrees, 0 = +y, CCW+); a pose is node + heading.
 
@@ -179,81 +181,81 @@
 
 - term: PoseGraph
   decl: "PoseGraph"
-  code: [PoseGraph, pg_, GetAllowedHeadings, pose_neighbors_, PoseNeighbor]
+  code: [PoseGraph, GetAllowedHeadings, pose_neighbors_, PoseNeighbor, pg_]
   to: bg-posegraph-from-nodes-to-poses
-  def: Expands each node into poses (every YAML heading and its reciprocal) and finds each pose's up to 8 neighbours.
+  def: "Expands each node into poses (every YAML heading and its reciprocal) and finds each pose's up to 8 neighbours. The scheduler builds one only to construct motion_graph_."
 
 - term: GarageGraph and Vertex
   decl: "GarageGraph::Vertex"
-  code: [GarageGraph, gg_, "volley::GarageGraph", Vertex, "GarageGraph::Vertex", GetVertexFromPose, GetPoseFromVertex, GarageNodeFromVertex, BoostPoseGraph, pose_to_vertex_]
+  code: [GarageGraph, motion_graph_, "volley::GarageGraph", Vertex, "GarageGraph::Vertex", GetVertexFromPose, GetPoseFromVertex, GarageNodeFromVertex, BoostPoseGraph, pose_to_vertex_, GetMotionGraph, gg_]
   to: bg-garagegraph-and-its-vertex
-  def: The search graph. A Vertex is a std::size_t index into a Boost vertex vector; each entry holds one pose and its edge lists.
+  def: "The search graph (the scheduler's motion_graph_, gg_ before PR #1018). A Vertex is a std::size_t index into a Boost vertex vector; each entry holds one pose and its edge lists."
 
 - term: CollisionTable
   decl: "CollisionTable"
-  code: [CollisionTable, table_, "volley::CollisionTable", "table_.Query", ppmap_, CollisionEntityId]
+  code: [CollisionTable, collision_table_, "volley::CollisionTable", "collision_table_.Query", ppmap_, CollisionEntityId, table_, "table_.Query"]
   to: bg-collisiontable-precomputed-conflict-sets
-  def: Precomputed conflict sets - for an entity type at a pose or edge, where another entity type may not be. Cached on disk.
+  def: "Precomputed conflict sets - for an entity type at a pose or edge, where another entity type may not be. Cached on disk. The scheduler's collision_table_ (table_ before PR #1018)."
 
 - term: SchedulerRos
-  code: [SchedulerRos, SchedulerComponent]
+  code: [SchedulerRos, "volley::scheduler::SchedulerRos", SchedulerComponent]
   to: bg-where-the-scheduler-runs-the-node-and-its-interfaces
-  def: The ROS adapter that owns the Scheduler and exposes the plan service.
+  def: The ROS adapter that owns the Scheduler and exposes the plan service; SchedulerComponent loads it as a plugin.
 
-- term: DoTrayAssignments
-  code: [DoTrayAssignments]
+- term: AssignTrays
+  code: [AssignTrays, TrayAssignmentState, DoTrayAssignments]
   text: [tray assignment, Tray assignment]
   to: bg-tray-assignment-dotrayassignments
-  def: Fills blank tray ids and destinations and adds moves for blocking trays.
+  def: "Stage 2 (tray_assignment.cpp; DoTrayAssignments before PR #1018): fills blank tray ids and destinations and adds moves for blocking trays."
 
 - term: Blocking trays
-  code: [ResolveBlockingTrays]
+  code: [ResolveBlockingTrays, FindBlockingTrayResolution, FindDestinationForRootTray, TrayDestinationPlan]
   text: [blocking trays, blocking tray, critical path]
   to: bg-the-blocking-tray-loop
   def: Trays on another tray's critical path; they must be moved first.
 
-- term: AssignTrayIdForEmptyMove
-  code: [AssignTrayIdForEmptyMove]
+- term: AssignEmptyTrayToMove
+  code: [AssignEmptyTrayToMove, AssignTrayIdForEmptyMove]
   to: bg-filling-a-blank-tray-id-assigntrayidforemptymove
-  def: Chooses an empty tray for a TrayMove that has no tray id.
+  def: "Chooses an empty tray for a TrayMove that has no tray id (AssignTrayIdForEmptyMove before PR #1018)."
 
-- term: AssignDestForUntargetedMove
-  code: [AssignDestForUntargetedMove]
+- term: AssignDestinationAndUnblockingMoves
+  code: [AssignDestinationAndUnblockingMoves, AssignDestForUntargetedMove]
   to: bg-filling-a-blank-destination-assigndestforuntargetedmove
-  def: Chooses a parking destination for a TrayMove that has none.
+  def: "Chooses a parking destination for a TrayMove that has none, and adds the moves that clear its way (AssignDestForUntargetedMove before PR #1018)."
 
-- term: freeing_moves
-  code: [freeing_moves, GarageOccupancyChecker]
+- term: occupancy_history
+  code: [occupancy_history, "state.occupancy_history", OrderAfterPriorOccupants, GarageOccupancyChecker, freeing_moves]
   to: bg-occupancy-becomes-dependencies-freeing_moves
-  def: Remembers which event vacates each pose, so a later move into it can depend on that event.
+  def: "TrayAssignmentState::occupancy_history (freeing_moves before PR #1018): which event occupies each pose, so a later move into it can be ordered after that event."
 
-- term: DoAgvAssignments
-  code: [DoAgvAssignments, AddDepsAfterAmiga, MoveAgvToTrayPose]
+- term: AssignAgvs
+  code: [AssignAgvs, AgvAssignmentState, ScheduleAgvMoveToPickup, OrderAllTransitionsAroundAgvLifts, OrderTransitionAroundAgvLifts, DoAgvAssignments, AddDepsAfterAmiga, MoveAgvToTrayPose]
   text: [AGV assignment, AMIGA]
   to: bg-agv-assignment-doagvassignments
-  def: Matches AGVs to tray moves (AMIGA bottleneck matching) and wraps each move in approach, lift and lower events.
+  def: "Stage 3 (agv_assignment.cpp; DoAgvAssignments before PR #1018): matches AGVs to tray moves (AMIGA bottleneck matching) and wraps each move in approach, lift and lower events."
 
-- term: EnsureAgvMovePathsClear
-  code: [EnsureAgvMovePathsClear]
+- term: AGV path repair
+  code: [OrderAgvMovesAfterBlockingAgvs, AddNextMissingAgvMoveOrder, OrderAgvMoveAfterBlockerDeparture, EnsureAgvMovePathsClear]
   to: bg-repairing-paths-after-assignment
-  def: Repair passes that add edges so AGV paths are clear after assignment.
+  def: "Repair passes that add edges so AGV paths are clear after assignment (EnsureAgvMovePathsClear before PR #1018)."
 
-- term: SanityCheckEvents
-  code: [SanityCheckEvents]
+- term: ValidateEventSequence
+  code: [ValidateEventSequence, ValidateMoveDestinationAndPath, SanityCheckEvents]
   to: bg-reduce-and-sanitycheckevents
-  def: Replays the final DAG and checks every move is possible before motion planning.
+  def: "Replays the final DAG and checks every move's destination and path before motion planning (SanityCheckEvents before PR #1018)."
 
 - term: CHUGG
-  code: [Chugg, "volley::Chugg", PlanMotions, SolveSequential]
+  code: [Chugg, "volley::Chugg", PlanMotions, SolveSequential, ComputeEdgeDurations, ComputeAllPairsShortestPathCosts]
   text: [CHUGG]
   to: bg-chugg-the-motion-planner
   def: Constrained Huge Unknown Graph alGorithm - the motion planner; plans the event DAG's events one at a time (prioritized planning with SIPP) into timed, collision-free trajectories.
   decl: Chugg
 
-- term: Building the response
-  code: [ResponseFromTrajectories, BuildActionDagFromMotions, BuildScheduledActionsArray]
+- term: Building the action graph
+  code: [BuildActionGraph, ToActionNode, BuildActionDagFromMotions, BuildScheduledActionsArray, ResponseFromTrajectories]
   to: ad-how-the-action-dag-is-built
-  def: Converts CHUGG's trajectories into ActionNodes and fills ScheduledJobData.
+  def: "Stage 5 (action_graph.cpp): BuildActionGraph converts CHUGG's trajectories into ActionNodes; Plan() then fills ScheduledJobData. ResponseFromTrajectories before PR #1018."
 
 - term: VECS and VRC
   text: [VECS, VRC, VRCs]
@@ -264,12 +266,12 @@
   code: [BoolStringPair]
   to: pr-errors-stdxexpected-instead-of-boolstringpair
   decl: BoolStringPair
-  def: The (bool, message) return convention of most planning methods; the refactor proposal uses stdx::Expected instead.
+  def: "The (bool, message) return convention of common_ros and planner_core (OnEvent, ScheduleEvent::ApplyTo); the scheduler replaced it with stdx::Expected in PR #1018."
 
 - term: stdx::Expected
-  code: ["stdx::Expected", "stdx::Expected<Result>", "stdx::Result"]
+  code: ["stdx::Expected", "stdx::Expected<Result>", "stdx::Result", "stdx::Expected<void, JobFailure>"]
   to: pr-errors-stdxexpected-instead-of-boolstringpair
-  def: Proposed error type - a value or an error message, replacing BoolStringPair.
+  def: "A value or an error (stdx::Result: success or an error message); since PR #1018 the return type of every scheduler function that can fail, replacing BoolStringPair."
 
 - term: Proposed tray solver
   code: ["tray_assignment::Solver", "tray_assignment::DefaultSolver", DefaultSolver, ApplyTrayAssignment, GarageServices, "Result::edits"]
@@ -284,7 +286,7 @@
 - term: transitive reduction
   text: [transitive reduction]
   to: ad-transitive-reduction
-  def: "The unique smallest edge set with the same reachability as a DAG; what Reduce() computes"
+  def: "The unique smallest edge set with the same reachability as a DAG; what RemoveRedundantEdges() computes"
 - term: critical path
   text: [critical path]
   to: ad-timing-critical-path-and-slack
@@ -304,7 +306,7 @@
   decl: MotionCostParams
 
 - term: motion_planner toolbox
-  code: [SingleSourceSearch, "volley::SingleSourceSearch", GetPosePath, "volley::GetPosePath", GetStaticFilter, "volley::GetStaticFilter", HideAgvs, GraphFilterProperties, "volley::GraphFilterProperties"]
+  code: [SingleSourceSearch, "volley::SingleSourceSearch", FindPosePath, "volley::FindPosePath", BuildStaticObstacleFilter, BuildStaticObstacleFilters, FindAgvUnderTrayAssignment, GraphFilterProperties, "volley::GraphFilterProperties", GetPosePath, GetStaticFilter, HideAgvs]
   to: bg-the-motion-planner-toolbox
   def: Single-agent searches and filters used while the event DAG is built; CHUGG is the only multi-agent planner.
 
@@ -330,7 +332,7 @@
 - term: faces_reciprocal
   code: [faces_reciprocal]
   to: ly-faces-reciprocal-and-the-inbound-heading
-  def: "Layout key for bays and chargers. When true, the inbound heading is headings[0] + 180 (returned unwrapped by GetInboundHeading)."
+  def: "Layout key for bays and chargers. When true, the inbound heading is headings[0] + 180 (returned unwrapped by GetInboundHeading; the scheduler wraps it in MakeInboundPose since PR #1018)."
 
 - term: rotation_allowed
   code: [rotation_allowed]

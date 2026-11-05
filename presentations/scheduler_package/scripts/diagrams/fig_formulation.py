@@ -31,7 +31,7 @@ def edge_kinds():
                 "the car must be in the bay before the hand-over. Every valid plan contains these orders.")
     S2 = d.step("Path-dependent edge (blue): T15 must leave P15 only because T17's route was fixed through P15 "
                 "before motion planning. With another route, or with T15 leaving in time, the edge is not needed. "
-                "These come from occupancy checks (freeing_moves) and path repairs.")
+                "These come from occupancy checks (occupancy_history) and path repairs.")
     S3 = d.step("Resource-order edge (amber): AGV-2 does the blocker move and job B's first move, so one must come "
                 "first, but either order is valid. The direction was fixed by request order and assignment: in "
                 "scheduling terms, a disjunctive constraint whose choice was made greedily.")

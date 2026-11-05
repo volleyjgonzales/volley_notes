@@ -202,7 +202,7 @@ def garage_model_classes():
         ("GarageFloorMsg", "msg · Layout::floors_", LAY, ["+ id: uint8", "+ z: float32   // metres, arbitrary origin"]),
         ("Vrc", "struct (layout.hpp) · Layout::vrcs_", LAY, [
             "+ id, root_node_id: uint32", "+ nodes: vector<GarageNodeMsg>   // by floor"]),
-        ("Transition", "struct (garage_graph.hpp) · every gg_ edge", GG, [
+        ("Transition", "struct (garage_graph.hpp) · every GarageGraph edge", GG, [
             "+ length: double   // m, rad, or floor height", "+ type: TransitionType",
             "  LOCOMOTE | STRAFE | ROTATION | VRC_TRANSITION"]),
         ("PoseNeighbor", "enum (pose_graph.hpp) · slot in pose_neighbors_", PG, [
@@ -227,9 +227,10 @@ def garage_model_classes():
         tops[c] = b.y1 + gap
     yb = max(tops) + 10
     note(d, 0, yb, ct.x1, "Scheduler::Scheduler builds them in this order and never changes them afterwards: "
-         "layout_(make_shared<Layout>(file)), pg_(layout_), gg_(pg_), table_(gg_, logger). The only later write is "
-         "gg_.SetRetrievalHeading(...) from InitRetrievalHeadings(), still inside the constructor. GarageGraph keeps "
-         "no pointer to the PoseGraph: it copies poses and neighbours into its own Boost graph.",
+         "layout_(make_shared<Layout>(file)), motion_graph_(PoseGraph(layout_)), collision_table_(motion_graph_, logger); "
+         "the PoseGraph is a temporary. The only later write is motion_graph_.SetRetrievalHeading(...) from "
+         "StorePreferredPayloadHeadingsForRetrieval(), still inside the constructor. GarageGraph keeps no pointer to "
+         "the PoseGraph: it copies poses and neighbours into its own Boost graph.",
          title="One chain, built once", accent=GG)
     frame(d, title="The static garage model: four classes and what they store",
           subtitle="Layout stores places (YAML nodes and edges); PoseGraph expands every node into poses and finds "
@@ -333,10 +334,10 @@ def garage_graph_vertex():
             size=8)
     yb = max(t1.y1, t2.y1, t3.y1) + 28
     steps = [
-        ("gg_.GetVertexFromPose({node_id: 22, heading: 90})", "hash lookup in pose_to_vertex_ -> 44; {node_id: 22, heading: 270} or an unknown node -> nullopt"),
-        ("gg_.GetPoseFromVertex(44)", "index into base_graph_'s vertex vector -> {node_id: 22, heading: 90}; v >= NumVertices() -> nullopt"),
-        ("gg_.GetOutEdges(44)", "iterator pair over that vertex's out-edge vector (throws std::invalid_argument if invalid)"),
-        ("gg_.GarageNodeFromVertex(44)", "pose.node_id -> layout_->GetNodeById(22): a std::map lookup and a copy of the node"),
+        ("motion_graph_.GetVertexFromPose({node_id: 22, heading: 90})", "hash lookup in pose_to_vertex_ -> 44; {node_id: 22, heading: 270} or an unknown node -> nullopt"),
+        ("motion_graph_.GetPoseFromVertex(44)", "index into base_graph_'s vertex vector -> {node_id: 22, heading: 90}; v >= NumVertices() -> nullopt"),
+        ("motion_graph_.GetOutEdges(44)", "iterator pair over that vertex's out-edge vector (throws std::invalid_argument if invalid)"),
+        ("motion_graph_.GarageNodeFromVertex(44)", "pose.node_id -> layout_->GetNodeById(22): a std::map lookup and a copy of the node"),
     ]
     w = t3.x1
     d.text(0, yb, "Reading the structure", size=13, weight=600, fill=T.fg)
@@ -538,7 +539,7 @@ def boost_pose_graph():
          "always vertex_descriptor, which Boost derives from parameter 2: with vecS it is the vector index. "
          "That index is what every Boost algorithm takes, and it makes per-vertex arrays plain vectors "
          "(dist[v], MakeVertexVectorPropertyMap<T>). Finding a vertex from a pose needs a hash, so GarageGraph "
-         "adds pose_to_vertex_. DagBase<T> uses the same shape with std::shared_ptr<T> as its bundle.",
+         "adds pose_to_vertex_. Dag<T> (planner_core) uses the same shape with std::shared_ptr<T> as its bundle.",
          title="Why Vertex is not a GaragePoseMsg", accent=VX, size=12)
     frame(d, title="Inside BoostPoseGraph: template parameters and storage",
           subtitle="using BoostPoseGraph = boost::adjacency_list<vecS, vecS, bidirectionalS, GaragePoseMsg, "
@@ -739,7 +740,7 @@ def node_pose_vertex():
             "W22 as a Layout node, as four poses, as four GarageGraph vertices, and as the keys other structures use.")
     cols = [("node", "a place", "GarageNodeMsg  (Layout::nodes_)", LAY),
             ("pose", "a place + a heading", "GaragePoseMsg  {node_id, heading}", PG),
-            ("vertex", "a pose's index in gg_", "GarageGraph::Vertex  (std::size_t)", GG)]
+            ("vertex", "a pose's index in motion_graph_", "GarageGraph::Vertex  (std::size_t)", GG)]
     cw, gap = 400, 70
     top = 0
     for i, (word, what, typ, col) in enumerate(cols):
@@ -796,8 +797,8 @@ def node_pose_vertex():
     others = [("GeometricPoseMsg", "{x: 30.88, y: 21.74, yaw: 1.571}   // yaw of heading 90", "metres and radians, for geometry and motion", T.sky),
               ("SizedPoseMsg", "{resource_size_index: 4, pose: {node_id: 22, heading: 90}}", "a pose plus a footprint size", PG),
               ("CollisionTable location", "Pose {node_id: 22, heading: 90}  or  Edge {pose, pose} (a move)", "a pose, or a move between two", CT),
-              ("layout graph_ vertex", "20  (W22's position in Layout::nodes_)", "not the node id and not a gg_ vertex", LAY),
-              ("pose index", "PoseGraph::GetPoseIndex({node_id: 22, heading: 90}) = 44", "equals the gg_ Vertex by construction", PG)]
+              ("layout graph_ vertex", "20  (W22's position in Layout::nodes_)", "not the node id and not a GarageGraph vertex", LAY),
+              ("pose index", "PoseGraph::GetPoseIndex({node_id: 22, heading: 90}) = 44", "equals the GarageGraph Vertex by construction", PG)]
     for i, (name, ex, what, col) in enumerate(others):
         y = oy + 30 + i * 28
         d.rect(0, y - 13, x2 + cw, 26, rx=4, fill=T.card if i % 2 else T.tint(T.card, 0.6, T.bg))
@@ -805,8 +806,8 @@ def node_pose_vertex():
         d.text(250, y, ex, size=12, family="mono", fill=T.fg2)
         d.text(820, y, what, size=11.5, fill=T.muted)
     frame(d, title="Node, pose, vertex: one place, several names",
-          subtitle="A node is a place in the layout. A pose is that place plus a heading. A vertex is the number gg_ "
-                   "gives one pose. W22 is one node, four poses and four vertices; the arrows are the only conversions "
+          subtitle="A node is a place in the layout. A pose is that place plus a heading. A vertex is the number the "
+                   "GarageGraph gives one pose. W22 is one node, four poses and four vertices; the arrows are the only conversions "
                    "the code performs (GetAllowedHeadings, then GetVertexFromPose).",
           badge_key="yaml",
           legend=[("box", LAY, "Layout"), ("box", PG, "pose"), ("box", GG, "GarageGraph"), ("box", CT, "CollisionTable")],
@@ -917,7 +918,7 @@ def asset_types():
     note(d, 0, yb, 2 * cw + gx,
          "All six live in DiscreteGarageState (agvs, trays, payloads, bays, vexen, vrcs). Fixed assets (bay, VECS, "
          "VRC) are also layout nodes; mobile ones (AGV, tray, payload) are not: they have a pose. GarageEntityId "
-         "{entity_type, id} is how last_entity_event and ActionNode bookkeeping name an asset; 's' (system) also exists.",
+         "{entity_type, id} is how last_event_by_entity and ActionNode bookkeeping name an asset; 's' (system) also exists.",
          title="Where they meet", accent=T.fg2)
     frame(d, title="Asset types: what the scheduler plans for",
           subtitle="Six kinds of physical asset. Three move (AGV, tray, payload) and three are fixed in the layout "

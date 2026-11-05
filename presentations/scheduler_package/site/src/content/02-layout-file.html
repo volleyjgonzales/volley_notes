@@ -7,12 +7,12 @@
 <p>The Background tab describes the C++ objects built from the file (<a class="ref" href="#bg-layout-places-in-sorted-vectors-and-ordered-maps">section 8.1</a>). This tab is about the file itself: every key, how the parser reads it, who uses it downstream, what the parser checks and what it silently accepts, and what could be improved. All examples use the Pecos file, <code>sources/5675_pecos_combined.yaml</code> (352 lines), and the parser in <code>common_ros/src/layout.cpp</code>. Facts that are read from the code but not observed in a run are marked as such.</p>
 
 <h2 data-num id="ly-what-the-layout-file-is">What the layout file is, and who reads it</h2>
-<p>The layout is a static description: it holds no AGVs, trays or bay states (those arrive in every request as <code>DiscreteGarageState</code>). The scheduler node reads the ROS parameter <code>layout</code> (a name such as <code>5675_pecos_combined</code>), resolves it to a file with <code>GetLayoutPathByName</code> (site configuration), and the <code>Scheduler</code> constructor builds four objects from it, once, for the life of the node:</p>
-<pre><code class="language-cpp">// scheduler.cpp, Scheduler::Scheduler(layout_filepath, logger, params)
+<p>The layout is a static description: it holds no AGVs, trays or bay states (those arrive in every request as <code>DiscreteGarageState</code>). The scheduler node reads the ROS parameter <code>layout</code> (a name such as <code>5675_pecos_combined</code>), resolves it to a file with <code>GetLayoutPathByName</code> (site configuration), and the <code>volley::scheduler::Scheduler</code> constructor builds four objects from it, once, for the life of the node; it keeps three of them:</p>
+<pre><code class="language-cpp">// src/scheduler.cpp, Scheduler::Scheduler(layout_filepath, logger, params)
 layout_(std::make_shared&lt;Layout>(layout_filepath)),   // parse the YAML
-pg_(layout_),                                          // PoseGraph: poses and neighbour slots
-gg_(pg_),                                              // GarageGraph: typed, weighted transitions
-table_(gg_, logger),                                   // CollisionTable: which places conflict
+motion_graph_(PoseGraph(layout_)),                     // PoseGraph (a temporary: poses and neighbour slots)
+                                                       //   -> GarageGraph: typed, weighted transitions
+collision_table_(motion_graph_, logger),               // CollisionTable: which places conflict
 </code></pre>
 <figure id="ly-fig-105_layout_consumers">
   <img src="figures/105_layout_consumers.svg" alt="Diagram: the Pecos YAML file and its lookup feed a Layout class box; arrows labelled with fields lead to PoseGraph, GarageGraph and CollisionTable; three coloured buses connect Layout, GarageGraph and CollisionTable to six reader cards (scheduler, CHUGG/SIPP, action graph, safety checker, tape layout, GetGarageLayout).">
@@ -20,9 +20,9 @@ table_(gg_, logger),                                   // CollisionTable: which 
 </figure>
 <p>Three consequences follow from this structure:</p>
 <ul>
-  <li><strong>A layout change needs a restart.</strong> The four objects are members built in the constructor; nothing reloads them.</li>
-  <li><strong>The md5 is part of the cache key.</strong> The collision table is cached on disk under the layout name and the file's md5, and <code>GetStaticFilter</code> refuses a graph and a table whose md5s differ. Any byte change, a comment included, forces a rebuild of the table.</li>
-  <li><strong>Everything downstream sees the layout only through these objects.</strong> Task planning asks <code>layout_</code> for bay prioritization, inbound headings and windows; the searches and CHUGG use <code>gg_</code> and <code>table_</code>; the action graph uses <code>layout_</code> again for VRCs. Which reader uses which field is in the per-field sections below.</li>
+  <li><strong>A layout change needs a restart.</strong> The objects are members built in the constructor; nothing reloads them.</li>
+  <li><strong>The md5 is part of the cache key.</strong> The collision table is cached on disk under the layout name and the file's md5, and <code>BuildStaticObstacleFilter</code> (motion_planner) refuses a graph and a table whose md5s differ. Any byte change, a comment included, forces a rebuild of the table.</li>
+  <li><strong>Everything downstream sees the layout only through these objects.</strong> Task planning asks <code>layout_</code> for bay prioritization, inbound headings and windows; the searches and CHUGG use <code>motion_graph_</code> and <code>collision_table_</code>; the action graph uses <code>layout_</code> again for VRCs. Which reader uses which field is in the per-field sections below.</li>
 </ul>
 
 <h2 data-num id="ly-the-file-at-a-glance">The file at a glance</h2>
@@ -229,7 +229,7 @@ table_(gg_, logger),                                   // CollisionTable: which 
       <td><code>Parking</code></td>
       <td><code>TYPE_PARKING</code></td>
       <td>10</td>
-      <td>Park destinations, open-space search targets, the retrieval-heading cache (<code>InitRetrievalHeadings</code>)</td>
+      <td>Park destinations, open-space search targets, the retrieval-heading cache (<code>StorePreferredPayloadHeadingsForRetrieval</code>)</td>
     </tr>
     <tr>
       <td><code>Bay</code></td>
@@ -247,7 +247,7 @@ table_(gg_, logger),                                   // CollisionTable: which 
       <td><code>AgvCharge</code></td>
       <td><code>TYPE_AGV_CHARGE</code></td>
       <td>3</td>
-      <td>AGV chargers: <code>PlanAgvChargeJob</code> picks one; SIPP keeps any other entity off them</td>
+      <td>AGV chargers: <code>ExpandAgvChargeJob</code> picks one (<code>FindUnoccupiedChargerWithShortestTravelTime</code>); SIPP keeps any other entity off them</td>
     </tr>
     <tr>
       <td><code>EvCharge</code></td>
@@ -285,18 +285,21 @@ table_(gg_, logger),                                   // CollisionTable: which 
 <p>Optional boolean, default false, meaningful only for bays and chargers. The <em>inbound heading</em> of such a node is <code>headings[0] + 180 · faces_reciprocal</code> (<code>GetInboundHeading</code>): for a bay, the heading a payload facing into the garage has on insert; for a charger, the heading an AGV must have to charge. In Pecos the bays 7 and 21 and the chargers 14 and 16 set it; charger 10 does not.</p>
 <figure id="ly-fig-108_inbound_heading">
   <img src="figures/108_inbound_heading.svg" alt="Animated figure: map of bay B7 and chargers C10 and C14 with AGVs at their inbound poses, next to the YAML entries and highlighted C++ from layout.cpp, pose_graph.cpp and scheduler.cpp; a table of raw and wrapped inbound headings; the last step marks the failing −90 == 270 comparison in red.">
-  <figcaption><strong>How faces_reciprocal sets the inbound heading.</strong> Step through bay 7 and chargers 10 and 14, which all list heading 90: <code>faces_reciprocal: true</code> adds 180, which gives 270, and <code>GetInboundHeading</code> does not wrap it. Wrapped, it is −90: the AGV in bay 7 faces east, towards W31, its outbound pose is the LEFT neighbour (31, −90), and parking nodes cache the reciprocal, 90, as their retrieval heading. The last step shows one place where the unwrapped value is used: <code>PlanAgvChargeJob</code> compares a stored −90 with 270, so, reading the code, an AGV already charging on C14 or C16 is not recognised as charging (not observed in a run).</figcaption>
+  <figcaption><strong>How faces_reciprocal sets the inbound heading.</strong> Step through bay 7 and chargers 10 and 14, which all list heading 90: <code>faces_reciprocal: true</code> adds 180, which gives 270, and <code>GetInboundHeading</code> does not wrap it. Wrapped, it is −90: the AGV in bay 7 faces east, towards W31, its outbound pose is the LEFT neighbour (31, −90), and parking nodes cache the reciprocal, 90, as their retrieval heading. The last step shows the comparison the charge job made before PR #1018: a stored −90 against the unwrapped 270, so an AGV already charging on C14 or C16 was not recognised as charging. <code>ExpandAgvChargeJob</code> now compares with the wrapped pose.</figcaption>
 </figure>
-<p>The field is easy to misread, for three reasons: its name describes a mechanism (“use the reciprocal”) rather than the result; its meaning differs by node type (the header comment and <code>GarageNode.msg</code> describe the bay case differently); and the helper that applies it returns an unwrapped angle (270 rather than −90), which every caller must remember to wrap. <code>GetBayInboundHeading</code> wraps; <code>PlanAgvChargeJob</code>'s “already charging?” test does not:</p>
-<pre><code class="language-cpp">// scheduler.cpp, Scheduler::PlanAgvChargeJob: the early return for an AGV already on its charger
-if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
-    agv.pose.heading == volley::GetInboundHeading(curr_node)) {   // -90 == 270 for C14 and C16
-  return std::make_pair(true, "");
+<p>The field is easy to misread, for three reasons: its name describes a mechanism (“use the reciprocal”) rather than the result; its meaning differs by node type (the header comment and <code>GarageNode.msg</code> describe the bay case differently); and the helper that applies it returns an unwrapped angle (270 rather than −90), which every caller must remember to wrap. <code>GetBayInboundHeading</code> wraps. In the scheduler, every charger use goes through one helper that wraps, <code>MakeInboundPose</code>, including the “already charging?” test of the charge job:</p>
+<pre><code class="language-cpp">// src/utils.cpp: a free function in volley::scheduler
+interfaces::msg::GaragePose MakeInboundPose(const interfaces::msg::GarageNode&amp; node) {
+  return ConstructGaragePose(node.id, static_cast&lt;int16_t>(Wrap(GetInboundHeading(node))));   // 270 -> -90
 }
-// ... later, the destination pose IS wrapped:
-//   ConstructGaragePose(charge_node_id, static_cast&lt;int16_t>(volley::Wrap(volley::GetInboundHeading(node))))
+
+// src/job_expansion.cpp, Scheduler::ExpandAgvChargeJob: the early return for an AGV already on its charger
+if(current_node.type == interfaces::msg::GarageNode::TYPE_AGV_CHARGE &amp;&amp;
+    agv.pose == MakeInboundPose(current_node)) {   // (14, -90) == (14, -90) for C14
+  return {};
+}
 </code></pre>
-<p>Reading the code, an AGV already charging on <code>C14</code> or <code>C16</code> is therefore not treated as charging, and the charger search plans a move to another free charger. This is a one-line fix inside the scheduler (wrap the value, or call <code>GetBayInboundHeading</code>'s charger equivalent); it has not been reproduced in a test.</p>
+<p>Before PR #1018 this test compared <code>agv.pose.heading</code> with the unwrapped <code>GetInboundHeading</code>, −90 against 270 for <code>C14</code> and <code>C16</code>, so an AGV already charging there was not treated as charging and the charger search planned a move to another free charger. The fix (<code>fbb65ceb</code>) made <code>MakeInboundPose</code> serve this test, the charger search (<code>FindUnoccupiedChargerWithShortestTravelTime</code>) and the EV-charger transition pose in tray assignment; <code>AgvChargeJob.AlreadyOnCharger</code> (an AGV on C14 at −90) guards it. <code>GetInboundHeading</code> itself, in common_ros, still returns 270, so a new caller must wrap it too.</p>
 
 <h3 data-num id="ly-max-resource-size"><code>max_resource_size</code></h3>
 <p>Required string: the name of the largest payload window allowed at the node (one of the <code>parking_windows</code> names, or the automatic <code>TRAY</code>). The parser turns it into <code>max_resource_size_index</code>, the window's position in the area-sorted list (<a class="ref" href="#ly-parking-windows-and-the-buffer">section 5</a>), and an unknown name throws. Sizes 0 up to that index are allowed at the node: the static filters disable the node for larger payloads, SIPP refuses traversals with a larger footprint, and the retrieve job checks that the chosen bay fits the car. In Pecos every node is <code>XL</code> except the three chargers, which are <code>TRAY</code>: an AGV may stand there, a tray with a car may not.</p>
@@ -304,9 +307,9 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
 <h3 data-num id="ly-bay-only-fields">Bay-only fields: <code>prioritization_value</code>, <code>insert_floor</code>, <code>system_floors</code></h3>
 <p>For <code>Bay</code> and <code>BLift</code> nodes the parser reads three more optional keys:</p>
 <ul>
-  <li><strong><code>prioritization_value</code></strong> (int, default 0). The parser sorts bays by it, highest first, into <code>bay_prioritization_</code>: the first bay is the one most preferred to be ready for insert, the last the one most preferred to be ready for retrieve. Ties are broken by the <em>higher bay id first</em> (a <code>std::priority_queue&lt;std::pair&lt;int, uint16_t>></code>), which is deterministic but nowhere documented. Pecos sets no value, so the order is <code>[21, 7]</code>: B21 is preferred insert-ready, B7 is tried first for a retrieve and drives the retrieval-heading cache. The value is not copied into <code>GarageNode.bay_prioritization</code>, which stays 0. Consumers: <code>ComputeBayRebalancingActions</code>, <code>PlanRetrieveJob</code> and <code>InitRetrievalHeadings</code> (<a class="ref" href="#bg-bays-vecs-and-vrcs">section 20</a>).</li>
+  <li><strong><code>prioritization_value</code></strong> (int, default 0). The parser sorts bays by it, highest first, into <code>bay_prioritization_</code>: the first bay is the one most preferred to be ready for insert, the last the one most preferred to be ready for retrieve. Ties are broken by the <em>higher bay id first</em> (a <code>std::priority_queue&lt;std::pair&lt;int, uint16_t>></code>), which is deterministic but nowhere documented. Pecos sets no value, so the order is <code>[21, 7]</code>: B21 is preferred insert-ready, B7 is tried first for a retrieve and drives the retrieval-heading cache. The value is not copied into <code>GarageNode.bay_prioritization</code>, which stays 0. Consumers: <code>ComputeBayRebalancingActions</code> (through <code>ExpandRebalanceGarageJob</code>), <code>FindBayForRetrieve</code> (through <code>ExpandRetrieveJob</code>) and <code>StorePreferredPayloadHeadingsForRetrieval</code> (<a class="ref" href="#bg-bays-vecs-and-vrcs">section 20</a>).</li>
   <li><strong><code>insert_floor</code></strong> (default: the node's floor). Stored, but no code in the snapshots reads it.</li>
-  <li><strong><code>system_floors</code></strong> (list, default: the node's floor). The scheduler's bay-opening code uses <code>system_floors[0]</code> as the retrieve floor (“Pick the first floor for now”).</li>
+  <li><strong><code>system_floors</code></strong> (list, default: the node's floor). The scheduler uses <code>system_floors[0]</code> as the retrieve floor wherever it opens a bay: <code>GetFirstSystemFloor</code> (which fails the job when the list is missing or empty) and common_ros's <code>Layout::GetBayRetrieveFloor</code>, added on 2026-10-21 (<code>910997ca</code>), both return the first entry.</li>
 </ul>
 
 <h2 data-num id="ly-edges">Edges</h2>
@@ -410,10 +413,10 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
 </figure>
 
 <h2 data-num id="ly-vrc-support-status">VRC support across the pipeline</h2>
-<p>VRC support is a working skeleton rather than a finished feature. The layout and graph layers model a VRC ride as an ordinary edge an AGV can take; motion planning plans the AGV across it like any other edge; and the VRC commands themselves are added only at the very end, when the action graph is built. Task planning has no VRC logic, and the carriage is never planned as an agent with its own position or timing. Nothing in the snapshots tests the scheduler's VRC path end to end, and Pecos has no VRC, so none of this code runs there.</p>
+<p>VRC support is a working skeleton rather than a finished feature. The layout and graph layers model a VRC ride as an ordinary edge an AGV can take; motion planning plans the AGV across it like any other edge; and the VRC commands themselves are added only at the very end, when the action graph is built. Task planning has no VRC logic, and the carriage is never planned as an agent with its own position or timing. Two scheduler scenario tests plan through a VRC end to end: <code>RetrieveJob.FromReadyCharger</code> and <code>RetrieveJob.WhileCharging</code> carry a car from floor 0 of <code>38_gramercy</code> to its car-lift bay BL26 on floor 1, and their recorded responses hold the VRC commands; <code>scheduler_advanced_tests</code> adds two cross-floor regressions on <code>550_w21st</code>. Pecos has no VRC, so none of this code runs there.</p>
 <figure id="ly-fig-112_vrc_support_status">
   <img src="figures/112_vrc_support_status.svg" alt="Matrix of VRC support by layer: layout and graphs partial, task planning no, motion planning partial, action graph partial, dispatch and safety partial; columns for what exists, what runs on a plan call, and gaps.">
-  <figcaption><strong>VRC support across the pipeline.</strong> For each layer, what VRC code exists, what of it runs on a normal plan call, and what is missing or risky. The layout and graph layers (common_ros) parse floors, Lift/BLift nodes and <code>vrcs</code>, create <code>VRC_UP</code>/<code>VRC_DOWN</code> pose neighbours and <code>VRC_TRANSITION</code> edges, and let VRC nodes on different floors collide (the shaft rule). Task planning creates no <code>VrcTransition</code>. SIPP drives the AGV across the VRC edge, and <code>PlanNodeSequential</code> has no VRC branch. VRC commands appear only in the action graph (<code>CollectAndCollapseTrajectoryMotions</code>, <code>InsertVrcActionsIntoDag</code> in utils.cpp). The BLift conversion to <code>MOVE_LIFT_TO_FLOOR</code> happens in Dispatch, which is outside the snapshots. Pecos has no VRC, so none of this runs there.</figcaption>
+  <figcaption><strong>VRC support across the pipeline.</strong> For each layer, what VRC code exists, what of it runs on a normal plan call, and what is missing or risky. The layout and graph layers (common_ros) parse floors, Lift/BLift nodes and <code>vrcs</code>, create <code>VRC_UP</code>/<code>VRC_DOWN</code> pose neighbours and <code>VRC_TRANSITION</code> edges, and let VRC nodes on different floors collide (the shaft rule). Task planning creates no <code>VrcTransition</code>. SIPP drives the AGV across the VRC edge, and <code>PlanNodeSequential</code> has no VRC branch. VRC commands appear only in the action graph (<code>CollectAndCollapseTrajectoryMotions</code> and <code>InsertVrcActionsIntoDag</code>, both in <code>src/action_graph.cpp</code>). The BLift conversion to <code>MOVE_LIFT_TO_FLOOR</code> happens in Dispatch, which is outside the snapshots. Pecos has no VRC, so none of this runs there.</figcaption>
 </figure>
 <table>
   <thead>
@@ -447,7 +450,7 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
       <td>Action graph</td>
       <td>Partial (the main runtime path)</td>
       <td><code>CollectAndCollapseTrajectoryMotions</code> merges each run of floor-traversal motions into one; <code>InsertVrcActionsIntoDag</code> adds an approach command when the carriage is on the wrong floor, replaces the AGV's ride action with a VRC move command (door close + transit + door open), and chains the commands per VRC</td>
-      <td>A ride at the very end of a trajectory is dropped (no flush after the loop); the collapsed motion borrows the next motion's action id; per-VRC chaining skips an edge that would close a cycle; VRC commands in the base schedule are ignored; no direct test</td>
+      <td>A ride at the very end of a trajectory is dropped (no flush after the loop); the collapsed motion borrows the next motion's action id; per-VRC chaining skips an edge that would close a cycle; VRC commands in the base schedule are ignored; no direct test (the <code>38_gramercy</code> retrieves and <code>VrcInsertionCycle.CrossFloorRetrieve</code> run it inside <code>Plan()</code>)</td>
     </tr>
     <tr>
       <td>Dispatch and safety (outside the scheduler)</td>
@@ -457,7 +460,7 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
     </tr>
   </tbody>
 </table>
-<p><strong>In short.</strong> The task planner does not support VRCs: it neither creates VRC events nor reasons about floors, and works only because the graph it searches happens to contain the VRC edges. The motion planner supports them partially: it can route an AGV through a VRC, but plans the ride as plain travel, without the carriage, its doors or its other users. The VRC commands Dispatch needs are reconstructed afterwards by the action graph. A site with a VRC therefore depends on code paths that no snapshot test exercises; before such a site goes live, the minimum is an end-to-end test of a cross-floor retrieve, the trailing-ride fix in <code>CollectAndCollapseTrajectoryMotions</code>, and door times in the ride cost.</p>
+<p><strong>In short.</strong> The task planner does not support VRCs: it neither creates VRC events nor reasons about floors, and works only because the graph it searches happens to contain the VRC edges. The motion planner supports them partially: it can route an AGV through a VRC, but plans the ride as plain travel, without the carriage, its doors or its other users. The VRC commands Dispatch needs are reconstructed afterwards by the action graph. A site with a VRC therefore depends on code paths that only a few whole-plan tests exercise: the two <code>38_gramercy</code> retrieves and the two <code>550_w21st</code> advanced tests. Before such a site goes live, the minimum is the trailing-ride fix in <code>CollectAndCollapseTrajectoryMotions</code>, door times in the ride cost, and a direct test of <code>InsertVrcActionsIntoDag</code>.</p>
 
 <h2 data-num id="ly-validation">What the parser checks, and what it accepts silently</h2>
 <p>The parser checks types and a few cross-references, but not references between nodes and edges.</p>
@@ -538,17 +541,17 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
 </table>
 
 <h2 data-num id="ly-issues-found">Issues found while reading the parser and its users</h2>
-<p>Each item below is read from the code; none has been reproduced in a run.</p>
-<h3 data-num id="ly-charger-heading-comparison">An AGV already charging on C14 or C16 is not recognised</h3>
-<p><code>PlanAgvChargeJob</code> compares the AGV's stored heading (−90) with the unwrapped inbound heading (270) of chargers with <code>faces_reciprocal: true</code> (<a class="ref" href="#ly-faces-reciprocal-and-the-inbound-heading">section 3.5</a>). Fix: wrap the value, in the scheduler.</p>
+<p>Each item below is read from the code; none has been reproduced in a run. Two items on the scheduler side were resolved by PR #1018 and are kept here with their fix.</p>
+<h3 data-num id="ly-charger-heading-comparison">An AGV already charging on C14 or C16 was not recognised (fixed)</h3>
+<p>The charge job compared the AGV's stored heading (−90) with the unwrapped inbound heading (270) of chargers with <code>faces_reciprocal: true</code> (<a class="ref" href="#ly-faces-reciprocal-and-the-inbound-heading">section 3.5</a>). Fixed in PR #1018 (<code>fbb65ceb</code>): <code>ExpandAgvChargeJob</code> compares the AGV's pose with <code>MakeInboundPose</code>, which wraps the heading, and <code>AgvChargeJob.AlreadyOnCharger</code> tests it on C14.</p>
 <h3 data-num id="ly-phantom-edges">An edge to an unknown node creates a phantom node</h3>
 <p>Edge parsing uses <code>node_id_to_index_[a]</code>. A typo in an edge id silently connects the other end to the lowest-id node and makes the typo look like a real node to <code>HasNode</code>. Fix: <code>.at()</code> and a clear error, in common_ros.</p>
 <h3 data-num id="ly-empty-vrc-underflow">An empty VRC node list is undefined behaviour</h3>
 <p><code>for(std::size_t i = 0; i &lt; vrc.nodes.size() - 1; i++)</code> underflows when <code>nodes</code> is empty. Fix: <code>i + 1 &lt; vrc.nodes.size()</code> and a check that the list has at least two stops, in common_ros.</p>
 <h3 data-num id="ly-edgemsg-carries-indices"><code>GetGarageLayout</code> publishes vertex indices as edge ends</h3>
 <p><code>GetGarageLayout</code> fills <code>EdgeMsg.src</code> / <code>dst</code> with Boost vertex indices, which are positions in the id-sorted node vector, not node ids. <code>Edge.msg</code>'s comment (“node index”) matches, but the YAML and every other message use ids, and in Pecos they differ (edge 8–31 is published as <code>{7, 26}</code>). The message also omits floors and disallowed orientations. Whoever serves and reads this service is outside the snapshots; check the consumer before changing it.</p>
-<h3 data-num id="ly-name-based-behaviour">One behaviour depends on the layout's name</h3>
-<p><code>Scheduler::UseEvChargeHeading</code> tests <code>strstr(name, "576_eccles")</code>. Site behaviour should be layout data (for example a per-node preferred heading), not a name match.</p>
+<h3 data-num id="ly-name-based-behaviour">One behaviour depended on the layout's name (removed)</h3>
+<p><code>Scheduler::UseEvChargeHeading</code> (later <code>ApplyEvChargeHeading</code>) tested <code>strstr(name, "576_eccles")</code> and forced heading 0 on two nodes of any layout so named. PR #1018 (<code>725b7d0e</code>) deleted it, with its call sites and the Eccles advanced tests, because Eccles is decommissioned; no scheduler code reads the layout's name now. If a site needs a per-node heading again, it should be layout data, not a name match.</p>
 <h3 data-num id="ly-unused-and-dead-fields">Fields that are stored but have no effect</h3>
 <p>Some keys in the layout file are parsed and stored but have no effect in the snapshots, or have an effect that does not reach the published messages. They are listed here so that a reader editing a layout does not expect behaviour the code does not provide.</p>
 <ul>
@@ -563,9 +566,9 @@ if(curr_node.type == GarageNodeMsg::TYPE_AGV_CHARGE &amp;&amp;
 <h3 data-num id="ly-improvements-in-the-scheduler">Inside the scheduler (fits the refactor)</h3>
 <p>Each item below changes only scheduler code and leaves the layout file and its parser untouched, so it can be made within the refactor. The items follow from the issues in <a class="ref" href="#ly-issues-found">section</a> and the field descriptions in <a class="ref" href="#ly-nodes">section</a>.</p>
 <ul>
-  <li>Wrap every inbound heading the scheduler compares (the charger test above, and <code>ApplyTransitionToFreeingMoves</code> for VECS), or call one helper that returns a wrapped pose.</li>
-  <li>Replace the <code>576_eccles</code> name test with a layout-driven rule once the field exists; until then, keep it in one named function with a comment.</li>
-  <li>Give the bay order a name that says what it is (for example <code>BaysByInsertPreference()</code>) and document the tie rule where task planning reads it.</li>
+  <li>Done in PR #1018: every inbound heading of a charger the scheduler uses goes through one helper that returns a wrapped pose, <code>MakeInboundPose</code> (the charge job's test and charger search, and <code>ApplyBayOrChargerTransition</code> for VECS); bays use <code>MakeBayInboundPose</code>.</li>
+  <li>Done in PR #1018: the <code>576_eccles</code> name test is deleted rather than replaced, as the site is decommissioned.</li>
+  <li>Give the bay order a name that says what it is (for example <code>BaysByInsertPreference()</code>) and document the tie rule where task planning reads it; it is still <code>GetBayPrioritization()</code>.</li>
   <li>Use window <em>names</em> in logs and messages, never indices.</li>
 </ul>
 <h3 data-num id="ly-improvements-in-the-format">In the format and parser (common_ros, interfaces, site configuration)</h3>

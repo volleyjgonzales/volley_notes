@@ -1,4 +1,5 @@
-This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+The content has been processed where security check has been disabled.
 
 <file_summary>
 This section contains a summary of this file.
@@ -32,9 +33,10 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Files matching these patterns are excluded: test/**
+- Only files matching these patterns are included: include/**, src/**, CMakeLists.txt, package.xml
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
+- Security check has been disabled - content may contain sensitive information
 - Files are sorted by Git change count (files with more changes are at the bottom)
 </notes>
 
@@ -82,13 +84,11 @@ This section contains the contents of the repository's files.
 
 <file path="include/motion_planner/agv_hiding_search.hpp">
 #pragma once
-#include <chrono>
-#include <common/types.hpp>
 #include <common_ros/collision_geometry.hpp>
 #include <common_ros/discrete_garage_state.hpp>
 #include <common_ros/garage_graph.hpp>
-#include <common_ros/pose_utils.hpp>
 #include <interfaces/msg/garage_pose.hpp>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 
@@ -102,12 +102,7 @@ class AgvSearchEnvironment : public SearchEnvironment<GaragePoseMsg, Interval::D
 public:
   AgvSearchEnvironment(const volley::DiscreteGarageState& base_state, const volley::GarageGraph& graph,
       const GraphFilterProperties& filters) :
-      base_state_(base_state),
-      graph_(graph),
-      filters_(filters)  //, edge_durations_(GetEdgeDurations(graph))
-                         // TODO(Gunther): Take edge durations as a parameter and calculate them
-                         // only once
-  { }
+      base_state_(base_state), graph_(graph), filters_(filters) { }
 
   ~AgvSearchEnvironment() override = default;
   AgvSearchEnvironment(const AgvSearchEnvironment&) = delete;
@@ -128,13 +123,13 @@ private:
   const volley::DiscreteGarageState& base_state_;
   const volley::GarageGraph& graph_;
   const GraphFilterProperties filters_;
-  // volley::GarageGraph::EdgeVectorPropertryMap edge_durations_;
   std::vector<GaragePoseMsg> valid_destinations_;
 };
 
-// Searches for a matching with the least amount of AGV moves that results in
-// a discrete garage state where all AGVs are hidden under trays.
-std::pair<bool, std::unordered_map<uint16_t, GaragePoseMsg>> HideAgvs(
+// Each enabled AGV's pose under a different tray it can reach (the tray's heading or its reverse): the
+// first complete assignment found trying trays nearest first, not the one with the fewest moves. Empty
+// when there is no AGV to place; nullopt when no assignment exists.
+std::optional<std::unordered_map<uint16_t, interfaces::msg::GaragePose>> FindAgvUnderTrayAssignment(
     const volley::DiscreteGarageState& base_state, const volley::CollisionTable& table);
 
 }  // namespace volley
@@ -654,8 +649,8 @@ private:
 
 <file path="include/motion_planner/garage_graph_pathing.hpp">
 #pragma once
-#include <common/types.hpp>
 #include <cost_functions/motion_cost_model.hpp>
+#include <interfaces/msg/garage_pose.hpp>
 
 #include "boost/graph/floyd_warshall_shortest.hpp"
 #include "common_ros/garage_graph.hpp"
@@ -669,15 +664,12 @@ namespace volley {
 // Utility functions
 
 // Make an edge property map of trapezoid-profile durations using the supplied cost model.
-volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeDurations(
+volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> ComputeEdgeDurations(
     const volley::GarageGraph& garage_graph, const cost::MotionCostModel& cost_model);
 
-// Per-edge marginal cruise-only durations: `length / vmax` for every edge, ignoring accel /
-// decel and wheel-turn overhead. The sum along any path is a strict lower bound on the path's
-// actual time (each edge's true cost ≥ length/vmax), which makes this map admissible as the
-// edge-weight input to GetAllPairsMinCost when feeding SIPP's A* heuristic under Ring 3b's
-// path-dependent edge costs.
-volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeMarginalDurations(
+// `length / vmax` for every edge, ignoring acceleration and wheel turns: a lower bound on any path's time,
+// so an admissible edge weight for SIPP's A* heuristic (ComputeAllPairsShortestPathCosts).
+volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> ComputeEdgeMarginalDurations(
     const volley::GarageGraph& garage_graph, const cost::MotionCostModel& cost_model);
 
 // Distance/Duration map for Heuristics when pathfinding
@@ -685,7 +677,7 @@ volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeMarginalDu
 // To use this for filtered graphs, modify the input cost map s.t. filtered edges
 // and edges touching filtered vertices have 'infinity' cost
 template <typename Cost>
-std::vector<std::vector<Cost>> GetAllPairsMinCost(const volley::GarageGraph& garage_graph,
+std::vector<std::vector<Cost>> ComputeAllPairsShortestPathCosts(const volley::GarageGraph& garage_graph,
     const volley::GarageGraph::EdgeVectorPropertyMap<Cost>& cost_map, const Cost& zero,
     const Cost& infinity) {
   // Get the number of vertices in the garage_graph
@@ -746,9 +738,9 @@ private:
 };
 
 // uses SingleSourceSearch and GarageGraphEnvironment to compute a path between poses
-std::vector<GaragePoseMsg> GetPosePath(const volley::GarageGraph& graph, const GaragePoseMsg& source,
-    const GaragePoseMsg& target, const cost::MotionCostModel& cost_model,
-    std::optional<GraphFilterProperties> filters = std::nullopt);
+std::vector<interfaces::msg::GaragePose> FindPosePath(const volley::GarageGraph& graph,
+    const interfaces::msg::GaragePose& source, const interfaces::msg::GaragePose& target,
+    const cost::MotionCostModel& cost_model, std::optional<GraphFilterProperties> filters = std::nullopt);
 
 // Constructs trajectory from pose path, requires sequential poses to be adjacent on the graph
 // and uses the cost model's trapezoid profile for time intervals.
@@ -1771,65 +1763,64 @@ private:
 
 <file path="include/motion_planner/static_graph_filtering.hpp">
 #pragma once
-#include <common/types.hpp>
 #include <common_ros/collision_geometry.hpp>
 #include <common_ros/discrete_garage_state.hpp>
 #include <common_ros/garage_graph.hpp>
+#include <cstdint>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 namespace volley {
-
-// Helper functions for filtering GarageGraph nodes/edges
 
 class GraphFilterProperties {
 public:
   GraphFilterProperties() = default;
 
-  GraphFilterProperties(const volley::GarageGraph::VertexVectorPropertyMap<bool>& vfilter,
-      const volley::GarageGraph::EdgeVectorPropertyMap<bool>& efilter) :
-      vertex_filter_(vfilter), edge_filter_(efilter) { }
+  GraphFilterProperties(const volley::GarageGraph::VertexVectorPropertyMap<bool>& vertex_filter,
+      const volley::GarageGraph::EdgeVectorPropertyMap<bool>& edge_filter) :
+      vertex_filter_(vertex_filter), edge_filter_(edge_filter) { }
 
-  GraphFilterProperties(volley::GarageGraph::VertexVectorPropertyMap<bool>&& vfilter,
-      volley::GarageGraph::EdgeVectorPropertyMap<bool>&& efilter) :
-      vertex_filter_(std::move(vfilter)), edge_filter_(std::move(efilter)) { }
+  GraphFilterProperties(volley::GarageGraph::VertexVectorPropertyMap<bool>&& vertex_filter,
+      volley::GarageGraph::EdgeVectorPropertyMap<bool>&& edge_filter) :
+      vertex_filter_(std::move(vertex_filter)), edge_filter_(std::move(edge_filter)) { }
 
-  GraphFilterProperties(const volley::GarageGraph& graph,
-      const std::unordered_set<volley::CollisionTable::Pose>& disabled_poses,
-      const std::unordered_set<volley::CollisionTable::Edge>& disabled_edges);
+  // Everything enabled except `blocked_poses` and `blocked_edges`; throws if one is not in the graph.
+  GraphFilterProperties(const volley::GarageGraph& motion_graph,
+      const std::unordered_set<volley::CollisionTable::Pose>& blocked_poses,
+      const std::unordered_set<volley::CollisionTable::Edge>& blocked_edges);
 
-  // Note: These functions offer no bounds checking.
+  // No bounds checking.
   bool IsEnabled(const volley::GarageGraph::Vertex& vertex) const { return vertex_filter_[vertex]; }
   bool IsEnabled(const volley::GarageGraph::Edge& edge) const { return edge_filter_[edge]; }
-  void AddProperty(const volley::GarageGraph::Edge& edge, const bool val) { edge_filter_[edge] = val; }
-  void AddProperty(const volley::GarageGraph::Vertex& vertex, const bool val) {
-    vertex_filter_[vertex] = val;
+  void SetEnabled(const volley::GarageGraph::Vertex& vertex, bool is_enabled) {
+    vertex_filter_[vertex] = is_enabled;
   }
+  void SetEnabled(const volley::GarageGraph::Edge& edge, bool is_enabled) { edge_filter_[edge] = is_enabled; }
 
 private:
   volley::GarageGraph::VertexVectorPropertyMap<bool> vertex_filter_;
   volley::GarageGraph::EdgeVectorPropertyMap<bool> edge_filter_;
 };
 
-// Returns graph filter property for given collision id type
-// The filter property for a vertex or an edge is set to false if the given resource type would be
-// in collision with another entity in the input state or if the corresponding pose/edge is
-// disabled.
-GraphFilterProperties GetStaticFilter(const volley::CollisionEntityId_t& collision_id,
-    const volley::GarageGraph& gg, const volley::DiscreteGarageState& dgs,
-    const volley::CollisionTable& ctable, const std::unordered_set<uint16_t>& ignore_trays,
+// Where the `collision_id` footprint can be: a vertex or edge is disabled if it collides with a tray,
+// AGV or bay barrier in `state` (except the ignored ones), with the volume of a disabled node, or is too
+// small for the footprint. The state's entities are treated as stationary.
+GraphFilterProperties BuildStaticObstacleFilter(volley::CollisionEntityId_t collision_id,
+    const volley::GarageGraph& motion_graph, const volley::DiscreteGarageState& state,
+    const volley::CollisionTable& collision_table, const std::unordered_set<uint16_t>& ignore_trays,
     const std::unordered_set<uint16_t>& ignore_agvs, const std::unordered_set<uint16_t>& ignore_bays);
 
-// Returns a dictionary of GraphFilterProperties for all collision id types in the input
-// corresponding to the input discrete garage state and information on ignored entities
-std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetAllStaticFilters(
-    const volley::GarageGraph& gg, const volley::DiscreteGarageState& dgs,
-    const volley::CollisionTable& ctable, const std::unordered_set<uint16_t>& ignored_trays,
-    const std::unordered_set<uint16_t>& ignored_agvs, const std::unordered_set<uint16_t>& ignored_bays);
+// BuildStaticObstacleFilter for the AGV and TRAY footprints and for each tray footprint in `state`.
+std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> BuildStaticObstacleFilters(
+    const volley::GarageGraph& motion_graph, const volley::DiscreteGarageState& state,
+    const volley::CollisionTable& collision_table, const std::unordered_set<uint16_t>& ignore_trays,
+    const std::unordered_set<uint16_t>& ignore_agvs, const std::unordered_set<uint16_t>& ignore_bays);
 
-// Returns a dictionary of GraphFilterProperties for all collision id types in the input
-// discrete garage states
-std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetDisabledEntitiesFilters(
-    const volley::GarageGraph& gg, const volley::DiscreteGarageState& dgs,
-    const volley::CollisionTable& ctable);
+// BuildStaticObstacleFilters counting only disabled entities and entities on disabled nodes.
+std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> BuildKeepOutFilters(
+    const volley::GarageGraph& motion_graph, const volley::DiscreteGarageState& state,
+    const volley::CollisionTable& collision_table);
 
 }  // namespace volley
 </file>
@@ -2063,7 +2054,6 @@ std::vector<std::pair<GaragePoseMsg, Interval::Duration>> AgvSearchEnvironment::
     auto next_pose = graph_.GetPoseFromVertex(next_vert).value();
     if(filters_.IsEnabled(edge) and filters_.IsEnabled(next_vert)) {
       if(graph_.GetTransition(edge)) {
-        // auto cost  = edge_durations_[edge];
         // TODO(Gunther): Use graph edge costs somehow
         neighbors.emplace_back(std::make_pair(next_pose, 1s));
       }
@@ -2076,19 +2066,21 @@ Interval::Duration AgvSearchEnvironment::GetHeuristic(const GaragePoseMsg&) {
   return 0s;
 }
 
-// For Each AGV, find all possible desinations
+namespace {
+
+// For each AGV, find all possible destinations,
 // then in order of cost, apply the agv move, and do the same for each subsequent AGV
-std::pair<bool, std::unordered_map<uint16_t, GaragePoseMsg>> HideOneAgv(
+std::optional<std::unordered_map<uint16_t, GaragePoseMsg>> FindRemainingAgvUnderTrayAssignment(
     const volley::DiscreteGarageState& base_state, const volley::CollisionTable& table,
-    std::unordered_set<uint16_t> agvs_to_assign) {
-  if(agvs_to_assign.empty()) {
-    return {true, {}};
+    std::unordered_set<uint16_t> remaining_agv_ids) {
+  if(remaining_agv_ids.empty()) {
+    return std::unordered_map<uint16_t, GaragePoseMsg> {};
   }
 
-  for(uint16_t agv_id : agvs_to_assign) {
+  for(uint16_t agv_id : remaining_agv_ids) {
     auto agv_state = base_state.GetAgv(agv_id).value();
     volley::CollisionEntityId_t agv_cid = common::EnumInteger(volley::CollisionEntityId::AGV);
-    auto filter = GetStaticFilter(agv_cid, table.GetGraph(), base_state, table, {}, {agv_id}, {});
+    auto filter = BuildStaticObstacleFilter(agv_cid, table.GetGraph(), base_state, table, {}, {agv_id}, {});
 
     AgvSearchEnvironment env(base_state, table.GetGraph(), filter);
     auto agv_pose = agv_state.pose;
@@ -2114,29 +2106,32 @@ std::pair<bool, std::unordered_map<uint16_t, GaragePoseMsg>> HideOneAgv(
           continue;
         }
       }
-      auto agvs_to_assign_next = agvs_to_assign;
-      agvs_to_assign_next.erase(agv_id);
+      auto next_remaining_agv_ids = remaining_agv_ids;
+      next_remaining_agv_ids.erase(agv_id);
 
-      auto [success, next_agv_destinations] = HideOneAgv(working_state, table, agvs_to_assign_next);
-      if(success) {
-        next_agv_destinations[agv_id] = dest;
-        return {true, next_agv_destinations};
+      auto next_agv_destinations =
+          FindRemainingAgvUnderTrayAssignment(working_state, table, next_remaining_agv_ids);
+      if(next_agv_destinations) {
+        (*next_agv_destinations)[agv_id] = dest;
+        return next_agv_destinations;
       }
     }
   }
-  return {false, {}};
+  return std::nullopt;
 }
 
-std::pair<bool, std::unordered_map<uint16_t, GaragePoseMsg>> HideAgvs(
+}  // namespace
+
+std::optional<std::unordered_map<uint16_t, interfaces::msg::GaragePose>> FindAgvUnderTrayAssignment(
     const volley::DiscreteGarageState& base_state, const volley::CollisionTable& table) {
-  std::unordered_set<uint16_t> agvs_to_assign;
+  std::unordered_set<uint16_t> enabled_agv_ids;
   for(const auto& agv : base_state.GetAgvs()) {
     if(agv.second.disabled) {
       continue;
     }
-    agvs_to_assign.insert(agv.first);
+    enabled_agv_ids.insert(agv.first);
   }
-  return HideOneAgv(base_state, table, agvs_to_assign);
+  return FindRemainingAgvUnderTrayAssignment(base_state, table, enabled_agv_ids);
 }
 
 }  // namespace volley
@@ -2479,7 +2474,7 @@ Chugg::Node Chugg::BranchNode(Node& parent) {
 </file>
 
 <file path="src/chugg_common.cpp">
-#include <queue>
+#include <stdexcept>
 
 #include "motion_planner/chugg.hpp"
 
@@ -2519,7 +2514,7 @@ void Chugg::InitializeEventOrder() {
   auto working_state = init_traj_.GetEndState().value();
   for(auto event_id : event_order_) {
     // shared ptr to ScheduleEvent
-    auto event = event_dag_.GetEventFromVertex(event_id).value();
+    auto event = event_dag_.GetEvent(event_id);
 
     if(event->GetType() == EventType::AGV_MOVE) {
       auto agv_event = std::dynamic_pointer_cast<volley::AgvMove>(event);
@@ -2558,7 +2553,7 @@ void Chugg::InitializeEventOrder() {
         throw std::logic_error("Agv for TRAY_MOVE is not under tray");
       }
     }
-    auto [success, msg] = event->Apply(working_state);
+    auto [success, msg] = event->ApplyTo(working_state);
     if(!success) {
       throw std::logic_error("Could not apply event, trajectories are non-computable. Event msg: " + msg);
     }
@@ -2573,11 +2568,19 @@ void Chugg::AddStaticPoseConstraints(GraphConstraints& event_constraints, Collis
   std::tie(poses, edges) = geometry_.Query(avoid_id, my_id, avoid_pose);
 
   for(auto& avoid_pose : poses) {
-    event_constraints[my_id].AddProperty(graph_.GetVertexFromPose(avoid_pose).value(), false);
+    const auto vertex_opt = graph_.GetVertexFromPose(avoid_pose);
+    if(!vertex_opt) {
+      throw std::invalid_argument("Pose " + std::to_string(avoid_pose) + " not found in graph");
+    }
+    event_constraints[my_id].SetEnabled(*vertex_opt, false);
   }
   for(auto& avoid_edge : edges) {
-    event_constraints[my_id].AddProperty(
-        graph_.GetEdgeFromPoses(avoid_edge[0], avoid_edge[1]).value(), false);
+    const auto edge_opt = graph_.GetEdgeFromPoses(avoid_edge[0], avoid_edge[1]);
+    if(!edge_opt) {
+      throw std::invalid_argument("Edge " + std::to_string(avoid_edge[0]) + ", " +
+                                  std::to_string(avoid_edge[1]) + " not found in graph");
+    }
+    event_constraints[my_id].SetEnabled(*edge_opt, false);
   }
 }
 
@@ -2660,12 +2663,12 @@ Interval::Timepoint Chugg::GetDependencyCompletionTime(Node& node, ScheduleEvent
 
   auto [edge_begin, edge_end] = event_dag_.GetInEdges(event_id);
 
-  auto event = event_dag_.GetEventFromVertex(event_id).value();
+  auto event = event_dag_.GetEvent(event_id);
   auto event_entity = GetEventEntity(event);
 
   for(auto it = edge_begin; it != edge_end; ++it) {
     auto dep_id = it->m_source;
-    auto dep_event = event_dag_.GetEventFromVertex(dep_id).value();
+    auto dep_event = event_dag_.GetEvent(dep_id);
 
     GarageEntityIdMsg dep_entity = GetEventEntity(dep_event);
 
@@ -2758,7 +2761,7 @@ Chugg::Node Chugg::MakeRootNode() {
 
   // Initialize base sequence of sipp goals for all agvs
   for(auto& event_id : event_order_) {
-    auto event = event_dag_.GetEventFromVertex(event_id).value();
+    auto event = event_dag_.GetEvent(event_id);
     if(event->GetType() == EventType::AGV_MOVE) {
       auto agv_event = std::dynamic_pointer_cast<volley::AgvMove>(event);
       auto agv_id = agv_event->GetAgvId();
@@ -2800,7 +2803,7 @@ Chugg::Node Chugg::MakeRootNode() {
     else if(event->GetType() == EventType::BAY_TRANSITION) {
       auto bay_event = std::dynamic_pointer_cast<volley::BayTransition>(event);
     }
-    event->Apply(work_state);
+    event->ApplyTo(work_state);
   }
 
   // Initialize node trajectory map for all dynamic entities
@@ -2846,7 +2849,8 @@ void Chugg::SolveInitialization() {
   DiscreteGarageState work_state = init_traj_.GetEndState().value();
   // TODO(Joe) add VECS state code here if the hardware ever takes up real space. Or just to be
   // extra safe
-  constraints_ = GetAllStaticFilters(graph_, work_state, geometry_, moving_trays, movable_agvs, moving_bays);
+  constraints_ =
+      BuildStaticObstacleFilters(graph_, work_state, geometry_, moving_trays, movable_agvs, moving_bays);
   dynamic_entities_.clear();
 
   // All movable agvs are considered dynamic regardless if there is an event specifically
@@ -2860,7 +2864,7 @@ void Chugg::SolveInitialization() {
   //                we need is explicitly stated in events
   auto working_state = init_traj_.GetEndState().value();
   for(auto& event_id : event_order_) {
-    auto event = event_dag_.GetEventFromVertex(event_id).value();
+    auto event = event_dag_.GetEvent(event_id);
     if(event->GetType() == EventType::TRAY_MOVE) {
       auto tray_event = std::dynamic_pointer_cast<volley::TrayMove>(event);
       dynamic_entities_.insert(volley::TrayId(tray_event->GetTrayId().value()));
@@ -2877,7 +2881,7 @@ void Chugg::SolveInitialization() {
       auto vrc_event = std::dynamic_pointer_cast<volley::VrcTransition>(event);
       dynamic_entities_.insert(volley::VrcId(vrc_event->GetVrcId()));
     }
-    event->Apply(working_state);
+    event->ApplyTo(working_state);
   }
 }
 
@@ -2931,7 +2935,7 @@ std::unordered_set<uint16_t> Chugg::GetBaysMovingAfter(const Interval::Timepoint
   // All bays that have an event
   for(auto event_id : event_order_) {
     // shared ptr to ScheduleEvent
-    auto event = event_dag_.GetEventFromVertex(event_id).value();
+    auto event = event_dag_.GetEvent(event_id);
     if(event->GetType() == EventType::BAY_TRANSITION) {
       auto bay_event = std::dynamic_pointer_cast<volley::BayTransition>(event);
       moving_bays.insert(bay_event->GetSourceState().id);
@@ -2959,7 +2963,7 @@ std::unordered_set<uint16_t> Chugg::GetTraysMovingAfter(const Interval::Timepoin
   // this includes AGV lifting events
   DiscreteGarageState working_state = init_traj_.GetEndState().value();
   for(auto event_id : event_order_) {
-    auto event = event_dag_.GetEventFromVertex(event_id).value();
+    auto event = event_dag_.GetEvent(event_id);
     if(event->GetType() == EventType::AGV_MOVE) {
       auto agv_event = std::dynamic_pointer_cast<volley::AgvMove>(event);
       auto agv_state = working_state.GetAgv(agv_event->GetAgvId()).value();
@@ -2971,7 +2975,7 @@ std::unordered_set<uint16_t> Chugg::GetTraysMovingAfter(const Interval::Timepoin
       auto tray_event = std::dynamic_pointer_cast<volley::TrayMove>(event);
       moving_trays.insert(tray_event->GetTrayId().value());
     }
-    event->Apply(working_state);
+    event->ApplyTo(working_state);
   }
   return moving_trays;
 }
@@ -2993,12 +2997,12 @@ std::unordered_set<uint16_t> Chugg::GetVexenMovingAfter(const Interval::Timepoin
   // All Vexen that have a new event targeting them
   DiscreteGarageState working_state = init_traj_.GetEndState().value();
   for(auto event_id : event_order_) {
-    auto event = event_dag_.GetEventFromVertex(event_id).value();
+    auto event = event_dag_.GetEvent(event_id);
     if(event->GetType() == EventType::VECS_TRANSITION) {
       auto vecs_event = std::dynamic_pointer_cast<volley::VecsTransition>(event);
       moving_vexen.insert(vecs_event->GetVecsId());
     }
-    event->Apply(working_state);
+    event->ApplyTo(working_state);
   }
   return moving_vexen;
 }
@@ -3059,7 +3063,7 @@ bool Chugg::PlanNodeSequential(Node& node) {
   // Plan events in topological order
   auto working_state = init_traj_.GetEndState().value();
   for(auto& event_id : event_order_) {
-    auto event = event_dag_.GetEventFromVertex(event_id).value();
+    auto event = event_dag_.GetEvent(event_id);
     bool plan_success = true;
     if(event->GetType() == EventType::AGV_MOVE) {
       // Plan AGV move event
@@ -3080,7 +3084,7 @@ bool Chugg::PlanNodeSequential(Node& node) {
       plan_success = PlanEventSequential(node, event_id, vecs_event, working_state);
     }
     // Advance working state
-    auto [success, msg] = event->Apply(working_state);
+    auto [success, msg] = event->ApplyTo(working_state);
     if(!success) {
       ERRORS(logger_, "Failed to apply event: " << event->ToString() << " : " << msg);
     }
@@ -4087,7 +4091,7 @@ bool ContinuousState::CheckMotionCollision(
 
     // Bay is fixed resource in query checks
     return std::visit(
-        [table, left_cid, right_cid, &bay_pose](
+        [&table, left_cid, right_cid, &bay_pose](
             auto&& other_loc) -> bool { return table.Query(left_cid, right_cid, bay_pose, other_loc); },
         right_loc);
   }
@@ -4110,7 +4114,7 @@ bool ContinuousState::CheckMotionCollision(
     }
 
     return std::visit(
-        [table, left_cid, right_cid, &bay_pose](
+        [&table, left_cid, right_cid, &bay_pose](
             auto&& other_loc) -> bool { return table.Query(right_cid, left_cid, bay_pose, other_loc); },
         left_loc);
   }
@@ -4120,7 +4124,7 @@ bool ContinuousState::CheckMotionCollision(
       left_cid = common::EnumInteger(volley::CollisionEntityId::TRAY_LEGS);
     }
     return std::visit(
-        [table, left_cid, right_cid](auto&& tray_loc, auto&& agv_loc) -> bool {
+        [&table, left_cid, right_cid](auto&& tray_loc, auto&& agv_loc) -> bool {
           return table.Query(left_cid, right_cid, tray_loc, agv_loc);
         },
         left_loc, right_loc);
@@ -4131,7 +4135,7 @@ bool ContinuousState::CheckMotionCollision(
       right_cid = common::EnumInteger(volley::CollisionEntityId::TRAY_LEGS);
     }
     return std::visit(
-        [table, left_cid, right_cid](auto&& agv_loc, auto&& tray_loc) -> bool {
+        [&table, left_cid, right_cid](auto&& agv_loc, auto&& tray_loc) -> bool {
           return table.Query(left_cid, right_cid, agv_loc, tray_loc);
         },
         left_loc, right_loc);
@@ -4139,7 +4143,7 @@ bool ContinuousState::CheckMotionCollision(
   else {
     // Both AGV or both TRAY
     return std::visit(
-        [table, left_cid, right_cid](auto&& left_location, auto&& right_location) -> bool {
+        [&table, left_cid, right_cid](auto&& left_location, auto&& right_location) -> bool {
           return table.Query(left_cid, right_cid, left_location, right_location);
         },
         left_loc, right_loc);
@@ -4202,7 +4206,7 @@ Interval::Duration ToIntervalDuration(cost::SecondsF seconds) {
 }
 }  // namespace
 
-volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeDurations(
+volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> ComputeEdgeDurations(
     const volley::GarageGraph& garage_graph, const cost::MotionCostModel& cost_model) {
   // Create an EdgeVectorPropertyMap to store the durations
   auto edge_durations = garage_graph.MakeEdgeVectorPropertyMap<Interval::Duration>(Interval::Duration(0));
@@ -4226,7 +4230,7 @@ volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeDurations(
   return edge_durations;
 }
 
-volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> GetEdgeMarginalDurations(
+volley::GarageGraph::EdgeVectorPropertyMap<Interval::Duration> ComputeEdgeMarginalDurations(
     const volley::GarageGraph& garage_graph, const cost::MotionCostModel& cost_model) {
   auto edge_durations = garage_graph.MakeEdgeVectorPropertyMap<Interval::Duration>(Interval::Duration(0));
   for(auto [edge_iter, edge_end] = garage_graph.GetEdges(); edge_iter != edge_end; ++edge_iter) {
@@ -4271,12 +4275,8 @@ std::vector<std::pair<volley::GarageGraph::Vertex, Interval::Duration>> GarageGr
           continue;
         }
       }
-      // GarageGraphEnvironment is the non-SIPP single-source search backing GetPosePath, used
-      // only to discover *topology* (the path of poses to traverse). Per-edge full-Trapezoid
-      // weight is fine here because the consumer ConvertPosePathToTrajectory immediately
-      // recomputes the chosen path's *timing* with run-coalesced trapezoids. Ring 3b's
-      // path-dependent edge costs live in SippEnvironment, which is the search that interacts
-      // with deconfliction and so needs path-dependent costs to stay self-consistent.
+      // FindPosePath uses only the path's poses: ConvertPosePathToTrajectory recomputes its timing, so a
+      // full trapezoid per edge is fine here. Deconfliction's path-dependent costs are SippEnvironment's.
       Interval::Duration cost = ToIntervalDuration(cost_model_.Duration(transition.value()));
       neighbors.emplace_back(dst_vertex, cost);
     }
@@ -4284,9 +4284,9 @@ std::vector<std::pair<volley::GarageGraph::Vertex, Interval::Duration>> GarageGr
   return neighbors;
 }
 
-std::vector<GaragePoseMsg> GetPosePath(const volley::GarageGraph& graph, const GaragePoseMsg& source,
-    const GaragePoseMsg& target, const cost::MotionCostModel& cost_model,
-    std::optional<GraphFilterProperties> filters) {
+std::vector<interfaces::msg::GaragePose> FindPosePath(const volley::GarageGraph& graph,
+    const interfaces::msg::GaragePose& source, const interfaces::msg::GaragePose& target,
+    const cost::MotionCostModel& cost_model, std::optional<GraphFilterProperties> filters) {
   // Get the source and target vertices from the GaragePoses
   auto source_vertex = graph.GetVertexFromPose(source);
   auto target_vertex = graph.GetVertexFromPose(target);
@@ -5693,33 +5693,35 @@ void SippAgv::AddLocationConstraint(CollisionEntityId_t type,
 <file path="src/static_graph_filtering.cpp">
 #include "motion_planner/static_graph_filtering.hpp"
 
+#include <common_ros/discrete_garage_state_utils.hpp>
+#include <interfaces/msg/bay_report.hpp>
+#include <set>
+#include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 
-#include "common_ros/discrete_garage_state_utils.hpp"
-
 namespace volley {
 
-GraphFilterProperties::GraphFilterProperties(const volley::GarageGraph& graph,
-    const std::unordered_set<volley::CollisionTable::Pose>& disabled_poses,
-    const std::unordered_set<volley::CollisionTable::Edge>& disabled_edges) :
-    vertex_filter_(graph.MakeVertexVectorPropertyMap<bool>(true)),
-    edge_filter_(graph.MakeEdgeVectorPropertyMap<bool>(true)) {
-  // Set edge/vertex properties corresponding to poses/edges
-  for(const volley::CollisionTable::Edge& edge : disabled_edges) {
-    auto e_opt = graph.EdgeFromPoses(edge[0], edge[1]);
-    if(e_opt.has_value()) {
-      AddProperty(e_opt.value(), false);
+GraphFilterProperties::GraphFilterProperties(const volley::GarageGraph& motion_graph,
+    const std::unordered_set<volley::CollisionTable::Pose>& blocked_poses,
+    const std::unordered_set<volley::CollisionTable::Edge>& blocked_edges) :
+    vertex_filter_(motion_graph.MakeVertexVectorPropertyMap<bool>(true)),
+    edge_filter_(motion_graph.MakeEdgeVectorPropertyMap<bool>(true)) {
+  for(const volley::CollisionTable::Edge& edge : blocked_edges) {
+    auto edge_opt = motion_graph.EdgeFromPoses(edge[0], edge[1]);
+    if(edge_opt.has_value()) {
+      SetEnabled(edge_opt.value(), false);
     }
     else {
       throw std::invalid_argument(
           "Edge " + std::to_string(edge[0]) + ", " + std::to_string(edge[1]) + " not found in graph");
     }
   }
-  for(const auto& pose : disabled_poses) {
-    auto v_opt = graph.GetVertexFromPose(pose);
-    if(v_opt.has_value()) {
-      AddProperty(v_opt.value(), false);
+  for(const auto& pose : blocked_poses) {
+    auto vertex_opt = motion_graph.GetVertexFromPose(pose);
+    if(vertex_opt.has_value()) {
+      SetEnabled(vertex_opt.value(), false);
     }
     else {
       throw std::invalid_argument("Pose " + std::to_string(pose) + " not found in graph");
@@ -5727,98 +5729,82 @@ GraphFilterProperties::GraphFilterProperties(const volley::GarageGraph& graph,
   }
 }
 
-GraphFilterProperties GetStaticFilter(const volley::CollisionEntityId_t& collision_id,
-    const volley::GarageGraph& gg, const volley::DiscreteGarageState& dgs,
-    const volley::CollisionTable& ctable, const std::unordered_set<uint16_t>& ignore_trays,
+GraphFilterProperties BuildStaticObstacleFilter(volley::CollisionEntityId_t collision_id,
+    const volley::GarageGraph& motion_graph, const volley::DiscreteGarageState& state,
+    const volley::CollisionTable& collision_table, const std::unordered_set<uint16_t>& ignore_trays,
     const std::unordered_set<uint16_t>& ignore_agvs, const std::unordered_set<uint16_t>& ignore_bays) {
-  if(gg.GetLayout()->GetMD5Sum() != ctable.GetGraph().GetLayout()->GetMD5Sum()) {
+  if(motion_graph.GetLayout()->GetMD5Sum() != collision_table.GetGraph().GetLayout()->GetMD5Sum()) {
     throw std::invalid_argument("Constraint table layout mismatched with graph layout");
   }
 
-  std::unordered_set<volley::CollisionTable::Edge> disabled_edges;
-  std::unordered_set<volley::CollisionTable::Pose> disabled_poses;
+  std::unordered_set<volley::CollisionTable::Edge> blocked_edges;
+  std::unordered_set<volley::CollisionTable::Pose> blocked_poses;
 
-  const auto& disabled_nodes = dgs.GetDisabledNodes();
+  // The disabled nodes and the nodes of disabled entities, ignored or not.
+  const auto& state_disabled_nodes = state.GetDisabledNodes();
+  std::set<uint32_t> disabled_node_ids(state_disabled_nodes.begin(), state_disabled_nodes.end());
 
-  // Set of all disabled nodes corresponding to disabled entities or
-  // nodes that are specifically disabled in the DGS
-  std::set<uint32_t> all_disabled_nodes;
-  all_disabled_nodes.insert(disabled_nodes.begin(), disabled_nodes.end());
-
-  // Filter areas where trays/payloads conflict with this payload type
-  for(const auto& [tray_id, tray_state] : dgs.GetTrays()) {
+  for(const auto& [tray_id, tray_state] : state.GetTrays()) {
     if(tray_state.disabled) {
-      all_disabled_nodes.insert(tray_state.pose.node_id);
+      disabled_node_ids.insert(tray_state.pose.node_id);
     }
-    if(ignore_trays.find(tray_id) != ignore_trays.end()) {
-      // Ignore any moving trays in this filter
+    if(ignore_trays.contains(tray_id)) {
       continue;
     }
-    // Want all the places that this resource type can't be, if the other
-    // payload type is at tray_pose.
-    auto other_collision_id = volley::CollisionEntityIdFromTrayState(tray_state, dgs, *(gg.GetLayout()));
+    auto other_collision_id =
+        volley::CollisionEntityIdFromTrayState(tray_state, state, *(motion_graph.GetLayout()));
     if(collision_id == common::EnumInteger(volley::CollisionEntityId::AGV)) {
-      // Agv w/ lift down collides with tray legs, not payload or tray
+      // An AGV with its lift down collides with the tray's legs, not the tray or its payload.
       other_collision_id = common::EnumInteger(volley::CollisionEntityId::TRAY_LEGS);
     }
-    auto [poses, edges] = ctable.Query(other_collision_id, collision_id, tray_state.pose);
-    disabled_poses.insert(poses.begin(), poses.end());
-    disabled_edges.insert(edges.begin(), edges.end());
+    auto [poses, edges] = collision_table.Query(other_collision_id, collision_id, tray_state.pose);
+    blocked_poses.insert(poses.begin(), poses.end());
+    blocked_edges.insert(edges.begin(), edges.end());
   }
 
-  // Filter areas where agvs conflict with this payload type
-  for(const auto& [agv_id, agv_state] : dgs.GetAgvs()) {
+  for(const auto& [agv_id, agv_state] : state.GetAgvs()) {
     if(agv_state.disabled) {
-      all_disabled_nodes.insert(agv_state.pose.node_id);
+      disabled_node_ids.insert(agv_state.pose.node_id);
     }
-    if(ignore_agvs.find(agv_id) != ignore_agvs.end()) {
-      // Ignore any moving AGVs in this filter
+    if(ignore_agvs.contains(agv_id)) {
       continue;
     }
-    // Want all the places that this resource type can't be, if an AGV is at agv_pose.
-    auto adjust_collision_id = collision_id;
+    // An AGV or payload footprint is checked against an AGV as a TRAY: an AGV meets the tray's legs
+    // before the payload.
+    auto effective_collision_id = collision_id;
     if(collision_id >= common::EnumInteger(volley::CollisionEntityId::AGV)) {
-      // We use 'TRAY' instead of payload type since the AGV would collide with the
-      // outer perimeter of a tray (legs) before it would hit the payload
-      adjust_collision_id = common::EnumInteger(volley::CollisionEntityId::TRAY);
+      effective_collision_id = common::EnumInteger(volley::CollisionEntityId::TRAY);
     }
-
-    auto [poses, edges] = ctable.Query(
-        common::EnumInteger(volley::CollisionEntityId::AGV), adjust_collision_id, agv_state.pose);
-
-    disabled_poses.insert(poses.begin(), poses.end());
-    disabled_edges.insert(edges.begin(), edges.end());
+    auto [poses, edges] = collision_table.Query(
+        common::EnumInteger(volley::CollisionEntityId::AGV), effective_collision_id, agv_state.pose);
+    blocked_poses.insert(poses.begin(), poses.end());
+    blocked_edges.insert(edges.begin(), edges.end());
   }
 
-  // Filter areas where bays conflict with this payload type
-  for(const auto& [bay_id, bay_state] : dgs.GetBays()) {
+  for(const auto& [bay_id, bay_state] : state.GetBays()) {
     if(bay_state.disabled) {
-      all_disabled_nodes.insert(bay_id);
+      disabled_node_ids.insert(bay_id);
     }
-    if(ignore_bays.find(bay_id) != ignore_bays.end()) {
-      // Ignore any moving bays in this filter
+    if(ignore_bays.contains(bay_id)) {
       continue;
     }
-    // Bays in ready-to-retrieve don't collide
-    if(bay_state.state == BayReportMsg::STATE_READY_TO_RETRIEVE) {
+    // A bay ready to retrieve does not block.
+    if(bay_state.state == interfaces::msg::BayReport::STATE_READY_TO_RETRIEVE) {
       continue;
     }
-
-    auto bay_head = gg.GetLayout()->GetBayInboundHeading(bay_id).value();
-    auto bay_pose = volley::ConstructGaragePose(bay_id, static_cast<int16_t>(bay_head));
-
-    // Want all the places that this payload type can't be, if the bay is not ready to retrieve
-    auto [poses, edges] =
-        ctable.Query(common::EnumInteger(volley::CollisionEntityId::BAY_ODP), collision_id, bay_pose);
-
-    disabled_poses.insert(poses.begin(), poses.end());
-    disabled_edges.insert(edges.begin(), edges.end());
+    const auto bay_inbound_heading_opt = motion_graph.GetLayout()->GetBayInboundHeading(bay_id);
+    if(!bay_inbound_heading_opt) {
+      throw std::invalid_argument("Bay " + std::to_string(bay_id) + " has no inbound heading in the layout");
+    }
+    auto bay_pose = volley::ConstructGaragePose(bay_id, static_cast<int16_t>(*bay_inbound_heading_opt));
+    auto [poses, edges] = collision_table.Query(
+        common::EnumInteger(volley::CollisionEntityId::BAY_ODP), collision_id, bay_pose);
+    blocked_poses.insert(poses.begin(), poses.end());
+    blocked_edges.insert(edges.begin(), edges.end());
   }
 
-  // Filter all disabled areas
-  for(const auto& node_id : all_disabled_nodes) {
-    auto garage_node_opt = gg.GetLayout()->GetNodeById(node_id);
-    // ffs
+  for(const auto& node_id : disabled_node_ids) {
+    auto garage_node_opt = motion_graph.GetLayout()->GetNodeById(node_id);
     if(!garage_node_opt) {
       throw std::invalid_argument(
           "Discrete garage state has a disabled node that does not exist in the layout " +
@@ -5826,107 +5812,105 @@ GraphFilterProperties GetStaticFilter(const volley::CollisionEntityId_t& collisi
     }
     auto garage_node = garage_node_opt.value();
 
-    // For disabled nodes we assume the entire volume corresponding to the largest entity type
-    // is disabled
-    auto max_win_idx = static_cast<volley::CollisionEntityId_t>(garage_node.max_resource_size_index);
-    auto disabled_entity_collision_id = common::EnumInteger(volley::CollisionEntityId::TRAY);
-    if(max_win_idx > 0) {
-      // adjust collision id to match payload
-      disabled_entity_collision_id = common::EnumInteger(volley::CollisionEntityId::PAYLOAD) + max_win_idx;
+    // A disabled node blocks the volume of the largest payload it allows, at each configured heading.
+    auto max_resource_size_index =
+        static_cast<volley::CollisionEntityId_t>(garage_node.max_resource_size_index);
+    auto disabled_node_collision_id = common::EnumInteger(volley::CollisionEntityId::TRAY);
+    if(max_resource_size_index > 0) {
+      disabled_node_collision_id =
+          common::EnumInteger(volley::CollisionEntityId::PAYLOAD) + max_resource_size_index;
     }
-
-    // Disable volume for all possible orientations
-    for(auto head : garage_node.headings) {
-      auto disabled_entity_pose = volley::ConstructGaragePose(node_id, head);
-      auto [poses, edges] = ctable.Query(disabled_entity_collision_id, collision_id, disabled_entity_pose);
-
-      disabled_poses.insert(poses.begin(), poses.end());
-      disabled_edges.insert(edges.begin(), edges.end());
+    for(auto heading : garage_node.headings) {
+      auto disabled_node_pose = volley::ConstructGaragePose(node_id, heading);
+      auto [poses, edges] =
+          collision_table.Query(disabled_node_collision_id, collision_id, disabled_node_pose);
+      blocked_poses.insert(poses.begin(), poses.end());
+      blocked_edges.insert(edges.begin(), edges.end());
     }
   }
 
+  // A payload footprint is blocked from every pose too small for it, and from that pose's edges.
   if(collision_id >= common::EnumInteger(volley::CollisionEntityId::PAYLOAD)) {
-    // Filter all poses that don't support a resource of this size
-    size_t resource_window_idx = collision_id - common::EnumInteger(volley::CollisionEntityId::PAYLOAD);
-    for(const auto& vertex : boost::make_iterator_range(gg.GetVertices())) {
-      auto pose = gg.GetPoseFromVertex(vertex).value();
-      if(resource_window_idx > gg.GetLayout()->GetNodeById(pose.node_id)->max_resource_size_index) {
-        // WARNS(rclcpp::get_logger("static_graph_filtering"),
-        //     "Pose " << std::to_string(pose) << " does not support resource size " << resource_window_idx);
-        disabled_poses.insert(pose);
-        for(const auto& edge : boost::make_iterator_range(gg.GetInEdges(vertex))) {
-          disabled_edges.insert(gg.GetFromGraphRep(edge));
+    size_t resource_size_index = collision_id - common::EnumInteger(volley::CollisionEntityId::PAYLOAD);
+    for(const auto& vertex : boost::make_iterator_range(motion_graph.GetVertices())) {
+      const auto pose_opt = motion_graph.GetPoseFromVertex(vertex);
+      if(!pose_opt) {
+        throw std::invalid_argument("Graph vertex has no pose");
+      }
+      const auto node_opt = motion_graph.GetLayout()->GetNodeById(pose_opt->node_id);
+      if(!node_opt) {
+        throw std::invalid_argument("Pose " + std::to_string(*pose_opt) + " has no node in the layout");
+      }
+      if(resource_size_index > node_opt->max_resource_size_index) {
+        blocked_poses.insert(*pose_opt);
+        for(const auto& edge : boost::make_iterator_range(motion_graph.GetInEdges(vertex))) {
+          blocked_edges.insert(motion_graph.GetFromGraphRep(edge));
         }
-        for(const auto& edge : boost::make_iterator_range(gg.GetOutEdges(vertex))) {
-          disabled_edges.insert(gg.GetFromGraphRep(edge));
+        for(const auto& edge : boost::make_iterator_range(motion_graph.GetOutEdges(vertex))) {
+          blocked_edges.insert(motion_graph.GetFromGraphRep(edge));
         }
       }
     }
   }
 
-  return {gg, disabled_poses, disabled_edges};
+  return {motion_graph, blocked_poses, blocked_edges};
 }
 
-std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetAllStaticFilters(
-    const volley::GarageGraph& gg, const volley::DiscreteGarageState& dgs,
-    const volley::CollisionTable& ctable, const std::unordered_set<uint16_t>& ignore_trays,
+std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> BuildStaticObstacleFilters(
+    const volley::GarageGraph& motion_graph, const volley::DiscreteGarageState& state,
+    const volley::CollisionTable& collision_table, const std::unordered_set<uint16_t>& ignore_trays,
     const std::unordered_set<uint16_t>& ignore_agvs, const std::unordered_set<uint16_t>& ignore_bays) {
-  std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> collision_id_filters;
+  std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> filter_by_footprint;
 
-  // Always compute the filter for AGVs and empty Tray
-  auto agv_filter = GetStaticFilter(common::EnumInteger(volley::CollisionEntityId::AGV), gg, dgs, ctable,
-      ignore_trays, ignore_agvs, ignore_bays);
-  collision_id_filters.insert({common::EnumInteger(volley::CollisionEntityId::AGV), std::move(agv_filter)});
+  auto agv_filter = BuildStaticObstacleFilter(common::EnumInteger(volley::CollisionEntityId::AGV),
+      motion_graph, state, collision_table, ignore_trays, ignore_agvs, ignore_bays);
+  filter_by_footprint.insert({common::EnumInteger(volley::CollisionEntityId::AGV), std::move(agv_filter)});
 
-  auto tray_filter = GetStaticFilter(common::EnumInteger(volley::CollisionEntityId::TRAY), gg, dgs, ctable,
-      ignore_trays, ignore_agvs, ignore_bays);
-  collision_id_filters.insert({common::EnumInteger(volley::CollisionEntityId::TRAY), std::move(tray_filter)});
+  auto tray_filter = BuildStaticObstacleFilter(common::EnumInteger(volley::CollisionEntityId::TRAY),
+      motion_graph, state, collision_table, ignore_trays, ignore_agvs, ignore_bays);
+  filter_by_footprint.insert({common::EnumInteger(volley::CollisionEntityId::TRAY), std::move(tray_filter)});
 
-  // Get the filter for payload windows in the DGS
-  for(const auto& [curr_tray_id, curr_tray_state] : dgs.GetTrays()) {
-    volley::CollisionEntityId_t collision_id =
-        volley::CollisionEntityIdFromTrayState(curr_tray_state, dgs, *(gg.GetLayout()));
-    // Don't need to compute it for this resource size if we already have it
-    if(collision_id_filters.find(collision_id) != collision_id_filters.end()) {
+  for(const auto& [tray_id, tray_state] : state.GetTrays()) {
+    volley::CollisionEntityId_t tray_collision_id =
+        volley::CollisionEntityIdFromTrayState(tray_state, state, *(motion_graph.GetLayout()));
+    if(filter_by_footprint.contains(tray_collision_id)) {
       continue;
     }
-    auto payload_filter =
-        GetStaticFilter(collision_id, gg, dgs, ctable, ignore_trays, ignore_agvs, ignore_bays);
-    collision_id_filters.insert({collision_id, std::move(payload_filter)});
+    auto payload_filter = BuildStaticObstacleFilter(
+        tray_collision_id, motion_graph, state, collision_table, ignore_trays, ignore_agvs, ignore_bays);
+    filter_by_footprint.insert({tray_collision_id, std::move(payload_filter)});
   }
 
-  return collision_id_filters;
+  return filter_by_footprint;
 }
 
-std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> GetDisabledEntitiesFilters(
-    const volley::GarageGraph& gg, const volley::DiscreteGarageState& dgs,
-    const volley::CollisionTable& ctable) {
+std::unordered_map<volley::CollisionEntityId_t, GraphFilterProperties> BuildKeepOutFilters(
+    const volley::GarageGraph& motion_graph, const volley::DiscreteGarageState& state,
+    const volley::CollisionTable& collision_table) {
   std::unordered_set<uint16_t> ignore_agvs;
   std::unordered_set<uint16_t> ignore_trays;
   std::unordered_set<uint16_t> ignore_bays;
 
-  const auto& disabled_nodes = dgs.GetDisabledNodes();
-  // ignore all entities that are not disabled or are not on disabled nodes
-  for(const auto& [agv_id, agv_state] : dgs.GetAgvs()) {
-    // If agv is not disabled and not on a disabled node, ignore in filter
-    if(disabled_nodes.find(agv_state.pose.node_id) == disabled_nodes.end() && !agv_state.disabled) {
+  // An entity is ignored when it is enabled and not on a disabled node.
+  const auto& disabled_nodes = state.GetDisabledNodes();
+  for(const auto& [agv_id, agv_state] : state.GetAgvs()) {
+    if(!disabled_nodes.contains(agv_state.pose.node_id) && !agv_state.disabled) {
       ignore_agvs.insert(static_cast<uint16_t>(agv_id));
     }
   }
-  for(const auto& [tray_id, tray_state] : dgs.GetTrays()) {
-    // If tray is not disabled and not on a disabled node, ignore in filter
-    if(disabled_nodes.find(tray_state.pose.node_id) == disabled_nodes.end() && !tray_state.disabled) {
+  for(const auto& [tray_id, tray_state] : state.GetTrays()) {
+    if(!disabled_nodes.contains(tray_state.pose.node_id) && !tray_state.disabled) {
       ignore_trays.insert(static_cast<uint16_t>(tray_id));
     }
   }
-  for(const auto& [bay_id, bay_state] : dgs.GetBays()) {
-    // If bay is not disabled and not on a disabled node, ignore in filter
-    if(disabled_nodes.find(static_cast<uint16_t>(bay_id)) == disabled_nodes.end() && !bay_state.disabled) {
+  for(const auto& [bay_id, bay_state] : state.GetBays()) {
+    if(!disabled_nodes.contains(static_cast<uint16_t>(bay_id)) && !bay_state.disabled) {
       ignore_bays.insert(static_cast<uint16_t>(bay_id));
     }
   }
 
-  return GetAllStaticFilters(gg, dgs, ctable, ignore_trays, ignore_agvs, ignore_bays);
+  return BuildStaticObstacleFilters(
+      motion_graph, state, collision_table, ignore_trays, ignore_agvs, ignore_bays);
 }
 
 }  // namespace volley
