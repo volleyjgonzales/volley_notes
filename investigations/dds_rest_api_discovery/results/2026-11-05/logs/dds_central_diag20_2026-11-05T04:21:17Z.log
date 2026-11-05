@@ -1,0 +1,755 @@
+[INFO] [1793852479.649372494] [discovery_probe]: Starting the discovery server probe
+[INFO] [1793852479.650326811] [discovery_probe]: Waiting for servers 'discovery-server:11811' to resolve
+[INFO] [1793852485.654579809] [discovery_probe]: Successfully resolved discovery server addresses 'discovery-server:11811'
+[INFO] [1793852485.810459499] [discovery_probe]: Discovery server probe succeeded, participant registration accepted
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-05-04-21-26-403318-7d4f9d974528-7
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [rest_api-1]: process started with pid [68]
+[INFO] [central-3]: process started with pid [70]
+[INFO] [metrics_recorder-4]: process started with pid [71]
+[INFO] [visualizer_node-5]: process started with pid [72]
+[INFO] [recorder-7]: process started with pid [74]
+[INFO] [proxy_node-2]: process started with pid [69]
+[INFO] [foxglove_bridge-6]: process started with pid [73]
+[visualizer_node-5] [33m[WARN] [1793852486.707942664] [vis.visualizer]: Parameter use_remote_meshes hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+[visualizer_node-5] [33m[WARN] [1793852486.707987414] [vis.visualizer]: Parameter remote_mesh_prefix hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+[visualizer_node-5] [0m[INFO] [1793852486.707996306] [vis.visualizer]: Starting VisManager with context:
+[visualizer_node-5] 	layout: "/opt/volley/share/site_config/layouts/5675_pecos_sandbox_combined.yaml"
+[visualizer_node-5] 	use_remote_meshes: true
+[visualizer_node-5] 	remote_mesh_prefix: https://aws-mesh-proxy.tailfadbb4.ts.net/model/[0m
+[proxy_node-2] [INFO] [1793852486.708594919] [hito_proxy]: Successfully loaded layout file '5675_pecos_sandbox_combined'
+[proxy_node-2] [INFO] [1793852486.708661041] [hito_proxy]: Loaded AGV speed performance limits: locomote=1/0.8[m/s] strafe=0.6/0.32[m/s] rotate=0.17/0.136[rad/s] restricted_multiplier=0.4
+[proxy_node-2] [INFO] [1793852486.708678341] [hito_proxy]: Requiring AGV firmware version '^2.0.0'
+[recorder-7] [0m[INFO] [1793852486.708552430] [central.recorder]: Event publisher thread: Started[0m
+[recorder-7] [0m[INFO] [1793852486.710043854] [central.recorder]: Starting recording to '/artifacts/20261105T042117Z/central'[0m
+[proxy_node-2] [INFO] [1793852486.710950175] [hito_proxy]: Connected to MQTT broker
+[recorder-7] [0m[INFO] [1793852486.711578986] [central.recorder]: Subscribed to topic '/parameter_events'[0m
+[recorder-7] [0m[INFO] [1793852486.712180502] [central.recorder]: Subscribed to topic '/central/rosout'[0m
+[recorder-7] [0m[INFO] [1793852486.712553127] [central.recorder]: Subscribed to topic '/central/recorder/events/write_split'[0m
+[recorder-7] [0m[INFO] [1793852486.712867988] [central.recorder]: Subscribed to topic '/central/recorder/events/rosbag2_messages_lost'[0m
+[recorder-7] [0m[INFO] [1793852486.712923250] [central.recorder]: Listening for topics...[0m
+[recorder-7] [0m[INFO] [1793852486.712928751] [central.recorder]: Recording...[0m
+[recorder-7] [0m[INFO] [1793852486.712938548] [central.recorder]: Topics discovery started.[0m
+[foxglove_bridge-6] [INFO] [1793852486.723018225] [foxglove_bridge]: Starting foxglove_bridge (lyrical, 3.4.3@)
+[foxglove_bridge-6] [2026-11-05T04:21:26Z INFO  foxglove::websocket::server] Started server on 0.0.0.0:8765
+[foxglove_bridge-6] [INFO] [1793852486.723853621] [foxglove_bridge]: Server listening on port 8765
+[foxglove_bridge-6] [INFO] [1793852486.724239678] [foxglove_bridge]: Advertising new channel 2 for topic "/rosout"
+[foxglove_bridge-6] [INFO] [1793852486.724486049] [foxglove_bridge]: Advertising new channel 3 for topic "/parameter_events"
+[recorder-7] [0m[INFO] [1793852487.242338469] [central.recorder]: Subscribed to topic '/rosout'[0m
+[recorder-7] [0m[INFO] [1793852487.290503144] [central.recorder]: Subscribed to topic '/vis/rosout'[0m
+[recorder-7] [0m[INFO] [1793852487.293234259] [central.recorder]: Subscribed to topic '/vis/layout_spaces'[0m
+[recorder-7] [0m[INFO] [1793852487.293618214] [central.recorder]: Subscribed to topic '/vis/tape'[0m
+[recorder-7] [0m[INFO] [1793852487.293968462] [central.recorder]: Subscribed to topic '/vis/vrcs'[0m
+[recorder-7] [0m[INFO] [1793852487.294306210] [central.recorder]: Subscribed to topic '/hito_proxy/rosout'[0m
+[recorder-7] [0m[INFO] [1793852487.294618744] [central.recorder]: Subscribed to topic '/vis/chargers'[0m
+[recorder-7] [0m[INFO] [1793852487.294925523] [central.recorder]: Subscribed to topic '/vis/schedule_dag'[0m
+[recorder-7] [0m[INFO] [1793852487.295221212] [central.recorder]: Subscribed to topic '/vis/payloads'[0m
+[recorder-7] [0m[INFO] [1793852487.295524214] [central.recorder]: Subscribed to topic '/vis/request_markers'[0m
+[recorder-7] [0m[INFO] [1793852487.295923451] [central.recorder]: Subscribed to topic '/vis/nodes'[0m
+[recorder-7] [0m[INFO] [1793852487.296276161] [central.recorder]: Subscribed to topic '/vis/agv_commands'[0m
+[recorder-7] [0m[INFO] [1793852487.296590879] [central.recorder]: Subscribed to topic '/vis/bays'[0m
+[recorder-7] [0m[INFO] [1793852487.296949466] [central.recorder]: Subscribed to topic '/vis/trays'[0m
+[recorder-7] [0m[INFO] [1793852487.297411699] [central.recorder]: Subscribed to topic '/vis/agvs'[0m
+[recorder-7] [0m[INFO] [1793852487.297785398] [central.recorder]: Subscribed to topic '/vis/edges'[0m
+[recorder-7] [0m[INFO] [1793852487.298098592] [central.recorder]: Subscribed to topic '/vis/environment'[0m
+[central-3] [0m[INFO] [1793852487.396779583] [central.central_nodes]: Load Library: /opt/volley/lib/libagv_monitor_component.so[0m
+[central-3] [0m[INFO] [1793852487.399491942] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::AgvMonitorComponent>[0m
+[central-3] [0m[INFO] [1793852487.399517445] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::AgvMonitorComponent>[0m
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/agv_monitor' in container '/central/central_nodes'
+[central-3] [0m[INFO] [1793852487.406274007] [central.central_nodes]: Load Library: /opt/volley/lib/libsafety_hardware_monitor_component.so[0m
+[central-3] [0m[INFO] [1793852487.407103731] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::SafetyHardwareMonitorComponent>[0m
+[central-3] [0m[INFO] [1793852487.407134235] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::SafetyHardwareMonitorComponent>[0m
+[central-3] [0m[INFO] [1793852487.408519997] [central.safety_hardware_monitor]: This is a Safety Hardware Monitor Node[0m
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/safety_hardware_monitor' in container '/central/central_nodes'
+[central-3] [0m[INFO] [1793852487.411146112] [central.central_nodes]: Load Library: /opt/volley/lib/libconsistency_monitor_component.so[0m
+[central-3] [0m[INFO] [1793852487.412315455] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::ConsistencyMonitorComponent>[0m
+[central-3] [0m[INFO] [1793852487.412344901] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::ConsistencyMonitorComponent>[0m
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/consistency_monitor' in container '/central/central_nodes'
+[central-3] [0m[INFO] [1793852487.415826404] [central.central_nodes]: Load Library: /opt/volley/lib/libdispatch_component.so[0m
+[central-3] [0m[INFO] [1793852487.419465040] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::DispatchComponent>[0m
+[central-3] [0m[INFO] [1793852487.419503514] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::DispatchComponent>[0m
+[recorder-7] [0m[INFO] [1793852487.419522980] [central.recorder]: Subscribed to topic '/central/consistency_report'[0m
+[central-3] [0m[INFO] [1793852487.420843241] [central.dispatcher]: installation_id:              8[0m
+[central-3] [0m[INFO] [1793852487.420878882] [central.dispatcher]: layout_file:                  "/opt/volley/share/site_config/layouts/5675_pecos_sandbox_combined.yaml"[0m
+[central-3] [0m[INFO] [1793852487.444064001] [garage_graph]: GarageGraph VRC audit: 0/0 directed VRC edges present (expected 2x pair count)[0m
+[central-3] [0m[INFO] [1793852487.444094973] [central.dispatcher]: Loading collision table for layout 5675_pecos_sandbox_combined from file "/root/.cache/volley/5675_pecos_sandbox_combined_collision_table_f30aa5e6376eb7c45d2ec8f2246eaec7.json"[0m
+[foxglove_bridge-6] [2026-11-05T04:21:27Z INFO  foxglove::websocket::server] Registered client 10.0.3.162:47276
+[foxglove_bridge-6] [INFO] [1793852487.515176919] [foxglove_bridge]: received connection graph subscribe request
+[foxglove_bridge-6] [INFO] [1793852487.681363893] [foxglove_bridge]: Client ID 1 is advertising "/move_base_simple/goal" (geometry_msgs/PoseStamped) on channel 1 with encoding "cdr"
+[foxglove_bridge-6] [INFO] [1793852487.681774104] [foxglove_bridge]: Client ID 1 is advertising "/clicked_point" (geometry_msgs/PointStamped) on channel 2 with encoding "cdr"
+[foxglove_bridge-6] [INFO] [1793852487.682169403] [foxglove_bridge]: Client ID 1 is advertising "/initialpose" (geometry_msgs/PoseWithCovarianceStamped) on channel 3 with encoding "cdr"
+[recorder-7] [0m[INFO] [1793852487.683788064] [central.recorder]: Subscribed to topic '/clicked_point'[0m
+[recorder-7] [0m[INFO] [1793852487.684389211] [central.recorder]: Subscribed to topic '/move_base_simple/goal'[0m
+[recorder-7] [0m[INFO] [1793852487.685403647] [central.recorder]: Subscribed to topic '/initialpose'[0m
+[foxglove_bridge-6] [INFO] [1793852487.730087224] [foxglove_bridge]: Advertising new channel 4 for topic "/vis/vrcs"
+[foxglove_bridge-6] [INFO] [1793852487.730138668] [foxglove_bridge]: Advertising new channel 5 for topic "/vis/trays"
+[foxglove_bridge-6] [INFO] [1793852487.730160777] [foxglove_bridge]: Advertising new channel 6 for topic "/vis/schedule_dag"
+[foxglove_bridge-6] [INFO] [1793852487.730172739] [foxglove_bridge]: Advertising new channel 7 for topic "/vis/rosout"
+[foxglove_bridge-6] [INFO] [1793852487.730204790] [foxglove_bridge]: Advertising new channel 8 for topic "/vis/layout_spaces"
+[foxglove_bridge-6] [INFO] [1793852487.730227349] [foxglove_bridge]: Advertising new channel 9 for topic "/vis/environment"
+[foxglove_bridge-6] [INFO] [1793852487.730255106] [foxglove_bridge]: Advertising new channel 10 for topic "/vis/edges"
+[foxglove_bridge-6] [INFO] [1793852487.730278740] [foxglove_bridge]: Advertising new channel 11 for topic "/vis/agv_commands"
+[foxglove_bridge-6] [INFO] [1793852487.730619424] [foxglove_bridge]: Advertising new channel 12 for topic "/sim/report"
+[foxglove_bridge-6] [INFO] [1793852487.730664245] [foxglove_bridge]: Advertising new channel 13 for topic "/vis/bays"
+[foxglove_bridge-6] [INFO] [1793852487.730753236] [foxglove_bridge]: Advertising new channel 14 for topic "/move_base_simple/goal"
+[foxglove_bridge-6] [INFO] [1793852487.730793664] [foxglove_bridge]: Advertising new channel 15 for topic "/vis/tape"
+[foxglove_bridge-6] [INFO] [1793852487.730808582] [foxglove_bridge]: Advertising new channel 16 for topic "/hito_proxy/rosout"
+[foxglove_bridge-6] [INFO] [1793852487.731434735] [foxglove_bridge]: Advertising new channel 17 for topic "/central/schedule"
+[foxglove_bridge-6] [INFO] [1793852487.731469511] [foxglove_bridge]: Advertising new channel 18 for topic "/vis/request_markers"
+[foxglove_bridge-6] [INFO] [1793852487.731477585] [foxglove_bridge]: Advertising new channel 19 for topic "/central/rosout"
+[foxglove_bridge-6] [INFO] [1793852487.731635959] [foxglove_bridge]: Advertising new channel 20 for topic "/central/report"
+[foxglove_bridge-6] [INFO] [1793852487.731678184] [foxglove_bridge]: Advertising new channel 21 for topic "/central/recorder/events/write_split"
+[foxglove_bridge-6] [INFO] [1793852487.731697392] [foxglove_bridge]: Advertising new channel 22 for topic "/vis/agvs"
+[foxglove_bridge-6] [INFO] [1793852487.732302470] [foxglove_bridge]: Advertising new channel 23 for topic "/central/garage_snapshot"
+[foxglove_bridge-6] [INFO] [1793852487.732789442] [foxglove_bridge]: Advertising new channel 24 for topic "/central/continuous_garage_info"
+[foxglove_bridge-6] [INFO] [1793852487.732811126] [foxglove_bridge]: Advertising new channel 25 for topic "/vis/payloads"
+[foxglove_bridge-6] [INFO] [1793852487.733133231] [foxglove_bridge]: Advertising new channel 26 for topic "/central/discrete_garage_state"
+[foxglove_bridge-6] [INFO] [1793852487.733181897] [foxglove_bridge]: Advertising new channel 27 for topic "/central/consistency_report"
+[foxglove_bridge-6] [INFO] [1793852487.733244090] [foxglove_bridge]: Advertising new channel 28 for topic "/central/completed_jobs"
+[foxglove_bridge-6] [INFO] [1793852487.733255025] [foxglove_bridge]: Advertising new channel 29 for topic "/central/active_jobs"
+[foxglove_bridge-6] [INFO] [1793852487.733336667] [foxglove_bridge]: Advertising new channel 30 for topic "/bay/b7/version_info"
+[foxglove_bridge-6] [INFO] [1793852487.733406796] [foxglove_bridge]: Advertising new channel 31 for topic "/central/garage_status"
+[foxglove_bridge-6] [INFO] [1793852487.733442344] [foxglove_bridge]: Advertising new channel 32 for topic "/bay/b7/vehicle_prox_sensor"
+[foxglove_bridge-6] [INFO] [1793852487.733551950] [foxglove_bridge]: Advertising new channel 33 for topic "/bay/b7/vehicle_pose"
+[foxglove_bridge-6] [INFO] [1793852487.733645775] [foxglove_bridge]: Advertising new channel 34 for topic "/bay/b7/report"
+[foxglove_bridge-6] [INFO] [1793852487.733654861] [foxglove_bridge]: Advertising new channel 35 for topic "/central/pending_jobs"
+[foxglove_bridge-6] [INFO] [1793852487.733660372] [foxglove_bridge]: Advertising new channel 36 for topic "/bay/b7/recorder/events/write_split"
+[foxglove_bridge-6] [INFO] [1793852487.733727634] [foxglove_bridge]: Advertising new channel 37 for topic "/bay/b7/recorder/events/rosbag2_messages_lost"
+[foxglove_bridge-6] [INFO] [1793852487.733748614] [foxglove_bridge]: Advertising new channel 38 for topic "/vis/nodes"
+[foxglove_bridge-6] [INFO] [1793852487.733756675] [foxglove_bridge]: Advertising new channel 39 for topic "/bay/b7/rosout"
+[foxglove_bridge-6] [INFO] [1793852487.733787488] [foxglove_bridge]: Advertising new channel 40 for topic "/bay/b7/radar"
+[foxglove_bridge-6] [INFO] [1793852487.733866572] [foxglove_bridge]: Advertising new channel 41 for topic "/initialpose"
+[foxglove_bridge-6] [INFO] [1793852487.733905442] [foxglove_bridge]: Advertising new channel 42 for topic "/clicked_point"
+[foxglove_bridge-6] [INFO] [1793852487.733938695] [foxglove_bridge]: Advertising new channel 43 for topic "/bay/b7/load_cells"
+[foxglove_bridge-6] [INFO] [1793852487.733985289] [foxglove_bridge]: Advertising new channel 44 for topic "/bay/b7/io_link_sensors"
+[foxglove_bridge-6] [INFO] [1793852487.734029627] [foxglove_bridge]: Advertising new channel 45 for topic "/bay/b7/guidance/debug/guidance_payload"
+[foxglove_bridge-6] [INFO] [1793852487.734045078] [foxglove_bridge]: Advertising new channel 46 for topic "/vis/chargers"
+[foxglove_bridge-6] [INFO] [1793852487.734110443] [foxglove_bridge]: Advertising new channel 47 for topic "/bay/b7/SYSTEM/report"
+[foxglove_bridge-6] [INFO] [1793852487.734117302] [foxglove_bridge]: Advertising new channel 48 for topic "/central/recorder/events/rosbag2_messages_lost"
+[foxglove_bridge-6] [INFO] [1793852487.734125213] [foxglove_bridge]: Advertising new channel 49 for topic "/bay/b7/PATRON/report"
+[foxglove_bridge-6] [INFO] [1793852487.767994204] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-6] [INFO] [1793852487.770205048] [foxglove_bridge]: received subscribe request for channel 20 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.770957151] [foxglove_bridge]: Created ROS subscription on /central/report (interfaces/msg/DispatchReport) for channel 20
+[foxglove_bridge-6] [INFO] [1793852487.812641503] [foxglove_bridge]: received subscribe request for channel 5 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.815379706] [foxglove_bridge]: Created ROS subscription on /vis/trays (visualization_msgs/msg/MarkerArray) for channel 5
+[foxglove_bridge-6] [INFO] [1793852487.815410023] [foxglove_bridge]: received subscribe request for channel 4 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.815935686] [foxglove_bridge]: Created ROS subscription on /vis/vrcs (visualization_msgs/msg/MarkerArray) for channel 4
+[foxglove_bridge-6] [INFO] [1793852487.815964821] [foxglove_bridge]: received subscribe request for channel 26 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.816977616] [foxglove_bridge]: Created ROS subscription on /central/discrete_garage_state (interfaces/msg/DiscreteGarageState) for channel 26
+[foxglove_bridge-6] [INFO] [1793852487.827932188] [foxglove_bridge]: received subscribe request for channel 11 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.828633312] [foxglove_bridge]: Created ROS subscription on /vis/agv_commands (visualization_msgs/msg/MarkerArray) for channel 11
+[foxglove_bridge-6] [INFO] [1793852487.828660403] [foxglove_bridge]: received subscribe request for channel 22 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.829169557] [foxglove_bridge]: Created ROS subscription on /vis/agvs (visualization_msgs/msg/MarkerArray) for channel 22
+[foxglove_bridge-6] [INFO] [1793852487.829196095] [foxglove_bridge]: received subscribe request for channel 13 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.829702802] [foxglove_bridge]: Created ROS subscription on /vis/bays (visualization_msgs/msg/MarkerArray) for channel 13
+[foxglove_bridge-6] [INFO] [1793852487.829757226] [foxglove_bridge]: received subscribe request for channel 46 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.830231039] [foxglove_bridge]: Created ROS subscription on /vis/chargers (visualization_msgs/msg/MarkerArray) for channel 46
+[foxglove_bridge-6] [INFO] [1793852487.830253982] [foxglove_bridge]: received subscribe request for channel 10 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.830729545] [foxglove_bridge]: Created ROS subscription on /vis/edges (visualization_msgs/msg/MarkerArray) for channel 10
+[foxglove_bridge-6] [INFO] [1793852487.830753159] [foxglove_bridge]: received subscribe request for channel 9 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.831227423] [foxglove_bridge]: Created ROS subscription on /vis/environment (visualization_msgs/msg/MarkerArray) for channel 9
+[foxglove_bridge-6] [INFO] [1793852487.831250968] [foxglove_bridge]: received subscribe request for channel 8 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.831740078] [foxglove_bridge]: Created ROS subscription on /vis/layout_spaces (visualization_msgs/msg/MarkerArray) for channel 8
+[foxglove_bridge-6] [INFO] [1793852487.831765645] [foxglove_bridge]: received subscribe request for channel 38 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.832256022] [foxglove_bridge]: Created ROS subscription on /vis/nodes (visualization_msgs/msg/MarkerArray) for channel 38
+[foxglove_bridge-6] [INFO] [1793852487.832280466] [foxglove_bridge]: received subscribe request for channel 25 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.832760087] [foxglove_bridge]: Created ROS subscription on /vis/payloads (visualization_msgs/msg/MarkerArray) for channel 25
+[foxglove_bridge-6] [INFO] [1793852487.832783850] [foxglove_bridge]: received subscribe request for channel 6 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.833264843] [foxglove_bridge]: Created ROS subscription on /vis/schedule_dag (visualization_msgs/msg/MarkerArray) for channel 6
+[foxglove_bridge-6] [INFO] [1793852487.833291683] [foxglove_bridge]: received subscribe request for channel 15 from client 1
+[foxglove_bridge-6] [INFO] [1793852487.833758597] [foxglove_bridge]: Created ROS subscription on /vis/tape (visualization_msgs/msg/MarkerArray) for channel 15
+[rest_api-1] Populating database...
+[rest_api-1] [dds-diag] wall=1793852487.998 mono=121401.069 pid=68 fastdds verbosity=1 (1 = Warning)
+[rest_api-1] [37;1m2026-11-05 04:21:27.998 [33;1m[[37;1mUTILS[33;1m Warning] [37mCannot get machine id. Failing back to IP based ID[34;1m -> Function [36mHost[m
+[central-3] [0m[INFO] [1793852488.013025248] [central.dispatcher]: Successfully loaded collision table[0m
+[central-3] [33m[WARN] [1793852488.013767208] [central.dispatcher]: Parameter enable_dispatch_charging_mode hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+[central-3] [33m[WARN] [1793852488.013798597] [central.dispatcher]: Parameter printdags hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+[recorder-7] [0m[INFO] [1793852488.018591345] [central.recorder]: Subscribed to topic '/central/schedule'[0m
+[recorder-7] [0m[INFO] [1793852488.019631049] [central.recorder]: Subscribed to topic '/central/report'[0m
+[recorder-7] [0m[INFO] [1793852488.020489471] [central.recorder]: Subscribed to topic '/central/heartbeat'[0m
+[recorder-7] [0m[INFO] [1793852488.022705578] [central.recorder]: Subscribed to topic '/central/set_mode/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.023693251] [central.recorder]: Subscribed to topic '/central/stop/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.024319763] [central.recorder]: Subscribed to topic '/central/get_job_state/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.024962692] [central.recorder]: Subscribed to topic '/central/completed_jobs'[0m
+[recorder-7] [0m[INFO] [1793852488.025468913] [central.recorder]: Subscribed to topic '/central/pending_jobs'[0m
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/dispatcher' in container '/central/central_nodes'
+[recorder-7] [0m[INFO] [1793852488.025837805] [central.recorder]: Subscribed to topic '/central/pause/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.026300381] [central.recorder]: Subscribed to topic '/central/active_jobs'[0m
+[recorder-7] [0m[INFO] [1793852488.026695085] [central.recorder]: Subscribed to topic '/central/start/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.027837869] [central.recorder]: Subscribed to topic '/central/plan_request'[0m
+[central-3] [0m[INFO] [1793852488.028253616] [central.central_nodes]: Load Library: /opt/volley/lib/libgarage_tracker_component.so[0m
+[recorder-7] [0m[INFO] [1793852488.028334637] [central.recorder]: Subscribed to topic '/central/version_info'[0m
+[recorder-7] [0m[INFO] [1793852488.028927583] [central.recorder]: Subscribed to topic '/central/plan_response'[0m
+[recorder-7] [0m[INFO] [1793852488.030182746] [central.recorder]: Subscribed to topic '/central/trigger_plan_call/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.030551850] [central.recorder]: Subscribed to topic '/central/stop_auto_planner/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.030770123] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::GarageTrackerComponent>[0m
+[central-3] [0m[INFO] [1793852488.030805433] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::GarageTrackerComponent>[0m
+[recorder-7] [0m[INFO] [1793852488.031098894] [central.recorder]: Subscribed to topic '/central/transition_bay_to_retrieve/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.031643660] [central.recorder]: Subscribed to topic '/central/transition_bay_to_insert/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.032022843] [central.recorder]: Subscribed to topic '/central/rebalance_garage/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.032220996] [central.garage_tracker]: layout_file: "/opt/volley/share/site_config/layouts/5675_pecos_sandbox_combined.yaml"[0m
+[central-3] [0m[INFO] [1793852488.032244262] [central.garage_tracker]: port:     3306[0m
+[central-3] [0m[INFO] [1793852488.032251666] [central.garage_tracker]: host:     mysql[0m
+[central-3] [0m[INFO] [1793852488.032258884] [central.garage_tracker]: user:     scheduler[0m
+[central-3] [0m[INFO] [1793852488.032264892] [central.garage_tracker]: password: password[0m
+[central-3] [0m[INFO] [1793852488.032271570] [central.garage_tracker]: database: scheduler[0m
+[recorder-7] [0m[INFO] [1793852488.032595220] [central.recorder]: Subscribed to topic '/central/move_agv/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.033143862] [central.recorder]: Subscribed to topic '/central/repark_tray/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.033664194] [central.recorder]: Subscribed to topic '/central/move_tray/_service_event'[0m
+[central-3] [33m[WARN] [1793852488.033705483] [central.garage_tracker]: Parameter is_simulation hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+[recorder-7] [0m[INFO] [1793852488.034064877] [central.recorder]: Subscribed to topic '/central/clean_garage/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.034413880] [central.recorder]: Subscribed to topic '/central/start_auto_planner/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.034932884] [central.recorder]: Subscribed to topic '/central/charge_payload/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.035439975] [central.recorder]: Subscribed to topic '/central/retrieve/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.074483747] [central.garage_tracker]: Successfully queried for latest snapshot[0m
+[central-3] [0m[INFO] [1793852488.074657523] [central.garage_tracker]: Loaded garage tracker[0m
+[recorder-7] [0m[INFO] [1793852488.078036649] [central.recorder]: Subscribed to topic '/central/continuous_garage_info'[0m
+[recorder-7] [0m[INFO] [1793852488.078652705] [central.recorder]: Subscribed to topic '/central/discrete_events'[0m
+[recorder-7] [0m[INFO] [1793852488.079195504] [central.recorder]: Subscribed to topic '/central/discrete_garage_state'[0m
+[recorder-7] [0m[INFO] [1793852488.080927804] [central.recorder]: Subscribed to topic '/central/add_tray/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.081523936] [central.recorder]: Subscribed to topic '/central/add_payload/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.081957223] [central.recorder]: Subscribed to topic '/central/fault_reset/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.082501505] [central.recorder]: Subscribed to topic '/central/add_agv/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.083042986] [central.recorder]: Subscribed to topic '/central/place_payload_in_bay/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.083551441] [central.recorder]: Subscribed to topic '/central/remove_agv/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.085040377] [central.garage_tracker]: Subscribing to new AgvReport topic: a16[0m
+[recorder-7] [0m[INFO] [1793852488.085422914] [central.recorder]: Subscribed to topic '/central/set_agv_disabledness/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.085604165] [central.garage_tracker]: Subscribing to new AgvReport topic: a17[0m
+[recorder-7] [0m[INFO] [1793852488.086021767] [central.recorder]: Subscribed to topic '/central/remove_payload_from_bay/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.086127786] [central.garage_tracker]: Subscribing to new BayReport topic: b7[0m
+[recorder-7] [0m[INFO] [1793852488.086438997] [central.recorder]: Subscribed to topic '/central/remove_tray/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.086828091] [central.recorder]: Subscribed to topic '/central/set_node_disabledness/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.087201232] [central.recorder]: Subscribed to topic '/central/remove_payload_from_tray/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.088008807] [central.dispatcher]: Successfully reset discrete garage state[0m
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/garage_tracker' in container '/central/central_nodes'
+[recorder-7] [0m[INFO] [1793852488.088967326] [central.recorder]: Subscribed to topic '/central/set_tray_disabledness/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.089829659] [central.recorder]: Subscribed to topic '/central/set_vecs_disabledness/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.089978579] [central.central_nodes]: Load Library: /opt/volley/lib/libgarage_monitor_component.so[0m
+[recorder-7] [0m[INFO] [1793852488.090515123] [central.recorder]: Subscribed to topic '/central/set_tray_pose/_service_event'[0m
+[central-3] [0m[INFO] [1793852488.091229240] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::GarageMonitorComponent>[0m
+[central-3] [0m[INFO] [1793852488.091262899] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::GarageMonitorComponent>[0m
+[recorder-7] [0m[INFO] [1793852488.094256944] [central.recorder]: Subscribed to topic '/central/garage_snapshot'[0m
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/garage_monitor' in container '/central/central_nodes'
+[rest_api-1] Twilio client initialized
+[rest_api-1] SendGrid client initialized
+[rest_api-1] Starting Flask!
+[central-3] [0m[INFO] [1793852488.095716870] [central.central_nodes]: Load Library: /opt/volley/lib/libscheduler_component.so[0m
+[recorder-7] [0m[INFO] [1793852488.096987059] [central.recorder]: Subscribed to topic '/central/garage_status'[0m
+[central-3] [0m[INFO] [1793852488.097498581] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<volley::SchedulerComponent>[0m
+[central-3] [0m[INFO] [1793852488.097532759] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<volley::SchedulerComponent>[0m
+[central-3] [0m[INFO] [1793852488.099069249] [scheduler.scheduler]: Starting scheduler node.[0m
+[central-3] [33m[WARN] [1793852488.099122949] [scheduler.scheduler]: Parameter printdags hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+[rest_api-1]  * Serving Flask app 'central_api.rest_api'
+[rest_api-1]  * Debug mode: off
+[central-3] [0m[INFO] [1793852488.120087242] [garage_graph]: GarageGraph VRC audit: 0/0 directed VRC edges present (expected 2x pair count)[0m
+[central-3] [0m[INFO] [1793852488.120118912] [scheduler.scheduler]: Loading collision table for layout 5675_pecos_sandbox_combined from file "/root/.cache/volley/5675_pecos_sandbox_combined_collision_table_f30aa5e6376eb7c45d2ec8f2246eaec7.json"[0m
+[foxglove_bridge-6] [INFO] [1793852488.268584526] [foxglove_bridge]: Advertising new channel 50 for topic "/scheduler/version_info"
+[foxglove_bridge-6] [INFO] [1793852488.268633453] [foxglove_bridge]: Advertising new channel 51 for topic "/central/version_info"
+[foxglove_bridge-6] [INFO] [1793852488.268926622] [foxglove_bridge]: Advertising new channel 52 for topic "/central/plan_response"
+[foxglove_bridge-6] [INFO] [1793852488.269096070] [foxglove_bridge]: Advertising new channel 53 for topic "/central/plan_request"
+[foxglove_bridge-6] [INFO] [1793852488.269241051] [foxglove_bridge]: Advertising new channel 54 for topic "/central/discrete_events"
+[foxglove_bridge-6] [INFO] [1793852488.269324354] [foxglove_bridge]: Advertising new channel 55 for topic "/central/heartbeat"
+[foxglove_bridge-6] [INFO] [1793852488.269339095] [foxglove_bridge]: Advertising new channel 56 for topic "/agv/a17/version_info"
+[foxglove_bridge-6] [INFO] [1793852488.269433965] [foxglove_bridge]: Advertising new channel 57 for topic "/agv/a17/report"
+[foxglove_bridge-6] [INFO] [1793852488.269446532] [foxglove_bridge]: Advertising new channel 58 for topic "/agv/a16/version_info"
+[foxglove_bridge-6] [INFO] [1793852488.269463144] [foxglove_bridge]: Advertising new channel 59 for topic "/agv/a16/report"
+[foxglove_bridge-6] [INFO] [1793852488.299517011] [foxglove_bridge]: publishing connection graph
+[central-3] [33m[WARN] [1793852488.414475598] [central.consistency_monitor]: Inconsistent! Missing version info from: a16 (missing for 0s) a17 (missing for 0s) b7 (missing for 0s) dispatcher (missing for 0s) scheduler (missing for 0s)[0m
+[central-3] [0m[INFO] [1793852488.420675298] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 2 to 0[0m
+[rest_api-1] [37;1m2026-11-05 04:21:28.631 [33;1m[[37;1mRTPS_TRANSPORT_SHM[33;1m Warning] [37mBuffer is being invalidated, segment_size may be insufficient[34;1m -> Function [36minvalidate_if_not_processing[m
+[central-3] [0m[INFO] [1793852488.661639196] [scheduler.scheduler]: Successfully loaded collision table[0m
+[central-3] [0m[INFO] [1793852488.665384841] [scheduler.scheduler]: Scheduler node started[0m
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/scheduler/scheduler' in container '/central/central_nodes'
+[recorder-7] [0m[INFO] [1793852488.670140182] [central.recorder]: Subscribed to topic '/scheduler/version_info'[0m
+[recorder-7] [0m[INFO] [1793852488.670732891] [central.recorder]: Subscribed to topic '/scheduler/report'[0m
+[recorder-7] [0m[INFO] [1793852488.673073733] [central.recorder]: Subscribed to topic '/rest_api/register_retrieval_code/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.673836994] [central.recorder]: Subscribed to topic '/scheduler/plan/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852488.676106953] [central.recorder]: Subscribed to topic '/scheduler/set_bay_readiness_ratio/_service_event'[0m
+[proxy_node-2] [INFO] [1793852488.723180494] [hito_proxy]: Discovered a new AGV w/ id 16
+[proxy_node-2] [INFO] [1793852488.723332864] [hito_proxy]: Discovered a new AGV w/ id 17
+[foxglove_bridge-6] [INFO] [1793852488.801584752] [foxglove_bridge]: Advertising new channel 60 for topic "/scheduler/report"
+[foxglove_bridge-6] [INFO] [1793852488.816207250] [foxglove_bridge]: publishing connection graph
+[rest_api-1] [dds-diag] wall=1793852489.094 mono=121402.165 pid=68 check-start n=1
+[rest_api-1] [dds-diag] wall=1793852489.094 mono=121402.165 pid=68 change /bay/b7/confirm_insert ready=0 rq_readers=1 rr_writers=0 rq_gids=010fe7d034009b0f0000000000002504 rr_gids=-
+[rest_api-1] [dds-diag] wall=1793852489.094 mono=121402.166 pid=68 change /bay/b7/confirm_retrieve ready=0 rq_readers=1 rr_writers=0 rq_gids=010fe7d034009b0f0000000000002804 rr_gids=-
+[rest_api-1] [dds-diag] wall=1793852489.095 mono=121402.166 pid=68 change /bay/b7 nodes=0 topics=1 publishers=0 participants=-
+[rest_api-1] [dds-diag] wall=1793852489.095 mono=121402.166 pid=68 heartbeat n=1 took_ms=1 not_ready=/bay/b7/confirm_insert,/bay/b7/confirm_retrieve
+[foxglove_bridge-6] [INFO] [1793852489.324557226] [foxglove_bridge]: publishing connection graph
+[central-3] [33m[WARN] [1793852489.414619743] [central.consistency_monitor]: Inconsistent! Missing version info from: a16 (missing for 1s) a17 (missing for 1s) dispatcher (missing for 1s) scheduler (missing for 1s)[0m
+[rest_api-1] [dds-diag] wall=1793852490.093 mono=121403.164 pid=68 check-start n=2
+[rest_api-1] [dds-diag] wall=1793852490.093 mono=121403.165 pid=68 change /bay/b7/confirm_insert ready=1 rq_readers=1 rr_writers=1 rq_gids=010fe7d034009b0f0000000000002504 rr_gids=010fe7d034009b0f0000000000002603
+[rest_api-1] [dds-diag] wall=1793852490.094 mono=121403.165 pid=68 change /bay/b7/confirm_retrieve ready=1 rq_readers=1 rr_writers=1 rq_gids=010fe7d034009b0f0000000000002804 rr_gids=010fe7d034009b0f0000000000002903
+[rest_api-1] [dds-diag] wall=1793852490.096 mono=121403.167 pid=68 change /bay/b7 nodes=7 topics=20 publishers=24 participants=010fe7d034009b0f00000000,010fe7d035004cce00000000
+[rest_api-1] [dds-diag] wall=1793852490.096 mono=121403.167 pid=68 heartbeat n=2 took_ms=3 not_ready=-
+[central-3] [33m[WARN] [1793852490.414717184] [central.consistency_monitor]: Inconsistent! Missing version info from: a16 (missing for 2s) a17 (missing for 2s) dispatcher (missing for 2s) scheduler (missing for 2s)[0m
+[proxy_node-2] [INFO] [1793852490.725644197] [hito_proxy]: Cached factsheet for AGV 17
+[proxy_node-2] [INFO] [1793852490.725794540] [hito_proxy]: Cached factsheet for AGV 16
+[proxy_node-2] [INFO] [1793852490.727244335] [hito_proxy.a17]: State machine 'root' starting at 'booting'
+[proxy_node-2] [INFO] [1793852490.727584903] [hito_proxy.a17]: Waiting for a non-stale state message to hit the blackboard...
+[proxy_node-2] [INFO] [1793852490.732038041] [hito_proxy.a17]: Setup ROS timers for execution
+[foxglove_bridge-6] [INFO] [1793852490.738406930] [foxglove_bridge]: publishing connection graph
+[proxy_node-2] [INFO] [1793852490.739725987] [hito_proxy.a17]: Setup service servers for accepting requests
+[proxy_node-2] [INFO] [1793852490.740554610] [hito_proxy.a16]: State machine 'root' starting at 'booting'
+[proxy_node-2] [INFO] [1793852490.741404925] [hito_proxy.a16]: Setup ROS timers for execution
+[recorder-7] [0m[INFO] [1793852490.742138996] [central.recorder]: Subscribed to topic '/agv/a17/report'[0m
+[recorder-7] [0m[INFO] [1793852490.742852105] [central.recorder]: Subscribed to topic '/agv/a17/version_info'[0m
+[recorder-7] [0m[INFO] [1793852490.744155067] [central.recorder]: Subscribed to topic '/agv/a17/node_accuracy'[0m
+[proxy_node-2] [INFO] [1793852490.744709072] [hito_proxy.a16]: Setup service servers for accepting requests
+[recorder-7] [0m[INFO] [1793852490.745129816] [central.recorder]: Subscribed to topic '/agv/a17/command_list'[0m
+[recorder-7] [0m[INFO] [1793852490.745811093] [central.recorder]: Subscribed to topic '/agv/a17/activate/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.746574038] [central.recorder]: Subscribed to topic '/agv/a17/faults'[0m
+[recorder-7] [0m[INFO] [1793852490.751590931] [central.recorder]: Subscribed to topic '/agv/a16/version_info'[0m
+[recorder-7] [0m[INFO] [1793852490.752791734] [central.recorder]: Subscribed to topic '/agv/a16/command/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.754056213] [central.recorder]: Subscribed to topic '/agv/a17/stop/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.754904723] [central.recorder]: Subscribed to topic '/agv/a17/resume/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.755716984] [central.recorder]: Subscribed to topic '/agv/a17/pause/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.756438836] [central.recorder]: Subscribed to topic '/agv/a16/node_accuracy'[0m
+[recorder-7] [0m[INFO] [1793852490.757130338] [central.recorder]: Subscribed to topic '/agv/a17/command/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.757771338] [central.recorder]: Subscribed to topic '/agv/a16/faults'[0m
+[recorder-7] [0m[INFO] [1793852490.758366635] [central.recorder]: Subscribed to topic '/agv/a16/pause/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.758954297] [central.recorder]: Subscribed to topic '/agv/a16/stop/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.759528683] [central.recorder]: Subscribed to topic '/agv/a16/command_list'[0m
+[recorder-7] [0m[INFO] [1793852490.760045061] [central.recorder]: Subscribed to topic '/agv/a16/activate/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.760558726] [central.recorder]: Subscribed to topic '/agv/a16/report'[0m
+[recorder-7] [0m[INFO] [1793852490.761272701] [central.recorder]: Subscribed to topic '/agv/a16/commandlist/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.761794915] [central.recorder]: Subscribed to topic '/agv/a16/resume/_service_event'[0m
+[recorder-7] [0m[INFO] [1793852490.762323479] [central.recorder]: Subscribed to topic '/agv/a17/commandlist/_service_event'[0m
+[proxy_node-2] [INFO] [1793852490.827771133] [hito_proxy.a17]: Requesting auto-wait: release E-stop, clear exceptions, stop pause
+[proxy_node-2] [INFO] [1793852490.840777405] [hito_proxy.a16]: Requesting auto-wait: release E-stop, clear exceptions, stop pause
+[rest_api-1] [dds-diag] wall=1793852491.093 mono=121404.164 pid=68 check-start n=3
+[rest_api-1] [dds-diag] wall=1793852491.096 mono=121404.168 pid=68 change /bay/b7 nodes=8 topics=21 publishers=27 participants=010fe7d034009b0f00000000,010fe7d035004cce00000000
+[rest_api-1] [dds-diag] wall=1793852491.096 mono=121404.168 pid=68 heartbeat n=3 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852491.130349981] [hito_proxy.a17]: Waiting 200ms for HITO stopPause to settle
+[proxy_node-2] [INFO] [1793852491.142658203] [hito_proxy.a16]: Waiting 200ms for HITO stopPause to settle
+[foxglove_bridge-6] [INFO] [1793852491.240559110] [foxglove_bridge]: Advertising new channel 61 for topic "/agv/a17/node_accuracy"
+[foxglove_bridge-6] [INFO] [1793852491.240781355] [foxglove_bridge]: Advertising new channel 62 for topic "/agv/a17/faults"
+[foxglove_bridge-6] [INFO] [1793852491.241038624] [foxglove_bridge]: Advertising new channel 63 for topic "/agv/a17/command_list"
+[foxglove_bridge-6] [INFO] [1793852491.241086974] [foxglove_bridge]: Advertising new channel 64 for topic "/agv/a16/node_accuracy"
+[foxglove_bridge-6] [INFO] [1793852491.241114054] [foxglove_bridge]: Advertising new channel 65 for topic "/agv/a16/faults"
+[foxglove_bridge-6] [INFO] [1793852491.241153379] [foxglove_bridge]: Advertising new channel 66 for topic "/agv/a16/command_list"
+[foxglove_bridge-6] [INFO] [1793852491.259378562] [foxglove_bridge]: publishing connection graph
+[proxy_node-2] [INFO] [1793852491.330839662] [hito_proxy.a17]: AGV should be in Automatic wait operation mode
+[proxy_node-2] [INFO] [1793852491.330993563] [hito_proxy.a17]: Requesting to enable localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L'
+[proxy_node-2] [INFO] [1793852491.342982017] [hito_proxy.a16]: AGV should be in Automatic wait operation mode
+[proxy_node-2] [INFO] [1793852491.343089520] [hito_proxy.a16]: Requesting to enable localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L'
+[central-3] [33m[WARN] [1793852491.414684062] [central.consistency_monitor]: Inconsistent! Missing version info from: dispatcher (missing for 3s) scheduler (missing for 3s)[0m
+[central-3] [0m[INFO] [1793852491.421267387] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 0 to 1[0m
+[proxy_node-2] [INFO] [1793852491.431732050] [hito_proxy.a17]: AGV reported it has completed all map requests
+[proxy_node-2] [INFO] [1793852491.432026659] [hito_proxy.a17]: State machine 'root' transitioning 'booting' -> 'booted' -> 'localizing'
+[proxy_node-2] [INFO] [1793852491.432085069] [hito_proxy.a17]: Forcing the AGV to unpause due to issue with firmware that causes EnableMap action to fail
+[proxy_node-2] [INFO] [1793852491.443572950] [hito_proxy.a16]: AGV reported it has completed all map requests
+[proxy_node-2] [INFO] [1793852491.443624378] [hito_proxy.a16]: State machine 'root' transitioning 'booting' -> 'booted' -> 'localizing'
+[proxy_node-2] [INFO] [1793852491.443637305] [hito_proxy.a16]: Forcing the AGV to unpause due to issue with firmware that causes EnableMap action to fail
+[proxy_node-2] [INFO] [1793852491.532701429] [hito_proxy.a17]: Waiting 200ms for HITO stopPause to settle
+[proxy_node-2] [INFO] [1793852491.544059042] [hito_proxy.a16]: Waiting 200ms for HITO stopPause to settle
+[proxy_node-2] [INFO] [1793852491.733068811] [hito_proxy.a17]: Ensuring localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L' is enabled
+[proxy_node-2] [INFO] [1793852491.744360447] [hito_proxy.a16]: Ensuring localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L' is enabled
+[foxglove_bridge-6] [INFO] [1793852491.775298845] [foxglove_bridge]: publishing connection graph
+[proxy_node-2] [INFO] [1793852491.833668059] [hito_proxy.a17]: Localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L' has been enabled
+[proxy_node-2] [INFO] [1793852491.833801902] [hito_proxy.a17]: Checking if AGV is reporting position localized
+[proxy_node-2] [INFO] [1793852491.833854745] [hito_proxy.a17]: AGV reported position initialized
+[proxy_node-2] [INFO] [1793852491.833934720] [hito_proxy.a17]: State machine 'root' transitioning 'localizing' -> 'localized' -> 'stopped'
+[proxy_node-2] [INFO] [1793852491.833992809] [hito_proxy.a17]: Clearing any queued orders
+[proxy_node-2] [INFO] [1793852491.834074584] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[proxy_node-2] [INFO] [1793852491.844828521] [hito_proxy.a16]: Localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L' has been enabled
+[proxy_node-2] [INFO] [1793852491.844939662] [hito_proxy.a16]: AGV reported position initialized
+[proxy_node-2] [INFO] [1793852491.845004284] [hito_proxy.a16]: State machine 'root' transitioning 'localizing' -> 'localized' -> 'stopped'
+[proxy_node-2] [INFO] [1793852491.845057137] [hito_proxy.a16]: Clearing any queued orders
+[rest_api-1] [dds-diag] wall=1793852492.093 mono=121405.164 pid=68 check-start n=4
+[rest_api-1] [dds-diag] wall=1793852492.096 mono=121405.168 pid=68 change /bay/b7 nodes=8 topics=24 publishers=31 participants=010fe7d034009b0f00000000,010fe7d035004cce00000000
+[rest_api-1] [dds-diag] wall=1793852492.096 mono=121405.168 pid=68 heartbeat n=4 took_ms=3 not_ready=-
+[foxglove_bridge-6] [INFO] [1793852492.287138088] [foxglove_bridge]: publishing connection graph
+[central-3] [33m[WARN] [1793852492.414525022] [central.consistency_monitor]: Inconsistent! Missing version info from: dispatcher (missing for 4s) scheduler (missing for 4s)[0m
+[rest_api-1] [dds-diag] wall=1793852493.093 mono=121406.164 pid=68 check-start n=5
+[rest_api-1] [dds-diag] wall=1793852493.094 mono=121406.166 pid=68 heartbeat n=5 took_ms=1 not_ready=-
+[central-3] [33m[WARN] [1793852493.414693086] [central.consistency_monitor]: Inconsistent! Missing version info from: scheduler (missing for 5s)[0m
+[rest_api-1] [dds-diag] wall=1793852494.093 mono=121407.165 pid=68 check-start n=6
+[rest_api-1] [dds-diag] wall=1793852494.097 mono=121407.168 pid=68 heartbeat n=6 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852495.093 mono=121408.164 pid=68 check-start n=7
+[rest_api-1] [dds-diag] wall=1793852495.096 mono=121408.168 pid=68 heartbeat n=7 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852496.093 mono=121409.165 pid=68 check-start n=8
+[rest_api-1] [dds-diag] wall=1793852496.097 mono=121409.168 pid=68 heartbeat n=8 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852496.834094335] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852497.093 mono=121410.164 pid=68 check-start n=9
+[rest_api-1] [dds-diag] wall=1793852497.096 mono=121410.168 pid=68 heartbeat n=9 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852498.093 mono=121411.164 pid=68 check-start n=10
+[central-3] [0m[INFO] [1793852498.094218854] [central.garage_monitor]: Garage status changed to DOWN, because Scheduler not running;[0m
+[central-3] [0m[INFO] [1793852498.094856650] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 0[0m
+[rest_api-1] [dds-diag] wall=1793852498.096 mono=121411.167 pid=68 heartbeat n=10 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852499.093 mono=121412.165 pid=68 check-start n=11
+[rest_api-1] [dds-diag] wall=1793852499.097 mono=121412.168 pid=68 heartbeat n=11 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852500.093 mono=121413.164 pid=68 check-start n=12
+[rest_api-1] [dds-diag] wall=1793852500.096 mono=121413.168 pid=68 heartbeat n=12 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852501.093 mono=121414.164 pid=68 check-start n=13
+[rest_api-1] [dds-diag] wall=1793852501.096 mono=121414.168 pid=68 heartbeat n=13 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852501.834197921] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852502.093 mono=121415.165 pid=68 check-start n=14
+[rest_api-1] [dds-diag] wall=1793852502.096 mono=121415.168 pid=68 heartbeat n=14 took_ms=3 not_ready=-
+[foxglove_bridge-6] [INFO] [1793852502.532620088] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-6] [INFO] [1793852503.042915616] [foxglove_bridge]: publishing connection graph
+[rest_api-1] [dds-diag] wall=1793852503.093 mono=121416.165 pid=68 check-start n=15
+[rest_api-1] [dds-diag] wall=1793852503.097 mono=121416.169 pid=68 heartbeat n=15 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852504.093 mono=121417.164 pid=68 check-start n=16
+[rest_api-1] [dds-diag] wall=1793852504.096 mono=121417.168 pid=68 heartbeat n=16 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852505.093 mono=121418.164 pid=68 check-start n=17
+[rest_api-1] [dds-diag] wall=1793852505.097 mono=121418.168 pid=68 heartbeat n=17 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852506.093 mono=121419.165 pid=68 check-start n=18
+[rest_api-1] [dds-diag] wall=1793852506.096 mono=121419.168 pid=68 heartbeat n=18 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852506.845155003] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852507.093 mono=121420.164 pid=68 check-start n=19
+[rest_api-1] [dds-diag] wall=1793852507.096 mono=121420.168 pid=68 heartbeat n=19 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852508.093 mono=121421.165 pid=68 check-start n=20
+[central-3] [0m[INFO] [1793852508.094347938] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 0[0m
+[rest_api-1] [dds-diag] wall=1793852508.098 mono=121421.169 pid=68 heartbeat n=20 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852509.093 mono=121422.165 pid=68 check-start n=21
+[rest_api-1] [dds-diag] wall=1793852509.098 mono=121422.170 pid=68 heartbeat n=21 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852510.093 mono=121423.164 pid=68 check-start n=22
+[rest_api-1] [dds-diag] wall=1793852510.097 mono=121423.168 pid=68 heartbeat n=22 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852511.093 mono=121424.164 pid=68 check-start n=23
+[rest_api-1] [dds-diag] wall=1793852511.096 mono=121424.168 pid=68 heartbeat n=23 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852511.845257380] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852512.093 mono=121425.165 pid=68 check-start n=24
+[rest_api-1] [dds-diag] wall=1793852512.097 mono=121425.168 pid=68 heartbeat n=24 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852513.093 mono=121426.165 pid=68 check-start n=25
+[rest_api-1] [dds-diag] wall=1793852513.097 mono=121426.168 pid=68 heartbeat n=25 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852514.093 mono=121427.165 pid=68 check-start n=26
+[rest_api-1] [dds-diag] wall=1793852514.098 mono=121427.169 pid=68 heartbeat n=26 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852515.093 mono=121428.164 pid=68 check-start n=27
+[rest_api-1] [dds-diag] wall=1793852515.096 mono=121428.168 pid=68 heartbeat n=27 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852516.093 mono=121429.165 pid=68 check-start n=28
+[rest_api-1] [dds-diag] wall=1793852516.097 mono=121429.169 pid=68 heartbeat n=28 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852516.934194856] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852517.093 mono=121430.165 pid=68 check-start n=29
+[rest_api-1] [dds-diag] wall=1793852517.097 mono=121430.168 pid=68 heartbeat n=29 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852518.093 mono=121431.165 pid=68 check-start n=30
+[central-3] [0m[INFO] [1793852518.094303253] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 0[0m
+[rest_api-1] [dds-diag] wall=1793852518.097 mono=121431.169 pid=68 heartbeat n=30 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852519.093 mono=121432.164 pid=68 check-start n=31
+[rest_api-1] [dds-diag] wall=1793852519.095 mono=121432.166 pid=68 heartbeat n=31 took_ms=2 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852520.093 mono=121433.165 pid=68 check-start n=32
+[rest_api-1] [dds-diag] wall=1793852520.097 mono=121433.168 pid=68 heartbeat n=32 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852521.093 mono=121434.165 pid=68 check-start n=33
+[rest_api-1] [dds-diag] wall=1793852521.098 mono=121434.170 pid=68 heartbeat n=33 took_ms=5 not_ready=-
+[proxy_node-2] [INFO] [1793852521.945151197] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852522.093 mono=121435.164 pid=68 check-start n=34
+[rest_api-1] [dds-diag] wall=1793852522.097 mono=121435.168 pid=68 heartbeat n=34 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852523.093 mono=121436.165 pid=68 check-start n=35
+[rest_api-1] [dds-diag] wall=1793852523.098 mono=121436.169 pid=68 heartbeat n=35 took_ms=5 not_ready=-
+[central-3] [0m[INFO] [1793852523.921363157] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 1 to 2[0m
+[rest_api-1] [dds-diag] wall=1793852524.093 mono=121437.165 pid=68 check-start n=36
+[rest_api-1] [dds-diag] wall=1793852524.097 mono=121437.168 pid=68 heartbeat n=36 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852525.093 mono=121438.165 pid=68 check-start n=37
+[rest_api-1] [dds-diag] wall=1793852525.097 mono=121438.168 pid=68 heartbeat n=37 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852526.093 mono=121439.165 pid=68 check-start n=38
+[rest_api-1] [dds-diag] wall=1793852526.098 mono=121439.170 pid=68 heartbeat n=38 took_ms=5 not_ready=-
+[proxy_node-2] [INFO] [1793852526.945257348] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852527.093 mono=121440.164 pid=68 check-start n=39
+[rest_api-1] [dds-diag] wall=1793852527.097 mono=121440.168 pid=68 heartbeat n=39 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852528.093 mono=121441.164 pid=68 check-start n=40
+[central-3] [0m[INFO] [1793852528.094356164] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852528.097 mono=121441.168 pid=68 heartbeat n=40 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852529.093 mono=121442.164 pid=68 check-start n=41
+[rest_api-1] [dds-diag] wall=1793852529.097 mono=121442.168 pid=68 heartbeat n=41 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852530.093 mono=121443.165 pid=68 check-start n=42
+[rest_api-1] [dds-diag] wall=1793852530.098 mono=121443.170 pid=68 heartbeat n=42 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852531.093 mono=121444.165 pid=68 check-start n=43
+[rest_api-1] [dds-diag] wall=1793852531.097 mono=121444.168 pid=68 heartbeat n=43 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852532.034166206] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852532.093 mono=121445.164 pid=68 check-start n=44
+[rest_api-1] [dds-diag] wall=1793852532.097 mono=121445.168 pid=68 heartbeat n=44 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852533.093 mono=121446.164 pid=68 check-start n=45
+[rest_api-1] [dds-diag] wall=1793852533.097 mono=121446.168 pid=68 heartbeat n=45 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852534.093 mono=121447.165 pid=68 check-start n=46
+[rest_api-1] [dds-diag] wall=1793852534.097 mono=121447.168 pid=68 heartbeat n=46 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852535.093 mono=121448.164 pid=68 check-start n=47
+[rest_api-1] [dds-diag] wall=1793852535.096 mono=121448.168 pid=68 heartbeat n=47 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852536.093 mono=121449.164 pid=68 check-start n=48
+[rest_api-1] [dds-diag] wall=1793852536.097 mono=121449.169 pid=68 heartbeat n=48 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852537.045152238] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852537.093 mono=121450.164 pid=68 check-start n=49
+[rest_api-1] [dds-diag] wall=1793852537.096 mono=121450.168 pid=68 heartbeat n=49 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852538.093 mono=121451.164 pid=68 check-start n=50
+[central-3] [0m[INFO] [1793852538.094306472] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852538.097 mono=121451.168 pid=68 heartbeat n=50 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852539.093 mono=121452.164 pid=68 check-start n=51
+[rest_api-1] [dds-diag] wall=1793852539.097 mono=121452.168 pid=68 heartbeat n=51 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852540.093 mono=121453.164 pid=68 check-start n=52
+[rest_api-1] [dds-diag] wall=1793852540.096 mono=121453.168 pid=68 heartbeat n=52 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852541.093 mono=121454.165 pid=68 check-start n=53
+[rest_api-1] [dds-diag] wall=1793852541.097 mono=121454.168 pid=68 heartbeat n=53 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852542.045183074] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852542.093 mono=121455.164 pid=68 check-start n=54
+[rest_api-1] [dds-diag] wall=1793852542.097 mono=121455.168 pid=68 heartbeat n=54 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852543.093 mono=121456.165 pid=68 check-start n=55
+[rest_api-1] [dds-diag] wall=1793852543.097 mono=121456.168 pid=68 heartbeat n=55 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852544.093 mono=121457.165 pid=68 check-start n=56
+[rest_api-1] [dds-diag] wall=1793852544.098 mono=121457.169 pid=68 heartbeat n=56 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852545.093 mono=121458.164 pid=68 check-start n=57
+[rest_api-1] [dds-diag] wall=1793852545.096 mono=121458.168 pid=68 heartbeat n=57 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852546.093 mono=121459.165 pid=68 check-start n=58
+[rest_api-1] [dds-diag] wall=1793852546.097 mono=121459.168 pid=68 heartbeat n=58 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852547.093 mono=121460.164 pid=68 check-start n=59
+[rest_api-1] [dds-diag] wall=1793852547.097 mono=121460.168 pid=68 heartbeat n=59 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852547.134158684] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852548.093 mono=121461.165 pid=68 check-start n=60
+[central-3] [0m[INFO] [1793852548.094236202] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852548.098 mono=121461.169 pid=68 heartbeat n=60 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852549.093 mono=121462.165 pid=68 check-start n=61
+[rest_api-1] [dds-diag] wall=1793852549.097 mono=121462.168 pid=68 heartbeat n=61 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852550.093 mono=121463.165 pid=68 check-start n=62
+[rest_api-1] [dds-diag] wall=1793852550.097 mono=121463.168 pid=68 heartbeat n=62 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852551.093 mono=121464.165 pid=68 check-start n=63
+[rest_api-1] [dds-diag] wall=1793852551.098 mono=121464.169 pid=68 heartbeat n=63 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852552.093 mono=121465.165 pid=68 check-start n=64
+[rest_api-1] [dds-diag] wall=1793852552.097 mono=121465.168 pid=68 heartbeat n=64 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852552.145150260] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852553.093 mono=121466.165 pid=68 check-start n=65
+[rest_api-1] [dds-diag] wall=1793852553.098 mono=121466.169 pid=68 heartbeat n=65 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852554.093 mono=121467.165 pid=68 check-start n=66
+[rest_api-1] [dds-diag] wall=1793852554.098 mono=121467.170 pid=68 heartbeat n=66 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852555.093 mono=121468.165 pid=68 check-start n=67
+[rest_api-1] [dds-diag] wall=1793852555.099 mono=121468.170 pid=68 heartbeat n=67 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852556.093 mono=121469.164 pid=68 check-start n=68
+[rest_api-1] [dds-diag] wall=1793852556.098 mono=121469.169 pid=68 heartbeat n=68 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852557.093 mono=121470.165 pid=68 check-start n=69
+[rest_api-1] [dds-diag] wall=1793852557.097 mono=121470.168 pid=68 heartbeat n=69 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852557.145158994] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852558.093 mono=121471.164 pid=68 check-start n=70
+[central-3] [0m[INFO] [1793852558.094478285] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852558.097 mono=121471.168 pid=68 heartbeat n=70 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852559.093 mono=121472.164 pid=68 check-start n=71
+[rest_api-1] [dds-diag] wall=1793852559.097 mono=121472.168 pid=68 heartbeat n=71 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852560.093 mono=121473.164 pid=68 check-start n=72
+[rest_api-1] [dds-diag] wall=1793852560.097 mono=121473.168 pid=68 heartbeat n=72 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852561.093 mono=121474.164 pid=68 check-start n=73
+[rest_api-1] [dds-diag] wall=1793852561.097 mono=121474.168 pid=68 heartbeat n=73 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852562.093 mono=121475.164 pid=68 check-start n=74
+[rest_api-1] [dds-diag] wall=1793852562.095 mono=121475.166 pid=68 heartbeat n=74 took_ms=2 not_ready=-
+[proxy_node-2] [INFO] [1793852562.234099322] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852563.093 mono=121476.164 pid=68 check-start n=75
+[rest_api-1] [dds-diag] wall=1793852563.096 mono=121476.168 pid=68 heartbeat n=75 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852564.093 mono=121477.164 pid=68 check-start n=76
+[rest_api-1] [dds-diag] wall=1793852564.097 mono=121477.168 pid=68 heartbeat n=76 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852565.093 mono=121478.165 pid=68 check-start n=77
+[rest_api-1] [dds-diag] wall=1793852565.097 mono=121478.168 pid=68 heartbeat n=77 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852566.093 mono=121479.164 pid=68 check-start n=78
+[rest_api-1] [dds-diag] wall=1793852566.097 mono=121479.168 pid=68 heartbeat n=78 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852567.093 mono=121480.165 pid=68 check-start n=79
+[rest_api-1] [dds-diag] wall=1793852567.097 mono=121480.169 pid=68 heartbeat n=79 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852567.245150240] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852568.093 mono=121481.165 pid=68 check-start n=80
+[central-3] [0m[INFO] [1793852568.094538116] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852568.097 mono=121481.169 pid=68 heartbeat n=80 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852569.093 mono=121482.164 pid=68 check-start n=81
+[rest_api-1] [dds-diag] wall=1793852569.097 mono=121482.168 pid=68 heartbeat n=81 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852570.093 mono=121483.164 pid=68 check-start n=82
+[rest_api-1] [dds-diag] wall=1793852570.096 mono=121483.168 pid=68 heartbeat n=82 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852571.093 mono=121484.164 pid=68 check-start n=83
+[rest_api-1] [dds-diag] wall=1793852571.094 mono=121484.166 pid=68 heartbeat n=83 took_ms=1 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852572.093 mono=121485.165 pid=68 check-start n=84
+[rest_api-1] [dds-diag] wall=1793852572.097 mono=121485.168 pid=68 heartbeat n=84 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852572.245254776] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852573.093 mono=121486.165 pid=68 check-start n=85
+[rest_api-1] [dds-diag] wall=1793852573.097 mono=121486.168 pid=68 heartbeat n=85 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852574.093 mono=121487.164 pid=68 check-start n=86
+[rest_api-1] [dds-diag] wall=1793852574.096 mono=121487.168 pid=68 heartbeat n=86 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852575.093 mono=121488.165 pid=68 check-start n=87
+[rest_api-1] [dds-diag] wall=1793852575.098 mono=121488.170 pid=68 heartbeat n=87 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852576.093 mono=121489.165 pid=68 check-start n=88
+[rest_api-1] [dds-diag] wall=1793852576.097 mono=121489.168 pid=68 heartbeat n=88 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852577.093 mono=121490.164 pid=68 check-start n=89
+[rest_api-1] [dds-diag] wall=1793852577.097 mono=121490.168 pid=68 heartbeat n=89 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852577.334074338] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852578.093 mono=121491.164 pid=68 check-start n=90
+[central-3] [0m[INFO] [1793852578.094441755] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852578.097 mono=121491.168 pid=68 heartbeat n=90 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852579.093 mono=121492.165 pid=68 check-start n=91
+[rest_api-1] [dds-diag] wall=1793852579.097 mono=121492.168 pid=68 heartbeat n=91 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852580.093 mono=121493.164 pid=68 check-start n=92
+[rest_api-1] [dds-diag] wall=1793852580.097 mono=121493.168 pid=68 heartbeat n=92 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852581.093 mono=121494.165 pid=68 check-start n=93
+[rest_api-1] [dds-diag] wall=1793852581.097 mono=121494.168 pid=68 heartbeat n=93 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852582.093 mono=121495.164 pid=68 check-start n=94
+[rest_api-1] [dds-diag] wall=1793852582.096 mono=121495.168 pid=68 heartbeat n=94 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852582.345139712] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852583.093 mono=121496.164 pid=68 check-start n=95
+[rest_api-1] [dds-diag] wall=1793852583.097 mono=121496.168 pid=68 heartbeat n=95 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852584.093 mono=121497.165 pid=68 check-start n=96
+[rest_api-1] [dds-diag] wall=1793852584.097 mono=121497.168 pid=68 heartbeat n=96 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852585.093 mono=121498.164 pid=68 check-start n=97
+[rest_api-1] [dds-diag] wall=1793852585.096 mono=121498.168 pid=68 heartbeat n=97 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852586.093 mono=121499.164 pid=68 check-start n=98
+[rest_api-1] [dds-diag] wall=1793852586.097 mono=121499.168 pid=68 heartbeat n=98 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852587.093 mono=121500.165 pid=68 check-start n=99
+[rest_api-1] [dds-diag] wall=1793852587.098 mono=121500.169 pid=68 heartbeat n=99 took_ms=5 not_ready=-
+[proxy_node-2] [INFO] [1793852587.345157183] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852588.093 mono=121501.165 pid=68 check-start n=100
+[central-3] [0m[INFO] [1793852588.094256898] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852588.097 mono=121501.168 pid=68 heartbeat n=100 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852589.093 mono=121502.164 pid=68 check-start n=101
+[rest_api-1] [dds-diag] wall=1793852589.096 mono=121502.168 pid=68 heartbeat n=101 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852590.093 mono=121503.165 pid=68 check-start n=102
+[rest_api-1] [dds-diag] wall=1793852590.097 mono=121503.168 pid=68 heartbeat n=102 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852591.093 mono=121504.164 pid=68 check-start n=103
+[rest_api-1] [dds-diag] wall=1793852591.097 mono=121504.168 pid=68 heartbeat n=103 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852592.093 mono=121505.164 pid=68 check-start n=104
+[rest_api-1] [dds-diag] wall=1793852592.096 mono=121505.168 pid=68 heartbeat n=104 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852592.434075629] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852593.093 mono=121506.164 pid=68 check-start n=105
+[rest_api-1] [dds-diag] wall=1793852593.098 mono=121506.169 pid=68 heartbeat n=105 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852594.093 mono=121507.165 pid=68 check-start n=106
+[rest_api-1] [dds-diag] wall=1793852594.097 mono=121507.168 pid=68 heartbeat n=106 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852595.093 mono=121508.165 pid=68 check-start n=107
+[rest_api-1] [dds-diag] wall=1793852595.099 mono=121508.170 pid=68 heartbeat n=107 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852596.093 mono=121509.164 pid=68 check-start n=108
+[rest_api-1] [dds-diag] wall=1793852596.096 mono=121509.168 pid=68 heartbeat n=108 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852597.093 mono=121510.164 pid=68 check-start n=109
+[rest_api-1] [dds-diag] wall=1793852597.097 mono=121510.168 pid=68 heartbeat n=109 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852597.434084863] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852598.093 mono=121511.164 pid=68 check-start n=110
+[central-3] [0m[INFO] [1793852598.094328153] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852598.097 mono=121511.168 pid=68 heartbeat n=110 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852599.093 mono=121512.165 pid=68 check-start n=111
+[rest_api-1] [dds-diag] wall=1793852599.097 mono=121512.168 pid=68 heartbeat n=111 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852600.093 mono=121513.164 pid=68 check-start n=112
+[rest_api-1] [dds-diag] wall=1793852600.097 mono=121513.168 pid=68 heartbeat n=112 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852601.093 mono=121514.164 pid=68 check-start n=113
+[rest_api-1] [dds-diag] wall=1793852601.096 mono=121514.168 pid=68 heartbeat n=113 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852602.093 mono=121515.165 pid=68 check-start n=114
+[rest_api-1] [dds-diag] wall=1793852602.097 mono=121515.168 pid=68 heartbeat n=114 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852602.445252282] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852603.093 mono=121516.164 pid=68 check-start n=115
+[rest_api-1] [dds-diag] wall=1793852603.095 mono=121516.167 pid=68 heartbeat n=115 took_ms=2 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852604.093 mono=121517.164 pid=68 check-start n=116
+[rest_api-1] [dds-diag] wall=1793852604.097 mono=121517.168 pid=68 heartbeat n=116 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852605.093 mono=121518.164 pid=68 check-start n=117
+[rest_api-1] [dds-diag] wall=1793852605.097 mono=121518.168 pid=68 heartbeat n=117 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852606.093 mono=121519.165 pid=68 check-start n=118
+[rest_api-1] [dds-diag] wall=1793852606.097 mono=121519.168 pid=68 heartbeat n=118 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852607.093 mono=121520.164 pid=68 check-start n=119
+[rest_api-1] [dds-diag] wall=1793852607.096 mono=121520.168 pid=68 heartbeat n=119 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852607.534090875] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852608.093 mono=121521.164 pid=68 check-start n=120
+[central-3] [0m[INFO] [1793852608.094389409] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852608.097 mono=121521.168 pid=68 heartbeat n=120 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852609.093 mono=121522.164 pid=68 check-start n=121
+[rest_api-1] [dds-diag] wall=1793852609.097 mono=121522.168 pid=68 heartbeat n=121 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852610.093 mono=121523.164 pid=68 check-start n=122
+[rest_api-1] [dds-diag] wall=1793852610.096 mono=121523.168 pid=68 heartbeat n=122 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852611.093 mono=121524.164 pid=68 check-start n=123
+[rest_api-1] [dds-diag] wall=1793852611.097 mono=121524.168 pid=68 heartbeat n=123 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852612.093 mono=121525.165 pid=68 check-start n=124
+[rest_api-1] [dds-diag] wall=1793852612.099 mono=121525.170 pid=68 heartbeat n=124 took_ms=6 not_ready=-
+[proxy_node-2] [INFO] [1793852612.545135333] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852613.093 mono=121526.165 pid=68 check-start n=125
+[rest_api-1] [dds-diag] wall=1793852613.098 mono=121526.169 pid=68 heartbeat n=125 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852614.093 mono=121527.164 pid=68 check-start n=126
+[rest_api-1] [dds-diag] wall=1793852614.097 mono=121527.168 pid=68 heartbeat n=126 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852615.093 mono=121528.165 pid=68 check-start n=127
+[rest_api-1] [dds-diag] wall=1793852615.097 mono=121528.168 pid=68 heartbeat n=127 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852616.093 mono=121529.165 pid=68 check-start n=128
+[rest_api-1] [dds-diag] wall=1793852616.097 mono=121529.168 pid=68 heartbeat n=128 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852617.093 mono=121530.164 pid=68 check-start n=129
+[rest_api-1] [dds-diag] wall=1793852617.097 mono=121530.168 pid=68 heartbeat n=129 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852617.545253906] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852618.093 mono=121531.164 pid=68 check-start n=130
+[central-3] [0m[INFO] [1793852618.094682316] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852618.097 mono=121531.168 pid=68 heartbeat n=130 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852619.093 mono=121532.164 pid=68 check-start n=131
+[rest_api-1] [dds-diag] wall=1793852619.095 mono=121532.167 pid=68 heartbeat n=131 took_ms=2 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852620.093 mono=121533.165 pid=68 check-start n=132
+[rest_api-1] [dds-diag] wall=1793852620.097 mono=121533.168 pid=68 heartbeat n=132 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852621.093 mono=121534.165 pid=68 check-start n=133
+[rest_api-1] [dds-diag] wall=1793852621.097 mono=121534.168 pid=68 heartbeat n=133 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852622.093 mono=121535.164 pid=68 check-start n=134
+[rest_api-1] [dds-diag] wall=1793852622.097 mono=121535.168 pid=68 heartbeat n=134 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852622.634099888] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852623.093 mono=121536.164 pid=68 check-start n=135
+[rest_api-1] [dds-diag] wall=1793852623.097 mono=121536.168 pid=68 heartbeat n=135 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852624.093 mono=121537.164 pid=68 check-start n=136
+[rest_api-1] [dds-diag] wall=1793852624.096 mono=121537.168 pid=68 heartbeat n=136 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852625.093 mono=121538.164 pid=68 check-start n=137
+[rest_api-1] [dds-diag] wall=1793852625.097 mono=121538.168 pid=68 heartbeat n=137 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852626.093 mono=121539.164 pid=68 check-start n=138
+[rest_api-1] [dds-diag] wall=1793852626.096 mono=121539.168 pid=68 heartbeat n=138 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852627.093 mono=121540.165 pid=68 check-start n=139
+[rest_api-1] [dds-diag] wall=1793852627.097 mono=121540.168 pid=68 heartbeat n=139 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852627.634164094] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852628.093 mono=121541.165 pid=68 check-start n=140
+[central-3] [0m[INFO] [1793852628.094401723] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852628.097 mono=121541.168 pid=68 heartbeat n=140 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852629.093 mono=121542.164 pid=68 check-start n=141
+[rest_api-1] [dds-diag] wall=1793852629.096 mono=121542.168 pid=68 heartbeat n=141 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852630.093 mono=121543.164 pid=68 check-start n=142
+[rest_api-1] [dds-diag] wall=1793852630.095 mono=121543.167 pid=68 heartbeat n=142 took_ms=2 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852631.093 mono=121544.165 pid=68 check-start n=143
+[rest_api-1] [dds-diag] wall=1793852631.097 mono=121544.168 pid=68 heartbeat n=143 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852632.093 mono=121545.164 pid=68 check-start n=144
+[rest_api-1] [dds-diag] wall=1793852632.097 mono=121545.168 pid=68 heartbeat n=144 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852632.645250455] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852633.093 mono=121546.164 pid=68 check-start n=145
+[rest_api-1] [dds-diag] wall=1793852633.094 mono=121546.166 pid=68 heartbeat n=145 took_ms=1 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852634.093 mono=121547.164 pid=68 check-start n=146
+[rest_api-1] [dds-diag] wall=1793852634.096 mono=121547.168 pid=68 heartbeat n=146 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852635.093 mono=121548.164 pid=68 check-start n=147
+[rest_api-1] [dds-diag] wall=1793852635.097 mono=121548.168 pid=68 heartbeat n=147 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852636.093 mono=121549.165 pid=68 check-start n=148
+[rest_api-1] [dds-diag] wall=1793852636.097 mono=121549.168 pid=68 heartbeat n=148 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852637.093 mono=121550.164 pid=68 check-start n=149
+[rest_api-1] [dds-diag] wall=1793852637.096 mono=121550.168 pid=68 heartbeat n=149 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852637.734080204] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852638.093 mono=121551.164 pid=68 check-start n=150
+[central-3] [0m[INFO] [1793852638.094478608] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852638.097 mono=121551.168 pid=68 heartbeat n=150 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852639.093 mono=121552.165 pid=68 check-start n=151
+[rest_api-1] [dds-diag] wall=1793852639.097 mono=121552.168 pid=68 heartbeat n=151 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852640.093 mono=121553.165 pid=68 check-start n=152
+[rest_api-1] [dds-diag] wall=1793852640.097 mono=121553.168 pid=68 heartbeat n=152 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852641.093 mono=121554.164 pid=68 check-start n=153
+[rest_api-1] [dds-diag] wall=1793852641.095 mono=121554.167 pid=68 heartbeat n=153 took_ms=2 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852642.093 mono=121555.164 pid=68 check-start n=154
+[rest_api-1] [dds-diag] wall=1793852642.096 mono=121555.168 pid=68 heartbeat n=154 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852642.734162179] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852643.093 mono=121556.165 pid=68 check-start n=155
+[rest_api-1] [dds-diag] wall=1793852643.097 mono=121556.168 pid=68 heartbeat n=155 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852644.093 mono=121557.164 pid=68 check-start n=156
+[rest_api-1] [dds-diag] wall=1793852644.095 mono=121557.167 pid=68 heartbeat n=156 took_ms=2 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852645.093 mono=121558.165 pid=68 check-start n=157
+[rest_api-1] [dds-diag] wall=1793852645.097 mono=121558.168 pid=68 heartbeat n=157 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852646.093 mono=121559.164 pid=68 check-start n=158
+[rest_api-1] [dds-diag] wall=1793852646.096 mono=121559.168 pid=68 heartbeat n=158 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852647.093 mono=121560.164 pid=68 check-start n=159
+[rest_api-1] [dds-diag] wall=1793852647.097 mono=121560.168 pid=68 heartbeat n=159 took_ms=3 not_ready=-
+[proxy_node-2] [INFO] [1793852647.745153793] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852648.093 mono=121561.164 pid=68 check-start n=160
+[central-3] [0m[INFO] [1793852648.094276233] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852648.096 mono=121561.167 pid=68 heartbeat n=160 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852649.093 mono=121562.164 pid=68 check-start n=161
+[rest_api-1] [dds-diag] wall=1793852649.095 mono=121562.166 pid=68 heartbeat n=161 took_ms=2 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852650.093 mono=121563.164 pid=68 check-start n=162
+[rest_api-1] [dds-diag] wall=1793852650.097 mono=121563.168 pid=68 heartbeat n=162 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852651.093 mono=121564.165 pid=68 check-start n=163
+[rest_api-1] [dds-diag] wall=1793852651.097 mono=121564.168 pid=68 heartbeat n=163 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852652.093 mono=121565.165 pid=68 check-start n=164
+[rest_api-1] [dds-diag] wall=1793852652.097 mono=121565.168 pid=68 heartbeat n=164 took_ms=4 not_ready=-
+[proxy_node-2] [INFO] [1793852652.834096858] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852653.093 mono=121566.164 pid=68 check-start n=165
+[rest_api-1] [dds-diag] wall=1793852653.097 mono=121566.168 pid=68 heartbeat n=165 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852654.093 mono=121567.164 pid=68 check-start n=166
+[rest_api-1] [dds-diag] wall=1793852654.097 mono=121567.168 pid=68 heartbeat n=166 took_ms=3 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852655.093 mono=121568.164 pid=68 check-start n=167
+[rest_api-1] [dds-diag] wall=1793852655.097 mono=121568.168 pid=68 heartbeat n=167 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852656.093 mono=121569.165 pid=68 check-start n=168
+[rest_api-1] [dds-diag] wall=1793852656.098 mono=121569.170 pid=68 heartbeat n=168 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852657.093 mono=121570.165 pid=68 check-start n=169
+[rest_api-1] [dds-diag] wall=1793852657.098 mono=121570.170 pid=68 heartbeat n=169 took_ms=5 not_ready=-
+[proxy_node-2] [INFO] [1793852657.834153084] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+[rest_api-1] [dds-diag] wall=1793852658.093 mono=121571.165 pid=68 check-start n=170
+[central-3] [0m[INFO] [1793852658.094235001] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+[rest_api-1] [dds-diag] wall=1793852658.097 mono=121571.168 pid=68 heartbeat n=170 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852659.093 mono=121572.164 pid=68 check-start n=171
+[rest_api-1] [dds-diag] wall=1793852659.097 mono=121572.168 pid=68 heartbeat n=171 took_ms=4 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852660.093 mono=121573.164 pid=68 check-start n=172
+[rest_api-1] [dds-diag] wall=1793852660.098 mono=121573.170 pid=68 heartbeat n=172 took_ms=5 not_ready=-
+[rest_api-1] [dds-diag] wall=1793852661.093 mono=121574.164 pid=68 check-start n=173
+[rest_api-1] [dds-diag] wall=1793852661.097 mono=121574.168 pid=68 heartbeat n=173 took_ms=4 not_ready=-

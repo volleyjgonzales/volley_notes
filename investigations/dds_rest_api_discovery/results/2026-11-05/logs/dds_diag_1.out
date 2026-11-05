@@ -1,0 +1,42 @@
+[02:01:24] attempt 'diag1' (root /data/swarm, bays b7): removing app-comb
+    Removing stack 'app-comb'
+    Stack 'app-comb' stopped
+[02:01:32] removed; waiting 20 s
+[02:01:52] deploying app-comb
+    Deploying stack 'app-comb'
+    Creating network app-comb_internal
+    Creating config app-comb_garage-info
+    Creating config app-comb_mysql-init
+    Creating config app-comb_mysqld
+    Creating config app-comb_nginx
+    Creating config app-comb_fastdds-profile
+    Creating service app-comb_mysql
+    Creating service app-comb_nginx
+    Creating service app-comb_noc
+    Creating service app-comb_bay7
+    Creating service app-comb_bay7-guidance
+    Creating service app-comb_central
+    Creating service app-comb_control
+    Creating service app-comb_discovery-server
+    Deployed with timestamp 20261105T020152Z
+[02:01:53] deployed; watching for 180 s (stuck = a deployed bay's confirm service not ready at 180 s)
+    t+ 10s  services 8/8  not ready: -                                                  udp drops central 20
+    t+ 20s  services 8/8  not ready: -                                                  udp drops central 288
+    t+ 30s  services 8/8  not ready: -                                                  udp drops central 288
+    t+ 40s  services 8/8  not ready: -                                                  udp drops central 288
+    t+ 50s  services 8/8  not ready: -                                                  udp drops central 288
+    t+ 60s  services 8/8  not ready: -                                                  udp drops central 288
+    t+ 71s  services 8/8  not ready: -                                                  udp drops central 288
+    t+ 81s  services 8/8  not ready: -                                                  udp drops central 288
+    t+ 91s  services 8/8  not ready: -                                                  udp drops central 288
+    t+101s  services 8/8  not ready: -                                                  udp drops central 288
+    t+111s  services 8/8  not ready: -                                                  udp drops central 288
+    t+121s  services 8/8  not ready: -                                                  udp drops central 288
+    t+132s  services 8/8  not ready: -                                                  udp drops central 288
+    t+142s  services 8/8  not ready: -                                                  udp drops central 288
+    t+152s  services 8/8  not ready: -                                                  udp drops central 288
+    t+162s  services 8/8  not ready: -                                                  udp drops central 288
+    t+172s  services 8/8  not ready: -                                                  udp drops central 288
+    t+183s  services 8/8  not ready: -                                                  udp drops central 288
+[02:04:56] result: ok
+2026-11-05T02:01:52Z label=diag1 build=29712d9 result=ok stuck=- states= warnings_on=1 fastdds_warnings=0 unknown_participant=0 last_check="finished n=173" rest_api_pids=68 rcvbuf_errors central=288 discovery=0 rest_api_sockets=7424:rb212992/d268 7425:rb212992/d0

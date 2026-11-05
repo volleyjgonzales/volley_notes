@@ -1,0 +1,18 @@
+test: InsertJob.StallBlockedByAgvOnCharger
+description: >-
+  Scenario: On 5675_pecos_combined, a customer has left a car on tray 27 at heading 90 in bay B7,
+  whose state is vehicle inserted, and bay B21 is ready to retrieve; AGV 7 waits under an empty
+  tray at P5 near bay 7 and AGV 10 under one at P19 near bay 21, three other cars and three empty
+  trays fill the stalls but P15, and stall P24 is disabled. AGV 1 stands stopped on charger C14,
+  whose pose is 0.6 m from P15: the collision table blocks every tray and payload pose at P15 while
+  an AGV is on C14. Test: The test plans one INSERT job for bay 7 through Plan(). Expected: The
+  destination search must not choose P15 while AGV 1 is on C14 (SW2-905). AGV 7 enters the bay at
+  heading 90, lifts the tray and lowers it somewhere other than P15 or the bay (today: W31, as in
+  FromBay7TrayHeading90); the job is returned as executing.
+initial_state: 5675_pecos_combined/busy_garage_car_in_bay_7_agv_on_charger_14
+scheduler:
+  target_insert_ready_bay_fraction: 0.5
+request:
+  jobs:
+  - type: INSERT
+    bay_id: 7

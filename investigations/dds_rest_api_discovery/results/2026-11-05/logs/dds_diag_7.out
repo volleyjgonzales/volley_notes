@@ -1,0 +1,47 @@
+[03:16:20] host capture started: /home/ops/captures/diag7_host.pcap
+[03:16:20] attempt 'diag7' (root /data/swarm, bays b7): removing app-comb
+    Removing stack 'app-comb'
+    Stack 'app-comb' stopped
+[03:16:28] removed; waiting 20 s
+[03:16:48] deploying app-comb
+    Deploying stack 'app-comb'
+    Creating network app-comb_internal
+    Creating config app-comb_garage-info
+    Creating config app-comb_nginx
+    Creating config app-comb_fastdds-profile
+    Creating config app-comb_mysql-init
+    Creating config app-comb_mysqld
+    Creating service app-comb_discovery-server
+    Creating service app-comb_mysql
+    Creating service app-comb_nginx
+    Creating service app-comb_noc
+    Creating service app-comb_bay7
+    Creating service app-comb_bay7-guidance
+    Creating service app-comb_central
+    Creating service app-comb_control
+    Deployed with timestamp 20261105T031648Z
+[03:16:51] central capture started (2 s after the deploy): /home/ops/captures/diag7_central.pcap
+[03:16:51] deployed; watching for 180 s (stuck = a deployed bay's confirm service not ready at 180 s)
+    t+ 12s  services 8/8  not ready: -                                                  udp drops central 526
+    t+ 22s  services 8/8  not ready: -                                                  udp drops central 526
+    t+ 32s  services 8/8  not ready: -                                                  udp drops central 526
+    t+ 42s  services 8/8  not ready: -                                                  udp drops central 526
+    t+ 53s  services 8/8  not ready: -                                                  udp drops central 526
+    t+ 63s  services 8/8  not ready: -                                                  udp drops central 526
+    t+ 73s  services 8/8  not ready: -                                                  udp drops central 526
+    t+ 83s  services 8/8  not ready: -                                                  udp drops central 526
+    t+ 93s  services 8/8  not ready: -                                                  udp drops central 526
+    t+104s  services 8/8  not ready: -                                                  udp drops central 526
+    t+114s  services 8/8  not ready: -                                                  udp drops central 526
+    t+124s  services 8/8  not ready: -                                                  udp drops central 526
+    t+134s  services 8/8  not ready: -                                                  udp drops central 526
+    t+144s  services 8/8  not ready: -                                                  udp drops central 526
+    t+154s  services 8/8  not ready: -                                                  udp drops central 526
+    t+165s  services 8/8  not ready: -                                                  udp drops central 526
+    t+175s  services 8/8  not ready: -                                                  udp drops central 526
+    t+185s  services 8/8  not ready: -                                                  udp drops central 526
+[03:19:55] result: ok
+2026-11-05T03:16:48Z label=diag7 build=4b00571 result=ok stuck=- states= warnings_on=1 fastdds_warnings=2 unknown_participant=0 last_check="finished n=175" rest_api_pids=68 rcvbuf_errors central=526 discovery=0 rest_api_sockets=7424:rb212992/d526 7425:rb212992/d0
+    -rw-r--r-- 1 root root 21923437 Nov  5 03:19 /home/ops/captures/diag7_central.pcap0
+    -rw-r--r-- 1 root root 16986424 Nov  5 03:19 /home/ops/captures/diag7_host.pcap0
+[03:19:55] logs saved: ~/dds_central_diag7_2026-11-05T03:16:48Z.log ~/dds_discovery_diag7_2026-11-05T03:16:48Z.log

@@ -1,0 +1,112 @@
+[03:49:04] captures off (CAPTURE=0)
+[03:49:04] attempt 'diag15' (root /data/swarm, bays b7): removing app-comb
+    Removing stack 'app-comb'
+    Stack 'app-comb' stopped
+[03:49:11] removed; waiting 20 s
+[03:49:31] deploying app-comb
+    Deploying stack 'app-comb'
+    Creating network app-comb_internal
+    Creating config app-comb_mysqld
+    Creating config app-comb_nginx
+    Creating config app-comb_garage-info
+    Creating config app-comb_fastdds-profile
+    Creating config app-comb_mysql-init
+    Creating service app-comb_noc
+    Creating service app-comb_bay7
+    Creating service app-comb_bay7-guidance
+    Creating service app-comb_central
+    Creating service app-comb_control
+    Creating service app-comb_discovery-server
+    Creating service app-comb_mysql
+    Creating service app-comb_nginx
+    Deployed with timestamp 20261105T034932Z
+[03:49:32] deployed; watching for 180 s (stuck = a deployed bay's confirm service not ready at 180 s)
+    t+ 10s  services 8/8  not ready: -                                                  udp drops central 0
+    t+ 20s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+ 30s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+ 41s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+ 51s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+ 61s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+ 71s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+ 81s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+ 92s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+102s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+112s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+122s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+132s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+142s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+153s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+163s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+173s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+    t+183s  services 8/8  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve   udp drops central 600
+[03:52:36] result: STUCK
+2026-11-05T03:49:31Z label=diag15 build=4b00571 result=STUCK stuck=/bay/b7/confirm_insert,/bay/b7/confirm_retrieve states=/bay/b7/confirm_insert ready=0 rq_readers=0 rr_writers=0 rq_gids=- rr_gids=- warnings_on=1 fastdds_warnings=2 unknown_participant=0 last_check="finished n=173" rest_api_pids=68 rcvbuf_errors central=600 discovery=0 rest_api_sockets=7424:rb212992/d600 7427:rb212992/d0
+[03:52:36] STUCK: hands off for up to 10 min. Run no ros2 commands, probes or Foxglove reconnects meanwhile.
+    hands-off t+ 10s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+ 20s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+ 30s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+ 40s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+ 50s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+ 60s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+ 70s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+ 80s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+ 90s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+100s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+110s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+120s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+130s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+140s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+150s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 0s ago
+    hands-off t+160s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 0s ago
+    hands-off t+170s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 0s ago
+    hands-off t+181s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+191s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+201s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+211s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+221s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+231s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+241s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+251s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+261s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+271s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+281s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+291s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+301s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+311s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+321s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+331s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+341s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+351s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+361s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+371s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+381s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+391s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+401s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 0s ago
+    hands-off t+411s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 0s ago
+    hands-off t+421s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 0s ago
+    hands-off t+431s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 0s ago
+    hands-off t+442s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+452s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+462s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+472s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+482s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+492s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+502s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+512s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+522s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+532s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+542s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+552s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+562s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+572s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+582s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+592s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+    hands-off t+602s  not ready: /bay/b7/confirm_insert,/bay/b7/confirm_retrieve  heartbeat 1s ago
+  still stuck after 10 min hands-off: /bay/b7/confirm_insert ready=0 rq_readers=0 rr_writers=0 rq_gids=- rr_gids=-
+[04:02:38] probe 'unrelated': one rclpy process in control (probe_unrelated.py)
+  probe 'unrelated' (one rclpy process, no entrypoint probe) in control at 04:02:38:
+    held one node with no clients for 20 s; graph: 25 nodes, bay 7: ['/bay/b7/bay_guidance', '/bay/b7/bay_nodes', '/bay/b7/bay_state_machine', '/bay/b7/io_link_driver', '/bay/b7/load_cell_driver', '/bay/b7/plc_control', '/bay/b7/recorder', '/bay/b7/vehicle_estimator']
+    after-unrelated t+ 10s  not ready: -  heartbeat 1s ago
+  recovered at 04:02:40, 2 s after the 'unrelated' probe started; fastdds_warnings=2 unknown_participant=0
+[04:03:09] done: leave the stack as it is for the C++ check and the restart test if it's still stuck
+[04:03:10] logs saved: ~/dds_central_diag15_2026-11-05T03:49:31Z.log ~/dds_discovery_diag15_2026-11-05T03:49:31Z.log

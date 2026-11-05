@@ -1,0 +1,1542 @@
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: init supervisor logger path=nil rotate_age=nil rotate_size=nil
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: parsing config file is succeeded path="/fluentd/etc/fluent.conf"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: inaccessible include directory was specified path="/etc/fluent/conf.d"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: gem 'fluentd' version '1.19.3'
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: using configuration file: <ROOT>
+(global.log-collector) |   <system>
+(global.log-collector) |     dir_permission 0770
+(global.log-collector) |     file_permission 0660
+(global.log-collector) |   </system>
+(global.log-collector) |   <source>
+(global.log-collector) |     @type forward
+(global.log-collector) |     port 24224
+(global.log-collector) |     bind "0.0.0.0"
+(global.log-collector) |   </source>
+(global.log-collector) |   <filter docker.**>
+(global.log-collector) |     @type record_transformer
+(global.log-collector) |     enable_ruby true
+(global.log-collector) |     <record>
+(global.log-collector) |       service ${(record["com.docker.swarm.service.name"] || record["container_name"] || "unknown") + (record["SWARM_NODE"] ? "-" + record["SWARM_NODE"] : "")}
+(global.log-collector) |     </record>
+(global.log-collector) |   </filter>
+(global.log-collector) |   <match docker.**>
+(global.log-collector) |     @type file
+(global.log-collector) |     path "/data/logs/stack/%Y%m%dT%H%M%SZ-${service}"
+(global.log-collector) |     append true
+(global.log-collector) |     add_path_suffix true
+(global.log-collector) |     path_suffix ".log"
+(global.log-collector) |     <buffer time,service>
+(global.log-collector) |       @type "file"
+(global.log-collector) |       path "/data/logs/.fluentd/buffer"
+(global.log-collector) |       timekey 1h
+(global.log-collector) |       timekey_wait 1m
+(global.log-collector) |       timekey_use_utc true
+(global.log-collector) |       flush_mode lazy
+(global.log-collector) |     </buffer>
+(global.log-collector) |     <format>
+(global.log-collector) |       @type "single_value"
+(global.log-collector) |       message_key "log"
+(global.log-collector) |     </format>
+(global.log-collector) |   </match>
+(global.log-collector) | </ROOT>
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: starting fluentd-1.19.3 pid=7 ruby="3.4.10"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: spawn command to main:  cmdline=["/usr/local/bin/ruby", "-Eascii-8bit:ascii-8bit", "/usr/local/bundle/bin/fluentd", "--config", "/fluentd/etc/fluent.conf", "--plugin", "/fluentd/plugins", "--under-supervisor"]
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: #0 init worker0 logger path=nil rotate_age=nil rotate_size=nil
+(app-comb.nginx) | /docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+(app-comb.nginx) | /docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: adding filter pattern="docker.**" type="record_transformer"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: adding match pattern="docker.**" type="file"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: adding source type="forward"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: #0 starting fluentd worker pid=20 ppid=7 worker=0
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: #0 listening port port=24224 bind="0.0.0.0"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: #0 fluentd worker is now running worker=0
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: init supervisor logger path=nil rotate_age=nil rotate_size=nil
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: parsing config file is succeeded path="/fluentd/etc/fluent.conf"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: inaccessible include directory was specified path="/etc/fluent/conf.d"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: gem 'fluentd' version '1.19.3'
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: using configuration file: <ROOT>
+(app-comb.nginx) | /docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+(app-comb.nginx) | 10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+(app-comb.nginx) | 10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+(global.log-collector) |   <system>
+(global.log-collector) |     dir_permission 0770
+(global.log-collector) |     file_permission 0660
+(global.log-collector) |   </system>
+(global.log-collector) |   <source>
+(global.log-collector) |     @type forward
+(global.log-collector) |     port 24224
+(global.log-collector) |     bind "0.0.0.0"
+(global.log-collector) |   </source>
+(global.log-collector) |   <filter docker.**>
+(global.log-collector) |     @type record_transformer
+(global.log-collector) |     enable_ruby true
+(global.log-collector) |     <record>
+(global.log-collector) |       service ${(record["com.docker.swarm.service.name"] || record["container_name"] || "unknown") + (record["SWARM_NODE"] ? "-" + record["SWARM_NODE"] : "")}
+(global.log-collector) |     </record>
+(global.log-collector) |   </filter>
+(global.log-collector) |   <match docker.**>
+(global.log-collector) |     @type file
+(global.log-collector) |     path "/data/logs/stack/%Y%m%dT%H%M%SZ-${service}"
+(global.log-collector) |     append true
+(global.log-collector) |     add_path_suffix true
+(global.log-collector) |     path_suffix ".log"
+(global.log-collector) |     <buffer time,service>
+(global.log-collector) |       @type "file"
+(global.log-collector) |       path "/data/logs/.fluentd/buffer"
+(global.log-collector) |       timekey 1h
+(global.log-collector) |       timekey_wait 1m
+(global.log-collector) |       timekey_use_utc true
+(global.log-collector) |       flush_mode lazy
+(global.log-collector) |     </buffer>
+(global.log-collector) |     <format>
+(global.log-collector) |       @type "single_value"
+(app-comb.nginx) | /docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+(global.log-collector) |       message_key "log"
+(global.log-collector) |     </format>
+(global.log-collector) |   </match>
+(global.log-collector) | </ROOT>
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: starting fluentd-1.19.3 pid=7 ruby="3.4.10"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: spawn command to main:  cmdline=["/usr/local/bin/ruby", "-Eascii-8bit:ascii-8bit", "/usr/local/bundle/bin/fluentd", "--config", "/fluentd/etc/fluent.conf", "--plugin", "/fluentd/plugins", "--under-supervisor"]
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: #0 init worker0 logger path=nil rotate_age=nil rotate_size=nil
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: adding filter pattern="docker.**" type="record_transformer"
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: adding match pattern="docker.**" type="file"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: init supervisor logger path=nil rotate_age=nil rotate_size=nil
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: adding source type="forward"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: parsing config file is succeeded path="/fluentd/etc/fluent.conf"
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: #0 starting fluentd worker pid=20 ppid=7 worker=0
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: inaccessible include directory was specified path="/etc/fluent/conf.d"
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: #0 listening port port=24224 bind="0.0.0.0"
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: #0 fluentd worker is now running worker=0
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: gem 'fluentd' version '1.19.3'
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: using configuration file: <ROOT>
+(global.log-collector) |   <system>
+(global.log-collector) |     dir_permission 0770
+(global.log-collector) |     file_permission 0660
+(global.log-collector) |   </system>
+(global.log-collector) |   <source>
+(global.log-collector) |     @type forward
+(global.log-collector) |     port 24224
+(global.log-collector) |     bind "0.0.0.0"
+(global.log-collector) |   </source>
+(global.log-collector) |   <filter docker.**>
+(global.log-collector) |     @type record_transformer
+(global.log-collector) |     enable_ruby true
+(global.log-collector) |     <record>
+(global.log-collector) |       service ${(record["com.docker.swarm.service.name"] || record["container_name"] || "unknown") + (record["SWARM_NODE"] ? "-" + record["SWARM_NODE"] : "")}
+(global.log-collector) |     </record>
+(global.log-collector) |   </filter>
+(global.log-collector) |   <match docker.**>
+(global.log-collector) |     @type file
+(global.log-collector) |     path "/data/logs/stack/%Y%m%dT%H%M%SZ-${service}"
+(global.log-collector) |     append true
+(global.log-collector) |     add_path_suffix true
+(global.log-collector) |     path_suffix ".log"
+(global.log-collector) |     <buffer time,service>
+(app-comb.nginx) | /docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+(app-comb.nginx) | /docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+(app-comb.nginx) | /docker-entrypoint.sh: Configuration complete; ready for start up
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:06:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:06:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:06:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:07:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:07:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:07:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:07:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:07:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:07:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:08:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:08:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:08:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:08:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:08:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.bay7-guidance) | 
+(global.log-collector) |       @type "file"
+(global.log-collector) |       path "/data/logs/.fluentd/buffer"
+(global.log-collector) |       timekey 1h
+(global.log-collector) |       timekey_wait 1m
+(global.log-collector) |       timekey_use_utc true
+(global.log-collector) |       flush_mode lazy
+(global.log-collector) |     </buffer>
+(global.log-collector) |     <format>
+(global.log-collector) |       @type "single_value"
+(global.log-collector) |       message_key "log"
+(global.log-collector) |     </format>
+(global.log-collector) |   </match>
+(global.log-collector) | </ROOT>
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: starting fluentd-1.19.3 pid=7 ruby="3.4.10"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: spawn command to main:  cmdline=["/usr/local/bin/ruby", "-Eascii-8bit:ascii-8bit", "/usr/local/bundle/bin/fluentd", "--config", "/fluentd/etc/fluent.conf", "--plugin", "/fluentd/plugins", "--under-supervisor"]
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: #0 init worker0 logger path=nil rotate_age=nil rotate_size=nil
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: adding filter pattern="docker.**" type="record_transformer"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: adding match pattern="docker.**" type="file"
+(global.log-collector) | 2026-11-03 19:20:18 +0000 [info]: adding source type="forward"
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: #0 starting fluentd worker pid=20 ppid=7 worker=0
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: #0 listening port port=24224 bind="0.0.0.0"
+(global.log-collector) | 2026-11-03 19:20:19 +0000 [info]: #0 fluentd worker is now running worker=0
+(app-comb.bay7-guidance) | (com.example.bay_guidance_app:7): Atk-CRITICAL **: 16:06:38.771: atk_socket_embed: assertion 'plug_id != NULL' failed
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:08:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:09:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:09:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:09:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:09:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:09:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:09:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:31 +0000] "GET /api/v3/patron/payloads?active=true HTTP/1.1" 200 145 "-" "Dart/3.12 (dart:io)"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:31 +0000] "GET /api/v3/dispatch/state HTTP/1.1" 200 13 "-" "Dart/3.12 (dart:io)"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:42 +0000] "POST /api/v3/bay/b7/confirm-insert HTTP/1.1" 500 88 "-" "Dart/3.12 (dart:io)"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:10:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:11:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:11:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:11:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:11:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:11:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:11:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:12:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:12:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:12:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:12:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:12:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:12:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:13:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:13:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:13:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:13:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:13:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:13:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:14:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:14:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:14:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:14:42 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:14:44 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:14:49 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:15:12 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:15:14 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.nginx) | 172.18.0.1 - - [04/Nov/2026:16:15:19 +0000] "GET /healthz HTTP/1.1" 200 2 "-" "ELB-HealthChecker/2.0"
+(app-comb.discovery-server) | #### Server started ####
+(app-comb.discovery-server) |   GUID prefix: 01.0f.df.b1.01.00.f1.a9.00.00.00.00
+(app-comb.discovery-server) |   Running on:  UDPv4:[172.16.3.3]:11811
+(site.map-server) | 2026-11-03 19:20:20,018 INFO map_server.server: Server is up @ http=0.0.0.0:5050
+(site.prometheus) | time=2026-11-03T19:20:18.332Z level=INFO source=main.go:1724 msg="updated GOGC" old=100 new=75
+(site.prometheus) | time=2026-11-03T19:20:18.333Z level=INFO source=main.go:789 msg="Leaving GOMAXPROCS=28: CPU quota undefined" component=automaxprocs
+(site.prometheus) | time=2026-11-03T19:20:18.333Z level=INFO source=memlimit.go:198 msg="GOMEMLIMIT is updated" component=automemlimit package=github.com/KimMachineGun/automemlimit/memlimit GOMEMLIMIT=60426038476 previous=9223372036854775807
+(site.prometheus) | time=2026-11-03T19:20:18.333Z level=INFO source=main.go:896 msg="Starting Prometheus Server" mode=server version="(version=3.13.1, branch=HEAD, revision=73ff57ce2b8161059ac7fe5188f03f1c3d22b29a)"
+(site.prometheus) | time=2026-11-03T19:20:18.333Z level=INFO source=main.go:901 msg="operational information" build_context="(go=go1.26.5, platform=linux/amd64, user=root@6a98665b49f7, date=20260710-08:18:27, tags=netgo,builtinassets)" host_details="(Linux 6.18.33-intel-pk-standard #1 SMP PREEMPT_DYNAMIC Wed Jun 17 18:57:42 UTC 2026 x86_64 a717f81b3e3b (none))" fd_limits="(soft=524287, hard=524288)" vm_limits="(soft=unlimited, hard=unlimited)"
+(site.prometheus) | time=2026-11-03T19:20:18.467Z level=INFO source=web.go:727 msg="Start listening for connections" component=web address=0.0.0.0:9090
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=main.go:1456 msg="Starting TSDB ..."
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792432813422 maxt=1792497600000 ulid=01M5D43QJACQ00G0HVKDPR5JCJ
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792497613422 maxt=1792562400000 ulid=01M5F1X8V375G1S8276T9H4E0K
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792562413422 maxt=1792627200000 ulid=01M5J8WW3PPKB9D8PP9ZYNKGKH
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792673493722 maxt=1792692000000 ulid=01M5JXG1QKHA6CT078E9WKXYN4
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792692003722 maxt=1792756800000 ulid=01M5MV9SHD2ZY1J2X8PGMFQDAS
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792756810313 maxt=1792821600000 ulid=01M5PS3AS043NFDY4GZ4HKWJ3Q
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792821610313 maxt=1792886400000 ulid=01M5RPWW34HP5CNA5F0MM88TBV
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792886410313 maxt=1792951200000 ulid=01M5TMPD8WEBTKCBMFPBQ9R6XA
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1792951210313 maxt=1793016000000 ulid=01M5WJFYH65AZR0YE631FEBDR9
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793016010313 maxt=1793080800000 ulid=01M5YG961XX4A57QBGV739NRGS
+(site.prometheus) | time=2026-11-03T19:20:18.469Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793080800272 maxt=1793145600000 ulid=01M60E2Q9B2C91FJ2DTJD7M06Q
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793145600272 maxt=1793210400000 ulid=01M62BW8GNFQ3S7DSE1ERG6QGQ
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793210400272 maxt=1793275200000 ulid=01M649NR76J0M691B178D72KTG
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793275200272 maxt=1793340000000 ulid=01M667FBM7D8G6B3JK111K710C
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793340000886 maxt=1793404800000 ulid=01M68595EFAQMPWKV7W2WB7R5Y
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793404809716 maxt=1793469600000 ulid=01M6A32PPJP3100C6FPGRD4N6E
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793469609716 maxt=1793534400000 ulid=01M6C0W7ZEY4GXPFXN68DJSWCM
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793534409716 maxt=1793599200000 ulid=01M6DYNS6T2E2BBRZ2GQXP1S0K
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793599209716 maxt=1793664000000 ulid=01M6FWFAF460Z06F1G4V60WQ6K
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793664009716 maxt=1793685600000 ulid=01M6GH2G3G95P8EQ9BCMF2EE32
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793707209716 maxt=1793714400000 ulid=01M6GYSYGE8S79MKZ4WSP96M19
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793714409716 maxt=1793721600000 ulid=01M6H5NNRDT86AFSDKSBQTJMTX
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793685609716 maxt=1793707200000 ulid=01M6H5NNVDN9NQ5NEHNK29RQCB
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=repair.go:54 msg="Found healthy block" component=tsdb mint=1793721600000 maxt=1793728800000 ulid=01M6HCGWWW2C1VCG1GQ66XRW14
+(app-comb.mysql) | 2026-11-04 16:06:38+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 5.7.44-1.el7 started.
+(app-comb.mysql) | 2026-11-04 16:06:39+00:00 [Note] [Entrypoint]: Switching to dedicated user 'mysql'
+(app-comb.mysql) | 2026-11-04 16:06:39+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 5.7.44-1.el7 started.
+(app-comb.mysql) | '/var/lib/mysql/mysql.sock' -> '/var/run/mysqld/mysqld.sock'
+(site.map-server) | 2026-11-03 19:20:20,020 INFO waitress: Serving on http://0.0.0.0:5050
+(site.map-server) | 2026-11-03 19:20:46,045 INFO map_server.flask_app: /map POST: stored map mapId=e0af95e2f92d8e7e5b8874cf2a2c7e68-L (total maps: 1)
+(site.map-server) | 2026-11-03 19:20:46,047 INFO map_server.flask_app: /map POST: stored map mapId=ac990f9ab2cd1ac37212ca869c1f5c49-F0 (total maps: 2)
+(site.map-server) | 2026-11-03 20:28:59,318 INFO map_server.flask_app: /map POST: stored map mapId=f30aa5e6376eb7c45d2ec8f2246eaec7-L (total maps: 3)
+(site.map-server) | 2026-11-03 20:28:59,319 INFO map_server.flask_app: /map POST: stored map mapId=e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0 (total maps: 4)
+(site.map-server) | 2026-11-03 21:01:34,078 INFO map_server.flask_app: /map POST: stored map mapId=ac990f9ab2cd1ac37212ca869c1f5c49-F0 (total maps: 4)
+(site.map-server) | 2026-11-03 21:01:34,085 INFO map_server.flask_app: /map POST: stored map mapId=5f790bd5b666a3997f5f2f6902688e8e-L (total maps: 5)
+(site.map-server) | 2026-11-03 21:02:41,628 INFO map_server.flask_app: /map POST: stored map mapId=e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0 (total maps: 5)
+(site.map-server) | 2026-11-03 21:02:41,637 INFO map_server.flask_app: /map POST: stored map mapId=f30aa5e6376eb7c45d2ec8f2246eaec7-L (total maps: 5)
+(site.map-server) | 2026-11-03 21:27:57,432 INFO map_server.flask_app: /map POST: stored map mapId=e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0 (total maps: 5)
+(site.map-server) | 2026-11-03 21:27:57,442 INFO map_server.flask_app: /map POST: stored map mapId=f30aa5e6376eb7c45d2ec8f2246eaec7-L (total maps: 5)
+(app-comb.control) | [INFO] [1793808399.813196243] [discovery_probe]: Starting the discovery server probe
+(app-comb.control) | [INFO] [1793808399.814459089] [discovery_probe]: Waiting for servers 'discovery-server:11811' to resolve
+(app-comb.control) | [INFO] [1793808405.820075211] [discovery_probe]: Successfully resolved discovery server addresses 'discovery-server:11811'
+(app-comb.control) | [INFO] [1793808405.978184777] [discovery_probe]: Discovery server probe succeeded, participant registration accepted
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=tls_config.go:354 msg="Listening on" component=web address=[::]:9090
+(site.prometheus) | time=2026-11-03T19:20:18.470Z level=INFO source=tls_config.go:357 msg="TLS is disabled." component=web http2=false address=[::]:9090
+(site.prometheus) | time=2026-11-03T19:20:18.475Z level=INFO source=head.go:709 msg="Replaying on-disk memory mappable chunks if any" component=tsdb
+(site.prometheus) | time=2026-11-03T19:20:18.475Z level=INFO source=head.go:795 msg="On-disk memory mappable chunks replay completed" component=tsdb duration=6.545µs
+(site.prometheus) | time=2026-11-03T19:20:18.475Z level=INFO source=head.go:803 msg="Replaying WAL, this may take a while" component=tsdb
+(site.prometheus) | time=2026-11-03T19:20:18.477Z level=INFO source=head.go:862 msg="WAL checkpoint loaded" component=tsdb
+(site.prometheus) | time=2026-11-03T19:20:18.479Z level=INFO source=head.go:898 msg="WAL segment loaded" component=tsdb segment=1158 maxSegment=1161 duration=2.171973ms
+(site.prometheus) | time=2026-11-03T19:20:18.479Z level=INFO source=head.go:898 msg="WAL segment loaded" component=tsdb segment=1159 maxSegment=1161 duration=610.382µs
+(site.prometheus) | time=2026-11-03T19:20:18.480Z level=INFO source=head.go:898 msg="WAL segment loaded" component=tsdb segment=1160 maxSegment=1161 duration=758.68µs
+(site.prometheus) | time=2026-11-03T19:20:18.480Z level=INFO source=head.go:898 msg="WAL segment loaded" component=tsdb segment=1161 maxSegment=1161 duration=275.342µs
+(site.prometheus) | time=2026-11-03T19:20:18.480Z level=INFO source=head.go:935 msg="WAL replay completed" component=tsdb checkpoint_replay_duration=1.179674ms wal_replay_duration=3.930391ms wbl_replay_duration=141ns chunk_snapshot_load_duration=0s mmap_chunk_replay_duration=6.545µs total_replay_duration=5.132589ms
+(site.prometheus) | time=2026-11-03T19:20:18.482Z level=INFO source=main.go:1477 msg="filesystem information" fs_type=EXT4_SUPER_MAGIC
+(site.prometheus) | time=2026-11-03T19:20:18.482Z level=INFO source=main.go:1480 msg="TSDB started"
+(site.prometheus) | time=2026-11-03T19:20:18.482Z level=INFO source=main.go:1678 msg="Loading configuration file" filename=/etc/prometheus/prometheus.yml
+(site.prometheus) | time=2026-11-03T19:20:18.482Z level=INFO source=main.go:1094 msg="TSDB retention updated" duration=15d size=0B percentage=0
+(site.prometheus) | time=2026-11-03T19:20:18.482Z level=INFO source=watcher.go:259 msg="Starting WAL watcher" component=remote remote_name=e87829 url=https://prometheus-prod-67-prod-us-west-0.grafana.net/api/prom/push queue=e87829
+(site.prometheus) | time=2026-11-03T19:20:18.482Z level=INFO source=metadata_watcher.go:90 msg="Starting scraped metadata watcher" component=remote remote_name=e87829 url=https://prometheus-prod-67-prod-us-west-0.grafana.net/api/prom/push
+(site.prometheus) | time=2026-11-03T19:20:18.483Z level=INFO source=watcher.go:311 msg="Replaying WAL" component=remote remote_name=e87829 url=https://prometheus-prod-67-prod-us-west-0.grafana.net/api/prom/push queue=e87829
+(app-comb.bay7) | [INFO] [1793808399.019660972] [discovery_probe]: Starting the discovery server probe
+(app-comb.bay7) | [INFO] [1793808399.157203043] [discovery_probe]: Waiting for servers 'discovery-server:11811' to resolve
+(app-comb.bay7) | [INFO] [1793808405.163362162] [discovery_probe]: Successfully resolved discovery server addresses 'discovery-server:11811'
+(app-comb.bay7) | [INFO] [1793808405.322390451] [discovery_probe]: Discovery server probe succeeded, participant registration accepted
+(app-comb.mysql) | 2026-11-04T16:06:39.350380Z 0 [Warning] TIMESTAMP with implicit DEFAULT value is deprecated. Please use --explicit_defaults_for_timestamp server option (see documentation for more details).
+(app-comb.bay7) | [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-04-16-06-45-822608-584b6f9b3cc6-7
+(app-comb.bay7) | [INFO] [launch]: Default logging verbosity is set to INFO
+(app-comb.bay7) | [INFO] [b7-1]: process started with pid [52]
+(app-comb.bay7) | [INFO] [recorder-2]: process started with pid [53]
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808406.413849613] [bay.b7.recorder]: Event publisher thread: Started[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808406.415221069] [bay.b7.recorder]: Starting recording to '/artifacts/20261104T160637Z/b7'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808406.419122524] [bay.b7.recorder]: Subscribed to topic '/bay/b7/rosout'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808406.419595286] [bay.b7.recorder]: Subscribed to topic '/bay/b7/recorder/events/write_split'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808406.420046355] [bay.b7.recorder]: Subscribed to topic '/bay/b7/recorder/events/rosbag2_messages_lost'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808406.420116933] [bay.b7.recorder]: Listening for topics...[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808406.420133193] [bay.b7.recorder]: Recording...[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808406.420134708] [bay.b7.recorder]: Topics discovery started.[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.393239076] [bay.b7.bay_nodes]: Load Library: /opt/volley/lib/libbay_state_machine_component.so[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.400272423] [bay.b7.bay_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<bay::StateMachineComponent>[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.400312634] [bay.b7.bay_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<bay::StateMachineComponent>[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.401436890] [bay.b7.bay_state_machine]: Initializing doors interface[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.401512337] [bay.b7.bay_state_machine]: System doors:[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.401566357] [bay.b7.bay_state_machine]:   SYSTEM[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.407834288] [bay.b7.bay_state_machine]: Patron doors:[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.407885072] [bay.b7.bay_state_machine]:   PATRON[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.408780703] [bay.b7.bay_state_machine]: Subscribed to /bay/b7/SYSTEM/report[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.408821349] [bay.b7.bay_state_machine]: Subscribed to /bay/b7/PATRON/report[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.408888547] []: BayStateMachineRos::Reset  [0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.408921948] [bay.b7.bay_state_machine]: Bay state machine constructed[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.408951565] [bay.b7.bay_state_machine]: Bay has lift: false[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.408974160] [bay.b7.bay_state_machine]: Bay has 1 retrieve floors:[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.408993794] [bay.b7.bay_state_machine]:   - 0[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.409013245] [bay.b7.bay_state_machine]: Bay insert floor 0[0m
+(app-comb.bay7) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/bay/b7/bay_state_machine' in container '/bay/b7/bay_nodes'
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.418698564] [bay.b7.bay_nodes]: Load Library: /opt/volley/lib/libvehicle_estimator_component.so[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.420123845] [bay.b7.bay_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<bay::VehicleEstimatorComponent>[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.420160496] [bay.b7.bay_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<bay::VehicleEstimatorComponent>[0m
+(app-comb.bay7) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/bay/b7/vehicle_estimator' in container '/bay/b7/bay_nodes'
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.424485206] [bay.b7.recorder]: Subscribed to topic '/bay/b7/report'[0m
+(app-comb.mysql) | 2026-11-04T16:06:39.351236Z 0 [Note] mysqld (mysqld 5.7.44) starting as process 1 ...
+(app-comb.mysql) | 2026-11-04T16:06:39.353035Z 0 [Note] InnoDB: PUNCH HOLE support available
+(app-comb.mysql) | 2026-11-04T16:06:39.353050Z 0 [Note] InnoDB: Mutexes and rw_locks use GCC atomic builtins
+(app-comb.mysql) | 2026-11-04T16:06:39.353052Z 0 [Note] InnoDB: Uses event mutexes
+(app-comb.mysql) | 2026-11-04T16:06:39.353054Z 0 [Note] InnoDB: GCC builtin __atomic_thread_fence() is used for memory barrier
+(app-comb.mysql) | 2026-11-04T16:06:39.353055Z 0 [Note] InnoDB: Compressed tables use zlib 1.2.13
+(app-comb.mysql) | 2026-11-04T16:06:39.353056Z 0 [Note] InnoDB: Using Linux native AIO
+(app-comb.mysql) | 2026-11-04T16:06:39.353190Z 0 [Note] InnoDB: Number of pools: 1
+(app-comb.mysql) | 2026-11-04T16:06:39.353242Z 0 [Note] InnoDB: Using CPU crc32 instructions
+(app-comb.mysql) | 2026-11-04T16:06:39.354127Z 0 [Note] InnoDB: Initializing buffer pool, total size = 128M, instances = 1, chunk size = 128M
+(app-comb.mysql) | 2026-11-04T16:06:39.358583Z 0 [Note] InnoDB: Completed initialization of buffer pool
+(app-comb.mysql) | 2026-11-04T16:06:39.359654Z 0 [Note] InnoDB: If the mysqld execution user is authorized, page cleaner thread priority can be changed. See the man page of setpriority().
+(app-comb.mysql) | 2026-11-04T16:06:39.370805Z 0 [Note] InnoDB: Highest supported file format is Barracuda.
+(app-comb.mysql) | 2026-11-04T16:06:39.382517Z 0 [Note] InnoDB: Creating shared tablespace for temporary tables
+(app-comb.mysql) | 2026-11-04T16:06:39.382551Z 0 [Note] InnoDB: Setting file './ibtmp1' size to 12 MB. Physically writing the file full; Please wait ...
+(app-comb.mysql) | 2026-11-04T16:06:39.393178Z 0 [Note] InnoDB: File './ibtmp1' size is now 12 MB.
+(app-comb.mysql) | 2026-11-04T16:06:39.393590Z 0 [Note] InnoDB: 96 redo rollback segment(s) found. 96 redo rollback segment(s) are active.
+(app-comb.mysql) | 2026-11-04T16:06:39.393593Z 0 [Note] InnoDB: 32 non-redo rollback segment(s) are active.
+(app-comb.mysql) | 2026-11-04T16:06:39.393826Z 0 [Note] InnoDB: 5.7.44 started; log sequence number 25848937
+(app-comb.mysql) | 2026-11-04T16:06:39.393885Z 0 [Note] InnoDB: Loading buffer pool(s) from /var/lib/mysql/ib_buffer_pool
+(app-comb.mysql) | 2026-11-04T16:06:39.393989Z 0 [Note] Plugin 'FEDERATED' is disabled.
+(app-comb.mysql) | 2026-11-04T16:06:39.396597Z 0 [Note] InnoDB: Buffer pool(s) load completed at 261104 16:06:39
+(site.mosquitto) | chown: /mosquitto/config/mosquitto.conf: Read-only file system
+(app-comb.mysql) | 2026-11-04T16:06:39.397087Z 0 [Note] Found ca.pem, server-cert.pem and server-key.pem in data directory. Trying to enable SSL support using them.
+(app-comb.mysql) | 2026-11-04T16:06:39.397093Z 0 [Note] Skipping generation of SSL certificates as certificate files are present in data directory.
+(app-comb.mysql) | 2026-11-04T16:06:39.397095Z 0 [Warning] A deprecated TLS version TLSv1 is enabled. Please use TLSv1.2 or higher.
+(app-comb.mysql) | 2026-11-04T16:06:39.397096Z 0 [Warning] A deprecated TLS version TLSv1.1 is enabled. Please use TLSv1.2 or higher.
+(app-comb.mysql) | 2026-11-04T16:06:39.397418Z 0 [Warning] CA certificate ca.pem is self signed.
+(app-comb.mysql) | 2026-11-04T16:06:39.397432Z 0 [Note] Skipping generation of RSA key pair as key files are present in data directory.
+(app-comb.mysql) | 2026-11-04T16:06:39.397566Z 0 [Note] Server hostname (bind-address): '*'; port: 3306
+(app-comb.mysql) | 2026-11-04T16:06:39.397578Z 0 [Note] IPv6 is available.
+(app-comb.mysql) | 2026-11-04T16:06:39.397584Z 0 [Note]   - '::' resolves to '::';
+(app-comb.mysql) | 2026-11-04T16:06:39.397593Z 0 [Note] Server socket created on IP: '::'.
+(app-comb.mysql) | 2026-11-04T16:06:39.402563Z 0 [Warning] Insecure configuration for --pid-file: Location '/var/run/mysqld' in the path is accessible to all OS users. Consider choosing a different directory.
+(app-comb.mysql) | 2026-11-04T16:06:39.406094Z 0 [Note] Event Scheduler: Loaded 0 events
+(app-comb.mysql) | 2026-11-04T16:06:39.406177Z 0 [Note] mysqld: ready for connections.
+(app-comb.mysql) | Version: '5.7.44'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  MySQL Community Server (GPL)
+(site.mosquitto) | 1793733618: mosquitto version 2.0.22 starting
+(site.mosquitto) | 1793733618: Config loaded from /mosquitto/config/mosquitto.conf.
+(site.mosquitto) | 1793733618: Opening ipv4 listen socket on port 1883.
+(site.mosquitto) | 1793733618: Opening ipv6 listen socket on port 1883.
+(site.mosquitto) | 1793733618: mosquitto version 2.0.22 running
+(site.mosquitto) | 1793733620: New connection from 10.0.0.121:37208 on port 1883.
+(site.mosquitto) | 1793733620: New client connected from 10.0.0.121:37208 as HITO:17 (p2, c1, k30, u'admin').
+(site.mosquitto) | 1793733621: New connection from 10.0.0.120:34950 on port 1883.
+(site.mosquitto) | 1793733621: New client connected from 10.0.0.120:34950 as HITO:16 (p2, c1, k30, u'hito').
+(site.mosquitto) | 1793733646: New connection from 172.18.0.1:51302 on port 1883.
+(site.mosquitto) | 1793733646: New client connected from 172.18.0.1:51302 as /hito_proxy (p2, c0, k60).
+(site.prometheus) | time=2026-11-03T19:20:18.483Z level=INFO source=main.go:1717 msg="Completed loading of configuration file" db_storage=24.281µs remote_storage=280.739µs web_handler=407ns query_engine=711ns scrape=393.55µs scrape_sd=71.874µs notify=1.597µs notify_sd=961ns rules=2.768µs tracing=18.555µs filename=/etc/prometheus/prometheus.yml totalDuration=990.67µs
+(site.prometheus) | time=2026-11-03T19:20:18.483Z level=INFO source=main.go:1441 msg="Server is ready to receive web requests."
+(site.prometheus) | time=2026-11-03T19:20:18.483Z level=INFO source=manager.go:211 msg="Starting rule manager..." component="rule manager"
+(site.prometheus) | time=2026-11-03T19:20:18.483Z level=WARN source=watcher.go:377 msg="Expected to have read whole segment, may have dropped data" component=remote remote_name=e87829 url=https://prometheus-prod-67-prod-us-west-0.grafana.net/api/prom/push segment=1158 read=25500 size=25632
+(site.prometheus) | time=2026-11-03T19:20:24.163Z level=INFO source=watcher.go:565 msg="Done replaying WAL" component=remote remote_name=e87829 url=https://prometheus-prod-67-prod-us-west-0.grafana.net/api/prom/push duration=5.680748686s
+(site.prometheus) | time=2026-11-03T21:00:09.163Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793728800000 maxt=1793736000000 ulid=01M6HKCN2BKKYMRKS4734JRF0P
+(site.prometheus) | time=2026-11-03T21:00:09.258Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793728800000 maxt=1793736000000 ulid=01M6HKCN2BKKYMRKS4734JRF0P duration=95.499704ms ooo=false
+(site.prometheus) | time=2026-11-03T21:00:09.260Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-03T21:00:09.263Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=3.207957ms
+(site.prometheus) | time=2026-11-03T21:00:09.263Z level=INFO source=checkpoint.go:109 msg="Creating checkpoint" component=tsdb from_segment=1158 to_segment=1159 mint=1793736000000
+(site.prometheus) | time=2026-11-03T21:00:09.279Z level=INFO source=head.go:1483 msg="WAL checkpoint complete" component=tsdb first=1158 last=1159 duration=15.472438ms
+(site.prometheus) | time=2026-11-03T23:00:24.162Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793736009160 maxt=1793743200000 ulid=01M6HT8TZ2SKJ6YJN9QGKS3FWK
+(site.prometheus) | time=2026-11-03T23:00:24.261Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793736009160 maxt=1793743200000 ulid=01M6HT8TZ2SKJ6YJN9QGKS3FWK duration=99.292193ms ooo=false
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.424859122] [bay.b7.bay_nodes]: Load Library: /opt/volley/lib/libbay_guidance_component.so[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.425167483] [bay.b7.recorder]: Subscribed to topic '/bay/b7/version_info'[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.427401377] [bay.b7.bay_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<bay::BayGuidanceComponent>[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.427441046] [bay.b7.bay_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<bay::BayGuidanceComponent>[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.427860645] [bay.b7.recorder]: Subscribed to topic '/bay/b7/command/_service_event'[0m
+(app-comb.bay7) | [b7-1] [33m[WARN] [1793808407.428645982] [bay.b7.bay_guidance]: Parameter bay.guidance.websocket_address hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+(app-comb.bay7) | [b7-1] [33m[WARN] [1793808407.428696135] [bay.b7.bay_guidance]: Parameter bay.guidance.websocket_port hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.428814431] [bay.b7.bay_guidance]: Successfully created web socket server for bay guidance with address '0.0.0.0' and port '5001'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.428846430] [bay.b7.recorder]: Subscribed to topic '/bay/b7/confirm_insert/_service_event'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.429880995] [bay.b7.recorder]: Subscribed to topic '/bay/b7/confirm_retrieve/_service_event'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.430263085] [bay.b7.recorder]: Subscribed to topic '/bay/b7/fault_reset/_service_event'[0m
+(app-comb.bay7) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/bay/b7/bay_guidance' in container '/bay/b7/bay_nodes'
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.432670717] [bay.b7.bay_nodes]: Load Library: /opt/volley/lib/libplc_control_component.so[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.433295710] [bay.b7.recorder]: Subscribed to topic '/bay/b7/vehicle_pose'[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.433524786] [bay.b7.bay_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<bay::PlcControlComponent>[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.433560432] [bay.b7.bay_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<bay::PlcControlComponent>[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.434716663] []: Attempting to reset hardware[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.436138056] [bay.b7.plc_control]: GarageDoorRos created, publishing to /bay/b7/PATRON/report[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.436989237] [bay.b7.plc_control]: GarageDoorRos created, publishing to /bay/b7/SYSTEM/report[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.437535526] []: b7 plc devices reset successfully[0m
+(app-comb.bay7) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/bay/b7/plc_control' in container '/bay/b7/bay_nodes'
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.439930518] [bay.b7.bay_nodes]: Load Library: /opt/volley/lib/libio_link_driver_component.so[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.440483661] [bay.b7.bay_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<bay::IoLinkDriverComponent>[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.440514850] [bay.b7.bay_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<bay::IoLinkDriverComponent>[0m
+(site.otel-collector) | 2026-11-03T19:20:18.487Z	info	otelconftelemetry/tracer.go:47	Internal trace telemetry disabled	{"resource": {"service.instance.id": "4da44b63-97f4-4bd9-adc3-64d5bfc09976", "service.name": "otelcol-contrib", "service.version": "0.156.0"}}
+(app-comb.central) | [INFO] [1793808399.847066018] [discovery_probe]: Starting the discovery server probe
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.442166320] [bay.b7.recorder]: Subscribed to topic '/bay/b7/guidance/debug/guidance_payload'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.448468549] [bay.b7.recorder]: Subscribed to topic '/bay/b7/SYSTEM/report'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.449337150] [bay.b7.recorder]: Subscribed to topic '/bay/b7/radar'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.449735438] [bay.b7.recorder]: Subscribed to topic '/bay/b7/PATRON/report'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.450179348] [bay.b7.recorder]: Subscribed to topic '/bay/b7/vehicle_prox_sensor'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.450862117] [bay.b7.recorder]: Subscribed to topic '/bay/b7/SYSTEM/open/_service_event'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.451299825] [bay.b7.recorder]: Subscribed to topic '/bay/b7/PATRON/open/_service_event'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808407.458695012] [bay.b7.recorder]: Subscribed to topic '/bay/b7/reset_hardware/_service_event'[0m
+(site.mosquitto) | 1793733656: New connection from 10.0.2.79:38176 on port 1883.
+(site.mosquitto) | 1793733656: New client connected from 10.0.2.79:38176 as agvctl-a16-111283 (p2, c0, k60).
+(site.mosquitto) | 1793733680: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793733722: New connection from 172.18.0.1:42930 on port 1883.
+(site.prometheus) | time=2026-11-03T23:00:24.262Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-03T23:00:24.269Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=6.078989ms
+(site.prometheus) | time=2026-11-03T23:00:24.343Z level=INFO source=compact.go:562 msg="compact blocks" component=tsdb count=3 mint=1793707209716 maxt=1793728800000 ulid=01M6HT8V2E5EASQMPMKND0NJ6Z sources="[01M6GYSYGE8S79MKZ4WSP96M19 01M6H5NNRDT86AFSDKSBQTJMTX 01M6HCGWWW2C1VCG1GQ66XRW14]" duration=73.515842ms
+(site.prometheus) | time=2026-11-03T23:00:24.350Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6GYSYGE8S79MKZ4WSP96M19
+(site.prometheus) | time=2026-11-03T23:00:24.355Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6HCGWWW2C1VCG1GQ66XRW14
+(site.prometheus) | time=2026-11-03T23:00:24.360Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6H5NNRDT86AFSDKSBQTJMTX
+(site.prometheus) | time=2026-11-03T23:00:24.442Z level=INFO source=compact.go:562 msg="compact blocks" component=tsdb count=3 mint=1793664009716 maxt=1793728800000 ulid=01M6HT8V5966NTSHS1MVCSM246 sources="[01M6GH2G3G95P8EQ9BCMF2EE32 01M6H5NNVDN9NQ5NEHNK29RQCB 01M6HT8V2E5EASQMPMKND0NJ6Z]" duration=81.072524ms
+(site.prometheus) | time=2026-11-03T23:00:24.449Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6HT8V2E5EASQMPMKND0NJ6Z
+(site.prometheus) | time=2026-11-03T23:00:24.455Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6GH2G3G95P8EQ9BCMF2EE32
+(site.prometheus) | time=2026-11-03T23:00:24.460Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6H5NNVDN9NQ5NEHNK29RQCB
+(site.prometheus) | time=2026-11-04T01:00:24.162Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793743209160 maxt=1793750400000 ulid=01M6J14J72QFWRWF5SMY0DW7SX
+(site.prometheus) | time=2026-11-04T01:00:24.276Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793743209160 maxt=1793750400000 ulid=01M6J14J72QFWRWF5SMY0DW7SX duration=113.211698ms ooo=false
+(site.prometheus) | time=2026-11-04T01:00:24.277Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-04T01:00:24.285Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=8.283713ms
+(site.prometheus) | time=2026-11-04T01:00:24.286Z level=INFO source=checkpoint.go:109 msg="Creating checkpoint" component=tsdb from_segment=1160 to_segment=1161 mint=1793750400000
+(site.prometheus) | time=2026-11-04T01:00:24.306Z level=INFO source=head.go:1483 msg="WAL checkpoint complete" component=tsdb first=1160 last=1161 duration=20.305754ms
+(site.prometheus) | time=2026-11-04T03:00:24.165Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793750409160 maxt=1793757600000 ulid=01M6J809F5XRHF3RR7B4FMAG1G
+(site.prometheus) | time=2026-11-04T03:00:24.256Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793750409160 maxt=1793757600000 ulid=01M6J809F5XRHF3RR7B4FMAG1G duration=91.820713ms ooo=false
+(site.prometheus) | time=2026-11-04T03:00:24.258Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-04T03:00:24.263Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=4.584121ms
+(site.prometheus) | time=2026-11-04T03:00:24.391Z level=INFO source=compact.go:562 msg="compact blocks" component=tsdb count=3 mint=1793728800000 maxt=1793750400000 ulid=01M6J809J8869Q1531M278W8MQ sources="[01M6HKCN2BKKYMRKS4734JRF0P 01M6HT8TZ2SKJ6YJN9QGKS3FWK 01M6J14J72QFWRWF5SMY0DW7SX]" duration=127.116497ms
+(site.prometheus) | time=2026-11-04T03:00:24.397Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6HKCN2BKKYMRKS4734JRF0P
+(site.prometheus) | time=2026-11-04T03:00:24.403Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6HT8TZ2SKJ6YJN9QGKS3FWK
+(site.prometheus) | time=2026-11-04T03:00:24.408Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6J14J72QFWRWF5SMY0DW7SX
+(site.prometheus) | time=2026-11-04T05:00:24.163Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793757609160 maxt=1793764800000 ulid=01M6JEW0Q3NF7V0Y48FQS6QSQ8
+(site.prometheus) | time=2026-11-04T05:00:24.260Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793757609160 maxt=1793764800000 ulid=01M6JEW0Q3NF7V0Y48FQS6QSQ8 duration=96.428856ms ooo=false
+(site.prometheus) | time=2026-11-04T05:00:24.261Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-04T05:00:24.263Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=2.32539ms
+(site.prometheus) | time=2026-11-04T05:00:24.264Z level=INFO source=checkpoint.go:109 msg="Creating checkpoint" component=tsdb from_segment=1162 to_segment=1163 mint=1793764800000
+(site.prometheus) | time=2026-11-04T05:00:24.300Z level=INFO source=head.go:1483 msg="WAL checkpoint complete" component=tsdb first=1162 last=1163 duration=36.526404ms
+(site.prometheus) | time=2026-11-04T07:00:24.164Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793764809160 maxt=1793772000000 ulid=01M6JNQQZ4M3583EMB3YZ3Q01P
+(site.prometheus) | time=2026-11-04T07:00:24.238Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793764809160 maxt=1793772000000 ulid=01M6JNQQZ4M3583EMB3YZ3Q01P duration=74.118233ms ooo=false
+(site.prometheus) | time=2026-11-04T07:00:24.240Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-04T07:00:24.242Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=2.467029ms
+(site.prometheus) | time=2026-11-04T09:00:24.164Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793772009160 maxt=1793779200000 ulid=01M6JWKF74CZ3BPG1DZ20RQGVT
+(site.prometheus) | time=2026-11-04T09:00:24.258Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793772009160 maxt=1793779200000 ulid=01M6JWKF74CZ3BPG1DZ20RQGVT duration=93.476204ms ooo=false
+(site.prometheus) | time=2026-11-04T09:00:24.259Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-04T09:00:24.262Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=2.27794ms
+(site.prometheus) | time=2026-11-04T09:00:24.262Z level=INFO source=checkpoint.go:109 msg="Creating checkpoint" component=tsdb from_segment=1164 to_segment=1165 mint=1793779200000
+(site.prometheus) | time=2026-11-04T09:00:24.290Z level=INFO source=head.go:1483 msg="WAL checkpoint complete" component=tsdb first=1164 last=1165 duration=28.273697ms
+(site.prometheus) | time=2026-11-04T11:00:24.163Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793779209160 maxt=1793786400000 ulid=01M6K3F6F3ZTFZD4YFF0A6RG3C
+(app-comb.central) | [INFO] [1793808399.848342541] [discovery_probe]: Waiting for servers 'discovery-server:11811' to resolve
+(app-comb.central) | [INFO] [1793808405.853035186] [discovery_probe]: Successfully resolved discovery server addresses 'discovery-server:11811'
+(app-comb.central) | [INFO] [1793808406.010323279] [discovery_probe]: Discovery server probe succeeded, participant registration accepted
+(app-comb.central) | [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-04-16-06-46-536957-f5ad022abc30-7
+(app-comb.central) | [INFO] [launch]: Default logging verbosity is set to INFO
+(app-comb.central) | [INFO] [rest_api-1]: process started with pid [68]
+(app-comb.central) | [INFO] [central-3]: process started with pid [70]
+(app-comb.central) | [INFO] [metrics_recorder-4]: process started with pid [71]
+(app-comb.central) | [INFO] [visualizer_node-5]: process started with pid [72]
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808407.742710341] [bay.b7.plc_control]: Radar clear[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808408.416617132] []: Attempting to reset hardware[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808408.420937572] [bay.b7.plc_control]: GarageDoorRos created, publishing to /bay/b7/PATRON/report[0m
+(site.mosquitto) | 1793733722: New client connected from 172.18.0.1:42930 as /hito_proxy (p2, c0, k60).
+(site.otel-collector) | 2026-11-03T19:20:18.488Z	info	service@v0.156.0/service.go:256	Starting otelcol-contrib...	{"resource": {"service.instance.id": "4da44b63-97f4-4bd9-adc3-64d5bfc09976", "service.name": "otelcol-contrib", "service.version": "0.156.0"}, "Version": "0.156.0", "NumCPU": 28}
+(site.otel-collector) | 2026-11-03T19:20:18.488Z	info	extensions/extensions.go:41	Starting extensions...	{"resource": {"service.instance.id": "4da44b63-97f4-4bd9-adc3-64d5bfc09976", "service.name": "otelcol-contrib", "service.version": "0.156.0"}}
+(site.otel-collector) | 2026-11-03T19:20:18.489Z	info	otlpreceiver@v0.156.0/otlp.go:120	Starting GRPC server	{"resource": {"service.instance.id": "4da44b63-97f4-4bd9-adc3-64d5bfc09976", "service.name": "otelcol-contrib", "service.version": "0.156.0"}, "otelcol.component.id": "otlp", "otelcol.component.kind": "receiver", "endpoint": "[::]:4317"}
+(site.otel-collector) | 2026-11-03T19:20:18.489Z	info	service@v0.156.0/service.go:279	Everything is ready. Begin running and processing data.	{"resource": {"service.instance.id": "4da44b63-97f4-4bd9-adc3-64d5bfc09976", "service.name": "otelcol-contrib", "service.version": "0.156.0"}}
+(site.mosquitto) | 1793735418: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793737220: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793737323: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793737515: New connection from 172.18.0.1:52912 on port 1883.
+(site.mosquitto) | 1793737515: New client connected from 172.18.0.1:52912 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793737697: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793737739: New connection from 172.18.0.1:49318 on port 1883.
+(site.mosquitto) | 1793737739: New client connected from 172.18.0.1:49318 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793738283: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793738323: New connection from 172.18.0.1:59282 on port 1883.
+(site.mosquitto) | 1793738323: New client connected from 172.18.0.1:59282 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793738500: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793738524: New connection from 172.18.0.1:53810 on port 1883.
+(site.mosquitto) | 1793738524: New client connected from 172.18.0.1:53810 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793738596: New connection from 10.0.3.162:46856 on port 1883.
+(site.mosquitto) | 1793738596: New client connected from 10.0.3.162:46856 as mqtt-explorer-fb8197b8 (p2, c1, k60).
+(site.mosquitto) | 1793738718: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793738743: New connection from 172.18.0.1:53732 on port 1883.
+(site.mosquitto) | 1793738743: New client connected from 172.18.0.1:53732 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793738890: New connection from 10.0.0.121:35880 on port 1883.
+(site.mosquitto) | 1793738890: Client HITO:17 already connected, closing old connection.
+(site.mosquitto) | 1793738890: New client connected from 10.0.0.121:35880 as HITO:17 (p2, c1, k30, u'admin').
+(site.mosquitto) | 1793738942: New connection from 10.0.1.254:34746 on port 1883.
+(site.mosquitto) | 1793738942: New client connected from 10.0.1.254:34746 as mqtt-explorer-0e36ad89 (p2, c1, k60).
+(site.mosquitto) | 1793738985: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793739020: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793739025: New connection from 172.18.0.1:35820 on port 1883.
+(site.mosquitto) | 1793739025: New client connected from 172.18.0.1:35820 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793739216: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793739272: New connection from 10.0.0.121:49248 on port 1883.
+(site.mosquitto) | 1793739272: Client HITO:17 already connected, closing old connection.
+(app-comb.central) | [INFO] [recorder-7]: process started with pid [74]
+(app-comb.central) | [INFO] [proxy_node-2]: process started with pid [69]
+(app-comb.central) | [INFO] [foxglove_bridge-6]: process started with pid [73]
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.842933171] [central.recorder]: Event publisher thread: Started[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.844319533] [central.recorder]: Starting recording to '/artifacts/20261104T160637Z/central'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.845808704] [central.recorder]: Subscribed to topic '/parameter_events'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.846158704] [central.recorder]: Subscribed to topic '/central/rosout'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.846455708] [central.recorder]: Subscribed to topic '/central/recorder/events/write_split'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.846737291] [central.recorder]: Subscribed to topic '/central/recorder/events/rosbag2_messages_lost'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.846789361] [central.recorder]: Listening for topics...[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.846795077] [central.recorder]: Recording...[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808406.846809060] [central.recorder]: Topics discovery started.[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808406.847762301] [hito_proxy]: Successfully loaded layout file '5675_pecos_sandbox_combined'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808406.847823431] [hito_proxy]: Loaded AGV speed performance limits: locomote=1/0.8[m/s] strafe=0.6/0.32[m/s] rotate=0.17/0.136[rad/s] restricted_multiplier=0.4
+(app-comb.central) | [proxy_node-2] [INFO] [1793808406.847840914] [hito_proxy]: Requiring AGV firmware version '^2.0.0'
+(app-comb.central) | [visualizer_node-5] [33m[WARN] [1793808406.849693266] [vis.visualizer]: Parameter use_remote_meshes hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+(app-comb.central) | [visualizer_node-5] [33m[WARN] [1793808406.849771503] [vis.visualizer]: Parameter remote_mesh_prefix hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+(app-comb.central) | [visualizer_node-5] [0m[INFO] [1793808406.849798676] [vis.visualizer]: Starting VisManager with context:
+(app-comb.central) | [visualizer_node-5] 	layout: "/opt/volley/share/site_config/layouts/5675_pecos_sandbox_combined.yaml"
+(app-comb.central) | [visualizer_node-5] 	use_remote_meshes: true
+(app-comb.central) | [visualizer_node-5] 	remote_mesh_prefix: https://aws-mesh-proxy.tailfadbb4.ts.net/model/[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808406.849765724] [hito_proxy]: Connected to MQTT broker
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808406.857581646] [foxglove_bridge]: Starting foxglove_bridge (lyrical, 3.4.3@)
+(app-comb.central) | [foxglove_bridge-6] [2026-11-04T16:06:46Z INFO  foxglove::websocket::server] Started server on 0.0.0.0:8765
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808406.858473280] [foxglove_bridge]: Server listening on port 8765
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808406.858765388] [foxglove_bridge]: Advertising new channel 2 for topic "/rosout"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808406.858908573] [foxglove_bridge]: Advertising new channel 3 for topic "/parameter_events"
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.305476455] [central.recorder]: Subscribed to topic '/rosout'[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.362023659] [foxglove_bridge]: Advertising new channel 4 for topic "/bay/b7/rosout"
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808408.422273821] [bay.b7.plc_control]: GarageDoorRos created, publishing to /bay/b7/SYSTEM/report[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808408.422946729] []: b7 plc devices reset successfully[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808408.423048218] [bay.b7.bay_state_machine]: Hardware reset successful.[0m
+(site.prometheus) | time=2026-11-04T11:00:24.242Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793779209160 maxt=1793786400000 ulid=01M6K3F6F3ZTFZD4YFF0A6RG3C duration=79.244069ms ooo=false
+(site.prometheus) | time=2026-11-04T11:00:24.244Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-04T11:00:24.246Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=2.567219ms
+(site.prometheus) | time=2026-11-04T11:00:24.341Z level=INFO source=compact.go:562 msg="compact blocks" component=tsdb count=3 mint=1793750409160 maxt=1793772000000 ulid=01M6K3F6HR0RMMQ24Z6R4VVS00 sources="[01M6J809F5XRHF3RR7B4FMAG1G 01M6JEW0Q3NF7V0Y48FQS6QSQ8 01M6JNQQZ4M3583EMB3YZ3Q01P]" duration=93.599691ms
+(site.prometheus) | time=2026-11-04T11:00:24.348Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6J809F5XRHF3RR7B4FMAG1G
+(site.prometheus) | time=2026-11-04T11:00:24.353Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6JNQQZ4M3583EMB3YZ3Q01P
+(site.prometheus) | time=2026-11-04T11:00:24.358Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6JEW0Q3NF7V0Y48FQS6QSQ8
+(site.prometheus) | time=2026-11-04T13:00:24.164Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793786409160 maxt=1793793600000 ulid=01M6KAAXQ4SFDN6TG8WHJ75ET7
+(site.prometheus) | time=2026-11-04T13:00:24.245Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793786409160 maxt=1793793600000 ulid=01M6KAAXQ4SFDN6TG8WHJ75ET7 duration=80.709835ms ooo=false
+(site.prometheus) | time=2026-11-04T13:00:24.251Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M5D43QJACQ00G0HVKDPR5JCJ
+(site.prometheus) | time=2026-11-04T13:00:24.251Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-04T13:00:24.254Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=2.509826ms
+(site.prometheus) | time=2026-11-04T13:00:24.254Z level=INFO source=checkpoint.go:109 msg="Creating checkpoint" component=tsdb from_segment=1166 to_segment=1167 mint=1793793600000
+(site.prometheus) | time=2026-11-04T13:00:24.271Z level=INFO source=head.go:1483 msg="WAL checkpoint complete" component=tsdb first=1166 last=1167 duration=17.304896ms
+(site.prometheus) | time=2026-11-04T15:00:24.165Z level=INFO source=compact.go:590 msg="write block started" component=tsdb mint=1793793609160 maxt=1793800800000 ulid=01M6KH6MZ5D7AC39X1CYCSBZ44
+(site.prometheus) | time=2026-11-04T15:00:24.265Z level=INFO source=compact.go:627 msg="write block completed" component=tsdb mint=1793793609160 maxt=1793800800000 ulid=01M6KH6MZ5D7AC39X1CYCSBZ44 duration=99.725115ms ooo=false
+(site.prometheus) | time=2026-11-04T15:00:24.266Z level=INFO source=head.go:1518 msg="Head GC started" component=tsdb caller=truncateMemory
+(site.prometheus) | time=2026-11-04T15:00:24.269Z level=INFO source=head.go:1522 msg="Head GC completed" component=tsdb caller=truncateMemory duration=2.408983ms
+(site.prometheus) | time=2026-11-04T15:00:24.413Z level=INFO source=compact.go:562 msg="compact blocks" component=tsdb count=5 mint=1793728800000 maxt=1793793600000 ulid=01M6KH6N2E3N30C02V80VCS06F sources="[01M6J809J8869Q1531M278W8MQ 01M6K3F6HR0RMMQ24Z6R4VVS00 01M6JWKF74CZ3BPG1DZ20RQGVT 01M6K3F6F3ZTFZD4YFF0A6RG3C 01M6KAAXQ4SFDN6TG8WHJ75ET7]" duration=143.101718ms
+(site.prometheus) | time=2026-11-04T15:00:24.421Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6KAAXQ4SFDN6TG8WHJ75ET7
+(site.prometheus) | time=2026-11-04T15:00:24.429Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6J809J8869Q1531M278W8MQ
+(site.prometheus) | time=2026-11-04T15:00:24.436Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6K3F6F3ZTFZD4YFF0A6RG3C
+(site.prometheus) | time=2026-11-04T15:00:24.443Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6K3F6HR0RMMQ24Z6R4VVS00
+(site.prometheus) | time=2026-11-04T15:00:24.450Z level=INFO source=db.go:2112 msg="Deleting obsolete block" component=tsdb block=01M6JWKF74CZ3BPG1DZ20RQGVT
+(site.mosquitto) | 1793739272: New client connected from 10.0.0.121:49248 as HITO:17 (p2, c1, k30, u'admin').
+(site.mosquitto) | 1793739350: New connection from 172.18.0.1:50122 on port 1883.
+(site.mosquitto) | 1793739350: New client connected from 172.18.0.1:50122 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793739497: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793739665: New connection from 10.0.1.254:54378 on port 1883.
+(site.mosquitto) | 1793739665: New client connected from 10.0.1.254:54378 as agvctl-a17-294678 (p2, c0, k60).
+(site.mosquitto) | 1793739756: Client agvctl-a17-294678 disconnected.
+(site.mosquitto) | 1793739758: New connection from 10.0.1.254:46190 on port 1883.
+(site.mosquitto) | 1793739758: New client connected from 10.0.1.254:46190 as agvctl-a17-295376 (p2, c0, k60).
+(site.mosquitto) | 1793739863: Client mqtt-explorer-0e36ad89 disconnected.
+(site.mosquitto) | 1793740104: New connection from 10.0.1.254:42108 on port 1883.
+(site.mosquitto) | 1793740104: New client connected from 10.0.1.254:42108 as mqttx_f21c6806 (p5, c1, k60).
+(site.mosquitto) | 1793740157: Client mqttx_f21c6806 disconnected.
+(site.mosquitto) | 1793740286: New connection from 10.0.1.254:46824 on port 1883.
+(site.mosquitto) | 1793740286: Client <unknown> closed its connection.
+(site.mosquitto) | 1793740301: New connection from 10.0.1.254:57665 on port 1883.
+(site.mosquitto) | 1793740301: New client connected from 10.0.1.254:57665 as probe_v311 (p2, c1, k10).
+(site.mosquitto) | 1793740307: Client probe_v311 disconnected.
+(site.mosquitto) | 1793740307: New connection from 10.0.1.254:52155 on port 1883.
+(site.mosquitto) | 1793740307: New client connected from 10.0.1.254:52155 as probe_v5 (p5, c1, k10).
+(site.mosquitto) | 1793740313: Client probe_v5 disconnected.
+(site.mosquitto) | 1793740423: New connection from 10.0.1.254:58574 on port 1883.
+(site.mosquitto) | 1793740423: New client connected from 10.0.1.254:58574 as mqttx_f21c6806 (p5, c1, k60).
+(site.mosquitto) | 1793740593: Client mqttx_f21c6806 disconnected.
+(site.mosquitto) | 1793740821: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793741004: Client agvctl-a16-111283 has exceeded timeout, disconnecting.
+(site.mosquitto) | 1793741268: Client agvctl-a17-295376 disconnected.
+(site.mosquitto) | 1793741271: New connection from 10.0.1.254:40906 on port 1883.
+(site.mosquitto) | 1793741271: New client connected from 10.0.1.254:40906 as agvctl-a17-302428 (p2, c0, k60).
+(site.mosquitto) | 1793741499: Client agvctl-a17-302428 disconnected.
+(site.mosquitto) | 1793741640: New connection from 172.18.0.1:49454 on port 1883.
+(site.mosquitto) | 1793741640: New client connected from 172.18.0.1:49454 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793742622: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793743528: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793743543: New connection from 172.18.0.1:55064 on port 1883.
+(site.mosquitto) | 1793743543: New client connected from 172.18.0.1:55064 as /hito_proxy (p2, c0, k60).
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.362132768] [foxglove_bridge]: Advertising new channel 5 for topic "/bay/b7/recorder/events/write_split"
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808408.640609032] [bay.b7.plc_control]: Radar clear[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808411.468586454] [bay.b7.io_link_driver]: All IoLink masters initialized[0m
+(app-comb.bay7) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/bay/b7/io_link_driver' in container '/bay/b7/bay_nodes'
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808411.476574744] [bay.b7.recorder]: Subscribed to topic '/bay/b7/io_link_sensors'[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808411.479256408] [bay.b7.bay_nodes]: Load Library: /opt/volley/lib/libload_cell_driver_component.so[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808411.480608087] [bay.b7.bay_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<bay::LoadCellDriverComponent>[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808411.480668109] [bay.b7.bay_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<bay::LoadCellDriverComponent>[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808411.480780988] [bay.b7.recorder]: Subscribed to topic '/bay/b7/patron_light_control/_service_event'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808411.880780378] [bay.b7.recorder]: Subscribed to topic '/bay/b7/load_cells'[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808411.881737312] [bay.b7.load_cell_driver]: Successfully configured load cell digitizers.[0m
+(app-comb.bay7) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/bay/b7/load_cell_driver' in container '/bay/b7/bay_nodes'
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808411.883722877] [bay.b7.recorder]: Subscribed to topic '/bay/b7/calibrate_load_cells/_service_event'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808411.884486216] [bay.b7.recorder]: Subscribed to topic '/bay/b7/zero_load_cells/_service_event'[0m
+(app-comb.bay7) | [recorder-2] [0m[INFO] [1793808411.886267447] [bay.b7.recorder]: Subscribed to topic '/bay/b7/force_calibrate_load_cells/_service_event'[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808411.923404671] [bay.b7.bay_state_machine]: Transitioning from state "BOOTING" to state "DOOR_VALIDATION" because of event "BOOTED".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808411.923576433] [bay.b7.bay_state_machine]: Patron light control request received![0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808412.423136909] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808412.923477643] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808413.423152169] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808413.923221918] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808414.423335883] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808414.923166157] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808415.423373732] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808415.923170945] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808416.423439842] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808416.923138569] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808417.423260355] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808417.923225472] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808418.423185402] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808418.923342620] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808419.423184965] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808419.923283526] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808420.423236333] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808420.923184721] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808421.423278778] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808421.923525506] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808422.423268984] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808422.923241479] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808423.423235717] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808423.923328999] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808424.423271633] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808424.923194488] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808425.423194620] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808425.923333387] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808426.423410529] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808426.923441668] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808427.423150192] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808427.923286365] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808428.423417553] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808428.423551633] [bay.b7.bay_state_machine]: Transitioning from state "CLOSING" to state "MOVING" because of event "DOORS_CLOSED".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808428.423760418] []: InterfaceBase::Command  action:2[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808428.424286985] [bay.b7.bay_state_machine]: Transitioning from state "MOVING" to state "OPENING" because of event "AT_FLOOR".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808441.923141133] [bay.b7.bay_state_machine]: Transitioning from state "OPENING" to state "DONE" because of event "DOORS_OPEN".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808441.923266847] [bay.b7.bay_state_machine]: Transitioning from state "DOOR_VALIDATION" to state "READY_TO_RETRIEVE" because of event "TRANSITION_COMPLETE".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808441.923314349] [bay.b7.bay_state_machine]: Patron light control request received![0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808523.923495180] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808523.924321941] [bay.b7.bay_state_machine]: Transitioning from state "READY_TO_RETRIEVE" to state "TRANSITIONING_TO_INSERT" because of event "EMPTY_TRAY_DELIVERED".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808523.924707542] [bay.b7.bay_state_machine]: Patron light control request received![0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808539.923360209] [bay.b7.bay_state_machine]: Transitioning from state "CLOSING" to state "MOVING" because of event "DOORS_CLOSED".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808539.923598891] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808539.923648351] [bay.b7.bay_state_machine]: Transitioning from state "MOVING" to state "OPENING" because of event "AT_FLOOR".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808539.923751861] [bay.b7.bay_state_machine]: Transitioning from state "OPENING" to state "DONE" because of event "DOORS_OPEN".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808539.923860156] [bay.b7.bay_state_machine]: Transitioning from state "TRANSITIONING_TO_INSERT" to state "READY_TO_INSERT" because of event "TRANSITION_COMPLETE".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808539.923973398] [bay.b7.bay_state_machine]: Patron light control request received![0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808569.923390157] []: InterfaceBase::Command  action:3[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808569.923850695] [bay.b7.bay_state_machine]: Transitioning from state "READY_TO_INSERT" to state "PROCESSING_INSERT" because of event "VEHICLE_READY_FOR_INSERT".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808569.923952807] [bay.b7.bay_state_machine]: Patron light control request received![0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808585.923216024] [bay.b7.bay_state_machine.insert]: Transitioning from state "PATRON_DOOR_OPENING" to state "GUIDING_VEHICLE" because of event "VEHICLE_IDENTIFIED".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808585.923296170] [bay.b7.bay_state_machine]: Patron light control request received![0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808590.923295294] [bay.b7.bay_state_machine.insert]: Transitioning from state "GUIDING_VEHICLE" to state "VEHICLE_INSERTED" because of event "VEHICLE_COMPLIANT".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808720.423144525] []: InterfaceBase::Command  action:1[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808720.423698826] [bay.b7.bay_state_machine.insert]: Transitioning from state "VEHICLE_INSERTED" to state "ABORTING_INSERT" because of event "VEHICLE_MISSING".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808726.423219909] [bay.b7.bay_state_machine.insert]: Transitioning from state "ABORTING_INSERT" to state "INSERT_ABORTED" because of event "DOORS_CLOSED".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808726.423340300] [bay.b7.bay_state_machine]: Transitioning from state "PROCESSING_INSERT" to state "READY_TO_INSERT" because of event "INSERT_ABORTED".[0m
+(app-comb.bay7) | [b7-1] [0m[INFO] [1793808726.423373270] [bay.b7.bay_state_machine]: Patron light control request received![0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.362206565] [foxglove_bridge]: Advertising new channel 6 for topic "/bay/b7/recorder/events/rosbag2_messages_lost"
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.531277078] [central.central_nodes]: Load Library: /opt/volley/lib/libagv_monitor_component.so[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.534537173] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::AgvMonitorComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.534579061] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::AgvMonitorComponent>[0m
+(app-comb.central) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/agv_monitor' in container '/central/central_nodes'
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.545271730] [central.central_nodes]: Load Library: /opt/volley/lib/libsafety_hardware_monitor_component.so[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.545735070] [central.recorder]: Subscribed to topic '/vis/rosout'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.546216756] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::SafetyHardwareMonitorComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.546254788] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::SafetyHardwareMonitorComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.547669640] [central.safety_hardware_monitor]: This is a Safety Hardware Monitor Node[0m
+(app-comb.central) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/safety_hardware_monitor' in container '/central/central_nodes'
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.548742638] [central.recorder]: Subscribed to topic '/vis/vrcs'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.549314506] [central.recorder]: Subscribed to topic '/vis/chargers'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.550003009] [central.recorder]: Subscribed to topic '/vis/schedule_dag'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.550496218] [central.central_nodes]: Load Library: /opt/volley/lib/libconsistency_monitor_component.so[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.550687404] [central.recorder]: Subscribed to topic '/vis/payloads'[0m
+(site.mosquitto) | 1793744355: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793744423: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793744793: New connection from 172.18.0.1:56474 on port 1883.
+(site.mosquitto) | 1793744793: New client connected from 172.18.0.1:56474 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793745013: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793745113: New connection from 172.18.0.1:44442 on port 1883.
+(site.mosquitto) | 1793745113: New client connected from 172.18.0.1:44442 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793746224: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793746339: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793746994: New connection from 172.18.0.1:38902 on port 1883.
+(site.mosquitto) | 1793746994: New client connected from 172.18.0.1:38902 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793748022: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793748025: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793748038: New connection from 172.18.0.1:38808 on port 1883.
+(site.mosquitto) | 1793748038: New client connected from 172.18.0.1:38808 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793748335: New connection from 10.0.0.121:56060 on port 1883.
+(site.mosquitto) | 1793748335: Client HITO:17 already connected, closing old connection.
+(site.mosquitto) | 1793748335: New client connected from 10.0.0.121:56060 as HITO:17 (p2, c1, k30, u'admin').
+(site.mosquitto) | 1793749826: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793751627: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793753331: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793753337: New connection from 172.18.0.1:56974 on port 1883.
+(site.mosquitto) | 1793753337: New client connected from 172.18.0.1:56974 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793753429: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793755229: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793757030: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793758831: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793760632: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793762433: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793764234: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793766036: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793767836: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793769638: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793771438: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793773239: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793775041: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793776841: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793778642: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793780443: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793782245: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793784045: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793785846: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793787648: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793789448: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793791250: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793793050: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793794851: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793796652: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793798454: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793800254: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793802055: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793803856: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793805592: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793805608: New connection from 172.18.0.1:48432 on port 1883.
+(site.mosquitto) | 1793805608: New client connected from 172.18.0.1:48432 as /hito_proxy (p2, c0, k60).
+(site.mosquitto) | 1793805657: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793807459: Saving in-memory database to /mosquitto/data//mosquitto.db.
+(site.mosquitto) | 1793808387: Client /hito_proxy disconnected.
+(site.mosquitto) | 1793808406: New connection from 172.18.0.1:46660 on port 1883.
+(site.mosquitto) | 1793808406: New client connected from 172.18.0.1:46660 as /hito_proxy (p2, c0, k60).
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.551293322] [central.recorder]: Subscribed to topic '/vis/request_markers'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.551801843] [central.recorder]: Subscribed to topic '/vis/nodes'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.551817429] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::ConsistencyMonitorComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.551855812] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::ConsistencyMonitorComponent>[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.552376143] [central.recorder]: Subscribed to topic '/vis/agv_commands'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.552818931] [central.recorder]: Subscribed to topic '/vis/bays'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.553244604] [central.recorder]: Subscribed to topic '/vis/trays'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.553664982] [central.recorder]: Subscribed to topic '/vis/agvs'[0m
+(app-comb.central) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/consistency_monitor' in container '/central/central_nodes'
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.554071828] [central.recorder]: Subscribed to topic '/vis/edges'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.554691498] [central.recorder]: Subscribed to topic '/vis/environment'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.555424744] [central.recorder]: Subscribed to topic '/vis/layout_spaces'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.555754830] [central.central_nodes]: Load Library: /opt/volley/lib/libdispatch_component.so[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.556087056] [central.recorder]: Subscribed to topic '/vis/tape'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.559663059] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::DispatchComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.559716343] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::DispatchComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.561002684] [central.dispatcher]: installation_id:              8[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.561028142] [central.dispatcher]: layout_file:                  "/opt/volley/share/site_config/layouts/5675_pecos_sandbox_combined.yaml"[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.561752907] [central.recorder]: Subscribed to topic '/central/consistency_report'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808407.562418677] [central.recorder]: Subscribed to topic '/hito_proxy/rosout'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.583487243] [garage_graph]: GarageGraph VRC audit: 0/0 directed VRC edges present (expected 2x pair count)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808407.583553908] [central.dispatcher]: Loading collision table for layout 5675_pecos_sandbox_combined from file "/root/.cache/volley/5675_pecos_sandbox_combined_collision_table_f30aa5e6376eb7c45d2ec8f2246eaec7.json"[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872273631] [foxglove_bridge]: Advertising new channel 7 for topic "/vis/schedule_dag"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872313122] [foxglove_bridge]: Advertising new channel 8 for topic "/vis/rosout"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872321434] [foxglove_bridge]: Advertising new channel 9 for topic "/vis/payloads"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872328481] [foxglove_bridge]: Advertising new channel 10 for topic "/vis/nodes"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872335380] [foxglove_bridge]: Advertising new channel 11 for topic "/vis/layout_spaces"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872346560] [foxglove_bridge]: Advertising new channel 12 for topic "/vis/environment"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872353912] [foxglove_bridge]: Advertising new channel 13 for topic "/vis/trays"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872361740] [foxglove_bridge]: Advertising new channel 14 for topic "/vis/edges"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872369571] [foxglove_bridge]: Advertising new channel 15 for topic "/vis/vrcs"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872378101] [foxglove_bridge]: Advertising new channel 16 for topic "/vis/chargers"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872384794] [foxglove_bridge]: Advertising new channel 17 for topic "/vis/bays"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872391424] [foxglove_bridge]: Advertising new channel 18 for topic "/vis/agvs"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872398383] [foxglove_bridge]: Advertising new channel 19 for topic "/vis/agv_commands"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872619373] [foxglove_bridge]: Advertising new channel 20 for topic "/sim/report"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.872625654] [foxglove_bridge]: Advertising new channel 21 for topic "/hito_proxy/rosout"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.873464901] [foxglove_bridge]: Advertising new channel 22 for topic "/central/schedule"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.873766522] [foxglove_bridge]: Advertising new channel 23 for topic "/central/report"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.873784125] [foxglove_bridge]: Advertising new channel 24 for topic "/central/rosout"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.873795702] [foxglove_bridge]: Advertising new channel 25 for topic "/central/recorder/events/write_split"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.873806809] [foxglove_bridge]: Advertising new channel 26 for topic "/central/recorder/events/rosbag2_messages_lost"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.873818853] [foxglove_bridge]: Advertising new channel 27 for topic "/vis/tape"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.873942427] [foxglove_bridge]: Advertising new channel 28 for topic "/central/pending_jobs"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.873960095] [foxglove_bridge]: Advertising new channel 29 for topic "/vis/request_markers"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.874099541] [foxglove_bridge]: Advertising new channel 30 for topic "/central/garage_status"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.875183421] [foxglove_bridge]: Advertising new channel 31 for topic "/central/garage_snapshot"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.875756279] [foxglove_bridge]: Advertising new channel 32 for topic "/central/discrete_garage_state"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.875850303] [foxglove_bridge]: Advertising new channel 33 for topic "/central/consistency_report"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.875864232] [foxglove_bridge]: Advertising new channel 34 for topic "/central/active_jobs"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.875874873] [foxglove_bridge]: Advertising new channel 35 for topic "/central/completed_jobs"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.876005346] [foxglove_bridge]: Advertising new channel 36 for topic "/bay/b7/version_info"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.876081696] [foxglove_bridge]: Advertising new channel 37 for topic "/bay/b7/vehicle_prox_sensor"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.876265928] [foxglove_bridge]: Advertising new channel 38 for topic "/bay/b7/vehicle_pose"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.876541433] [foxglove_bridge]: Advertising new channel 39 for topic "/bay/b7/report"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.876625232] [foxglove_bridge]: Advertising new channel 40 for topic "/bay/b7/load_cells"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.876712802] [foxglove_bridge]: Advertising new channel 41 for topic "/bay/b7/io_link_sensors"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.876803362] [foxglove_bridge]: Advertising new channel 42 for topic "/bay/b7/guidance/debug/guidance_payload"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.877494694] [foxglove_bridge]: Advertising new channel 43 for topic "/central/continuous_garage_info"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.877622057] [foxglove_bridge]: Advertising new channel 44 for topic "/bay/b7/SYSTEM/report"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.877691201] [foxglove_bridge]: Advertising new channel 45 for topic "/bay/b7/radar"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808407.877705674] [foxglove_bridge]: Advertising new channel 46 for topic "/bay/b7/PATRON/report"
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.173215405] [central.dispatcher]: Successfully loaded collision table[0m
+(app-comb.central) | [central-3] [33m[WARN] [1793808408.173877020] [central.dispatcher]: Parameter enable_dispatch_charging_mode hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+(app-comb.central) | [central-3] [33m[WARN] [1793808408.173916947] [central.dispatcher]: Parameter printdags hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.176202687] [central.recorder]: Subscribed to topic '/central/report'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.177134625] [central.recorder]: Subscribed to topic '/central/heartbeat'[0m
+(app-comb.central) | [rest_api-1] Populating database...
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.178870985] [central.recorder]: Subscribed to topic '/central/version_info'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.180314444] [central.recorder]: Subscribed to topic '/central/schedule'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.181030407] [central.recorder]: Subscribed to topic '/central/pending_jobs'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.181589806] [central.recorder]: Subscribed to topic '/central/completed_jobs'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.182410732] [central.recorder]: Subscribed to topic '/central/active_jobs'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.184108454] [central.recorder]: Subscribed to topic '/central/plan_response'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.185119646] [central.recorder]: Subscribed to topic '/central/set_mode/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.186109436] [central.recorder]: Subscribed to topic '/central/get_job_state/_service_event'[0m
+(app-comb.central) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/dispatcher' in container '/central/central_nodes'
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.187302721] [central.recorder]: Subscribed to topic '/central/stop_auto_planner/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.187997606] [central.recorder]: Subscribed to topic '/central/stop/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.188445179] [central.recorder]: Subscribed to topic '/central/pause/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.188869021] [central.recorder]: Subscribed to topic '/central/start/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.189829834] [central.central_nodes]: Load Library: /opt/volley/lib/libgarage_tracker_component.so[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.190093925] [central.recorder]: Subscribed to topic '/central/plan_request'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.191455911] [central.recorder]: Subscribed to topic '/central/trigger_plan_call/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.192104656] [central.recorder]: Subscribed to topic '/central/transition_bay_to_retrieve/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.192201032] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::GarageTrackerComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.192233428] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::GarageTrackerComponent>[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.193024286] [central.recorder]: Subscribed to topic '/central/transition_bay_to_insert/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.193388079] [central.garage_tracker]: layout_file: "/opt/volley/share/site_config/layouts/5675_pecos_sandbox_combined.yaml"[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.193436555] [central.garage_tracker]: port:     3306[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.193445269] [central.garage_tracker]: host:     mysql[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.193450855] [central.garage_tracker]: user:     scheduler[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.193464838] [central.garage_tracker]: password: password[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.193471641] [central.garage_tracker]: database: scheduler[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.193865752] [central.recorder]: Subscribed to topic '/central/rebalance_garage/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.194840730] [central.recorder]: Subscribed to topic '/central/move_agv/_service_event'[0m
+(app-comb.central) | [central-3] [33m[WARN] [1793808408.195114550] [central.garage_tracker]: Parameter is_simulation hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.195803899] [central.recorder]: Subscribed to topic '/central/repark_tray/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.196715319] [central.recorder]: Subscribed to topic '/central/move_tray/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.197329067] [central.recorder]: Subscribed to topic '/central/clean_garage/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.197949325] [central.recorder]: Subscribed to topic '/central/start_auto_planner/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.198861377] [central.recorder]: Subscribed to topic '/central/charge_payload/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.199740928] [central.recorder]: Subscribed to topic '/central/retrieve/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.235882319] [central.garage_tracker]: Successfully queried for latest snapshot[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.236073179] [central.garage_tracker]: Loaded garage tracker[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.238992003] [central.recorder]: Subscribed to topic '/central/continuous_garage_info'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.240840803] [central.recorder]: Subscribed to topic '/central/add_agv/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.241515186] [central.recorder]: Subscribed to topic '/central/discrete_events'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.242172640] [central.recorder]: Subscribed to topic '/central/discrete_garage_state'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.243957439] [central.recorder]: Subscribed to topic '/central/add_payload/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.244623104] [central.recorder]: Subscribed to topic '/central/place_payload_in_bay/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.245241148] [central.recorder]: Subscribed to topic '/central/add_tray/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.245841631] [central.recorder]: Subscribed to topic '/central/fault_reset/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.247737582] [central.recorder]: Subscribed to topic '/central/remove_payload_from_bay/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.248306702] [central.garage_tracker]: Subscribing to new AgvReport topic: a16[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.248372522] [central.recorder]: Subscribed to topic '/central/remove_tray/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.248733314] [central.garage_tracker]: Subscribing to new AgvReport topic: a17[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.249069248] [central.recorder]: Subscribed to topic '/central/remove_agv/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.249212289] [central.garage_tracker]: Subscribing to new BayReport topic: b7[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.249678402] [central.recorder]: Subscribed to topic '/central/remove_payload_from_tray/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.251721166] [central.recorder]: Subscribed to topic '/central/set_tray_disabledness/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.252139423] [central.recorder]: Subscribed to topic '/central/set_vecs_disabledness/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.252297868] [central.dispatcher]: Successfully reset discrete garage state[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.252599198] [central.recorder]: Subscribed to topic '/central/set_node_disabledness/_service_event'[0m
+(app-comb.central) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/garage_tracker' in container '/central/central_nodes'
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.253095357] [central.recorder]: Subscribed to topic '/central/set_agv_disabledness/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.253795553] [central.recorder]: Subscribed to topic '/central/set_tray_pose/_service_event'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.254753393] [central.central_nodes]: Load Library: /opt/volley/lib/libgarage_monitor_component.so[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.256034945] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<central::GarageMonitorComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.256073491] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<central::GarageMonitorComponent>[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.257361319] [central.recorder]: Subscribed to topic '/central/garage_snapshot'[0m
+(app-comb.central) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/central/garage_monitor' in container '/central/central_nodes'
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.260808473] [central.central_nodes]: Load Library: /opt/volley/lib/libscheduler_component.so[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.261948720] [central.recorder]: Subscribed to topic '/central/garage_status'[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.262599287] [central.central_nodes]: Found class: rclcpp_components::NodeFactoryTemplate<volley::SchedulerComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.262638823] [central.central_nodes]: Instantiate class: rclcpp_components::NodeFactoryTemplate<volley::SchedulerComponent>[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.264258718] [scheduler.scheduler]: Starting scheduler node.[0m
+(app-comb.central) | [central-3] [33m[WARN] [1793808408.264312269] [scheduler.scheduler]: Parameter printdags hasn't been set so using default. Are you missing a parameter in a launch file?[0m
+(app-comb.central) | [rest_api-1] Twilio client initialized
+(app-comb.central) | [rest_api-1] SendGrid client initialized
+(app-comb.central) | [rest_api-1] Starting Flask!
+(app-comb.central) | [rest_api-1]  * Serving Flask app 'central_api.rest_api'
+(app-comb.central) | [rest_api-1]  * Debug mode: off
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.286822521] [garage_graph]: GarageGraph VRC audit: 0/0 directed VRC edges present (expected 2x pair count)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.286857875] [scheduler.scheduler]: Loading collision table for layout 5675_pecos_sandbox_combined from file "/root/.cache/volley/5675_pecos_sandbox_combined_collision_table_f30aa5e6376eb7c45d2ec8f2246eaec7.json"[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403262742] [foxglove_bridge]: Advertising new channel 47 for topic "/scheduler/version_info"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403298512] [foxglove_bridge]: Advertising new channel 48 for topic "/central/version_info"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403554537] [foxglove_bridge]: Advertising new channel 49 for topic "/central/plan_response"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403693419] [foxglove_bridge]: Advertising new channel 50 for topic "/central/plan_request"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403806911] [foxglove_bridge]: Advertising new channel 51 for topic "/central/discrete_events"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403870935] [foxglove_bridge]: Advertising new channel 52 for topic "/central/heartbeat"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403877695] [foxglove_bridge]: Advertising new channel 53 for topic "/agv/a17/version_info"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403947066] [foxglove_bridge]: Advertising new channel 54 for topic "/agv/a17/report"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403952820] [foxglove_bridge]: Advertising new channel 55 for topic "/agv/a16/version_info"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.403958929] [foxglove_bridge]: Advertising new channel 56 for topic "/agv/a16/report"
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.415788322] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 2 to 0[0m
+(app-comb.central) | [central-3] [33m[WARN] [1793808408.553852189] [central.consistency_monitor]: Inconsistent! Missing version info from: a16 (missing for 0s) a17 (missing for 0s) dispatcher (missing for 0s) scheduler (missing for 0s)[0m
+(app-comb.central) | [foxglove_bridge-6] [2026-11-04T16:06:48Z INFO  foxglove::websocket::server] Registered client 10.0.3.162:55814
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.727046247] [foxglove_bridge]: received connection graph subscribe request
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.830548268] [scheduler.scheduler]: Successfully loaded collision table[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808408.833993612] [scheduler.scheduler]: Scheduler node started[0m
+(app-comb.central) | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/scheduler/scheduler' in container '/central/central_nodes'
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.840782674] [central.recorder]: Subscribed to topic '/rest_api/register_retrieval_code/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.841472383] [central.recorder]: Subscribed to topic '/scheduler/version_info'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.842711661] [central.recorder]: Subscribed to topic '/scheduler/plan/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.843315652] [central.recorder]: Subscribed to topic '/scheduler/report'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.845533292] [central.recorder]: Subscribed to topic '/scheduler/set_bay_readiness_ratio/_service_event'[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808408.860696053] [hito_proxy]: Discovered a new AGV w/ id 16
+(app-comb.central) | [proxy_node-2] [INFO] [1793808408.860768423] [hito_proxy]: Discovered a new AGV w/ id 17
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.885602497] [foxglove_bridge]: received subscribe request for channel 23 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.887408118] [foxglove_bridge]: Created ROS subscription on /central/report (interfaces/msg/DispatchReport) for channel 23
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.915815359] [foxglove_bridge]: Client ID 1 is advertising "/move_base_simple/goal" (geometry_msgs/PoseStamped) on channel 1 with encoding "cdr"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.916664827] [foxglove_bridge]: Client ID 1 is advertising "/clicked_point" (geometry_msgs/PointStamped) on channel 2 with encoding "cdr"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.917544793] [foxglove_bridge]: Client ID 1 is advertising "/initialpose" (geometry_msgs/PoseWithCovarianceStamped) on channel 3 with encoding "cdr"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.921794459] [foxglove_bridge]: Advertising new channel 57 for topic "/scheduler/report"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.921919431] [foxglove_bridge]: Advertising new channel 58 for topic "/move_base_simple/goal"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.922072155] [foxglove_bridge]: Advertising new channel 59 for topic "/initialpose"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.922144815] [foxglove_bridge]: Advertising new channel 60 for topic "/clicked_point"
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.926714652] [central.recorder]: Subscribed to topic '/move_base_simple/goal'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.928487948] [central.recorder]: Subscribed to topic '/initialpose'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808408.929578046] [central.recorder]: Subscribed to topic '/clicked_point'[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.936210754] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.940622752] [foxglove_bridge]: received subscribe request for channel 32 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.941341755] [foxglove_bridge]: Created ROS subscription on /central/discrete_garage_state (interfaces/msg/DiscreteGarageState) for channel 32
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.994320451] [foxglove_bridge]: received subscribe request for channel 19 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.999250977] [foxglove_bridge]: Created ROS subscription on /vis/agv_commands (visualization_msgs/msg/MarkerArray) for channel 19
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808408.999312639] [foxglove_bridge]: received subscribe request for channel 18 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.000301602] [foxglove_bridge]: Created ROS subscription on /vis/agvs (visualization_msgs/msg/MarkerArray) for channel 18
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.000347477] [foxglove_bridge]: received subscribe request for channel 17 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.001445959] [foxglove_bridge]: Created ROS subscription on /vis/bays (visualization_msgs/msg/MarkerArray) for channel 17
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.001547566] [foxglove_bridge]: received subscribe request for channel 16 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.002788511] [foxglove_bridge]: Created ROS subscription on /vis/chargers (visualization_msgs/msg/MarkerArray) for channel 16
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.002838438] [foxglove_bridge]: received subscribe request for channel 14 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.003998510] [foxglove_bridge]: Created ROS subscription on /vis/edges (visualization_msgs/msg/MarkerArray) for channel 14
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.004046320] [foxglove_bridge]: received subscribe request for channel 12 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.005161164] [foxglove_bridge]: Created ROS subscription on /vis/environment (visualization_msgs/msg/MarkerArray) for channel 12
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.005206170] [foxglove_bridge]: received subscribe request for channel 11 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.006225832] [foxglove_bridge]: Created ROS subscription on /vis/layout_spaces (visualization_msgs/msg/MarkerArray) for channel 11
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.006269532] [foxglove_bridge]: received subscribe request for channel 10 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.007275677] [foxglove_bridge]: Created ROS subscription on /vis/nodes (visualization_msgs/msg/MarkerArray) for channel 10
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.007333386] [foxglove_bridge]: received subscribe request for channel 9 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.008765077] [foxglove_bridge]: Created ROS subscription on /vis/payloads (visualization_msgs/msg/MarkerArray) for channel 9
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.008840152] [foxglove_bridge]: received subscribe request for channel 7 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.010290983] [foxglove_bridge]: Created ROS subscription on /vis/schedule_dag (visualization_msgs/msg/MarkerArray) for channel 7
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.010361500] [foxglove_bridge]: received subscribe request for channel 27 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.011484667] [foxglove_bridge]: Created ROS subscription on /vis/tape (visualization_msgs/msg/MarkerArray) for channel 27
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.011547147] [foxglove_bridge]: received subscribe request for channel 13 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.012524223] [foxglove_bridge]: Created ROS subscription on /vis/trays (visualization_msgs/msg/MarkerArray) for channel 13
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.012579547] [foxglove_bridge]: received subscribe request for channel 15 from client 1
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.013491652] [foxglove_bridge]: Created ROS subscription on /vis/vrcs (visualization_msgs/msg/MarkerArray) for channel 15
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808409.444553888] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [33m[WARN] [1793808409.554035448] [central.consistency_monitor]: Inconsistent! Missing version info from: a16 (missing for 1s) a17 (missing for 1s) dispatcher (missing for 1s) scheduler (missing for 1s)[0m
+(app-comb.central) | [central-3] [33m[WARN] [1793808410.553899930] [central.consistency_monitor]: Inconsistent! Missing version info from: a16 (missing for 2s) a17 (missing for 2s) dispatcher (missing for 2s) scheduler (missing for 2s)[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.863189294] [hito_proxy]: Cached factsheet for AGV 17
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.863357373] [hito_proxy]: Cached factsheet for AGV 16
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.864823883] [hito_proxy.a17]: State machine 'root' starting at 'booting'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.865163336] [hito_proxy.a17]: Waiting for a non-stale state message to hit the blackboard...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.870024392] [hito_proxy.a17]: Setup ROS timers for execution
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808410.876338873] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.878734528] [hito_proxy.a17]: Setup service servers for accepting requests
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.879558776] [hito_proxy.a16]: State machine 'root' starting at 'booting'
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.880905298] [central.recorder]: Subscribed to topic '/agv/a17/report'[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.881482580] [hito_proxy.a16]: Setup ROS timers for execution
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.882337204] [central.recorder]: Subscribed to topic '/agv/a17/version_info'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.885861555] [central.recorder]: Subscribed to topic '/agv/a17/node_accuracy'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.888699836] [central.recorder]: Subscribed to topic '/agv/a17/command_list'[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.890762782] [hito_proxy.a16]: Setup service servers for accepting requests
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.890904469] [central.recorder]: Subscribed to topic '/agv/a17/faults'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.898572958] [central.recorder]: Subscribed to topic '/agv/a17/commandlist/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.900065956] [central.recorder]: Subscribed to topic '/agv/a17/stop/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.901052617] [central.recorder]: Subscribed to topic '/agv/a17/resume/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.901998704] [central.recorder]: Subscribed to topic '/agv/a17/pause/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.902714604] [central.recorder]: Subscribed to topic '/agv/a16/node_accuracy'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.903776395] [central.recorder]: Subscribed to topic '/agv/a17/command/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.904448640] [central.recorder]: Subscribed to topic '/agv/a16/faults'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.905125155] [central.recorder]: Subscribed to topic '/agv/a16/pause/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.905868914] [central.recorder]: Subscribed to topic '/agv/a16/command_list'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.906561404] [central.recorder]: Subscribed to topic '/agv/a16/activate/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.907775171] [central.recorder]: Subscribed to topic '/agv/a17/activate/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.908967597] [central.recorder]: Subscribed to topic '/agv/a16/report'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.910160602] [central.recorder]: Subscribed to topic '/agv/a16/commandlist/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.911310036] [central.recorder]: Subscribed to topic '/agv/a16/command/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.912432485] [central.recorder]: Subscribed to topic '/agv/a16/version_info'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.917155052] [central.recorder]: Subscribed to topic '/agv/a16/resume/_service_event'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808410.917587386] [central.recorder]: Subscribed to topic '/agv/a16/stop/_service_event'[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.965270608] [hito_proxy.a17]: Requesting auto-wait: release E-stop, clear exceptions, stop pause
+(app-comb.central) | [proxy_node-2] [INFO] [1793808410.979825972] [hito_proxy.a16]: Requesting auto-wait: release E-stop, clear exceptions, stop pause
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.267194433] [hito_proxy.a17]: Waiting 200ms for HITO stopPause to settle
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.281091760] [hito_proxy.a16]: Waiting 200ms for HITO stopPause to settle
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808411.378547058] [foxglove_bridge]: Advertising new channel 61 for topic "/agv/a17/node_accuracy"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808411.378782732] [foxglove_bridge]: Advertising new channel 62 for topic "/agv/a17/faults"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808411.379030682] [foxglove_bridge]: Advertising new channel 63 for topic "/agv/a17/command_list"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808411.379085153] [foxglove_bridge]: Advertising new channel 64 for topic "/agv/a16/node_accuracy"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808411.379122197] [foxglove_bridge]: Advertising new channel 65 for topic "/agv/a16/faults"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808411.379161293] [foxglove_bridge]: Advertising new channel 66 for topic "/agv/a16/command_list"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808411.399904052] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.467689473] [hito_proxy.a17]: AGV should be in Automatic wait operation mode
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.467898616] [hito_proxy.a17]: Requesting to enable localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.481396388] [hito_proxy.a16]: AGV should be in Automatic wait operation mode
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.481498298] [hito_proxy.a16]: Requesting to enable localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L'
+(app-comb.central) | [central-3] [33m[WARN] [1793808411.553955321] [central.consistency_monitor]: Inconsistent! Missing version info from: dispatcher (missing for 3s) scheduler (missing for 3s)[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.568483373] [hito_proxy.a17]: AGV reported it has completed all map requests
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.568731830] [hito_proxy.a17]: State machine 'root' transitioning 'booting' -> 'booted' -> 'localizing'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.568766309] [hito_proxy.a17]: Forcing the AGV to unpause due to issue with firmware that causes EnableMap action to fail
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.581932570] [hito_proxy.a16]: AGV reported it has completed all map requests
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.582094072] [hito_proxy.a16]: State machine 'root' transitioning 'booting' -> 'booted' -> 'localizing'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.582141832] [hito_proxy.a16]: Forcing the AGV to unpause due to issue with firmware that causes EnableMap action to fail
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.669241094] [hito_proxy.a17]: Waiting 200ms for HITO stopPause to settle
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.682616622] [hito_proxy.a16]: Waiting 200ms for HITO stopPause to settle
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.869548035] [hito_proxy.a17]: Ensuring localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L' is enabled
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.882868782] [hito_proxy.a16]: Ensuring localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L' is enabled
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808411.908357477] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [0m[INFO] [1793808411.923545748] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 0 to 1[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.970003514] [hito_proxy.a17]: Localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L' has been enabled
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.970099125] [hito_proxy.a17]: Checking if AGV is reporting position localized
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.983119608] [hito_proxy.a16]: Localization map 'f30aa5e6376eb7c45d2ec8f2246eaec7-L' has been enabled
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.983230810] [hito_proxy.a16]: AGV reported position initialized
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.983283637] [hito_proxy.a16]: State machine 'root' transitioning 'localizing' -> 'localized' -> 'stopped'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.983313791] [hito_proxy.a16]: Clearing any queued orders
+(app-comb.central) | [proxy_node-2] [INFO] [1793808411.983357759] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808412.420164796] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [33m[WARN] [1793808412.553892609] [central.consistency_monitor]: Inconsistent! Missing version info from: dispatcher (missing for 4s) scheduler (missing for 4s)[0m
+(app-comb.central) | [central-3] [33m[WARN] [1793808413.554001351] [central.consistency_monitor]: Inconsistent! Missing version info from: scheduler (missing for 5s)[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808414.072924698] [hito_proxy.a17]: AGV reported position initialized
+(app-comb.central) | [proxy_node-2] [INFO] [1793808414.073042768] [hito_proxy.a17]: State machine 'root' transitioning 'localizing' -> 'localized' -> 'stopped'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808414.073072986] [hito_proxy.a17]: Clearing any queued orders
+(app-comb.central) | [proxy_node-2] [INFO] [1793808416.983410222] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808418.259376041] [central.garage_monitor]: Garage status changed to DOWN, because Scheduler not running;[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808418.259638524] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 0[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808418.300175213] [rest_api.rest_api]: /bay/b7/confirm_insert not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808418.305937566] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808418.817493835] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808422.073158861] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808423.744025198] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808424.254807317] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808427.073163266] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808428.259552895] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 0[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808428.284627317] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808428.797431618] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808432.083376785] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808437.083403879] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808438.259637821] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 0[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808438.286107691] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808438.800985624] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [0m[INFO] [1793808441.922990581] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 1 to 2[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808442.083479155] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808447.083489249] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808448.259585456] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808448.283016733] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808448.795342682] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808452.173172579] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808457.183394554] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808458.259625070] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808458.280959783] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808458.789841270] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808462.183406713] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808467.183418935] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808468.259648337] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808468.284242102] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808468.793845800] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808472.273150866] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808477.273167861] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808478.259637511] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808478.281175659] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808478.793478795] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808482.283492294] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808487.283490202] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808488.259433957] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808488.272865682] [rest_api.rest_api]: /bay/b7/confirm_insert not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808488.283268639] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808488.795871147] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808492.373171423] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808497.373241412] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808498.259646715] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808498.283083531] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808498.793007370] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808502.383415810] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808507.473179377] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808508.259570350] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: No, Active AGVs: 0, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808508.281165334] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808508.789778106] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808512.483491121] [hito_proxy.a16]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808513.292369027] [central.dispatcher]: Set dispatcher mode to AUTO[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808514.486671142] [central.dispatcher]: Set dispatcher mode to AUTO[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808517.573178114] [hito_proxy.a17]: Waiting in 'stopped' state for an 'Activate' request
+(app-comb.central) | [central-3] [0m[INFO] [1793808518.259892287] [central.safety_hardware_monitor]: Garage Status: DOWN, In Auto Mode: Yes, Active AGVs: 0, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808518.283053606] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808518.792196540] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [0m[INFO] [1793808521.486376168] [central.dispatcher]: Starting! Start Service was requested.[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808521.587402785] [central.dispatcher]: Sending activate command to a16[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808521.595081432] [central.dispatcher]: Sending activate command to a17[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808521.595325007] [hito_proxy.a16]: 'activate' service requested
+(app-comb.central) | [central-3] [0m[INFO] [1793808521.601648991] [central.dispatcher]: Attempting to start the garage. Temporarily blocked because: Not all AGVs are active yet: a16 a17 [0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808521.601874780] [hito_proxy.a17]: 'activate' service requested
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808521.602585405] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808521.673210671] [hito_proxy.a17]: Processed Activate request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808521.673329430] [hito_proxy.a17]: State machine 'root' transitioning 'stopped' -> 'activate-requested' -> 'idle'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808521.673364691] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808521.683404954] [hito_proxy.a16]: Processed Activate request
+(app-comb.central) | [proxy_node-2] [INFO] [1793808521.683513632] [hito_proxy.a16]: State machine 'root' transitioning 'stopped' -> 'activate-requested' -> 'idle'
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808522.116269329] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.790817471] [scheduler.scheduler]: CHUGG: Solving with sequential planning (not CBS)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.791023968] [scheduler.scheduler]: ~~~~~~~~ Chugg Planning 0:: Task ID: 0 AGV_MOVE Agv ID: 17 Discrete Change: a17 |Src: 10@90 |Dst: 5@90 ~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.791109450] [scheduler.scheduler]: Setting safe intervals for event a17, t0[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.791246860] [scheduler.scheduler]: Deconflict motion: Motion(entity_id: a16, location 14@-90, during Interval(16:08:43, inf), action_id: 99999, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.791770345] [scheduler.scheduler]: Successfully planned event for a17[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.791852175] [scheduler.scheduler]: ~~~~~~~~ Chugg Planning 1:: Task ID: 0 AGV_MOVE Agv ID: 16 Discrete Change: a16 |Src: 14@-90 |Dst: 15@-90 ~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.791928298] [scheduler.scheduler]: Setting safe intervals for event a16, t0[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792041418] [scheduler.scheduler]: Deconflict motion: Motion(entity_id: a17, location 5@90, during Interval(16:08:51, inf), action_id: 99999, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792191556] [scheduler.scheduler]: Successfully planned event for a16[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792274097] [scheduler.scheduler]: ~~~~~~~~ Planning 2:: Task ID: 1 BAY_TRANSITION Bay Id: 7 State: 2 Command: 1 ~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792439288] [scheduler.scheduler]: successfully planned event for b7[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792502040] [scheduler.scheduler]: ~~~~~~~~~~ Updated a17 Trajectory Segment ~~~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792582111] [scheduler.scheduler]:    Motion(entity_id: a17, location (10@90,9@90), during Interval(16:08:43, 16:08:47), action_id: 0, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792673050] [scheduler.scheduler]:    Motion(entity_id: a17, location (9@90,5@90), during Interval(16:08:47, 16:08:51), action_id: 0, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792729559] [scheduler.scheduler]: ~~~~~~~~~~ Updated a16 Trajectory Segment ~~~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792800886] [scheduler.scheduler]:    Motion(entity_id: a16, location (14@-90,15@-90), during Interval(16:08:43, 16:08:47), action_id: 1, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792860359] [scheduler.scheduler]: ~~~~~~~~~~ Updated b7 Trajectory Segment ~~~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.792935778] [scheduler.scheduler]:    Motion(entity_id: b7, location 7@0, during Interval(16:08:43, 16:08:47), action_id: 2, collision_id: 0)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.796140122] []:     add to existing batch  a17 2  10@90 to 9@90 -->  3  9@90 to 5@90[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.796172642] []:    [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.796181343] []:    [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.796187845] []:   AGV:16 BatchStart:1 BatchSize:1 [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.796196275] []:        index:1   14@-90 to 15@-90[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.796203474] []:   AGV:17 BatchStart:2 BatchSize:2 [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.796208077] []:        index:2   10@90 to 9@90[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.796214740] []:        index:3   9@90 to 5@90[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.797106519] [hito_proxy.a16]: 'commandlist' service requested w/ request:
+(app-comb.central) | [proxy_node-2] id: '00000000-0000-0000-0000-000000000002'
+(app-comb.central) | [proxy_node-2] src: node=14, heading=-90°, lifted=false
+(app-comb.central) | [proxy_node-2] dst: node=15, heading=-90°, lifted=false
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.797351965] [hito_proxy.a16]: Enqueued 1 assembled order(s) on the order queue {count: 1}:
+(app-comb.central) | [proxy_node-2] Order '075d0b98d2f4c37b44db07ec1162623a' command ids:
+(app-comb.central) | [proxy_node-2] 00000000-0000-0000-0000-000000000002
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.797656796] [central.dispatcher]: Received response from a16: [0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.798238194] [hito_proxy.a17]: 'commandlist' service requested w/ request:
+(app-comb.central) | [proxy_node-2] id: '00000000-0000-0000-0000-000000000001'
+(app-comb.central) | [proxy_node-2] src: node=10, heading=90°, lifted=false
+(app-comb.central) | [proxy_node-2] dst: node=9, heading=90°, lifted=false
+(app-comb.central) | [proxy_node-2] id: '00000000-0000-0000-0000-000000000004'
+(app-comb.central) | [proxy_node-2] src: node=9, heading=90°, lifted=false
+(app-comb.central) | [proxy_node-2] dst: node=5, heading=90°, lifted=false
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.798576201] [central.dispatcher]: Received response from a17: [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.798733467] [central.dispatcher]: Sending type 1 command to b7[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.798352221] [hito_proxy.a17]: Enqueued 1 assembled order(s) on the order queue {count: 1}:
+(app-comb.central) | [proxy_node-2] Order 'd697380a2fc1162883246c8724a4edda' command ids:
+(app-comb.central) | [proxy_node-2] 00000000-0000-0000-0000-000000000001
+(app-comb.central) | [proxy_node-2] 00000000-0000-0000-0000-000000000004
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808523.811458949] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.873458738] [hito_proxy.a17]: Order queue has a pending order
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.873522297] [hito_proxy.a17]: Clearing exceptions before publishing a new order
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.883776015] [hito_proxy.a16]: Order queue has a pending order
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.883887665] [central.dispatcher]: Received response from b7: TRANSITION_TO_INSERT successfully notified.[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.883890092] [hito_proxy.a16]: Clearing exceptions before publishing a new order
+(app-comb.central) | [central-3] [0m[INFO] [1793808523.924719330] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 2 to 4[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.973976046] [hito_proxy.a17]: State machine 'root' transitioning 'idle' -> 'order-requested' -> 'executing-order'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.974091155] [hito_proxy.a17]: Enabling new order map 'e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.984378453] [hito_proxy.a16]: State machine 'root' transitioning 'idle' -> 'order-requested' -> 'executing-order'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808523.984498296] [hito_proxy.a16]: Enabling new order map 'e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808524.074535879] [hito_proxy.a17]: AGV has 'e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0' map enabled
+(app-comb.central) | [proxy_node-2] [INFO] [1793808524.075213979] [hito_proxy.a17]: Waiting for AGV state predicate 'order 'd697380a2fc1162883246c8724a4edda' to be accepted' to hold, elapsed 0s
+(app-comb.central) | [proxy_node-2] [INFO] [1793808524.084960074] [hito_proxy.a16]: AGV has 'e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0' map enabled
+(app-comb.central) | [proxy_node-2] [INFO] [1793808524.175381479] [hito_proxy.a17]: AGV has published order 'd697380a2fc1162883246c8724a4edda' and is ready to rip on it!
+(app-comb.central) | [proxy_node-2] [INFO] [1793808524.175647330] [hito_proxy.a17]: Waiting on order id 'd697380a2fc1162883246c8724a4edda' to complete...
+(app-comb.central) | [proxy_node-2] Stop State: estop=NONE, paused=false, driving=false
+(app-comb.central) | [proxy_node-2] Current Pose: last_node=10, x=37.19m, y=13.38m, heading=90°, lifted=down
+(app-comb.central) | [proxy_node-2] [INFO] [1793808524.175703036] [hito_proxy.a17]: Active Order Status
+(app-comb.central) | [proxy_node-2] State:
+(app-comb.central) | [proxy_node-2] 	1: E10-9
+(app-comb.central) | [proxy_node-2] 	2: N9
+(app-comb.central) | [proxy_node-2] 	3: E9-5
+(app-comb.central) | [proxy_node-2] 	4: N5
+(app-comb.central) | [proxy_node-2] AgvCmdList:
+(app-comb.central) | [proxy_node-2] 	- Strafe Left @ E10-9 
+(app-comb.central) | [proxy_node-2] 	- Strafe Left @ E9-5 
+(app-comb.central) | [proxy_node-2] [INFO] [1793808524.185568439] [hito_proxy.a16]: AGV has published order '075d0b98d2f4c37b44db07ec1162623a' and is ready to rip on it!
+(app-comb.central) | [proxy_node-2] [INFO] [1793808524.185788320] [hito_proxy.a16]: Active Order Status
+(app-comb.central) | [proxy_node-2] State:
+(app-comb.central) | [proxy_node-2] 	1: E14-15
+(app-comb.central) | [proxy_node-2] 	2: N15
+(app-comb.central) | [proxy_node-2] AgvCmdList:
+(app-comb.central) | [proxy_node-2] 	- Strafe Left @ E14-15 
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808524.324023736] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808525.198561660] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808525.199682573] [central.recorder]: Subscribed to topic '/central/a16/command_sequence'[0m
+(app-comb.central) | [recorder-7] [0m[INFO] [1793808525.200417690] [central.recorder]: Subscribed to topic '/central/a17/command_sequence'[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808525.700627175] [foxglove_bridge]: Advertising new channel 67 for topic "/central/a17/command_sequence"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808525.700716963] [foxglove_bridge]: Advertising new channel 68 for topic "/central/a16/command_sequence"
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808525.712142215] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [0m[INFO] [1793808526.969833236] [central.garage_tracker]: GarageTracker::AgvReportCallback  a17 pose changed: node 10@90 -> node 9@90 (carrying t0)[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808527.380718170] [hito_proxy.a17]: Active Order Status
+(app-comb.central) | [proxy_node-2] State:
+(app-comb.central) | [proxy_node-2] 	3: E9-5
+(app-comb.central) | [proxy_node-2] 	4: N5
+(app-comb.central) | [proxy_node-2] AgvCmdList:
+(app-comb.central) | [proxy_node-2] 	- Strafe Left @ E9-5 
+(app-comb.central) | [central-3] [0m[INFO] [1793808528.259476354] [central.garage_monitor]: Garage status changed to UP[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808528.260067348] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808528.282676650] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808528.795328618] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808529.183373408] [hito_proxy.a17]: Waiting on order id 'd697380a2fc1162883246c8724a4edda' to complete...
+(app-comb.central) | [proxy_node-2] Stop State: estop=NONE, paused=false, driving=true
+(app-comb.central) | [proxy_node-2] Current Pose: last_node=9, x=37.19m, y=12.44m, heading=90°, lifted=down
+(app-comb.central) | [central-3] [0m[INFO] [1793808529.781407596] [central.garage_tracker]: GarageTracker::AgvReportCallback  a16 pose changed: node 14@-90 -> node 15@-90 (carrying t0)[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808530.797442868] [hito_proxy.a16]: Order '075d0b98d2f4c37b44db07ec1162623a' has completed
+(app-comb.central) | [proxy_node-2] [INFO] [1793808530.797646230] [hito_proxy.a16]: Waiting on a common message sampled after order '075d0b98d2f4c37b44db07ec1162623a' finished traversal...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808530.898164727] [hito_proxy.a16]: State machine 'root' transitioning 'executing-order' -> 'order-complete' -> 'idle'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808530.898234707] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808534.191251610] [hito_proxy.a17]: Waiting on order id 'd697380a2fc1162883246c8724a4edda' to complete...
+(app-comb.central) | [proxy_node-2] Stop State: estop=NONE, paused=false, driving=true
+(app-comb.central) | [proxy_node-2] Current Pose: last_node=9, x=37.19m, y=10.74m, heading=90°, lifted=down
+(app-comb.central) | [proxy_node-2] [INFO] [1793808535.898337727] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808536.996022889] [hito_proxy.a17]: Order 'd697380a2fc1162883246c8724a4edda' has completed
+(app-comb.central) | [proxy_node-2] [INFO] [1793808536.996246993] [hito_proxy.a17]: State machine 'root' transitioning 'executing-order' -> 'order-complete' -> 'idle'
+(app-comb.central) | [central-3] [0m[INFO] [1793808537.069711544] [central.garage_tracker]: GarageTracker::AgvReportCallback  a17 pose changed: node 9@90 -> node 5@90 (carrying t0)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808538.259520206] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808538.281024738] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808538.793948838] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [0m[INFO] [1793808539.924190882] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 4 to 3[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808540.996378318] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808541.638726409] [scheduler.scheduler]: CHUGG: Solving with sequential planning (not CBS)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808541.638796815] [scheduler.scheduler]: ~~~~~~~~~~ Updated a17 Trajectory Segment ~~~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808541.638811425] [scheduler.scheduler]: ~~~~~~~~~~ Updated a16 Trajectory Segment ~~~~~~~~~~[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808545.996390891] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808548.259407732] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808548.274995250] [rest_api.rest_api]: /bay/b7/confirm_retrieve not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808548.283537018] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808548.793085133] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808550.998293028] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808555.998362363] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808558.259476198] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808558.283643958] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808558.793355847] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808561.096378837] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808566.096385907] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808568.259707941] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808568.282547524] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808568.795410951] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [central-3] [0m[INFO] [1793808569.923396848] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 3 to 6[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808571.096449035] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808576.098299744] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808578.259650772] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808578.283548310] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808578.796277858] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808581.098380512] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808586.196448845] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808588.259389059] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808588.276119136] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808588.788477962] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808591.198393186] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808596.296371624] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808598.259583155] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808598.284446428] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808598.794881256] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808601.296448892] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539479316] [scheduler.scheduler]: CHUGG: Solving with sequential planning (not CBS)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539568758] [scheduler.scheduler]: ~~~~~~~~ Chugg Planning 0:: Task ID: 0 AGV_MOVE Agv ID: 16 Discrete Change: a16 |Src: 15@-90 |Dst: 14@-90 ~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539596042] [scheduler.scheduler]: Setting safe intervals for event a16, t0[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539651636] [scheduler.scheduler]: Deconflict motion: Motion(entity_id: a17, location 5@90, during Interval(16:10:04, inf), action_id: 99999, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539756302] [scheduler.scheduler]: Successfully planned event for a16[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539791449] [scheduler.scheduler]: ~~~~~~~~ Chugg Planning 1:: Task ID: 1 AGV_MOVE Agv ID: 17 Discrete Change: a17 |Src: 5@90 |Dst: 10@90 ~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539829088] [scheduler.scheduler]: Setting safe intervals for event a17, t0[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539869844] [scheduler.scheduler]: Deconflict motion: Motion(entity_id: a16, location 14@-90, during Interval(16:10:08, inf), action_id: 99999, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.539999833] [scheduler.scheduler]: Successfully planned event for a17[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.540029279] [scheduler.scheduler]: ~~~~~~~~~~ Updated a17 Trajectory Segment ~~~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.540053186] [scheduler.scheduler]:    Motion(entity_id: a17, location (5@90,9@90), during Interval(16:10:04, 16:10:11), action_id: 1, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.540076753] [scheduler.scheduler]:    Motion(entity_id: a17, location (9@90,10@90), during Interval(16:10:11, 16:10:12), action_id: 1, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.540096343] [scheduler.scheduler]: ~~~~~~~~~~ Updated a16 Trajectory Segment ~~~~~~~~~~[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.540125986] [scheduler.scheduler]:    Motion(entity_id: a16, location (15@-90,14@-90), during Interval(16:10:04, 16:10:08), action_id: 0, collision_id: 3)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.542557006] []:    [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.542596878] []:     add to existing batch  a17 0  5@90 to 9@90 -->  1  9@90 to 10@90[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.542605629] []:    [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.542623257] []:   AGV:17 BatchStart:0 BatchSize:2 [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.542630073] []:        index:0   5@90 to 9@90[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.542634944] []:        index:1   9@90 to 10@90[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.542640803] []:   AGV:16 BatchStart:2 BatchSize:1 [0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.542648032] []:        index:2   15@-90 to 14@-90[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.543457144] [hito_proxy.a16]: 'commandlist' service requested w/ request:
+(app-comb.central) | [proxy_node-2] id: '00000000-0000-0000-0000-000000000005'
+(app-comb.central) | [proxy_node-2] src: node=15, heading=-90°, lifted=false
+(app-comb.central) | [proxy_node-2] dst: node=14, heading=-90°, lifted=false
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.543595078] [hito_proxy.a16]: Enqueued 1 assembled order(s) on the order queue {count: 1}:
+(app-comb.central) | [proxy_node-2] Order 'dcc04a9d392441179af10850b2140021' command ids:
+(app-comb.central) | [proxy_node-2] 00000000-0000-0000-0000-000000000005
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.543858344] [central.dispatcher]: Received response from a16: [0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.544410464] [hito_proxy.a17]: 'commandlist' service requested w/ request:
+(app-comb.central) | [proxy_node-2] id: '00000000-0000-0000-0000-000000000006'
+(app-comb.central) | [proxy_node-2] src: node=5, heading=90°, lifted=false
+(app-comb.central) | [proxy_node-2] dst: node=9, heading=90°, lifted=false
+(app-comb.central) | [proxy_node-2] id: '00000000-0000-0000-0000-000000000007'
+(app-comb.central) | [proxy_node-2] src: node=9, heading=90°, lifted=false
+(app-comb.central) | [proxy_node-2] dst: node=10, heading=90°, lifted=false
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.544554818] [hito_proxy.a17]: Enqueued 1 assembled order(s) on the order queue {count: 1}:
+(app-comb.central) | [proxy_node-2] Order '5f6e71f3e53e96f27e89bb6269f71893' command ids:
+(app-comb.central) | [proxy_node-2] 00000000-0000-0000-0000-000000000006
+(app-comb.central) | [proxy_node-2] 00000000-0000-0000-0000-000000000007
+(app-comb.central) | [central-3] [0m[INFO] [1793808604.544909871] [central.dispatcher]: Received response from a17: [0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.596414183] [hito_proxy.a17]: Order queue has a pending order
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.596516989] [hito_proxy.a17]: Clearing exceptions before publishing a new order
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.598328160] [hito_proxy.a16]: Order queue has a pending order
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.598394233] [hito_proxy.a16]: Clearing exceptions before publishing a new order
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.697124863] [hito_proxy.a17]: State machine 'root' transitioning 'idle' -> 'order-requested' -> 'executing-order'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.697239379] [hito_proxy.a17]: AGV has 'e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0' map enabled
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.697663187] [hito_proxy.a17]: Waiting for AGV state predicate 'order '5f6e71f3e53e96f27e89bb6269f71893' to be accepted' to hold, elapsed 0s
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.698827388] [hito_proxy.a16]: State machine 'root' transitioning 'idle' -> 'order-requested' -> 'executing-order'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.698873011] [hito_proxy.a16]: AGV has 'e0cef1eaa3f7b2b6ea8af1c2cfe3c51d-F0' map enabled
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.797861678] [hito_proxy.a17]: AGV has published order '5f6e71f3e53e96f27e89bb6269f71893' and is ready to rip on it!
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.798068109] [hito_proxy.a17]: Waiting on order id '5f6e71f3e53e96f27e89bb6269f71893' to complete...
+(app-comb.central) | [proxy_node-2] Stop State: estop=NONE, paused=false, driving=false
+(app-comb.central) | [proxy_node-2] Current Pose: last_node=5, x=37.19m, y=10.49m, heading=90°, lifted=down
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.798113877] [hito_proxy.a17]: Active Order Status
+(app-comb.central) | [proxy_node-2] State:
+(app-comb.central) | [proxy_node-2] 	1: E5-9
+(app-comb.central) | [proxy_node-2] 	2: N9
+(app-comb.central) | [proxy_node-2] 	3: E9-10
+(app-comb.central) | [proxy_node-2] 	4: N10
+(app-comb.central) | [proxy_node-2] AgvCmdList:
+(app-comb.central) | [proxy_node-2] 	- Strafe Right @ E5-9 
+(app-comb.central) | [proxy_node-2] 	- Strafe Right @ E9-10 
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.799213348] [hito_proxy.a16]: AGV has published order 'dcc04a9d392441179af10850b2140021' and is ready to rip on it!
+(app-comb.central) | [proxy_node-2] [INFO] [1793808604.799319492] [hito_proxy.a16]: Active Order Status
+(app-comb.central) | [proxy_node-2] State:
+(app-comb.central) | [proxy_node-2] 	1: E15-14
+(app-comb.central) | [proxy_node-2] 	2: N14
+(app-comb.central) | [proxy_node-2] AgvCmdList:
+(app-comb.central) | [proxy_node-2] 	- Strafe Right @ E15-14 
+(app-comb.central) | [central-3] [0m[INFO] [1793808608.259496725] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808608.281678907] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808608.792267478] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808609.799001948] [hito_proxy.a16]: Waiting on order id 'dcc04a9d392441179af10850b2140021' to complete...
+(app-comb.central) | [proxy_node-2] Stop State: estop=NONE, paused=false, driving=true
+(app-comb.central) | [proxy_node-2] Current Pose: last_node=15, x=37.19m, y=16.69m, heading=-90°, lifted=down
+(app-comb.central) | [central-3] [0m[INFO] [1793808610.369740608] [central.garage_tracker]: GarageTracker::AgvReportCallback  a17 pose changed: node 5@90 -> node 9@90 (carrying t0)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808610.581482259] [central.garage_tracker]: GarageTracker::AgvReportCallback  a16 pose changed: node 15@-90 -> node 14@-90 (carrying t0)[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808611.598986974] [hito_proxy.a16]: Order 'dcc04a9d392441179af10850b2140021' has completed
+(app-comb.central) | [proxy_node-2] [INFO] [1793808611.599115404] [hito_proxy.a16]: Waiting on a common message sampled after order 'dcc04a9d392441179af10850b2140021' finished traversal...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808612.197446031] [hito_proxy.a17]: Active Order Status
+(app-comb.central) | [proxy_node-2] State:
+(app-comb.central) | [proxy_node-2] 	3: E9-10
+(app-comb.central) | [proxy_node-2] 	4: N10
+(app-comb.central) | [proxy_node-2] AgvCmdList:
+(app-comb.central) | [proxy_node-2] 	- Strafe Right @ E9-10 
+(app-comb.central) | [proxy_node-2] [INFO] [1793808612.499083828] [hito_proxy.a16]: State machine 'root' transitioning 'executing-order' -> 'order-complete' -> 'idle'
+(app-comb.central) | [proxy_node-2] [INFO] [1793808612.499151476] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808614.897426188] [hito_proxy.a17]: Waiting on order id '5f6e71f3e53e96f27e89bb6269f71893' to complete...
+(app-comb.central) | [proxy_node-2] Stop State: estop=NONE, paused=false, driving=true
+(app-comb.central) | [proxy_node-2] Current Pose: last_node=10, x=37.19m, y=13.16m, heading=90°, lifted=down
+(app-comb.central) | [proxy_node-2] [INFO] [1793808617.499209073] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808617.997364939] [hito_proxy.a17]: Order '5f6e71f3e53e96f27e89bb6269f71893' has completed
+(app-comb.central) | [proxy_node-2] [INFO] [1793808617.997541696] [hito_proxy.a17]: State machine 'root' transitioning 'executing-order' -> 'order-complete' -> 'idle'
+(app-comb.central) | [central-3] [0m[INFO] [1793808618.069819724] [central.garage_tracker]: GarageTracker::AgvReportCallback  a17 pose changed: node 9@90 -> node 10@90 (carrying t0)[0m
+(app-comb.central) | [central-3] [0m[INFO] [1793808618.259595514] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808618.273328860] [rest_api.rest_api]: /bay/b7/confirm_insert not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808618.283408749] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808618.796129733] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808622.499241363] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808627.499242266] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808628.259581161] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808628.281063972] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808628.794071760] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808632.597678850] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808637.599261629] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808638.259687573] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808638.285090557] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808638.794204970] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [rest_api-1] [31m[ERROR] [1793808642.313586177] [rest_api.rest_api]: confirm-insert: timeout waiting for service /bay/b7/confirm_insert ready[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808642.697669050] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808647.697685040] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808648.259589899] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808648.283543854] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808648.793906124] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808652.699317387] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808657.797662706] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808658.259716817] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808658.283126425] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808658.796017652] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808662.799250136] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808667.799311365] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808668.259626256] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808668.281383423] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808668.790316972] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808672.799319574] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808677.897678826] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808678.259621505] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808678.273337869] [rest_api.rest_api]: /bay/b7/confirm_insert not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808678.283075165] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808678.792409062] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808682.899316709] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808687.899324672] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808688.259582810] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808688.282106156] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808688.792024488] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808692.997681536] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808697.999259399] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808698.259734152] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808698.283437274] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808698.796364222] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808703.097672262] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808708.097760671] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808708.259640181] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808708.282991949] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808708.792233007] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808713.099210578] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808718.099211030] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808718.259659300] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808718.282515248] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808718.792042882] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808723.099292329] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808726.422654420] [central.garage_tracker]: GarageTracker::BayReportCallback  Bay 7 has changed state from 6 to 3[0m
+(app-comb.central) | [proxy_node-2] [INFO] [1793808728.197630432] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808728.259776112] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808728.284339139] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808728.796248282] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808733.197679502] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808738.197748709] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808738.259625029] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808738.274916860] [rest_api.rest_api]: /bay/b7/confirm_retrieve not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808738.281585900] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808738.791018608] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808743.199314533] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808748.259519522] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808748.283661201] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808748.297646207] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808748.793489842] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808753.297717712] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808758.259466936] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808758.280592894] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808758.299224836] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808758.793421235] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808763.299246676] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808768.259514377] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808768.284013898] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808768.397667267] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808768.796687538] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808773.397682912] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808778.259580900] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808778.282931048] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808778.399289002] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808778.792026456] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808783.497747681] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808788.259489498] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808788.280858879] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808788.499254737] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808788.792097658] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808793.597745596] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808798.259716419] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808798.275475720] [rest_api.rest_api]: /bay/b7/confirm_retrieve not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808798.282392304] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808798.599303829] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808798.788153728] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808803.697780670] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808808.259571786] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808808.282694488] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808808.699230578] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808808.792274967] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808813.699237817] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808818.259630541] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808818.283585767] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808818.796435932] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808818.797655382] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808823.799345518] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808828.259399823] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808828.281178515] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808828.790804695] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808828.897642711] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808833.897645493] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808838.259501850] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808838.283719485] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808838.796634638] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808838.897645862] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808843.897654226] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808848.259525467] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808848.285149214] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808848.795910328] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808848.899282203] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808853.997635758] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808858.259582130] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808858.286960057] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808858.798834070] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808858.997645903] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808863.997667325] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808868.259731464] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808868.272351180] [rest_api.rest_api]: /bay/b7/confirm_insert not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808868.284024217] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808868.793336844] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808868.999347235] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808874.097634139] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808878.259621718] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808878.285438615] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808878.798103775] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808879.097645474] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808884.099232711] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808888.259643769] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808888.281536251] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808888.792651083] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808889.197742027] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808894.199231453] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808898.259445052] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808898.284673565] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808898.796978218] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808899.297668744] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808904.299226962] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808908.259526642] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808908.285254518] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808908.794825775] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808909.299341650] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808914.397679022] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808918.259835117] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808918.282911961] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808918.792138823] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808919.399243804] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808924.399246218] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808928.259756794] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [rest_api-1] [33m[WARN] [1793808928.272458561] [rest_api.rest_api]: /bay/b7/confirm_retrieve not discovered, recreating its client[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808928.278373300] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808928.786991741] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [proxy_node-2] [INFO] [1793808929.497690566] [hito_proxy.a17]: Chillin' while waiting for a pending order...
+(app-comb.central) | [proxy_node-2] [INFO] [1793808934.499347444] [hito_proxy.a16]: Chillin' while waiting for a pending order...
+(app-comb.central) | [central-3] [0m[INFO] [1793808938.259605802] [central.safety_hardware_monitor]: Garage Status: UP, In Auto Mode: Yes, Active AGVs: 2, Active Bays: 1[0m
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808938.280703088] [foxglove_bridge]: publishing connection graph
+(app-comb.central) | [foxglove_bridge-6] [INFO] [1793808938.788268799] [foxglove_bridge]: publishing connection graph

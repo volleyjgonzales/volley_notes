@@ -1,0 +1,120 @@
+nohup: ignoring input
+[21:35:05] attempt 'baseline': removing app-comb
+    Removing stack 'app-comb'
+    Stack 'app-comb' stopped
+[21:35:12] removed; waiting 20 s
+[21:35:32] deploying app-comb
+    Deploying stack 'app-comb'
+    Creating network app-comb_internal
+    Creating config app-comb_mysql-init
+    Creating config app-comb_mysqld
+    Creating config app-comb_nginx
+    Creating config app-comb_garage-info
+    Creating config app-comb_fastdds-profile
+    Creating service app-comb_discovery-server
+    Creating service app-comb_mysql
+    Creating service app-comb_nginx
+    Creating service app-comb_noc
+    Creating service app-comb_bay7
+    Creating service app-comb_bay7-guidance
+    Creating service app-comb_central
+    Creating service app-comb_control
+    Deployed with timestamp 20261104T213533Z
+[21:35:33] deployed; watching for 180 s (stuck = recreate lines between 90 and 180 s)
+    t+ 10s  services 8/8  rest_api up 00:00  recreates 0   udp drops central 0
+    t+ 20s  services 8/8  rest_api up 00:10  recreates 0   udp drops central 776
+    t+ 31s  services 8/8  rest_api up 00:20  recreates 1   udp drops central 776
+    t+ 41s  services 8/8  rest_api up 00:30  recreates 1   udp drops central 776
+    t+ 51s  services 8/8  rest_api up 00:41  recreates 1   udp drops central 776
+    t+ 61s  services 8/8  rest_api up 00:51  recreates 1   udp drops central 776
+    t+ 72s  services 8/8  rest_api up 01:01  recreates 1   udp drops central 776
+    t+ 82s  services 8/8  rest_api up 01:11  recreates 1   udp drops central 776
+    t+ 92s  services 8/8  rest_api up 01:22  recreates 2   udp drops central 776
+    t+102s  services 8/8  rest_api up 01:32  recreates 2   udp drops central 776
+    t+112s  services 8/8  rest_api up 01:42  recreates 2   udp drops central 776
+    t+123s  services 8/8  rest_api up 01:52  recreates 2   udp drops central 776
+    t+133s  services 8/8  rest_api up 02:02  recreates 2   udp drops central 776
+    t+143s  services 8/8  rest_api up 02:13  recreates 2   udp drops central 776
+    t+153s  services 8/8  rest_api up 02:23  recreates 3   udp drops central 776
+    t+164s  services 8/8  rest_api up 02:33  recreates 3   udp drops central 776
+    t+174s  services 8/8  rest_api up 02:43  recreates 3   udp drops central 776
+    t+184s  services 8/8  rest_api up 02:54  recreates 3   udp drops central 776
+[21:38:38] result: STUCK
+2026-11-04T21:35:33Z label=baseline build=e1d24a7 result=STUCK late_recreates=1 rcvbuf_errors central=776 discovery=0
+[21:38:38] STUCK: hands off for up to 10 min. Run no ros2 commands, probes or Foxglove reconnects meanwhile.
+    hands-off t+ 10s  recreates 3   last line  43s ago
+    hands-off t+ 20s  recreates 3   last line  53s ago
+    hands-off t+ 30s  recreates 3   last line  63s ago
+    hands-off t+ 40s  recreates 4   last line   3s ago
+    hands-off t+ 50s  recreates 4   last line  13s ago
+    hands-off t+ 60s  recreates 4   last line  23s ago
+    hands-off t+ 70s  recreates 4   last line  33s ago
+    hands-off t+ 80s  recreates 4   last line  43s ago
+    hands-off t+ 90s  recreates 4   last line  53s ago
+    hands-off t+100s  recreates 5   last line   3s ago
+    hands-off t+110s  recreates 5   last line  13s ago
+    hands-off t+120s  recreates 5   last line  23s ago
+    hands-off t+130s  recreates 5   last line  33s ago
+    hands-off t+140s  recreates 5   last line  43s ago
+    hands-off t+150s  recreates 5   last line  53s ago
+    hands-off t+160s  recreates 6   last line   3s ago
+    hands-off t+170s  recreates 6   last line  13s ago
+    hands-off t+180s  recreates 6   last line  23s ago
+    hands-off t+190s  recreates 6   last line  33s ago
+    hands-off t+201s  recreates 6   last line  44s ago
+    hands-off t+211s  recreates 6   last line  54s ago
+    hands-off t+221s  recreates 7   last line   4s ago
+    hands-off t+231s  recreates 7   last line  14s ago
+    hands-off t+241s  recreates 7   last line  24s ago
+    hands-off t+251s  recreates 7   last line  34s ago
+    hands-off t+261s  recreates 7   last line  44s ago
+    hands-off t+271s  recreates 7   last line  54s ago
+    hands-off t+281s  recreates 7   last line  64s ago
+    hands-off t+291s  recreates 8   last line   4s ago
+    hands-off t+301s  recreates 8   last line  14s ago
+    hands-off t+311s  recreates 8   last line  24s ago
+    hands-off t+321s  recreates 8   last line  34s ago
+    hands-off t+331s  recreates 8   last line  44s ago
+    hands-off t+341s  recreates 8   last line  54s ago
+    hands-off t+351s  recreates 9   last line   4s ago
+    hands-off t+361s  recreates 9   last line  14s ago
+    hands-off t+371s  recreates 9   last line  24s ago
+    hands-off t+382s  recreates 9   last line  35s ago
+    hands-off t+392s  recreates 9   last line  45s ago
+    hands-off t+402s  recreates 9   last line  55s ago
+    hands-off t+412s  recreates 10  last line   5s ago
+    hands-off t+422s  recreates 10  last line  15s ago
+    hands-off t+432s  recreates 10  last line  25s ago
+    hands-off t+442s  recreates 10  last line  35s ago
+    hands-off t+452s  recreates 10  last line  45s ago
+    hands-off t+462s  recreates 10  last line  55s ago
+    hands-off t+472s  recreates 11  last line   5s ago
+    hands-off t+482s  recreates 11  last line  15s ago
+    hands-off t+492s  recreates 11  last line  25s ago
+    hands-off t+502s  recreates 11  last line  35s ago
+    hands-off t+512s  recreates 11  last line  45s ago
+    hands-off t+522s  recreates 11  last line  55s ago
+    hands-off t+532s  recreates 12  last line   5s ago
+    hands-off t+542s  recreates 12  last line  15s ago
+    hands-off t+552s  recreates 12  last line  25s ago
+    hands-off t+562s  recreates 12  last line  35s ago
+    hands-off t+573s  recreates 12  last line  46s ago
+    hands-off t+583s  recreates 12  last line  56s ago
+    hands-off t+593s  recreates 12  last line  66s ago
+    hands-off t+603s  recreates 13  last line   6s ago
+  still stuck after 10 min hands-off
+[21:48:41] one fresh participant: probe in control
+  probe in control at 21:48:41:
+    /bay/b7/confirm_insert: ready after 0.8 s
+    /bay/b7/confirm_retrieve: ready after 0.8 s
+    /bay/b7/command: ready after 0.8 s
+    /central/start: ready after 0.8 s
+    after-probe t+ 10s  recreates 13  last line  18s ago
+    after-probe t+ 20s  recreates 13  last line  28s ago
+    after-probe t+ 30s  recreates 13  last line  38s ago
+    after-probe t+ 40s  recreates 13  last line  48s ago
+    after-probe t+ 50s  recreates 13  last line  58s ago
+    after-probe t+ 60s  recreates 13  last line  68s ago
+    after-probe t+ 70s  recreates 13  last line  78s ago
+  recovered: matched between 21:48:35 and 21:49:45; the probe started at 21:48:41
+[21:49:53] done: leave the stack as it is for the C++ check and the restart test if it's still stuck

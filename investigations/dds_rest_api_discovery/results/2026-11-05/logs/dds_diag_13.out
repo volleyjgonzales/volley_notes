@@ -1,0 +1,44 @@
+[03:40:59] captures off (CAPTURE=0)
+[03:40:59] attempt 'diag13' (root /data/swarm, bays b7): removing app-comb
+    Removing stack 'app-comb'
+    Stack 'app-comb' stopped
+[03:41:07] removed; waiting 20 s
+[03:41:27] deploying app-comb
+    Deploying stack 'app-comb'
+    Creating network app-comb_internal
+    Creating config app-comb_mysqld
+    Creating config app-comb_nginx
+    Creating config app-comb_fastdds-profile
+    Creating config app-comb_mysql-init
+    Creating config app-comb_garage-info
+    Creating service app-comb_bay7
+    Creating service app-comb_bay7-guidance
+    Creating service app-comb_central
+    Creating service app-comb_control
+    Creating service app-comb_discovery-server
+    Creating service app-comb_mysql
+    Creating service app-comb_nginx
+    Creating service app-comb_noc
+    Deployed with timestamp 20261105T034127Z
+[03:41:28] deployed; watching for 180 s (stuck = a deployed bay's confirm service not ready at 180 s)
+    t+ 10s  services 8/8  not ready: -                                                  udp drops central 356
+    t+ 20s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+ 30s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+ 40s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+ 50s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+ 61s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+ 71s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+ 81s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+ 91s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+101s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+111s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+122s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+132s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+142s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+152s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+162s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+173s  services 8/8  not ready: -                                                  udp drops central 1304
+    t+183s  services 8/8  not ready: -                                                  udp drops central 1304
+[03:44:31] result: ok
+2026-11-05T03:41:27Z label=diag13 build=4b00571 result=ok stuck=- states= warnings_on=1 fastdds_warnings=2 unknown_participant=0 last_check="finished n=173" rest_api_pids=68 rcvbuf_errors central=1304 discovery=0 rest_api_sockets=7424:rb212992/d948 7425:rb212992/d0
+[03:44:32] logs saved: ~/dds_central_diag13_2026-11-05T03:41:27Z.log ~/dds_discovery_diag13_2026-11-05T03:41:27Z.log

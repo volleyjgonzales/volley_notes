@@ -1,0 +1,13 @@
+// Proposed addition to src/planner/scheduler/test/src/jobs/insert_job_tests.cpp, after FromBay21TrayReversed:
+
+// SW2-905: the only free stall, P15, is in collision with AGV 1 on charger C14. The tray must be
+// lowered somewhere else; before the fix the plan fails the pre-motion sanity check instead.
+TEST(InsertJob, StallBlockedByAgvOnCharger) {
+  const auto run = scenarios::Plan();
+  ExpectInsert(run, {.bay = 7, .agv = 7, .lift_heading = 90});
+  for(const auto& node : run.response.schedule.nodes) {
+    if(node.type == interfaces::msg::ActionNode::TYPE_AGV_COMMAND && IsAgvLiftLowered(node.agv_command)) {
+      EXPECT_NE(node.agv_command.dst.pose.node_id, 15u) << "lowered onto P15 while AGV 1 is on C14";
+    }
+  }
+}

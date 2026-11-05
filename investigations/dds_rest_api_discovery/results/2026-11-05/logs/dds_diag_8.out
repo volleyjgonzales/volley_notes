@@ -1,0 +1,47 @@
+[03:20:26] host capture started: /home/ops/captures/diag8_host.pcap
+[03:20:26] attempt 'diag8' (root /data/swarm, bays b7): removing app-comb
+    Removing stack 'app-comb'
+    Stack 'app-comb' stopped
+[03:20:33] removed; waiting 20 s
+[03:20:53] deploying app-comb
+    Deploying stack 'app-comb'
+    Creating network app-comb_internal
+    Creating config app-comb_garage-info
+    Creating config app-comb_fastdds-profile
+    Creating config app-comb_mysql-init
+    Creating config app-comb_mysqld
+    Creating config app-comb_nginx
+    Creating service app-comb_mysql
+    Creating service app-comb_nginx
+    Creating service app-comb_noc
+    Creating service app-comb_bay7
+    Creating service app-comb_bay7-guidance
+    Creating service app-comb_central
+    Creating service app-comb_control
+    Creating service app-comb_discovery-server
+    Deployed with timestamp 20261105T032054Z
+[03:20:57] central capture started (3 s after the deploy): /home/ops/captures/diag8_central.pcap
+[03:20:57] deployed; watching for 180 s (stuck = a deployed bay's confirm service not ready at 180 s)
+    t+ 13s  services 8/8  not ready: -                                                  udp drops central 346
+    t+ 23s  services 8/8  not ready: -                                                  udp drops central 346
+    t+ 33s  services 8/8  not ready: -                                                  udp drops central 346
+    t+ 43s  services 8/8  not ready: -                                                  udp drops central 346
+    t+ 53s  services 8/8  not ready: -                                                  udp drops central 346
+    t+ 64s  services 8/8  not ready: -                                                  udp drops central 346
+    t+ 74s  services 8/8  not ready: -                                                  udp drops central 346
+    t+ 84s  services 8/8  not ready: -                                                  udp drops central 346
+    t+ 94s  services 8/8  not ready: -                                                  udp drops central 346
+    t+104s  services 8/8  not ready: -                                                  udp drops central 346
+    t+115s  services 8/8  not ready: -                                                  udp drops central 346
+    t+125s  services 8/8  not ready: -                                                  udp drops central 346
+    t+135s  services 8/8  not ready: -                                                  udp drops central 346
+    t+145s  services 8/8  not ready: -                                                  udp drops central 346
+    t+155s  services 8/8  not ready: -                                                  udp drops central 346
+    t+165s  services 8/8  not ready: -                                                  udp drops central 346
+    t+176s  services 8/8  not ready: -                                                  udp drops central 346
+    t+186s  services 8/8  not ready: -                                                  udp drops central 346
+[03:24:00] result: ok
+2026-11-05T03:20:53Z label=diag8 build=4b00571 result=ok stuck=- states= warnings_on=1 fastdds_warnings=2 unknown_participant=0 last_check="finished n=175" rest_api_pids=68 rcvbuf_errors central=346 discovery=0 rest_api_sockets=7424:rb212992/d296 7425:rb212992/d0
+    -rw-r--r-- 1 root root 20529853 Nov  5 03:24 /home/ops/captures/diag8_central.pcap0
+    -rw-r--r-- 1 root root 16779364 Nov  5 03:24 /home/ops/captures/diag8_host.pcap0
+[03:24:01] logs saved: ~/dds_central_diag8_2026-11-05T03:20:53Z.log ~/dds_discovery_diag8_2026-11-05T03:20:53Z.log

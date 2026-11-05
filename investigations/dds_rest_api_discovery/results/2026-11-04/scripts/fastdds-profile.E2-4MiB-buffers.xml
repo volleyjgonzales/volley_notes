@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Restrict Fast DDS UDP to the swarm overlay so docker_gwbridge addresses are never advertised. -->
+<dds xmlns="http://www.eprosima.com">
+  <profiles>
+    <transport_descriptors>
+      <transport_descriptor>
+        <transport_id>udp_overlay</transport_id>
+        <type>UDPv4</type>
+        <interfaces>
+          <allowlist>
+            <interface name="overlay0"/>
+          </allowlist>
+        </interfaces>
+        <sendBufferSize>4194304</sendBufferSize>
+        <receiveBufferSize>4194304</receiveBufferSize>
+      </transport_descriptor>
+      <transport_descriptor>
+        <transport_id>shm</transport_id>
+        <type>SHM</type>
+      </transport_descriptor>
+    </transport_descriptors>
+
+    <participant profile_name="overlay_only" is_default_profile="true">
+      <rtps>
+        <userTransports>
+          <transport_id>shm</transport_id>
+          <transport_id>udp_overlay</transport_id>
+        </userTransports>
+        <useBuiltinTransports>false</useBuiltinTransports>
+        <!-- Type propagation on startup can flood UDP and leave endpoints unmatched, this causes participant boot issues. -->
+        <propertiesPolicy>
+          <properties>
+            <property>
+              <name>fastdds.type_propagation</name>
+              <value>disabled</value>
+            </property>
+          </properties>
+        </propertiesPolicy>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>
