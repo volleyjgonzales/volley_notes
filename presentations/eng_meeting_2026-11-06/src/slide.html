@@ -1,0 +1,182 @@
+<!-- One slide, 3 minutes + 3 minutes Q&A. Facts and their sources: ../talking_points.md.
+     Roadmap bars: data-start / data-end are dates; build.mjs turns them into positions inside data-from .. data-to.
+     Past bars are actual dates; future bars are targets (dashed). -->
+<section class="status">
+<div class="frame">
+
+  <header class="top">
+    <div>
+      <div class="eyebrow">Planning software · Oct 2026 – Mar 2027</div>
+      <h1>Scheduling &amp; Motion Planning Roadmap</h1>
+      <p class="lede">Make the scheduler <b>safe to change</b>, then extend it with <b>stronger planning methods</b>.</p>
+    </div>
+    <div class="meta">
+      <div class="who">Jon M Gonzales</div>
+      <div class="when">Engineering meeting · Nov 6, 2026</div>
+    </div>
+  </header>
+
+  <div class="gantt" data-from="2026-10-01" data-to="2027-04-01">
+    <div class="g-head">
+      <ul class="legend">
+        <li class="done"><i data-icon="check"></i>Done</li>
+        <li class="plan"><i data-icon="circle-dot-dashed"></i>Planned (target)</li>
+        <li class="explore"><i data-icon="compass"></i>Research &amp; development (open)</li>
+      </ul>
+      <div class="scale">
+        <div class="years">
+          <span data-start="2026-10-01" data-end="2027-01-01">2026</span>
+          <span data-start="2027-01-01" data-end="2027-04-01">2027</span>
+        </div>
+        <div class="months">
+          <span data-start="2026-10-01" data-end="2026-11-01">Oct</span>
+          <span data-start="2026-11-01" data-end="2026-12-01">Nov</span>
+          <span data-start="2026-12-01" data-end="2027-01-01">Dec</span>
+          <span data-start="2027-01-01" data-end="2027-02-01">Jan</span>
+          <span data-start="2027-02-01" data-end="2027-03-01">Feb</span>
+          <span data-start="2027-03-01" data-end="2027-04-01">Mar</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="g-body">
+      <div class="overlay" aria-hidden="true">
+        <span class="gridline" data-start="2026-11-01"></span>
+        <span class="gridline" data-start="2026-12-01"></span>
+        <span class="gridline year" data-start="2027-01-01"></span>
+        <span class="gridline" data-start="2027-02-01"></span>
+        <span class="gridline" data-start="2027-03-01"></span>
+        <span class="today" data-start="2026-11-06"><b>Today</b></span>
+      </div>
+
+      <div class="lane stair">
+        <div class="lane-label">
+          <span class="badge"><i data-icon="list-checks"></i></span>
+          <div><h3>Scheduler <span class="pkg">(task_planning)</span></h3><p>Refactor, then research &amp; development</p></div>
+        </div>
+        <div class="lane-track">
+          <div class="row">
+            <div class="bar done" data-start="2026-10-13" data-end="2026-11-06"><i data-icon="git-merge"></i>Tests &amp; cleanup</div>
+            <div class="bar plan short" data-start="2026-12-09" data-end="2026-12-16"><span class="lbl">Follow-up cleanup</span></div>
+            <div class="bar explore open" data-start="2027-01-11" data-end="2027-04-15"><i data-icon="compass"></i>R&amp;D: task planning methods, validated on site</div>
+          </div>
+          <div class="row">
+            <div class="bar plan short" data-start="2026-11-09" data-end="2026-11-17"><span class="lbl">Tray assignment helpers</span></div>
+            <div class="bar plan short" data-start="2027-01-04" data-end="2027-01-12"><span class="lbl">Benchmarks on real-site scenarios</span></div>
+          </div>
+          <div class="row">
+            <div class="bar plan short" data-start="2026-11-18" data-end="2026-11-25"><span class="lbl">Tray solver interface</span></div>
+          </div>
+          <div class="row">
+            <div class="bar plan short" data-start="2026-11-30" data-end="2026-12-08"><span class="lbl">AGV assignment module</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-label">
+          <span class="badge"><i data-icon="route"></i></span>
+          <div><h3>Motion planning refactor</h3><p>Redesign, then research &amp; development</p></div>
+        </div>
+        <div class="lane-track">
+          <div class="row">
+            <div class="bar done" data-start="2026-10-13" data-end="2026-11-06"><i data-icon="check"></i>Planner study</div>
+            <div class="bar plan short" data-start="2026-11-16" data-end="2026-12-05"><span class="lbl">Motion planning review</span></div>
+            <div class="bar plan" data-start="2027-01-04" data-end="2027-02-13">Refactor: redesign the interfaces</div>
+            <div class="bar explore open" data-start="2027-02-15" data-end="2027-04-15"><i data-icon="compass"></i>R&amp;D: motion planning methods</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-label">
+          <span class="badge"><i data-icon="route"></i></span>
+          <div><h3>Multi-agent path finding</h3><p>Research · notes on dependency graphs, multi-goal planning</p></div>
+        </div>
+        <div class="lane-track">
+          <div class="row">
+            <div class="bar prelim" data-start="2026-10-13" data-end="2026-11-30">Preliminary research (intermittent)</div>
+            <div class="bar plan" data-start="2026-12-01" data-end="2027-01-30">Focused literature review</div>
+            <div class="bar explore open" data-start="2027-02-01" data-end="2027-04-15"><i data-icon="compass"></i>Prototype candidate methods, validate on site</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lane aux">
+        <div class="lane-label">
+          <span class="badge"><i data-icon="wrench"></i></span>
+          <div><h3>AGV Hito <span class="tag">Support</span></h3><p>Auxiliary project</p></div>
+        </div>
+        <div class="lane-track">
+          <div class="row">
+            <div class="bar quiet open behind" data-start="2026-10-01" data-end="2027-04-15">Ongoing support: fixes, code reviews and field issues</div>
+            <div class="bar done tight" data-start="2026-10-01" data-end="2026-10-13">SW2-876</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="card">
+      <h2><i data-icon="git-merge"></i>Completed</h2>
+      <ul class="closed">
+        <li><span class="date">Oct 12</span><span class="ref">PR #973</span><span>Hito pause and e-stop policy</span></li>
+        <li><span class="date">Oct 22</span><span class="ref">Review</span><span>Refactor plan approved</span></li>
+        <li><span class="date">Oct 29</span><span class="ref">PR #1007</span><span>Scenario-based planning tests</span></li>
+        <li><span class="date">Nov 5</span><span class="ref">PR #1018</span><span>Scheduler restructuring</span></li>
+      </ul>
+    </div>
+    <div class="card side">
+      <h2><i data-icon="arrow-right"></i>Next 4 weeks</h2>
+      <ul>
+        <li>Complete the <b>tray solver interface</b></li>
+        <li>Begin the <b>AGV assignment module</b></li>
+        <li><b>Motion planning</b> review</li>
+      </ul>
+    </div>
+    <div class="card ideas">
+      <h2><i data-icon="lightbulb"></i>Candidate directions <span class="note">for evaluation</span></h2>
+      <ul>
+        <li><i data-icon="list-checks"></i><div><b>Puzzle-based tray rearrangement</b><cite>Rosenfeld 2022</cite></div></li>
+        <li><i data-icon="route"></i><div><b>Search over AGV priority orders</b><cite>Zhang et al. 2022</cite></div></li>
+        <li><i data-icon="list-checks"></i><div><b>Off-peak vehicle pre-positioning</b><cite>Guo &amp; Yu 2023</cite></div></li>
+        <li><i data-icon="route"></i><div><b>Plan repair instead of job rejection</b><cite>Li et al. 2022</cite></div></li>
+        <li><i data-icon="route"></i><div><b>Run-time reordering of AGVs</b><cite>Berndt et al. 2024</cite></div></li>
+        <li><i data-icon="route"></i><div><b>Scalable fallback planner</b><cite>Okumura 2023</cite></div></li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+  <aside class="notes">
+    Approximately 3 minutes. Press S for this view. Blue bars are targets; purple bars are open-ended research and
+    development.
+
+    (20 s) This roadmap covers three related projects through March: the scheduler refactor, the motion planning
+    refactor, and research in multi-agent path finding. Hito support continues alongside them.
+
+    (60 s) Scheduler, task planning. The objective is to make the scheduler safe to change. The planning tests are now
+    recorded scenario files (PR 1007), so every change must reproduce the current plans exactly. PR 1018, merged
+    yesterday, restructured the scheduler into one file per pipeline stage and fixed fourteen latent defects. Each
+    stage has merged within about a week, so the remaining stages should largely complete by the end of the year:
+    the tray solver interface, the AGV assignment module and the follow-up cleanup, with benchmarks in January.
+
+    (35 s) Motion planning. I studied the motion planner in October and will review it in depth from mid-November to
+    early December. In January I intend to refactor and redesign its interfaces. The direction is a more
+    conventional problem description: tasks as sequences of goals assigned to agents, with constraints between
+    goals across tasks, while preserving the event sequencing the scheduler depends on. The design is not final.
+
+    (25 s) Research. Preliminary notes exist; focused work begins in December. From February, all three areas move to
+    research and development: translating published algorithms into code we can validate on site. No specific
+    method has been selected.
+
+    (30 s) The right-hand panel lists candidate directions for evaluation: tray rearrangement as a
+    puzzle-based storage problem, off-peak vehicle pre-positioning, searching over AGV priority orders, repairing a
+    failed plan rather than rejecting the job, reordering AGVs at run time when one is delayed, and a scalable
+    fallback planner.
+
+    (10 s) Hito: I delivered the pause and e-stop policy in October and continue to provide support as required.
+  </aside>
+</section>

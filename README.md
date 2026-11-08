@@ -9,7 +9,7 @@ Working notes for the Volley workspace, outside the code repositories. Nothing h
 | `subsystems/` | One note per volley package (`01-common` … `24-central`), the Boost Graph primer, the swarm-deploy reference under `deploy/`, figures under `figures/` |
 | `research/` | Background reading: the MG-TAPF paper walkthrough, the action dependency graph tutorial, the bottleneck assignment explainer |
 | `specs/` | `agv_requirements/`: the illustrated AGV requirements and the site generator |
-| `presentations/` | `scheduler_package/`: the scheduler deck and its generated site (large) |
+| `presentations/` | `scheduler_package/`: the scheduler deck and its generated site (large); `eng_meeting_<date>/`: one-slide status updates for the 4-weekly engineering meeting |
 | `garage/` | Operating the test garages: `deploy_and_test.md` (deploying a build, the NOC, the dispatcher), `troubleshooting_reference.md` (every command used on a garage and how to read it), `scripts/` (attempt, loop, probe and registry scripts, one current copy each) |
 | `investigations/` | Issues worked across tickets. `dds_rest_api_discovery/`: the REST API stuck after a full start (2026-11-03 to 05): `README.md` is the entry point with the reading order, then `summary.md`, `findings.md`, `plan.md`, `handoff.md`, `reviews/` (Codex), `patches/` (PR and ticket texts), `results/<date>/` (raw logs, scripts as run, reference captures) |
 | `tickets/` | Per-ticket and per-PR notes: `SW2-482_scheduler_core_refactor/` (the epic: `SW2-482_notes.md` running log, `PROMPT.md`, `review_rules.md`, stage folders `SW2-1126_scenario_files/` and `SW2-1135_scheduler_renames/`), `SW2-876_agvhito_state_machine/`, `SW2-905_insert_blocked_by_agv/`, `rclcppx-component-review.md` |
