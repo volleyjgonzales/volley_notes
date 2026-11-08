@@ -27,7 +27,7 @@ GROUPS = [
         ("scheduled_jobs", "vector<interfaces::msg::ScheduledJobData>", "entry k = the job with job_index k"),
     ]),
     ("bookkeeping", BOOK, "links between events, consumed later", [
-        ("last_event_by_entity", "unordered_map<GarageEntityId, ScheduleEventSPtr>", "rules A and C; job expansion only"),
+        ("last_event_by_entity", "unordered_map<GarageEntityId, ScheduleEventSPtr>", "written by ChainAfterLastEntityEvent, read by OrderAfterBayAndChargerEvents"),
         ("first_event_by_tray", "unordered_map<uint16_t, ScheduleEventSPtr>", "tray assignment -> AGV assignment"),
     ]),
 ]
@@ -35,9 +35,9 @@ GROUPS = [
 METHODS = [
     ("PlanContext(request_id, initial_state, now)", "sets request_id, initial_state and start_time"),
     ("AddScheduledJob(job)", "appends a ScheduledJobData for a job that expanded"),
-    ("ChainAfterLastEntityEvent(entity, event)", "rule A: edge last[entity] -> event, then last[entity] = event"),
-    ("AddChainedEvent(event)", "AddEvent, then rule A on the event's own entity (if it has one)"),
-    ("OrderAfterJobLeafEvents(event)", "rule B: edge from every leaf with the event's job index"),
+    ("ChainAfterLastEntityEvent(entity, event)", "edge last[entity] -> event, then last[entity] = event"),
+    ("AddChainedEvent(event)", "AddEvent, then ChainAfterLastEntityEvent on the event's own entity (if it has one)"),
+    ("OrderAfterJobLeafEvents(event)", "edge from every leaf with the event's job index"),
     ("FindKeepOutFilter(collision_id)", "Expected<cref<GraphFilterProperties>>; an error if the footprint has none"),
 ]
 
@@ -373,20 +373,24 @@ def scheduled_jobs_flow():
 # 70 — last_event_by_entity during job expansion
 # --------------------------------------------------------------------------------------
 
-RULE_COL = {"A": T.green, "B": T.amber, "C": T.violet}
+RULE_COL = {"chain": T.green, "leaf": T.amber, "bay": T.violet}
 
 
 @figure("70_last_entity_event", "last_event_by_entity during job expansion", DOC1)
 def last_entity_event_flow():
     from fig_eventdag import _node, POS
     d = Doc("70_last_entity_event", "last_event_by_entity while jobs are expanded",
-            "Six events are added in order. For each, the table shows the map lookup (rule A), the leaf edges "
-            "(rule B), the bay edge (rule C) and the map afterwards; the DAG on the right colours each edge by "
-            "the rule that added it.")
-    hx = [0, 36, 270, 430, 560, 670]
-    for x, h in zip(hx, ["#", "event added (job)", "rule A: key -> edge", "rule B", "rule C",
-                         "last_event_by_entity after"]):
-        d.text(x, 0, h, size=11, family="mono", weight=600, fill=T.muted)
+            "Six events are added in order. For each, the table shows the map lookup (ChainAfterLastEntityEvent), "
+            "the leaf edges (OrderAfterJobLeafEvents), the bay edge (OrderAfterBayAndChargerEvents) and the map "
+            "afterwards; the DAG below colours each edge by the helper that added it.")
+    hx = [0, 30, 205, 385, 550, 750]
+    heads = [("#", ""), ("event added (job)", ""), ("ChainAfterLastEntityEvent", "key -> edge"),
+             ("OrderAfterJobLeafEvents", "leaf edges"), ("OrderAfterBayAndChargerEvents", "bay / VECS edge"),
+             ("last_event_by_entity after", "")]
+    for x, (h, sub) in zip(hx, heads):
+        d.text(x, 0, h, size=10.5, family="mono", weight=600, fill=T.muted)
+        if sub:
+            d.text(x, 15, sub, size=10.5, family="mono", fill=T.faint)
     rows = [
         ("a", "BayTransition B21 (0)", "Bay 21: none", "-", "-", ["Bay21:a"]),
         ("b", "TrayMove T21 -> ? (0)", "Tray 21: none", "a -> b", "-", ["Bay21:a", "Tray21:b"]),
@@ -395,15 +399,15 @@ def last_entity_event_flow():
         ("e", "TrayMove T19 -> P24 (1)", "Tray 19: none", "-", "-", ["... ", "Tray19:e"]),
         ("f", "TrayMove T19 -> P23 (2)", "Tray 19: e -> f", "-", "-", ["... ", "Tray19:f"]),
     ]
-    y = 22
+    y = 36
     for i, (k, ev, ra, rb, rc, mp) in enumerate(rows):
         if i % 2 == 0:
             d.rect(-8, y - 6, 1030, 34, rx=6, fill=T.tint(T.card, 0.6, T.bg), layer="under")
         d.text(hx[0], y + 11, k, size=12.5, family="mono", weight=700, fill=T.fg)
         d.text(hx[1], y + 11, ev, size=11.5, family="mono", fill=T.fg2)
-        d.text(hx[2], y + 11, ra, size=11.5, family="mono", fill=RULE_COL["A"] if "->" in ra else T.muted)
-        d.text(hx[3], y + 11, rb, size=11.5, family="mono", fill=RULE_COL["B"] if "->" in rb else T.faint)
-        d.text(hx[4], y + 11, rc, size=11.5, family="mono", fill=RULE_COL["C"] if "->" in rc else T.faint)
+        d.text(hx[2], y + 11, ra, size=11.5, family="mono", fill=RULE_COL["chain"] if "->" in ra else T.muted)
+        d.text(hx[3], y + 11, rb, size=11.5, family="mono", fill=RULE_COL["leaf"] if "->" in rb else T.faint)
+        d.text(hx[4], y + 11, rc, size=11.5, family="mono", fill=RULE_COL["bay"] if "->" in rc else T.faint)
         x = hx[5]
         for m in mp:
             changed = m.endswith(":" + k)
@@ -412,12 +416,13 @@ def last_entity_event_flow():
         y += 34
     # DAG with coloured edges
     gx0, gy0 = 0, y + 76
-    d.text(0, gy0 - 52, "The resulting DAG, edges coloured by rule", size=13, weight=600, fill=T.fg)
+    d.text(0, gy0 - 52, "The resulting DAG, edges coloured by helper", size=13, weight=600, fill=T.fg)
     gxs, gys = 110, 70
     boxes = {}
     for k, (c, r) in POS.items():
         boxes[k] = _node(d, gx0 + c * gxs, gy0 + r * gys, k)
-    edges = [("a", "b", "B"), ("b", "c", "B"), ("c", "d", "B"), ("a", "c", "C"), ("a", "d", "A"), ("e", "f", "A")]
+    edges = [("a", "b", "leaf"), ("b", "c", "leaf"), ("c", "d", "leaf"), ("a", "c", "bay"), ("a", "d", "chain"),
+             ("e", "f", "chain")]
     for u, v, r in edges:
         a, b = boxes[u], boxes[v]
         col = RULE_COL[r]
@@ -428,8 +433,8 @@ def last_entity_event_flow():
             pts = [(a.cx + 8, a.y0), (a.cx + 8, a.y0 - lift), (b.cx - 8, a.y0 - lift), (b.cx - 8, b.y0)]
         connect(d, pts, kind="flow", color=col, size=7, sw=1.8, radius=5)
     note(d, 520, gy0 - 30, 500,
-         "Rule A links events on the same garage asset across jobs (e -> f). Rule B only links events of one job. "
-         "Rule C (OrderAfterBayAndChargerEvents) reads the map for a bay or VECS but never writes it. After job "
+         "ChainAfterLastEntityEvent links events on the same garage asset across jobs (e -> f). "
+         "OrderAfterJobLeafEvents only links events of one job. OrderAfterBayAndChargerEvents reads the map for a bay or VECS but never writes it. After job "
          "expansion nothing updates the map again, so later stages keep their own (TrayAssignmentState::"
          "last_event_by_tray, AgvAssignmentState::last_event_by_agv).",
          title="What the map is for", accent=T.green)
@@ -438,11 +443,12 @@ def last_entity_event_flow():
                    "ChainAfterLastEntityEvent(key, e) adds last[key] -> e if there is an entry, then sets last[key] = e; "
                    "AddChainedEvent(e) adds e and does this for e's own entity.",
           badge_key="illustrative",
-          legend=[("arrow", RULE_COL["A"], "rule A (last_event_by_entity)"), ("arrow", RULE_COL["B"], "rule B (leaves of the job)"),
-                  ("arrow", RULE_COL["C"], "rule C (into a bay / VECS)"), ("box", T.green, "map entry changed by this event")],
+          legend=[("arrow", RULE_COL["chain"], "ChainAfterLastEntityEvent (same asset)"),
+                  ("arrow", RULE_COL["leaf"], "OrderAfterJobLeafEvents (leaves of the job)"),
+                  ("arrow", RULE_COL["bay"], "OrderAfterBayAndChargerEvents (into a bay / VECS)"), ("box", T.green, "map entry changed by this event")],
           footnote="Same six events as the topological-ordering figure. Keys are interfaces::msg::GarageEntityId values "
                    "built with AgvId / TrayId / BayId / VecsId; a TrayMove with no tray has no key (GetGarageEntityId() "
-                   "is empty) and skips rule A. Rule B is OrderAfterJobLeafEvents, rule C OrderAfterBayAndChargerEvents.")
+                   "is empty), so AddChainedEvent adds it without chaining it.")
     return d
 
 

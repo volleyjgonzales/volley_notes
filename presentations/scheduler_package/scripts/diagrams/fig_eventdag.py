@@ -255,7 +255,7 @@ def event_dag_storage():
                                                         "CHUGG motion.GetActionId()", "changes if a vertex is removed"],
          T.amber),
         ("job_index (unsigned int)", "a field of the event", ["event->GetJobIndex()", "scheduled_jobs[k]",
-                                                       "rule B: leaves of the same job", "shared by a whole job"],
+                                                       "OrderAfterJobLeafEvents matches it", "shared by a whole job"],
          T.green),
     ]
     cw = 290
@@ -311,7 +311,7 @@ def event_dag_operations():
 
     # 1 AddEvent
     x, y = at(0)
-    _panel(d, x, y, PW, PH, 1, "AddEvent(g)", ["adds vertex v6, no edges yet", "rules A/B/C then add its edges"])
+    _panel(d, x, y, PW, PH, 1, "AddEvent(g)", ["adds vertex v6, no edges yet", "the edge helpers then add its edges"])
     _mini_dag(d, x + dx, y + dy, nodes=ORDER + ["g"], states={"g": "new"}, extra_nodes={"g": (3, 1)})
     # 2 AddDependency
     x, y = at(1)

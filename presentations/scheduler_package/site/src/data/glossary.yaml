@@ -39,7 +39,7 @@
   def: "DiscreteGarageState's overloaded event handlers (common_ros): one per garage event message; each checks the event against the state, then changes it, and returns a BoolStringPair."
 
 - term: scheduled_jobs
-  code: [scheduled_jobs, ctx->scheduled_jobs, result.scheduled_jobs, AddScheduledJob]
+  code: [scheduled_jobs, ctx->scheduled_jobs, result.scheduled_jobs, AddScheduledJob, PushBackScheduledJob]
   to: bg-scheduled_jobs-in-detail
   def: "Jobs that expanded successfully, in request order; entry k is the job whose events carry job_index k. A job that fails expansion leaves no entry and no events."
 
@@ -62,22 +62,32 @@
 - term: last_event_by_entity
   code: [last_event_by_entity, ctx->last_event_by_entity, last_entity_event, ctx->last_entity_event]
   to: bg-last_entity_event-in-detail
-  def: "The last event that touched each AGV, tray, bay or VECS; used by rule A during job expansion (last_entity_event before PR #1018)."
+  def: "The last event that touched each AGV, tray, bay or VECS; read and updated by ChainAfterLastEntityEvent during job expansion (last_entity_event before PR #1018)."
 
 - term: first_event_by_tray
   code: [first_event_by_tray, ctx->first_event_by_tray, first_tray_event, ctx->first_tray_event]
   to: bg-first_tray_event-in-detail
   def: "The first event of each tray, filled by tray assignment and read by AGV assignment (first_tray_event before PR #1018)."
 
-- term: helper methods
-  code: [ChainAfterLastEntityEvent, AddChainedEvent, OrderAfterJobLeafEvents, UpdateLastEntityEvent, UpdateLeafDependencies, PushBackScheduledJob]
+- term: ChainAfterLastEntityEvent
+  code: [ChainAfterLastEntityEvent, AddChainedEvent, UpdateLastEntityEvent]
   to: bg-the-three-helper-methods
-  def: "The PlanContext methods that add edges - ChainAfterLastEntityEvent and AddChainedEvent apply rule A, OrderAfterJobLeafEvents applies rule B; AddScheduledJob records a planned job."
+  def: "PlanContext method (plan_context.hpp): adds the edge last_event_by_entity[entity] -> event, then records the event as the entity's last. AddChainedEvent adds an event and calls it with the event's own entity. UpdateLastEntityEvent before PR #1018."
 
-- term: Rules A, B and C
-  text: [rule A, rule B, rule C, Rule A, Rule B, Rule C]
+- term: OrderAfterJobLeafEvents
+  code: [OrderAfterJobLeafEvents, UpdateLeafDependencies]
+  to: bg-the-three-helper-methods
+  def: "PlanContext method (plan_context.hpp): adds an edge from every current leaf of the same job (same GetJobIndex()) to the new event. UpdateLeafDependencies before PR #1018."
+
+- term: OrderAfterBayAndChargerEvents
+  code: [OrderAfterBayAndChargerEvents]
   to: bg-where-the-edges-come-from
-  def: The three ways job expansion adds DAG edges - same entity (A), same job's leaves (B), repark-specific (C).
+  def: "File-local function in job_expansion.cpp, called only by ExpandReparkTrayJob: orders a tray move after the last event of its destination bay or VECS; reads last_event_by_entity, never writes it."
+
+- term: Edge helpers
+  text: [edge helpers]
+  to: bg-where-the-edges-come-from
+  def: "The three functions that add DAG edges during job expansion - ChainAfterLastEntityEvent (same entity, across jobs), OrderAfterJobLeafEvents (leaves of the same job) and OrderAfterBayAndChargerEvents (a tray move into a bay or VECS)."
 
 - term: DiscreteGarageState
   decl: "DiscreteGarageState"

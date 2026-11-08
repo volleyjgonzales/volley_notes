@@ -138,35 +138,35 @@
 03-task-planning.md:241:#### Assessment of the design
 03-task-planning.md:267:### Every job sees the garage through `working_state`
 03-task-planning.md:281:### Where the edges come from
-03-task-planning.md:300:#### Rule A, rule B and rule C in the code
-03-task-planning.md:318:### Job methods are built from a few shared pieces
-03-task-planning.md:333:### `TYPE_REPARK_TRAY` and `TYPE_MOVE_TRAY` — `ExpandReparkTrayJob`
-03-task-planning.md:369:### `TYPE_MOVE_AGV` — `ExpandAgvMoveJob`
-03-task-planning.md:398:### `TYPE_TRANSITION_BAY_TO_INSERT` / `_TO_RETRIEVE` — `ExpandBayTransitionJob`
-03-task-planning.md:428:### `TYPE_CHARGE_PAYLOAD` — `ExpandChargePayloadJob`
-03-task-planning.md:456:### `TYPE_RETRIEVE` — `ExpandRetrieveJob`
-03-task-planning.md:490:### `TYPE_INSERT` — `ExpandInsertJob`
-03-task-planning.md:519:### `TYPE_READY_FOR_INSERT` — `ExpandReadyForInsertJob`
-03-task-planning.md:549:### `TYPE_READY_FOR_RETRIEVE` — `ExpandReadyForRetrieveJob`
-03-task-planning.md:577:### `TYPE_CHARGE_AGV` — `ExpandAgvChargeJob`
-03-task-planning.md:605:### `TYPE_CLEAN_GARAGE` — `ExpandCleanGarageJob`
-03-task-planning.md:631:### `TYPE_REBALANCE_GARAGE` — `ExpandRebalanceGarageJob`
-03-task-planning.md:658:### Gotchas
-03-task-planning.md:692:### Cheat sheet and self-check
-03-task-planning.md:716:## Tray assignment: `AssignTrays`
-03-task-planning.md:720:### The problem this stage solves
-03-task-planning.md:769:### The blocking-tray loop
-03-task-planning.md:928:### Filling a blank tray id: `AssignEmptyTrayToMove`
-03-task-planning.md:964:### Filling a blank destination: `AssignDestinationAndUnblockingMoves`
-03-task-planning.md:1001:#### Inside `ResolveBlockingTrays`
-03-task-planning.md:1028:### Occupancy becomes dependencies: `occupancy_history`
-03-task-planning.md:1043:## AGV assignment: `AssignAgvs`
-03-task-planning.md:1106:### Repairing paths after assignment
-03-task-planning.md:1118:## `RemoveRedundantEdges()` and `ValidateEventSequence`
-03-task-planning.md:1133:## Bays, VECS and VRCs
-03-task-planning.md:1137:### Bays and rebalancing
-03-task-planning.md:1159:### VECS (EV charging)
-03-task-planning.md:1163:### VRCs (lifts between floors)
+03-task-planning.md:302:#### The three edge helpers in the code
+03-task-planning.md:320:### Job methods are built from a few shared pieces
+03-task-planning.md:335:### `TYPE_REPARK_TRAY` and `TYPE_MOVE_TRAY` — `ExpandReparkTrayJob`
+03-task-planning.md:371:### `TYPE_MOVE_AGV` — `ExpandAgvMoveJob`
+03-task-planning.md:400:### `TYPE_TRANSITION_BAY_TO_INSERT` / `_TO_RETRIEVE` — `ExpandBayTransitionJob`
+03-task-planning.md:430:### `TYPE_CHARGE_PAYLOAD` — `ExpandChargePayloadJob`
+03-task-planning.md:458:### `TYPE_RETRIEVE` — `ExpandRetrieveJob`
+03-task-planning.md:492:### `TYPE_INSERT` — `ExpandInsertJob`
+03-task-planning.md:521:### `TYPE_READY_FOR_INSERT` — `ExpandReadyForInsertJob`
+03-task-planning.md:551:### `TYPE_READY_FOR_RETRIEVE` — `ExpandReadyForRetrieveJob`
+03-task-planning.md:579:### `TYPE_CHARGE_AGV` — `ExpandAgvChargeJob`
+03-task-planning.md:607:### `TYPE_CLEAN_GARAGE` — `ExpandCleanGarageJob`
+03-task-planning.md:633:### `TYPE_REBALANCE_GARAGE` — `ExpandRebalanceGarageJob`
+03-task-planning.md:660:### Gotchas
+03-task-planning.md:694:### Cheat sheet and self-check
+03-task-planning.md:718:## Tray assignment: `AssignTrays`
+03-task-planning.md:722:### The problem this stage solves
+03-task-planning.md:771:### The blocking-tray loop
+03-task-planning.md:930:### Filling a blank tray id: `AssignEmptyTrayToMove`
+03-task-planning.md:966:### Filling a blank destination: `AssignDestinationAndUnblockingMoves`
+03-task-planning.md:1003:#### Inside `ResolveBlockingTrays`
+03-task-planning.md:1030:### Occupancy becomes dependencies: `occupancy_history`
+03-task-planning.md:1045:## AGV assignment: `AssignAgvs`
+03-task-planning.md:1108:### Repairing paths after assignment
+03-task-planning.md:1120:## `RemoveRedundantEdges()` and `ValidateEventSequence`
+03-task-planning.md:1135:## Bays, VECS and VRCs
+03-task-planning.md:1139:### Bays and rebalancing
+03-task-planning.md:1161:### VECS (EV charging)
+03-task-planning.md:1165:### VRCs (lifts between floors)
 04-motion-planning.md:1:# 04 — Motion planning: from the event DAG to timed motions
 04-motion-planning.md:7:## Where motion planning sits: two DAGs around one planner
 04-motion-planning.md:28:## How the motion planner is packaged and called

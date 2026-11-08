@@ -298,7 +298,7 @@ def assign_dest():
         events=[("TrayMove", "T21: B21 -> ?", 0, "optional", "before: destination blank"),
                 ("TrayMove", "T23: P23 -> P24", 0, "solid", "NEW: blocker move, job_index 0"),
                 ("TrayMove", "tray_id 21: B21 -> {node_id: 23, heading: 90}", 0, "solid", "after: same event as 1, dest set")],
-        edges=[(2, 3, "A", "tray", "AddDependency(last_move, event)")],
+        edges=[(2, 3, "chain", "tray", "AddDependency(last_move, event)")],
         events_title="The DAG, before and after",
         events_sub="one new event and one new edge (plus any occupancy edges)",
         steps=[

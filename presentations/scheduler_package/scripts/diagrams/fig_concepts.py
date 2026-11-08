@@ -424,7 +424,7 @@ def topological_ordering():
     edge("a", "c", via=(-30, 38, -40))
     edge("a", "d", via=(30, 22, 0))
     d.text(pos["e"].x0, pos["e"].y1 + 22, "Job 0 is the retrieve from 'Job expansion'; jobs 1 and 2 repark T19 twice "
-           "(rule A: e -> f). Nothing links job 0 to jobs 1 and 2.", size=11, fill=T.muted)
+           "(AddChainedEvent: e -> f). Nothing links job 0 to jobs 1 and 2.", size=11, fill=T.muted)
     dag_bottom = pos["e"].y1 + 34
 
     # ---- by hand: repeatedly take an event with no unfinished prerequisites ----

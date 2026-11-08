@@ -2342,7 +2342,7 @@ using ScheduleEventSPtr = std::shared_ptr&lt;ScheduleEvent>;
   <li><strong><code>ApplyTo</code> is <code>const</code>.</strong> Replaying an event changes only the <code>DiscreteGarageState</code> passed in, never the event. That is why the same event objects can be replayed by every job method and every stage.</li>
   <li><strong>The job index is fixed at construction.</strong> There is no setter. Blocker moves get their index by being constructed with the root move's <code>GetJobIndex()</code>.</li>
   <li><strong>Events can be copy-constructed but not assigned.</strong> <code>TrayMove copy = *move;</code> compiles; <code>copy = *move;</code> does not (the base copy assignment is private). The refactor proposal (the <a href="#doc-proposal">Issue &amp; proposal</a> tab) relies on the first.</li>
-  <li><strong><code>GetGarageEntityId()</code> drives rule A</strong> (an event waits for the previous event on the same AGV, tray, bay or VECS). It returns the entity whose last event a new event must wait for. A <code>TrayMove</code> with no tray yet returns <code>std::nullopt</code>, which is why such moves skip rule A (<a class="ref" href="#bg-where-the-edges-come-from">section 14.5</a>).</li>
+  <li><strong><code>GetGarageEntityId()</code> drives <code>AddChainedEvent</code></strong>, which chains an event after the previous event on the same AGV, tray, bay or VECS (<code>ChainAfterLastEntityEvent</code>). It returns the entity whose last event a new event must wait for. A <code>TrayMove</code> with no tray yet returns <code>std::nullopt</code>, which is why <code>AddChainedEvent</code> only adds such moves and chains them to nothing (<a class="ref" href="#bg-where-the-edges-come-from">section 14.5</a>).</li>
 </ul>
 <h3 id="bg-the-subclasses-and-what-apply-does">The subclasses, and what <code>ApplyTo</code> does</h3>
 <p>The five subclasses of <code>ScheduleEvent</code> differ in the data they carry and in what their <code>ApplyTo</code> method does to a <code>DiscreteGarageState</code>. The table summarises each subclass; pay particular attention to <code>TrayMove</code>, whose behaviour depends on which of its optional fields are set, as the figure and list after the table explain.</p>
@@ -2655,7 +2655,7 @@ public:
 <p>Three design choices explain most of the behaviour in the rest of this section:</p>
 <ul>
   <li><strong><code>boost::vecS</code> for vertices.</strong> Vertices are plain indices <code>0 … n−1</code>, so lookups by vertex are array accesses and <code>HasVertex(v)</code> is just <code>v &lt; NumVertices()</code>. The price: removing a vertex shifts every later index down by one.</li>
-  <li><strong><code>bidirectionalS</code>.</strong> Each vertex stores both its in-edges and its out-edges, so <code>GetInEdges</code>, <code>GetParents</code> and in-degree checks are cheap. Rule B's leaf search and the root search both use the degrees.</li>
+  <li><strong><code>bidirectionalS</code>.</strong> Each vertex stores both its in-edges and its out-edges, so <code>GetInEdges</code>, <code>GetParents</code> and in-degree checks are cheap. The leaf search in <code>OrderAfterJobLeafEvents</code> and the root search both use the degrees.</li>
   <li><strong>A side map <code>vertex_by_node_</code>.</strong> Boost only maps vertex → value. <code>Dag</code> keeps the reverse map itself, so “where is this event?” is a hash lookup. Every pointer-taking method goes through it, and it is why the same event cannot be added twice: <code>Add(ptr)</code> returns <code>std::nullopt</code> if <code>ptr</code> is already a key.</li>
 </ul>
 <h3 data-num id="bg-what-is-stored-vertices-edges-and-shared-events">What is stored: vertices, edges and shared events</h3>
@@ -2694,7 +2694,7 @@ public:
       <td>The job index</td>
       <td><code>unsigned int</code>, stored in the event</td>
       <td>Which job the event belongs to</td>
-      <td><code>scheduled_jobs[k]</code>, rule B, <code>GetRootEvents()</code> sorting, topological tie-breaking</td>
+      <td><code>scheduled_jobs[k]</code>, <code>OrderAfterJobLeafEvents</code>, <code>GetRootEvents()</code> sorting, topological tie-breaking</td>
       <td>Many events share one index; there is no index → event lookup</td>
     </tr>
   </tbody>
@@ -2779,7 +2779,7 @@ public:
       <td><code>GetLeafEvents()</code></td>
       <td><code>std::vector&lt;ScheduleEventSPtr></code></td>
       <td>Out-degree 0, in vertex order</td>
-      <td>rule B (<code>OrderAfterJobLeafEvents</code>)</td>
+      <td><code>OrderAfterJobLeafEvents</code></td>
     </tr>
     <tr>
       <td></td>
@@ -2888,7 +2888,7 @@ public:
     </tr>
   </tbody>
 </table>
-<p><strong>Edges, roots, leaves.</strong> An edge u → v reads “u must finish before v starts”, nothing more: not “u is near v” and not “the same AGV does both”. A root can start as soon as the plan starts; a leaf is something nothing else waits for. Rule B (<a class="ref" href="#bg-where-the-edges-come-from">section 14.5</a>) is built on leaves: a new event of job k waits for every current leaf of job k, which is “everything job k has done so far that nothing else is waiting for”.</p>
+<p><strong>Edges, roots, leaves.</strong> An edge u → v reads “u must finish before v starts”, nothing more: not “u is near v” and not “the same AGV does both”. A root can start as soon as the plan starts; a leaf is something nothing else waits for. <code>OrderAfterJobLeafEvents</code> (<a class="ref" href="#bg-where-the-edges-come-from">section 14.5</a>) is built on leaves: a new event of job k waits for every current leaf of job k, which is “everything job k has done so far that nothing else is waiting for”.</p>
 <p><strong>How <code>ScheduleEventDag</code> orders events.</strong> It overrides the Boost DFS sort with Kahn's algorithm:</p>
 <pre><code class="language-cpp">// planner_core/src/event_dag.cpp — ScheduleEventDag::GetTopologicalOrdering (abridged)
 // Min-heap on job index: of the vertices ready at each step, the earliest job's comes first.
@@ -2942,7 +2942,7 @@ if(ordering.size() != NumVertices()) {
     <tr>
       <td>Job expansion (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 14</a>)</td>
       <td><code>TrayMove</code>, <code>AgvMove</code>, <code>BayTransition</code>, <code>VecsTransition</code>: the intent of each job</td>
-      <td>Rule A (same garage asset, across jobs), rule B (leaves of the same job), rule C (into a bay or VECS), plus a few direct <code>AddDependency</code> calls in individual job methods</td>
+      <td><code>ChainAfterLastEntityEvent</code> (same garage asset, across jobs), <code>OrderAfterJobLeafEvents</code> (leaves of the same job), <code>OrderAfterBayAndChargerEvents</code> (into a bay or VECS), plus a few direct <code>AddDependency</code> calls in individual job methods</td>
       <td><code>ApplyEventsTo</code> for <code>working_state</code></td>
     </tr>
     <tr>
@@ -3111,8 +3111,8 @@ using PlanContextSPtr = std::shared_ptr&lt;PlanContext>;
       <td><code>last_event_by_entity</code></td>
       <td><code>std::unordered_map&lt;interfaces::msg::GarageEntityId, ScheduleEventSPtr></code></td>
       <td>bookkeeping</td>
-      <td><code>ChainAfterLastEntityEvent</code> (rule A), usually through <code>AddChainedEvent</code></td>
-      <td><code>ChainAfterLastEntityEvent</code>; rule C in <code>OrderAfterBayAndChargerEvents</code> (from <code>ExpandReparkTrayJob</code>)</td>
+      <td><code>ChainAfterLastEntityEvent</code>, usually through <code>AddChainedEvent</code></td>
+      <td><code>ChainAfterLastEntityEvent</code>; <code>OrderAfterBayAndChargerEvents</code> (from <code>ExpandReparkTrayJob</code>)</td>
       <td>Maintained only during job expansion</td>
     </tr>
     <tr>
@@ -3132,7 +3132,7 @@ using PlanContextSPtr = std::shared_ptr&lt;PlanContext>;
 <p><strong>Bookkeeping</strong> maps hold pointers into <code>event_dag</code> so that a stage can find “the last event for this AGV” or “the first move of this tray” without searching the DAG. They point at the same objects as the DAG (<code>shared_ptr</code> copies), so following a map entry gives you the actual vertex's event.</p>
 <p>Of the eight fields, three link events and jobs together and are where most bugs hide: <code>scheduled_jobs</code>, which turns an event's <code>job_index</code> back into a job, and the bookkeeping maps that the job methods and assignment stages use to add edges. The rest of this section looks at them in detail.</p>
 <h3 data-num id="bg-schedulecontext-in-depth-job-indices-and-bookkeeping-maps">Job indices and bookkeeping maps</h3>
-<p>This section explains <code>scheduled_jobs</code>; the helper methods, three of which add edges while jobs are expanded (rules A and B; the Task planning tab defines all three edge rules in <a class="ref bare" href="#bg-where-the-edges-come-from">section 15.5</a>); and the two bookkeeping maps, <code>last_event_by_entity</code> and <code>first_event_by_tray</code>. It ends with the context's life cycle across one <code>Plan()</code> call and its gotchas.</p>
+<p>This section explains <code>scheduled_jobs</code>; the helper methods, three of which add edges while jobs are expanded (<code>ChainAfterLastEntityEvent</code>, <code>AddChainedEvent</code> and <code>OrderAfterJobLeafEvents</code>; the Task planning tab explains them, with the file-local <code>OrderAfterBayAndChargerEvents</code>, in <a class="ref bare" href="#bg-where-the-edges-come-from">section 15.5</a>); and the two bookkeeping maps, <code>last_event_by_entity</code> and <code>first_event_by_tray</code>. It ends with the context's life cycle across one <code>Plan()</code> call and its gotchas.</p>
 <h3 id="bg-scheduled_jobs-in-detail"><code>scheduled_jobs</code> in detail</h3>
 <p>There are <strong>two</strong> vectors of <code>interfaces::msg::ScheduledJobData</code> in <code>Plan()</code>, and <a class="ref" href="#bg-fig-69_scheduled_jobs">Figure 23</a> tracks both:</p>
 <ul>
@@ -3160,7 +3160,7 @@ using PlanContextSPtr = std::shared_ptr&lt;PlanContext>;
       <td>Stamp every event they create with their <code>job_index</code>; nested calls (<code>ExpandRetrieveJob</code> → <code>ExpandReparkTrayJob</code>) pass the same index down</td>
     </tr>
     <tr>
-      <td>Rule B, <code>OrderAfterJobLeafEvents</code></td>
+      <td><code>OrderAfterJobLeafEvents</code></td>
       <td>Only links leaves whose <code>GetJobIndex()</code> equals the new event's</td>
     </tr>
     <tr>
@@ -3187,7 +3187,7 @@ void AddScheduledJob(const interfaces::msg::SchedulerJob&amp; job) {   // node_i
   scheduled_jobs.emplace_back().job = job;
 }
 
-// Rule A ("Where the edges come from", Task planning tab): chain events on the same garage asset, across jobs.
+// See "Where the edges come from" (Task planning tab): chain events on the same garage asset, across jobs.
 void ChainAfterLastEntityEvent(
     const interfaces::msg::GarageEntityId&amp; entity, const ScheduleEventSPtr&amp; event) {
   auto&amp; last_event = last_event_by_entity[entity];
@@ -3197,7 +3197,7 @@ void ChainAfterLastEntityEvent(
   last_event = event;                             // new event is now the last
 }
 
-// Adds the event and applies rule A; a tray move without a tray yet has no entity and is only added.
+// Adds the event and calls ChainAfterLastEntityEvent; a tray move without a tray yet has no entity and is only added.
 void AddChainedEvent(const ScheduleEventSPtr&amp; event) {
   event_dag.AddEvent(event);
   if(const auto entity = event->GetGarageEntityId()) {
@@ -3205,7 +3205,7 @@ void AddChainedEvent(const ScheduleEventSPtr&amp; event) {
   }
 }
 
-// Rule B ("Where the edges come from", Task planning tab): the new event waits for every current leaf of the SAME job.
+// See "Where the edges come from" (Task planning tab): the new event waits for every current leaf of the SAME job.
 void OrderAfterJobLeafEvents(const ScheduleEventSPtr&amp; event) {
   for(const auto&amp; leaf : event_dag.GetLeafEvents()) {               // leaf = no outgoing edge
     if(leaf != event &amp;&amp; leaf->GetJobIndex() == event->GetJobIndex()) {
@@ -3224,18 +3224,18 @@ void OrderAfterJobLeafEvents(const ScheduleEventSPtr&amp; event) {
   return std::cref(it->second);
 }
 </code></pre>
-<p><code>ChainAfterLastEntityEvent</code> (was <code>UpdateLastEntityEvent</code>), <code>AddChainedEvent</code> (new in PR #1018, which replaced a repeated add-then-chain pattern) and <code>OrderAfterJobLeafEvents</code> (was <code>UpdateLeafDependencies</code>, which took the job index as a second argument) are the only code in <code>PlanContext</code> that adds edges. The last two assume the event has already been added to <code>event_dag</code>; if it has not, <code>AddDependency</code> returns <code>false</code> and the edge is silently lost (<a class="ref" href="#bg-the-operations">section 12.5</a>). <code>AddChainedEvent</code> removes that trap for rule A. <code>interfaces::msg::GarageEntityId</code> is a ROS message holding an <a href="#bg-term-asset-type">asset type</a> letter and an id; the code builds keys with <code>AgvId(id)</code>, <code>TrayId(id)</code>, <code>BayId(id)</code> and <code>VecsId(id)</code>.</p>
+<p><code>ChainAfterLastEntityEvent</code> (was <code>UpdateLastEntityEvent</code>), <code>AddChainedEvent</code> (new in PR #1018, which replaced a repeated add-then-chain pattern) and <code>OrderAfterJobLeafEvents</code> (was <code>UpdateLeafDependencies</code>, which took the job index as a second argument) are the only code in <code>PlanContext</code> that adds edges. The last two assume the event has already been added to <code>event_dag</code>; if it has not, <code>AddDependency</code> returns <code>false</code> and the edge is silently lost (<a class="ref" href="#bg-the-operations">section 12.5</a>). <code>AddChainedEvent</code> removes that trap for <code>ChainAfterLastEntityEvent</code>. <code>interfaces::msg::GarageEntityId</code> is a ROS message holding an <a href="#bg-term-asset-type">asset type</a> letter and an id; the code builds keys with <code>AgvId(id)</code>, <code>TrayId(id)</code>, <code>BayId(id)</code> and <code>VecsId(id)</code>.</p>
 <h3 id="bg-last_entity_event-in-detail"><code>last_event_by_entity</code> in detail</h3>
-<p><code>last_event_by_entity</code> is a <code>std::unordered_map&lt;interfaces::msg::GarageEntityId, ScheduleEventSPtr></code>: for each AGV, tray, bay and VECS, the <strong>last event added so far</strong> that touches it. It exists for one purpose, rule A: when a job method adds an event for entity X, that event must wait for whatever X was last asked to do, even if a different job asked. Without it, two jobs that both move tray T19 could run in either order.</p>
+<p><code>last_event_by_entity</code> is a <code>std::unordered_map&lt;interfaces::msg::GarageEntityId, ScheduleEventSPtr></code>: for each AGV, tray, bay and VECS, the <strong>last event added so far</strong> that touches it. It exists for one purpose, <code>ChainAfterLastEntityEvent</code>: when a job method adds an event for entity X, that event must wait for whatever X was last asked to do, even if a different job asked. Without it, two jobs that both move tray T19 could run in either order.</p>
 <figure id="bg-fig-70_last_entity_event">
   <img src="figures/70_last_entity_event.svg" alt="last_event_by_entity during job expansion">
-  <figcaption>The six events of the topological-ordering example, added in order. For each one the table shows the rule A lookup (an edge only when the key is already in the map), the rule B edges (current leaves of the same job), the rule C edge (a tray move into a bay waits for the bay's last event) and the map afterwards. The DAG below colours each edge by the rule that added it: only rule A links the two T19 moves of jobs 1 and 2.</figcaption>
+  <figcaption>The six events of the topological-ordering example, added in order. For each one the table shows the <code>ChainAfterLastEntityEvent</code> lookup (an edge only when the key is already in the map), the <code>OrderAfterJobLeafEvents</code> edges (current leaves of the same job), the <code>OrderAfterBayAndChargerEvents</code> edge (a tray move into a bay waits for the bay's last event) and the map afterwards. The DAG below draws each edge in the style of the helper that added it: solid for <code>ChainAfterLastEntityEvent</code>, coloured by entity; dashed for <code>OrderAfterJobLeafEvents</code>; dotted for <code>OrderAfterBayAndChargerEvents</code>. Only <code>ChainAfterLastEntityEvent</code> links the two T19 moves of jobs 1 and 2.</figcaption>
 </figure>
 <p>How it is keyed, written and read:</p>
 <ul>
-  <li><strong>Keys</strong> are <code>interfaces::msg::GarageEntityId</code> values (asset type letter plus id) built with <code>AgvId(id)</code>, <code>TrayId(id)</code>, <code>BayId(id)</code>, <code>VecsId(id)</code>. <code>AddChainedEvent</code> takes the key from <code>event->GetGarageEntityId()</code>: a <code>TrayMove</code> gives its tray, an <code>AgvMove</code> its AGV, a <code>BayTransition</code> its bay, a <code>VecsTransition</code> its VECS. A <code>TrayMove</code> with no tray yet has no key (<code>std::nullopt</code>) and skips rule A.</li>
+  <li><strong>Keys</strong> are <code>interfaces::msg::GarageEntityId</code> values (asset type letter plus id) built with <code>AgvId(id)</code>, <code>TrayId(id)</code>, <code>BayId(id)</code>, <code>VecsId(id)</code>. <code>AddChainedEvent</code> takes the key from <code>event->GetGarageEntityId()</code>: a <code>TrayMove</code> gives its tray, an <code>AgvMove</code> its AGV, a <code>BayTransition</code> its bay, a <code>VecsTransition</code> its VECS. A <code>TrayMove</code> with no tray yet has no key (<code>std::nullopt</code>), so <code>AddChainedEvent</code> only adds it.</li>
   <li><strong>Written</strong> only by <code>ChainAfterLastEntityEvent(key, e)</code>, mostly through <code>AddChainedEvent(e)</code>: add the edge <code>last[key] → e</code> if <code>key</code> is present, then set <code>last[key] = e</code>. The entry always moves forward; nothing ever removes one.</li>
-  <li><strong>Read</strong> in two places: inside <code>ChainAfterLastEntityEvent</code> (rule A), and by rule C in <code>OrderAfterBayAndChargerEvents</code> (<code>job_expansion.cpp:68</code>, called from <code>ExpandReparkTrayJob</code>), which looks up <code>BayId(...)</code> / <code>VecsId(...)</code> and adds <code>last[bay] → tray_move</code> without updating the map (so the bay's chain is not moved forward by a tray entering it).</li>
+  <li><strong>Read</strong> in two places: inside <code>ChainAfterLastEntityEvent</code>, and by <code>OrderAfterBayAndChargerEvents</code> (<code>job_expansion.cpp:68</code>, called from <code>ExpandReparkTrayJob</code>), which looks up <code>BayId(...)</code> / <code>VecsId(...)</code> and adds <code>last[bay] → tray_move</code> without updating the map (so the bay's chain is not moved forward by a tray entering it).</li>
 </ul>
 <p>Why later stages do not use it: tray assignment adds blocker moves and AGV assignment adds approach, lift and lower moves, and neither calls <code>ChainAfterLastEntityEvent</code>. The map is therefore only correct while jobs are being expanded. Tray assignment keeps its own <code>last_event_by_tray</code> (in <code>TrayAssignmentState</code>, written by <code>ChainTrayEvent</code>) and AGV assignment its own <code>last_event_by_agv</code> (in <code>AgvAssignmentState</code>, written by <code>ChainAgvEvent</code>), each built from scratch as that stage walks the DAG. Reading <code>ctx->last_event_by_entity</code> after job expansion would give an answer that ignores every event those stages added.</p>
 <h3 id="bg-first_tray_event-in-detail"><code>first_event_by_tray</code> in detail</h3>
@@ -3292,7 +3292,7 @@ for(size_t path_index = 1; path_index &lt; nav_path.size(); ++path_index) {
 <ol>
   <li><strong>Construct.</strong> <code>request_id</code>, <code>start_time</code> and <code>initial_state</code> are set; <code>event_dag</code>, <code>scheduled_jobs</code> and the maps start empty.</li>
   <li><strong>Filters.</strong> <code>keep_out_filter_by_footprint</code> is computed from <code>initial_state</code>.</li>
-  <li><strong>Job expansion</strong> (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 14</a>). For each pending job: copy the context; copy <code>initial_state</code>, replay <code>event_dag</code> to get <code>working_state</code>, add events, add edges through rules A, B and C, then push the job onto <code>scheduled_jobs</code>, or restore the copied context if the expansion failed.</li>
+  <li><strong>Job expansion</strong> (<a class="ref" href="#bg-job-expansion-from-jobs-to-events">section 14</a>). For each pending job: copy the context; copy <code>initial_state</code>, replay <code>event_dag</code> to get <code>working_state</code>, add events, add edges through <code>ChainAfterLastEntityEvent</code>, <code>OrderAfterJobLeafEvents</code> and <code>OrderAfterBayAndChargerEvents</code>, then push the job onto <code>scheduled_jobs</code>, or restore the copied context if the expansion failed.</li>
   <li><strong>Tray assignment</strong> (<a class="ref" href="#bg-tray-assignment-dotrayassignments">section 16</a>). Copies <code>initial_state</code>, walks <code>event_dag</code> in topological order, fills blank fields, adds blocker moves and edges, and records <code>first_event_by_tray</code>.</li>
   <li><strong>AGV assignment</strong> (<a class="ref" href="#bg-agv-assignment-doagvassignments">section 17</a>). Copies <code>initial_state</code>, matches AGVs, adds AGV events and edges, using <code>first_event_by_tray</code> to wait for blocking trays to leave.</li>
   <li><strong>Remove redundant edges and check</strong> (<a class="ref" href="#bg-reduce-and-sanitycheckevents">section 18</a>). <code>event_dag.RemoveRedundantEdges()</code> drops redundant edges; <code>ValidateEventSequence</code> replays the DAG on a copy of <code>initial_state</code> and checks each move with <code>ValidateMoveDestinationAndPath</code>, which reads <code>keep_out_filter_by_footprint</code>.</li>

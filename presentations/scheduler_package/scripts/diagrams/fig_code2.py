@@ -154,16 +154,16 @@ def dependency_rules():
             "within one job; tray moves into a bay depend on that bay's last event.")
     S0 = d.step("Start: job 0 retrieves the payload on T17 into bay B21, which still holds the empty tray T21. "
                 "The DAG is empty and last_event_by_entity has no entries.")
-    S1 = d.step("Event 0, BayTransition B21 -> TO_RETRIEVE. Rule A finds no earlier B21 event and rule B finds no "
-                "earlier leaf of job 0, so no edge is added. last_event_by_entity[B21] = 0.")
-    S2 = d.step("Event 1 moves T21 out of the bay (destination still open). Rule B: event 0 is a leaf of job 0, so "
+    S1 = d.step("Event 0, BayTransition B21 -> TO_RETRIEVE. ChainAfterLastEntityEvent finds no earlier B21 event and "
+                "OrderAfterJobLeafEvents finds no earlier leaf of job 0, so no edge is added. last_event_by_entity[B21] = 0.")
+    S2 = d.step("Event 1 moves T21 out of the bay (destination still open). OrderAfterJobLeafEvents: event 0 is a leaf of job 0, so "
                 "0 -> 1. last_event_by_entity[T21] = 1.")
-    S3 = d.step("Event 2 moves T17 into B21. Rule B: the only job-0 leaf is now event 1, so 1 -> 2. Rule C: the "
-                "destination is a bay, so the move waits for the bay's last event: 0 -> 2.")
-    S4 = d.step("Event 3, BayTransition B21 -> PROCESS_RETRIEVE. Rule A chains it to B21's last event (0 -> 3); "
-                "rule B adds 2 -> 3. last_event_by_entity[B21] = 3.")
-    S5 = d.step("Job 1 reparks T21 to P24 (event 4). Rule B finds no leaf of job 1, so it adds nothing; rule A "
-                "links it to T21's last event: 1 -> 4. That shared tray is the only link between the two jobs.")
+    S3 = d.step("Event 2 moves T17 into B21. OrderAfterJobLeafEvents: the only job-0 leaf is now event 1, so 1 -> 2. "
+                "OrderAfterBayAndChargerEvents: the destination is a bay, so the move waits for the bay's last event: 0 -> 2.")
+    S4 = d.step("Event 3, BayTransition B21 -> PROCESS_RETRIEVE. ChainAfterLastEntityEvent chains it to B21's last "
+                "event (0 -> 3); OrderAfterJobLeafEvents adds 2 -> 3. last_event_by_entity[B21] = 3.")
+    S5 = d.step("Job 1 reparks T21 to P24 (event 4). OrderAfterJobLeafEvents finds no leaf of job 1, so it adds "
+                "nothing; ChainAfterLastEntityEvent links it to T21's last event: 1 -> 4. That shared tray is the only link between the two jobs.")
     W = 1040
     hw = (W - 24) / 2
     c1 = code_panel(d, 0, 0, hw, [
@@ -176,7 +176,7 @@ def dependency_rules():
         "    event_dag.AddDependency(last_event, event);",
         "  last_event = event;",
         "}",
-    ], title="rule A · per-asset chain", size=11.5)
+    ], title="ChainAfterLastEntityEvent · same asset", size=11.5)
     c2 = code_panel(d, hw + 24, 0, hw, [
         "// PlanContext::OrderAfterJobLeafEvents",
         "void OrderAfterJobLeafEvents(const ScheduleEventSPtr& event) {",
@@ -186,10 +186,10 @@ def dependency_rules():
         "      event_dag.AddDependency(leaf, event);  // same job only",
         "  }   // leaf = no out-edges",
         "}",
-        "// AddChainedEvent(event) = event_dag.AddEvent + rule A",
-    ], title="rule B · in-job ordering", size=11.5)
+        "// AddChainedEvent = AddEvent + ChainAfterLastEntityEvent",
+    ], title="OrderAfterJobLeafEvents · same job", size=11.5)
     LEAF, ENT, BAYR = T.fg2, T.violet, T.violet
-    # which rule panel adds an edge at each step
+    # which helper panel adds an edge at each step
     for k, panels in ((S2, [(c2, LEAF)]), (S3, [(c2, LEAF)]), (S4, [(c1, ENT), (c2, LEAF)]), (S5, [(c1, TRAY)])):
         with d.only(k):
             for p, col in panels:
@@ -219,30 +219,30 @@ def dependency_rules():
            size=11.5, fill=T.muted)
     with d.at(S5):
         d.text(xs[0] - 4, e4.y0 - 14, "job 1  TYPE_REPARK_TRAY T21 -> P24", size=11.5, fill=T.muted)
-    # rule B (leaf) edges: e0->e1, e1->e2, e2->e3
+    # OrderAfterJobLeafEvents (leaf) edges: e0->e1, e1->e2, e2->e3
     for a, b in ((0, 1), (1, 2), (2, 3)):
         with d.at(S1 + b):
             connect(d, [(B[a].x1, B[a].cy + 8), (B[b].x0, B[b].cy + 8)], kind="flow", color=LEAF, size=8, dash="5 4")
-    # rule C: tray move into a bay depends on the bay's last event: e0 -> e2
+    # OrderAfterBayAndChargerEvents: tray move into a bay depends on the bay's last event: e0 -> e2
     yA = y0 - 30
     with d.at(S3):
         connect(d, [(B[0].x0 + 150, B[0].y0), (B[0].x0 + 150, yA), (B[2].x0 + 60, yA), (B[2].x0 + 60, B[2].y0)],
                 kind="flow", color=BAYR, size=8, dash="2 4", sw=1.6)
-        label_pill(d, (B[0].x0 + 150 + B[2].x0 + 60) / 2, yA, "rule C · dest is a bay", color=BAYR, size=10.5)
-    # rule A: entity chain B21: e0 -> e3
+        label_pill(d, (B[0].x0 + 150 + B[2].x0 + 60) / 2, yA, "into B21", color=BAYR, size=10.5)
+    # ChainAfterLastEntityEvent: B21: e0 -> e3
     yB = y0 - 66
     with d.at(S4):
         connect(d, [(B[0].x0 + 90, B[0].y0), (B[0].x0 + 90, yB), (B[3].x0 + 100, yB), (B[3].x0 + 100, B[3].y0)],
                 kind="flow", color=ENT, size=8, sw=1.6)
-        label_pill(d, (B[0].x0 + 90 + B[3].x0 + 100) / 2 + 120, yB, "rule A · asset B21", color=ENT, size=10.5)
-    # rule A: entity chain T21: e1 -> e4 (crosses jobs)
+        label_pill(d, (B[0].x0 + 90 + B[3].x0 + 100) / 2 + 120, yB, "B21", color=ENT, size=10.5)
+    # ChainAfterLastEntityEvent: T21: e1 -> e4 (crosses jobs)
     with d.at(S5):
         connect(d, [(B[1].x0 + 50, B[1].y1), (B[1].x0 + 50, e4.y0)], kind="flow", color=TRAY, size=8, sw=1.6)
-        label_pill(d, B[1].x0 + 56, (B[1].y1 + e4.y0) / 2, "rule A · asset T21", color=TRAY, size=10.5,
+        label_pill(d, B[1].x0 + 56, (B[1].y1 + e4.y0) / 2, "T21", color=TRAY, size=10.5,
                    anchor="start")
         nb = note(d, xs[2], e4.y0 - 6, xs[3] + bw - xs[2],
-             "Rule B never links different jobs. Jobs only become ordered through shared entities (rule A) and, "
-             "later, through the occupancy edges added by tray and AGV assignment.", title="Jobs stay independent")
+             "OrderAfterJobLeafEvents never links different jobs. Jobs only become ordered through shared entities "
+             "(ChainAfterLastEntityEvent) and, later, through the occupancy edges added by tray and AGV assignment.", title="Jobs stay independent")
     # bookkeeping state per step
     sy = max(nb.y1, e4.y1) + 26
     state = {S0: ("{ }", "{ }"), S1: ("{ B21: 0 }", "{ 0 }"), S2: ("{ B21: 0, T21: 1 }", "{ 1 }"),
@@ -255,12 +255,12 @@ def dependency_rules():
             d.text(150, sy, le, size=12, family="mono", fill=T.fg)
             d.text(xs[2] + 100, sy, lv, size=12, family="mono", fill=T.fg)
     frame(d, title="Where the edges come from during job expansion",
-          subtitle="Each Expand<Type>Job adds an event, then calls one or both PlanContext helpers. Rule C is "
-                   "OrderAfterBayAndChargerEvents, called by ExpandReparkTrayJob. The letters A, B, C are this guide's names, not the code's. The result is a "
+          subtitle="Each Expand<Type>Job adds an event, then calls one or both PlanContext helpers. "
+                   "OrderAfterBayAndChargerEvents, file-local in job_expansion.cpp, is called only by ExpandReparkTrayJob. The result is a "
                    "partial order, not a sequence.",
           badge_key="as-built",
-          legend=[("arrow", ENT, "rule A: same asset (bay)"), ("arrow", TRAY, "rule A: same asset (tray)"),
-                  ("dasharrow", LEAF, "rule B: leaf of the same job"), ("dasharrow", BAYR, "rule C: into a bay")])
+          legend=[("arrow", ENT, "ChainAfterLastEntityEvent (bay)"), ("arrow", TRAY, "ChainAfterLastEntityEvent (tray)"),
+                  ("dasharrow", LEAF, "OrderAfterJobLeafEvents"), ("dasharrow", BAYR, "OrderAfterBayAndChargerEvents")])
     return d
 
 
@@ -379,7 +379,7 @@ def retrieve_walkthrough():
         return top
 
     # band 1: after job expansion
-    t1 = band("1 · after ExpandRetrieveJob()", "T21 has no destination yet; transitive edges omitted (see the edge-rules figure)", 112,
+    t1 = band("1 · after ExpandRetrieveJob()", "T21 has no destination yet; transitive edges omitted (see 'Where the edges come from')", 112,
               T.fg2, S1, S1)
     with d.at(S1):
         _chain(d, 16, t1 + 6, [("BayTransition", "B21: TO_RETRIEVE", 0, "solid"),

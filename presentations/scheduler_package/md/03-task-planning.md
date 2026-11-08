@@ -41,7 +41,7 @@ This section is long because every job type has its own recipe. Read it in this 
 | Part                                                                                                                          | What you learn                                                                                |
 |-------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
 | [14.1](#bg-what-a-job-is)–[14.3](#bg-the-shape-of-every-job-method)                                                           | What a job is, the loop in `Plan()` that dispatches it, and the shape every job method shares |
-| [14.4](#bg-every-job-sees-the-garage-through-working_state)–[14.5](#bg-where-the-edges-come-from)                             | How a job method sees the garage (`working_state`) and the three rules that add edges         |
+| [14.4](#bg-every-job-sees-the-garage-through-working_state)–[14.5](#bg-where-the-edges-come-from)                             | How a job method sees the garage (`working_state`) and the three helpers that add edges       |
 | [14.6](#bg-job-methods-are-built-from-a-few-shared-pieces)                                                                    | Which job methods are built from which others                                                 |
 | [14.7](#bg-type_repark_tray-and-type_move_tray--planreparktrayjob)–[14.17](#bg-type_rebalance_garage--planrebalancegaragejob) | Every job type, one at a time, each with a 2D garage example                                  |
 | [14.18](#bg-gotchas-2)–[14.19](#bg-cheat-sheet-and-self-check)                                                                | Gotchas, a one-page cheat sheet and questions to check yourself                               |
@@ -52,7 +52,7 @@ Sections [14.7](#bg-type_repark_tray-and-type_move_tray--planreparktrayjob) to [
 
 1.  **The map** is the Pecos layout, showing the garage as the job method sees it when it starts (`working_state`). Trays, cars and AGVs are hypothetical. **Curved dashed arrows are intent, not routes**: job expansion plans no paths. A `?` bubble means the destination is left empty for `AssignTrays()` to fill. Numbered circles match the event numbers.
 2.  **The request card** lists the `SchedulerJob` fields the method reads, the `job_index` it receives and the exact call `Plan()` makes.
-3.  **The event column** lists the events the method appends, numbered in creation order. Every arrow is an edge the method adds, labelled with the rule that added it (A, B or C, see [14.5](#bg-where-the-edges-come-from)).
+3.  **The event column** lists the events the method appends, numbered in creation order. Every arrow is an edge the method adds, drawn in the style of the helper that added it ([14.5](#bg-where-the-edges-come-from)): solid for `ChainAfterLastEntityEvent`, coloured by the asset it chains; dashed for `OrderAfterJobLeafEvents`; dotted for `OrderAfterBayAndChargerEvents`.
 4.  **The step table** is the method body as numbered steps, with what happens in this example and the result: `adds n` means event *n* is created, `skipped` means the branch does not apply, red means the job fails there.
 
 ### What a job is
@@ -117,7 +117,7 @@ The relationship is **one job → many events → many actions**:
 
 - **What the number is.** `job_index` is the job's position in `ctx->scheduled_jobs`, the list of jobs that have **succeeded so far**. It is not the loop counter (the job's position in `request_data.pending_jobs`).
 - **How it is chosen.** Just before calling the job method, `ExpandJob()` reads `ctx->scheduled_jobs.size()` and passes it on. If the method succeeds, `AddScheduledJob(job)` appends the job at exactly that position, so `scheduled_jobs[job_index]` is now this job. If it fails, nothing is appended, the context is restored, and the next job is offered the same number.
-- **How it is used.** When the response is built, `ToActionNode(motion, ctx->scheduled_jobs[event->GetJobIndex()].job.guid, *event)` (`action_graph.cpp`) turns the index back into the job's `guid`. Rule B ([14.5](#bg-where-the-edges-come-from)) also compares indices to decide which events belong to the same job.
+- **How it is used.** When the response is built, `ToActionNode(motion, ctx->scheduled_jobs[event->GetJobIndex()].job.guid, *event)` (`action_graph.cpp`) turns the index back into the job's `guid`. `OrderAfterJobLeafEvents` ([14.5](#bg-where-the-edges-come-from)) also compares indices to decide which events belong to the same job.
 
 A worked example, the same one as in [Figure 27](#bg-fig-36_expansion_loop) below:
 
@@ -143,7 +143,7 @@ The code has no design document, so this is a reading of the structure, with the
 - **Jobs are expanded one at a time, in request order, each seeing the garage that earlier jobs leave behind** ([14.4](#bg-every-job-sees-the-garage-through-working_state)). That is a greedy approach: easy to reason about, and later jobs automatically build on earlier ones (a second move of the same tray starts where the first one ends). The cost is that request order matters and nothing tries another order: an early job can make a later one fail, and the later one is simply reported as failed.
 - **Failure is per job during expansion.** One bad job does not sink the others, so Dispatch still gets a plan for everything that was possible. `retain_job` lets RETRIEVE say "try me again later" when no bay is free.
 - **After expansion, everything is one problem.** All successful jobs share one DAG, so tray assignment, AGV assignment and motion planning can share AGVs and resolve conflicts across jobs. The flip side is in [section 10](#bg-one-plan-call-step-by-step): if any later stage fails, `fail_all_jobs` fails every job in `ctx->scheduled_jobs`, that is every job that expanded.
-- **A small integer instead of a pointer or `guid`.** Events are `planner_core` objects that know nothing about ROS messages. A `size_t` is the cheapest way to tag them and is enough for rule B's "same job?" test.
+- **A small integer instead of a pointer or `guid`.** Events are `planner_core` objects that know nothing about ROS messages. A `size_t` is the cheapest way to tag them and is enough for the "same job?" test in `OrderAfterJobLeafEvents`.
 
 Known issues with this design (details in [14.18](#bg-gotchas-2)):
 
@@ -185,8 +185,8 @@ const auto bay_transition = std::make_shared<BayTransition>(
     job_index, *bay_opt, MakeBayCommand(command_type, kBayTransitionPlaceholderId, target_floor));
 
 // (5) Add each event and wire its edges ("Where the edges come from")
-ctx->AddChainedEvent(bay_transition);          // add the event + rule A
-ctx->OrderAfterJobLeafEvents(bay_transition);  // rule B
+ctx->AddChainedEvent(bay_transition);          // add it, then ChainAfterLastEntityEvent
+ctx->OrderAfterJobLeafEvents(bay_transition);  // wait for the job's current leaves
 
 // (6) Or delegate part of the work to another job method, passing the SAME job_index
 if(const auto tray_repark = ExpandReparkTrayJob(ctx, tray.id, job_index, true); !tray_repark) {
@@ -227,7 +227,7 @@ The same information as a table, for `ExpandRetrieveJob(ctx, payload_id, job_ind
 | `ctx`                                                         | `PlanContextSPtr` **by value**     |      |            | copying a `shared_ptr` copies the pointer, not the context: caller and callee share one `PlanContext`                                                                                                              |
 | `ctx->initial_state`                                          | through `ctx`                      | yes  | no         | copied into `working_state`                                                                                                                                                                                        |
 | `ctx->event_dag`                                              | through `ctx`                      | yes  | **yes**    | replayed, then 4 events and 5 edges added (2 of the events by nested `ExpandReparkTrayJob` calls)                                                                                                                  |
-| `ctx->last_event_by_entity`                                   | through `ctx`                      | yes  | **yes**    | rule A reads and updates it: B21 → e4, T21 → e2, T17 → e3                                                                                                                                                          |
+| `ctx->last_event_by_entity`                                   | through `ctx`                      | yes  | **yes**    | `ChainAfterLastEntityEvent` reads and updates it: B21 → e4, T21 → e2, T17 → e3                                                                                                                                     |
 | `ctx->keep_out_filter_by_footprint`                           | through `ctx`                      | yes  | no         | read through `ctx->FindKeepOutFilter(collision_id)`, which fails the job if the footprint has no filter. Before PR \#1018 it was read with `operator[]`, which inserted an empty filter for a missing collision id |
 | `ctx->scheduled_jobs`                                         | through `ctx`                      | no   | no         | `Plan()` appends the job **after** a successful return                                                                                                                                                             |
 | `working_state`, `bay_opt`, ...                               | locals                             |      | local only | `bay_opt->state = READY_TO_RETRIEVE` changes the local copy, not the garage                                                                                                                                        |
@@ -245,7 +245,7 @@ This is a common C++ style with real reasons behind it, but it makes the code ha
 **Why it was probably written this way**
 
 - **One growing structure is convenient.** Every step needs the latest DAG and the latest `last_event_by_entity`. Passing one context pointer around is less code than threading inputs and results through every call.
-- **Composition is free.** When `ExpandRetrieveJob` calls `ExpandReparkTrayJob`, the inner method simply appends to the same DAG, and its events immediately take part in rule B for the outer job. With pure functions, the caller has to merge the inner result itself.
+- **Composition is free.** When `ExpandRetrieveJob` calls `ExpandReparkTrayJob`, the inner method simply appends to the same DAG, and its events immediately count as the outer job's leaves for `OrderAfterJobLeafEvents`. With pure functions, the caller has to merge the inner result itself.
 - **The later stages really are graph rewrites.** Tray and AGV assignment fill in fields of existing events, add events and add edges across all jobs. In-place editing is natural there, and job expansion uses the same style for consistency.
 - **Events are shared objects** (`std::shared_ptr`). Producing a modified copy of a DAG would need deep copies, so mutation is the cheap option. (The refactor proposal, sections [6.1](#pr-the-new-pieces-and-how-they-fit-together) and [6.5](#pr-why-return-a-result-and-how-it-is-applied), show a middle way for tray assignment: return an ordered log of edits and let one function apply it.)
 
@@ -253,11 +253,11 @@ This is a common C++ style with real reasons behind it, but it makes the code ha
 
 - **The signature hides the output.** Nothing in `stdx::Expected<void, JobFailure> ExpandRetrieveJob(PlanContextSPtr, const interfaces::msg::Guid&, size_t)` says "adds events and edges". You have to read the body, and the bodies of everything it calls.
 - **No transaction inside a job.** A method that fails halfway leaves its partial changes in `*ctx`. Since PR \#1018 `Plan()` wraps every job in a copy-and-restore of the whole context ([14.18](#bg-gotchas-2), gotcha 1), but a nested failure that the outer method only logs, such as one bay of a REBALANCE_GARAGE, still keeps its partial events. A pure function that returns its events would make "discard on failure" automatic at every level.
-- **Hidden dependencies between calls.** Rule B looks at the *current* leaves of the whole DAG, and rule A at the *current* `last_event_by_entity`. The result of a call therefore depends on everything that ran before it, not only on its arguments.
+- **Hidden dependencies between calls.** `OrderAfterJobLeafEvents` looks at the *current* leaves of the whole DAG, and `ChainAfterLastEntityEvent` at the *current* `last_event_by_entity`. The result of a call therefore depends on everything that ran before it, not only on its arguments.
 - **Harder to test.** A test has to build a `PlanContext`, call the method, then inspect the context (see the [Verification](#doc-verification) tab). It cannot simply compare a returned value.
 - **Effects leave the process.** A callback to Dispatch from inside planning cannot be undone if the plan later fails.
 
-**A purer alternative** (sketched in the figure; not in the code): give each job method a read-only view (`const` working state, DAG, last-entity map) and have it **return** a `JobPlan`: its new events, the edges it wants (with the rule that justified each), and any follow-up requests for Dispatch. `Plan()` then commits a successful `JobPlan` into the context in one place, or drops it on failure. That makes the output visible, makes rollback automatic, and lets a test compare `JobPlan` values directly. The costs are some boilerplate and a `Commit()` step that applies rules A, B and C centrally. Two middle grounds are cheaper:
+**A purer alternative** (sketched in the figure; not in the code): give each job method a read-only view (`const` working state, DAG, last-entity map) and have it **return** a `JobPlan`: its new events, the edges it wants (with the helper that justified each), and any follow-up requests for Dispatch. `Plan()` then commits a successful `JobPlan` into the context in one place, or drops it on failure. That makes the output visible, makes rollback automatic, and lets a test compare `JobPlan` values directly. The costs are some boilerplate and a `Commit()` step that calls the three edge helpers centrally. Two middle grounds are cheaper:
 
 - keep mutation but pass exactly what is changed (`ScheduleEventDag& event_dag, LastEntityMap& last`) instead of the whole context, so the signature tells the truth;
 - keep the current code but snapshot the context before each job and restore it on failure. `Plan()` does this since PR \#1018.
@@ -280,40 +280,42 @@ Three details matter in practice:
 
 ### Where the edges come from
 
-Job methods add not only events but also the edges between them, and those edges decide which events must finish before others may start. During job expansion every edge comes from one of three rules, called A, B and C in this guide. The figure shows the rules at work on five events; the definition of each rule follows it.
+Job methods add not only events but also the edges between them, and those edges decide which events must finish before others may start. During job expansion every edge comes from one of three helpers: `ChainAfterLastEntityEvent`, `OrderAfterJobLeafEvents` and `OrderAfterBayAndChargerEvents`. The figure shows them at work on five events; the definition of each follows it.
 
-![Edge rules during job expansion](figures/25_dependency_rules.svg)
+![Edge helpers during job expansion](figures/25_dependency_rules.svg)
 
-The three edge rules used during job expansion. Step through the five events in the order they are created to see which rule adds each edge, and how `last_event_by_entity` and the leaf set change. Rule A (`ChainAfterLastEntityEvent`, usually through `AddChainedEvent`) chains events on the same garage asset (AGV, tray, bay or VECS), even across jobs. Rule B (`OrderAfterJobLeafEvents`) makes a new event wait for the current leaf events of the **same** job. Rule C (`OrderAfterBayAndChargerEvents`, called from `ExpandReparkTrayJob`) makes a tray move into a bay or VECS wait for that resource's last event.
+The three edge helpers used during job expansion. Step through the five events in the order they are created to see which helper adds each edge, and how `last_event_by_entity` and the leaf set change. Solid edges come from `ChainAfterLastEntityEvent` (usually through `AddChainedEvent`), which chains events on the same garage asset (AGV, tray, bay or VECS), even across jobs; the colour is the asset. Dashed edges come from `OrderAfterJobLeafEvents`, which makes a new event wait for the current leaf events of the **same** job. Dotted edges come from `OrderAfterBayAndChargerEvents` (called from `ExpandReparkTrayJob`), which makes a tray move into a bay or VECS wait for that resource's last event.
 
-The three rules, in one sentence each, then how the code applies them. A **garage asset** is anything an event acts on and that only one event can use at a time: an AGV, a tray, a bay or a VECS. The letters A, B and C are this guide's shorthand; the function names the code uses are [listed below](#bg-does-the-code-really-call-them-rule-a-rule-b-and-rule-c).
+The three helpers, in one sentence each, then how the code applies them. A **garage asset** is anything an event acts on and that only one event can use at a time: an AGV, a tray, a bay or a VECS. Where each one lives and why it is needed are [listed below](#bg-does-the-code-really-call-them-rule-a-rule-b-and-rule-c).
 
-- **Rule A — one asset, one event at a time, across jobs.** Each new event waits for the previous event on the same garage asset, whichever job created it. The code keeps `ctx->last_event_by_entity`, a map from each asset (`interfaces::msg::GarageEntityId`) to the last event that used it. `ChainAfterLastEntityEvent(id, e)` adds the edge `last[id] -> e` if there is one, then sets `last[id] = e`; `AddChainedEvent(e)` adds `e` to the DAG and calls it with `e`'s own asset. With rule C, this is the only rule that links **different jobs**: if job 0 and job 1 both move tray T19, job 1's move waits for job 0's.
-- **Rule B — steps of one job in order.** Each new event of a job waits for the job's open ends: its earlier events that nothing else waits for yet. In DAG terms these are the job's *leaves*, events with no outgoing edge. `OrderAfterJobLeafEvents(e)` adds `leaf -> e` for every leaf other than `e` whose `GetJobIndex()` equals `e->GetJobIndex()`. It never links different jobs.
-- **Rule C — a tray enters a bay or VECS only after that asset's latest event.** When a `TrayMove`'s destination is a bay or a VECS, it waits for the last event on that bay or VECS, so a tray never enters a bay before the bay's transition. Only `ExpandReparkTrayJob` applies it; it reads `last_event_by_entity` but does not update it.
+- **`ChainAfterLastEntityEvent` — one asset, one event at a time, across jobs.** Each new event waits for the previous event on the same garage asset, whichever job created it. The code keeps `ctx->last_event_by_entity`, a map from each asset (`interfaces::msg::GarageEntityId`) to the last event that used it. `ChainAfterLastEntityEvent(id, e)` adds the edge `last[id] -> e` if there is one, then sets `last[id] = e`; `AddChainedEvent(e)` adds `e` to the DAG and calls it with `e`'s own asset. With `OrderAfterBayAndChargerEvents`, it is the only helper that links **different jobs**: if job 0 and job 1 both move tray T19, job 1's move waits for job 0's.
+- **`OrderAfterJobLeafEvents` — steps of one job in order.** Each new event of a job waits for the job's open ends: its earlier events that nothing else waits for yet. In DAG terms these are the job's *leaves*, events with no outgoing edge. `OrderAfterJobLeafEvents(e)` adds `leaf -> e` for every leaf other than `e` whose `GetJobIndex()` equals `e->GetJobIndex()`. It never links different jobs.
+- **`OrderAfterBayAndChargerEvents` — a tray enters a bay or VECS only after that asset's latest event.** When a `TrayMove`'s destination is a bay or a VECS, it waits for the last event on that bay or VECS, so a tray never enters a bay before the bay's transition. Only `ExpandReparkTrayJob` calls it; it reads `last_event_by_entity` but does not update it.
 
-Not every event goes through every rule:
+Not every event goes through every helper, and a few are chained twice or late:
 
-- **Without rule A:** a `TrayMove` with no tray yet (its tray is unknown; `AddChainedEvent` only adds it), and the `TrayMove` that MOVE_AGV creates for a loaded AGV is chained by tray only, not by AGV. The "stop charging" `VecsTransition` in RETRIEVE and REPARK used to skip rule A too; since PR \#1018 it is chained after the charger's previous event.
-- **Without rule B:** the "stop charging" `VecsTransition`; RETRIEVE's `TRANSITION_TO_RETRIEVE` (so it does not wait for that stop-charging event); CHARGE_AGV's transition that frees a trapped AGV; and CLEAN_GARAGE's hide `AgvMove`s. Each of these is either the first event of its job or deliberately independent, but later events of the same job still wait for them through rule B. And none of the rules knows about geometry: whether tray T15 is *in the way* of T17's path, or whether two AGVs would meet, is discovered and turned into edges by tray and AGV assignment (sections [16](#bg-tray-assignment-dotrayassignments) and [17](#bg-agv-assignment-doagvassignments)).
+- **Without `ChainAfterLastEntityEvent`:** a `TrayMove` with no tray yet (its tray is unknown; `AddChainedEvent` only adds it), and the `TrayMove` that MOVE_AGV creates for a loaded AGV is chained by tray only, not by AGV. The "stop charging" `VecsTransition` in RETRIEVE and REPARK used to skip it too; since PR \#1018 it is chained after the charger's previous event.
+- **Chained after a second asset:** in `ExpandCleanGarageJob` (`job_expansion.cpp:536`) a hide `AgvMove` that ends on a bay node is also chained after that bay's last event, `ctx->ChainAfterLastEntityEvent(BayId(dest.node_id), agv_move)`, so a later transition of that bay waits for the AGV to arrive.
+- **Chained once the tray is known:** a READY_FOR_INSERT fill move has no tray when it is created, so `AddChainedEvent` only adds it, and once `AssignEmptyTrayToMove` picks the tray, `AssignTraysToBayFillMoves` chains it after that tray's last event with `ctx->ChainAfterLastEntityEvent(move->GetGarageEntityId().value(), event)` (`job_expansion.cpp:804`); a move it cannot fill is left for `AssignTrays`.
+- **Without `OrderAfterJobLeafEvents`:** the "stop charging" `VecsTransition`; RETRIEVE's `TRANSITION_TO_RETRIEVE` (so it does not wait for that stop-charging event); CHARGE_AGV's transition that frees a trapped AGV; and CLEAN_GARAGE's hide `AgvMove`s. Each of these is either the first event of its job or deliberately independent, but later events of the same job still wait for them through it. And none of the helpers knows about geometry: whether tray T15 is *in the way* of T17's path, or whether two AGVs would meet, is discovered and turned into edges by tray and AGV assignment (sections [16](#bg-tray-assignment-dotrayassignments) and [17](#bg-agv-assignment-doagvassignments)).
 
-#### Rule A, rule B and rule C in the code
+#### The three edge helpers in the code
 
-The code does not use these names; the letters keep the figures readable. The functions to search for:
+Each helper is one function. Where to find it, what it does, and why the edge is there:
 
-| Guide  | In the code                                                                                                                                                                                                      | What it does, and why                                                                                                                                                                                                                                             |
-|--------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Rule A | `PlanContext::ChainAfterLastEntityEvent(entity, event)` in `plan_context.hpp`, with the map `last_event_by_entity`; `PlanContext::AddChainedEvent(event)` adds the event and calls it with the event's own asset | Adds an edge from the last event on the asset to the new event, then records the new event as the asset's last. An asset can only do one thing at a time, and the next event must start from the state the previous one leaves.                                   |
-| Rule B | `PlanContext::OrderAfterJobLeafEvents(event)` in `plan_context.hpp`                                                                                                                                              | Adds an edge from every current leaf of the same job to the new event. A job's steps form a recipe (switch the bay, bring the tray, hand over the car) that must run in the order the job method creates them.                                                    |
-| Rule C | `OrderAfterBayAndChargerEvents(ctx, working_state, dest, tray_move)`, a file-local function in `job_expansion.cpp` that only `Scheduler::ExpandReparkTrayJob` calls                                              | Adds an edge from the last event on the destination bay or VECS to the tray move. A bay must finish its current transition or retrieve before a tray enters it; rule A does not cover this, because a tray move is chained to its tray, not to the bay it enters. |
+| Helper                                         | Signature and file                                                                                                                                                                                               | What it does, and why                                                                                                                                                                                                                                                                  |
+|------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ChainAfterLastEntityEvent`, `AddChainedEvent` | `PlanContext::ChainAfterLastEntityEvent(entity, event)` in `plan_context.hpp`, with the map `last_event_by_entity`; `PlanContext::AddChainedEvent(event)` adds the event and calls it with the event's own asset | Adds an edge from the last event on the asset to the new event, then records the new event as the asset's last. An asset can only do one thing at a time, and the next event must start from the state the previous one leaves.                                                        |
+| `OrderAfterJobLeafEvents`                      | `PlanContext::OrderAfterJobLeafEvents(event)` in `plan_context.hpp`                                                                                                                                              | Adds an edge from every current leaf of the same job to the new event. A job's steps form a recipe (switch the bay, bring the tray, hand over the car) that must run in the order the job method creates them.                                                                         |
+| `OrderAfterBayAndChargerEvents`                | `OrderAfterBayAndChargerEvents(ctx, working_state, dest, tray_move)`, a file-local function in `job_expansion.cpp` that only `Scheduler::ExpandReparkTrayJob` calls                                              | Adds an edge from the last event on the destination bay or VECS to the tray move. A bay must finish its current transition or retrieve before a tray enters it; `ChainAfterLastEntityEvent` does not cover this, because a tray move is chained to its tray, not to the bay it enters. |
 
 **Why each one is needed**, by what would go wrong without it:
 
-- **Without rule A**, two jobs that touch the same tray, AGV, bay or VECS would be unordered. If job 0 moves T19 from P19 to P24 and job 1 moves it from P24 to P23, nothing would stop the replay, or the robots, from doing job 1's move first, starting from a place the tray is not at yet.
-- **Without rule B**, the steps inside one job would be unordered: the car's tray could be planned into B21 before the bay switches to retrieve mode, or `PROCESS_RETRIEVE` could run before the tray arrives.
-- **Without rule C**, a tray could enter a bay before an *earlier job's* bay event finished. Rule B does not help across jobs, and rule A does not either, because a `TrayMove` is chained to its tray, not to the bay it enters. For example, a READY_FOR_INSERT job bringing an empty tray into B21 must wait for the previous job's `PROCESS_RETRIEVE` on B21; only rule C adds that edge.
+- **Without `ChainAfterLastEntityEvent`**, two jobs that touch the same tray, AGV, bay or VECS would be unordered. If job 0 moves T19 from P19 to P24 and job 1 moves it from P24 to P23, nothing would stop the replay, or the robots, from doing job 1's move first, starting from a place the tray is not at yet.
+- **Without `OrderAfterJobLeafEvents`**, the steps inside one job would be unordered: the car's tray could be planned into B21 before the bay switches to retrieve mode, or `PROCESS_RETRIEVE` could run before the tray arrives.
+- **Without `OrderAfterBayAndChargerEvents`**, a tray could enter a bay before an *earlier job's* bay event finished. `OrderAfterJobLeafEvents` does not help across jobs, and `ChainAfterLastEntityEvent` does not either, because a `TrayMove` is chained to its tray, not to the bay it enters. For example, a READY_FOR_INSERT job bringing an empty tray into B21 must wait for the previous job's `PROCESS_RETRIEVE` on B21; only `OrderAfterBayAndChargerEvents` adds that edge.
 
-The three rules are not the whole story. They only order what the job methods know about. Geometric conflicts (a tray in the way, two AGVs on one node) are turned into edges later by tray and AGV assignment (sections [16](#bg-tray-assignment-dotrayassignments) and [17](#bg-agv-assignment-doagvassignments)).
+The three helpers are not the whole story. They only order what the job methods know about. Geometric conflicts (a tray in the way, two AGVs on one node) are turned into edges later by tray and AGV assignment (sections [16](#bg-tray-assignment-dotrayassignments) and [17](#bg-agv-assignment-doagvassignments)).
 
 ### Job methods are built from a few shared pieces
 
@@ -321,18 +323,18 @@ The job methods in sections [14.7](#bg-type_repark_tray-and-type_move_tray--plan
 
 ![Job building blocks](figures/37_job_building_blocks.svg)
 
-Generated from the job-expansion code: which methods each job method calls, which event types it creates itself, and whether it applies rules A and B itself. `AddBayTransitionToRetrieve` and `ReparkWaypointStashedTrays` are helpers, not job types. Step through it one column group at a time; the last step marks the `ExpandReparkTrayJob` column, the workhorse that six other methods create their `TrayMove`s through.
+Generated from the job-expansion code: which methods each job method calls, which event types it creates itself, and which edge helpers it calls itself (`AddChainedEvent` or `ChainAfterLastEntityEvent`, `OrderAfterJobLeafEvents`, `OrderAfterBayAndChargerEvents`). `AddBayTransitionToRetrieve` and `ReparkWaypointStashedTrays` are helpers, not job types. Step through it one column group at a time; the last step marks the `ExpandReparkTrayJob` column, the workhorse that six other methods create their `TrayMove`s through.
 
 Two patterns stand out:
 
-- **`ExpandReparkTrayJob` is the workhorse.** Six methods create their `TrayMove`s through it, so the heading policy, the VECS checks and rule C live in one place. That is why it is explained first ([14.7](#bg-type_repark_tray-and-type_move_tray--planreparktrayjob)).
-- **Composite jobs pass their own `job_index` down.** When `ExpandRetrieveJob` calls `ExpandReparkTrayJob(ctx, tray, job_index, ...)`, the inner events belong to the retrieve job. Rule B then orders them with the retrieve's other events, and the response reports them as part of the retrieve.
+- **`ExpandReparkTrayJob` is the workhorse.** Six methods create their `TrayMove`s through it, so the heading policy, the VECS checks and the call to `OrderAfterBayAndChargerEvents` live in one place. That is why it is explained first ([14.7](#bg-type_repark_tray-and-type_move_tray--planreparktrayjob)).
+- **Composite jobs pass their own `job_index` down.** When `ExpandRetrieveJob` calls `ExpandReparkTrayJob(ctx, tray, job_index, ...)`, the inner events belong to the retrieve job. `OrderAfterJobLeafEvents` then orders them with the retrieve's other events, and the response reports them as part of the retrieve.
 
 The order of [14.7](#bg-type_repark_tray-and-type_move_tray--planreparktrayjob) to [14.17](#bg-type_rebalance_garage--planrebalancegaragejob) follows that structure: the building blocks first, then the jobs made from them.
 
 ### `TYPE_REPARK_TRAY` and `TYPE_MOVE_TRAY` — `ExpandReparkTrayJob`
 
-`ExpandReparkTrayJob` moves one tray to one destination. `ExpandJob()` calls it for `TYPE_REPARK_TRAY` and `TYPE_MOVE_TRAY` jobs, and five other job methods and the helper `ReparkWaypointStashedTrays` call it whenever they need a `TrayMove`, so the destination heading, the VECS checks and rule C are decided here for all of them.
+`ExpandReparkTrayJob` moves one tray to one destination. `ExpandJob()` calls it for `TYPE_REPARK_TRAY` and `TYPE_MOVE_TRAY` jobs, and five other job methods and the helper `ReparkWaypointStashedTrays` call it whenever they need a `TrayMove`, so the destination heading, the VECS checks and the call to `OrderAfterBayAndChargerEvents` are decided here for all of them.
 
 ``` cpp
 // scheduler.hpp; defined in job_expansion.cpp:247
@@ -357,9 +359,9 @@ The order of [14.7](#bg-type_repark_tray-and-type_move_tray--planreparktrayjob) 
 
 ![Repark tray job](figures/41_job_repark_tray.svg)
 
-Two jobs move tray T19: P19 → P24, then P24 → P23. Rule A chains the second move after the first. The last three steps play the plan with an illustrative AGV-1: it drives under T19, carries it to `P24` (1), and then on to `P23` (2).
+Two jobs move tray T19: P19 → P24, then P24 → P23. `ChainAfterLastEntityEvent` (through `AddChainedEvent`) chains the second move after the first. The last three steps play the plan with an illustrative AGV-1: it drives under T19, carries it to `P24` (1), and then on to `P23` (2).
 
-In words: create one `TrayMove` with `MakeTrayMove(job_index, tray_id, dest)`, its destination (if given) turned to the right heading and checked by `CheckReparkDestination`, and add it with rules A (`AddChainedEvent`), C (`OrderAfterBayAndChargerEvents`) and B (`OrderAfterJobLeafEvents`). Things to remember:
+In words: create one `TrayMove` with `MakeTrayMove(job_index, tray_id, dest)`, its destination (if given) turned to the right heading and checked by `CheckReparkDestination`, and add it with `AddChainedEvent`, then `OrderAfterBayAndChargerEvents` (when there is a destination) and `OrderAfterJobLeafEvents`. Things to remember:
 
 - **Either argument may be missing, not both.** Internal callers use `dest = std::nullopt` ("move this tray out of the way, anywhere") or `tray_id = std::nullopt` ("bring any empty tray here"). From `ExpandJob()` both are always present.
 - **The tray is looked up in `working_state`**, the garage after the planned events. Only when an earlier move without a destination has taken the tray out of the planned state does it fall back to `ctx->initial_state`. Before PR \#1018 it always read `ctx->initial_state` ([15.18](#bg-gotchas-2), gotcha 2). A tray on a charging VECS first gets a "stop charging" `VecsTransition` (`AddChargingStopBeforeTrayMove`).
@@ -393,7 +395,7 @@ In words: create one `TrayMove` with `MakeTrayMove(job_index, tray_id, dest)`, i
 
 An empty AGV produces an `AgvMove`; an AGV carrying a tray produces a `TrayMove` with that AGV already assigned. Here AGV-1 is sent to `W13` and AGV-2, which carries T9, to `P24`. The last two steps play the plan: AGV-1 drives to `W13`, then AGV-2 carries T9 to `P24` with no approach drive.
 
-In words: check the AGV (it exists and is enabled; an AGV already at `dest` needs no event), work out the destination, check it (the pose is in the graph and the AGV footprint's keep-out filter allows it), then add one event with rules A and B. For an AGV carrying a tray, `ResolveCarriedTrayDestination` turns `dest` into the tray's pose, taking the node's retrieval heading for a loaded tray when there is one, and the AGV pose that results is what gets checked. Remember that **this is the only job that can create a `TrayMove` with its AGV already set** (`MakeTrayMove(job_index, agv.tray_id, tray_dest, agv_id)`). The reverse-heading parameter that no caller used was deleted in PR \#1018.
+In words: check the AGV (it exists and is enabled; an AGV already at `dest` needs no event), work out the destination, check it (the pose is in the graph and the AGV footprint's keep-out filter allows it), then add one event with `AddChainedEvent` and `OrderAfterJobLeafEvents`. For an AGV carrying a tray, `ResolveCarriedTrayDestination` turns `dest` into the tray's pose, taking the node's retrieval heading for a loaded tray when there is one, and the AGV pose that results is what gets checked. Remember that **this is the only job that can create a `TrayMove` with its AGV already set** (`MakeTrayMove(job_index, agv.tray_id, tray_dest, agv_id)`). The reverse-heading parameter that no caller used was deleted in PR \#1018.
 
 ### `TYPE_TRANSITION_BAY_TO_INSERT` / `_TO_RETRIEVE` — `ExpandBayTransitionJob`
 
@@ -451,7 +453,7 @@ In words: validate (bay exists, enabled, its `BAY_ODP` area is clear, the bay is
 
 The car on T20 is moved to a VECS (invented here; the Pecos layout has none) and the VECS is switched to CHARGING. The last three steps play the plan: an illustrative AGV-1 drives under T20, carries it onto `V23` (1), and V23 starts charging (2).
 
-In words: if the tray is not already on a ready VECS, borrow the open-space search of `ResolveBlockingTrays(working_state, {.tray_id = tray.id}, job_index)` (explained under tray assignment, [section 4](#bg-tray-assignment-dotrayassignments)) to find one, move the tray there through `ExpandReparkTrayJob`, then add the `VecsTransition` `READY_TO_CHARGE -> CHARGING` with rules A and B.
+In words: if the tray is not already on a ready VECS, borrow the open-space search of `ResolveBlockingTrays(working_state, {.tray_id = tray.id}, job_index)` (explained under tray assignment, [section 4](#bg-tray-assignment-dotrayassignments)) to find one, move the tray there through `ExpandReparkTrayJob`, then add the `VecsTransition` `READY_TO_CHARGE -> CHARGING` with `AddChainedEvent` and `OrderAfterJobLeafEvents`.
 
 ### `TYPE_RETRIEVE` — `ExpandRetrieveJob`
 
@@ -481,9 +483,9 @@ Retrieving the car on T17. Bay B21 is chosen, switched to retrieve mode (1), the
 
 In words, five decisions in order:
 
-1.  **Is the car reachable?** It must exist and its tray's vertex must be enabled in the payload footprint's keep-out filter. If it sits on a VECS that is charging, add a "stop charging" `VecsTransition` (`AddChargingStopBeforeTrayMove`, rule A only); a VECS in any other state than charging or ready to charge fails the job with `is_retryable = true`.
+1.  **Is the car reachable?** It must exist and its tray's vertex must be enabled in the payload footprint's keep-out filter. If it sits on a VECS that is charging, add a "stop charging" `VecsTransition` (`AddChargingStopBeforeTrayMove`, `AddChainedEvent` only); a VECS in any other state than charging or ready to charge fails the job with `is_retryable = true`.
 2.  **Which bay?** `FindBayForRetrieve` walks `layout_->GetBayPrioritization()` from the back. It skips disabled bays and bays whose resource window is smaller than the car (`IsPayloadWithinBaySizeLimits`), takes the first `READY_TO_RETRIEVE` bay, and otherwise the first `READY_TO_INSERT` or `VEHICLE_INSERTED` bay. None: fail with `is_retryable = true`.
-3.  **Open the bay** if it is not in retrieve mode (event 1, built inline, rule A only).
+3.  **Open the bay** if it is not in retrieve mode (event 1, built inline, `AddChainedEvent` only).
 4.  **Empty the bay** if a tray is inside (event 2, destination left open). The source comment gives the reason this is done here rather than in `ResolveBlockingTrays`: so that AGV assignment clears the bay first.
 5.  **Bring the car in, then hand it over** (events 3 and 4). The requested pose is `MakeBayInboundPose(bay)`, reversed unless `payload.reciprocal_to_tray`, so the car ends up facing the way the bay needs. (Inside `ExpandReparkTrayJob`, a retrieval heading would override it, but only parking nodes have one.)
 
@@ -542,9 +544,9 @@ In words: check that the bay exists, is enabled, holds a loaded tray and is `VEH
 
 An empty tray is planned into B21 (chosen early here: T23), then B21 switches to insert mode. The last three steps play the plan: an illustrative AGV-1 drives under T23, carries it into B21 (1), and B21 switches to `READY_TO_INSERT` (2).
 
-In words: the bay must be `READY_TO_RETRIEVE`. If the car in the bay asked for charging, plan `ExpandChargePayloadJob` first. If the bay is empty, or holds a loaded tray, plan "any empty tray → bay" (`ExpandReparkTrayJob(ctx, std::nullopt, job_index, true, MakeBayInboundPose(bay))`, a `TrayMove` with no tray). Then try to pick the empty tray right away with `AssignTraysToBayFillMoves`, and finish with `TRANSITION_TO_INSERT` (rules A and B).
+In words: the bay must be `READY_TO_RETRIEVE`. If the car in the bay asked for charging, plan `ExpandChargePayloadJob` first. If the bay is empty, or holds a loaded tray, plan "any empty tray → bay" (`ExpandReparkTrayJob(ctx, std::nullopt, job_index, true, MakeBayInboundPose(bay))`, a `TrayMove` with no tray). Then try to pick the empty tray right away with `AssignTraysToBayFillMoves`, and finish with `TRANSITION_TO_INSERT` (`AddChainedEvent` and `OrderAfterJobLeafEvents`).
 
-This is the only job method that **fills a blank itself**. `AssignTraysToBayFillMoves(ctx, job_index)` (`job_expansion.cpp:782`) replays the DAG once more (`fill_state`, because `working_state` predates the reparks just added), walks the events in topological order and, for each of this job's tray moves with a destination but no tray, calls `AssignEmptyTrayToMove` (cheapest to reach: travel time plus 30 s per tray in the way). On success it chains the move after the chosen tray's last event (rule A, now that the tray is known) and applies it to `fill_state`. If no tray is found, it only logs a warning; `AssignTrays()` will try again with the full picture.
+This is the only job method that **fills a blank itself**. `AssignTraysToBayFillMoves(ctx, job_index)` (`job_expansion.cpp:782`) replays the DAG once more (`fill_state`, because `working_state` predates the reparks just added), walks the events in topological order and, for each of this job's tray moves with a destination but no tray, calls `AssignEmptyTrayToMove` (cheapest to reach: travel time plus 30 s per tray in the way). On success it chains the move after the chosen tray's last event (`ChainAfterLastEntityEvent`, now that the tray is known) and applies it to `fill_state`. If no tray is found, it only logs a warning; `AssignTrays()` will try again with the full picture.
 
 ### `TYPE_READY_FOR_RETRIEVE` — `ExpandReadyForRetrieveJob`
 
@@ -600,7 +602,7 @@ In words: the bay must be in insert or retrieve mode. If in insert mode, open it
 
 AGV-1 is trapped in bay B21 (insert mode). The bay opens (1), AGV-1 drives to the cheapest free charger C14 (2), and the bay returns to insert mode (3). Costs are illustrative. The last three steps play the plan on the map.
 
-In words: an AGV already on a charger, at the charger's inbound pose, needs no event. Otherwise free the AGV if a bay in insert mode traps it (an inline `TRANSITION_TO_RETRIEVE`, rule A only, applied to `working_state`; a bay in any state other than insert or retrieve mode fails the job). `FindUnoccupiedChargerWithShortestTravelTime` then costs every `TYPE_AGV_CHARGE` node with no AGV on it, at `MakeInboundPose(node)` and allowed by the AGV keep-out filter, using `ComputeTravelDuration`; the job moves to the cheapest with `ExpandAgvMoveJob` and puts the bay back with `ExpandBayTransitionJob`. Before PR \#1018 an AGV already on its charger was not recognised when the charger faced reciprocal: `GetInboundHeading` returned an unwrapped 270 and was compared with the AGV's wrapped heading, so the AGV was sent to another charger. `MakeInboundPose` wraps the heading (test `AgvChargeJob.AlreadyOnCharger`).
+In words: an AGV already on a charger, at the charger's inbound pose, needs no event. Otherwise free the AGV if a bay in insert mode traps it (an inline `TRANSITION_TO_RETRIEVE`, `AddChainedEvent` only, applied to `working_state`; a bay in any state other than insert or retrieve mode fails the job). `FindUnoccupiedChargerWithShortestTravelTime` then costs every `TYPE_AGV_CHARGE` node with no AGV on it, at `MakeInboundPose(node)` and allowed by the AGV keep-out filter, using `ComputeTravelDuration`; the job moves to the cheapest with `ExpandAgvMoveJob` and puts the bay back with `ExpandBayTransitionJob`. Before PR \#1018 an AGV already on its charger was not recognised when the charger faced reciprocal: `GetInboundHeading` returned an unwrapped 270 and was compared with the AGV's wrapped heading, so the AGV was sent to another charger. `MakeInboundPose` wraps the heading (test `AgvChargeJob.AlreadyOnCharger`).
 
 ### `TYPE_CLEAN_GARAGE` — `ExpandCleanGarageJob`
 
@@ -626,7 +628,7 @@ In words: an AGV already on a charger, at the charger's inbound pose, needs no e
 
 AGV-1 and AGV-2 are hidden under trays (1, 2). Tray T9, left on a waypoint by an earlier plan, is planned back into parking (3). The last four steps play the plan: both AGVs drive to their hiding spots, then AGV-2 fetches T9 from `W25` and parks it at `P23`, ending hidden under it (AGV and destination illustrative).
 
-In words: if this is `job_index` 0, ask `FindAgvUnderTrayAssignment(working_state, collision_table_)` (`motion_planner`; [section 7.6](#mp-hide-agvs)) for one pose under a tray per AGV (`std::nullopt` when no assignment exists) and add an `AgvMove` for each AGV that is not already there, chained after the AGV's last event and, if it ends in a bay, after the bay's last event (rule A twice, no rule B), and applied to `working_state`. Then `ReparkWaypointStashedTrays` adds a destination-less `TrayMove` for every enabled tray standing on a `TYPE_WAYPOINT` node; a tray that fails is logged and skipped. Only the hiding step, applying a hiding move (reported since PR \#1018; it was ignored before) or the initial replay of the DAG can fail the job.
+In words: if this is `job_index` 0, ask `FindAgvUnderTrayAssignment(working_state, collision_table_)` (`motion_planner`; [section 7.6](#mp-hide-agvs)) for one pose under a tray per AGV (`std::nullopt` when no assignment exists) and add an `AgvMove` for each AGV that is not already there, chained after the AGV's last event and, if it ends in a bay, after the bay's last event (`AddChainedEvent`, then `ChainAfterLastEntityEvent` with the bay's id; no `OrderAfterJobLeafEvents`), and applied to `working_state`. Then `ReparkWaypointStashedTrays` adds a destination-less `TrayMove` for every enabled tray standing on a `TYPE_WAYPOINT` node; a tray that fails is logged and skipped. Only the hiding step, applying a hiding move (reported since PR \#1018; it was ignored before) or the initial replay of the DAG can fail the job.
 
 ### `TYPE_REBALANCE_GARAGE` — `ExpandRebalanceGarageJob`
 
@@ -651,7 +653,7 @@ In words: if this is `job_index` 0, ask `FindAgvUnderTrayAssignment(working_stat
 
 ![Rebalance garage job](figures/47_job_rebalance_garage.svg)
 
-B7 gets an empty tray and insert mode (1, 2); B21 gets retrieve mode and its tray is planned out (3, 4). One job index for both bays makes rule B run them one after the other. The last six steps play the plan in that order with an illustrative AGV-1: T5 into B7, B7 to insert mode, B21 to retrieve mode, then T21 out to `P23` (destination illustrative).
+B7 gets an empty tray and insert mode (1, 2); B21 gets retrieve mode and its tray is planned out (3, 4). One job index for both bays makes `OrderAfterJobLeafEvents` run them one after the other. The last six steps play the plan in that order with an illustrative AGV-1: T5 into B7, B7 to insert mode, B21 to retrieve mode, then T21 out to `P23` (destination illustrative).
 
 In words: `ComputeBayRebalancingActions(working_state, bay_prioritization, target_insert_ready_bay_fraction_)` returns a `BayRebalancingActions` with two bay lists; run `ExpandReadyForInsertJob` for each of `bays_to_make_insert_ready` and `ExpandReadyForRetrieveJob` for each of `bays_to_make_retrieve_ready`, all with the same `job_index`. Per-bay failures are only logged; the job fails only if the initial replay of the DAG fails.
 
@@ -679,7 +681,7 @@ These are behaviours of the code that surprise people. Four of them (1, 2, 3 and
 
 7.  **"Free charger" only means "no AGV on the node".** The code says so ("Unoccupied means no AGV on the node, not collision free").
 
-8.  **Rule B serialises composite jobs.** REBALANCE_GARAGE's per-bay recipes share one `job_index`, so each bay waits for the previous bay's work.
+8.  **`OrderAfterJobLeafEvents` serialises composite jobs.** REBALANCE_GARAGE's per-bay recipes share one `job_index`, so each bay waits for the previous bay's work.
 
 9.  **Some bay commands skip the disabled check.** `ExpandReadyForInsertJob`, `ExpandReadyForRetrieveJob`, `AddBayTransitionToRetrieve` and CHARGE_AGV's trapped-bay branch never test `bay.disabled` (INSERT and TRANSITION_BAY_TO\_\* do). `Plan()` marks bays that already have a command in `base_schedule` as disabled (`ExcludeCommittedResources`), so those methods can command such a bay again; READY_FOR_INSERT is only stopped indirectly, because the repark into a disabled bay fails.
 
@@ -691,7 +693,7 @@ These are behaviours of the code that surprise people. Four of them (1, 2, 3 and
 
 ### Cheat sheet and self-check
 
-This section closes job expansion with a one-page summary of the events each job type can create, followed by five questions to check understanding before tray assignment. The figure condenses sections [14.7](#bg-type_repark_tray-and-type_move_tray--planreparktrayjob) to [14.17](#bg-type_rebalance_garage--planrebalancegaragejob); the questions draw on the loop, the edge rules and the job figures.
+This section closes job expansion with a one-page summary of the events each job type can create, followed by five questions to check understanding before tray assignment. The figure condenses sections [14.7](#bg-type_repark_tray-and-type_move_tray--planreparktrayjob) to [14.17](#bg-type_rebalance_garage--planrebalancegaragejob); the questions draw on the loop, the edge helpers and the job figures.
 
 ![Job recipes](figures/24_job_recipes.svg)
 
@@ -700,7 +702,7 @@ Cheat sheet: one row per job type, **not** a sequence of scenarios. Each row lis
 Check yourself before moving on:
 
 1.  A request has `[RETRIEVE (fails), MOVE_AGV, REPARK_TRAY]`. What `job_index` does each successful job get?
-2.  Job 0 reparks T19 to P24 and job 1 reparks T19 to P23. Which rule orders the two moves, and why does rule B not?
+2.  Job 0 reparks T19 to P24 and job 1 reparks T19 to P23. Which helper orders the two moves, and why does `OrderAfterJobLeafEvents` not?
 3.  In the retrieve figure, why does event 3 have edges from both 1 and 2?
 4.  Which job types can leave a `TrayMove` with no destination? With no tray?
 5.  Why can a bay's ODP check fail for TRANSITION_BAY_TO_INSERT but not for INSERT?
@@ -708,8 +710,8 @@ Check yourself before moving on:
 Answers
 
 1.  MOVE_AGV gets 0 and REPARK_TRAY gets 1; the failed retrieve uses no index, and since PR \#1018 any events it added first are dropped with it (gotcha 1).
-2.  Rule A (same tray). Rule B only links events of the same job.
-3.  Rule B (2 was the job's only leaf) and rule C (the tray is going into bay B21, whose last event is 1).
+2.  `ChainAfterLastEntityEvent` (same tray). `OrderAfterJobLeafEvents` only links events of the same job.
+3.  `OrderAfterJobLeafEvents` (2 was the job's only leaf) and `OrderAfterBayAndChargerEvents` (the tray is going into bay B21, whose last event is 1).
 4.  No destination: RETRIEVE, INSERT, READY_FOR_RETRIEVE, CLEAN_GARAGE (and REBALANCE through READY_FOR_RETRIEVE). No tray: READY_FOR_INSERT (and REBALANCE through it) when its fill pass (`AssignTraysToBayFillMoves`) finds no empty tray.
 5.  The ODP check lives in `ExpandBayTransitionJob`; INSERT uses `AddBayTransitionToRetrieve`, which does not check it.
 

@@ -796,7 +796,7 @@ Read it as a pipeline:
 3.  **The response keeps both the list and the edges.** `BuildScheduledActionsArray` walks the action DAG in topological order, gives each action its position in `Schedule.nodes`, and fills `parents` from its in-edges plus the previous action of the same AGV, bay or VRC. So the "sorted graph" is exactly this: a sorted array in which every node points back to its parents, always at smaller indices.
 4.  **Execution is driven by `parents`, not by array order** ([section 4](#ad-executing-an-adg) explains why that is safe). A node can start as soon as all its parents are done; nodes without a path between them run at the same time. The times themselves come from motion planning: in the `SchedulerState.ContinuousStateToSchedule` test (`test/src/stages/scheduler_state_tests.cpp`), AGV-1 and AGV-2 both have motions starting at `t = 0`. How Dispatch's executor consumes `parents` is outside this package.
 
-Parallelism is still lost wherever an edge exists. Some edges are physical (one AGV does one thing at a time; a tray is in one place). Others are choices: rule B orders every step of a job even when two steps could overlap, and REBALANCE_GARAGE runs its bays one after another because they share a job index ([section 14.18](#bg-gotchas-2)). Those are fair targets for improvement.
+Parallelism is still lost wherever an edge exists. Some edges are physical (one AGV does one thing at a time; a tray is in one place). Others are choices: `OrderAfterJobLeafEvents` orders every step of a job even when two steps could overlap, and REBALANCE_GARAGE runs its bays one after another because they share a job index ([section 14.18](#bg-gotchas-2)). Those are fair targets for improvement.
 
 ### Where the complexity comes from
 
@@ -827,7 +827,7 @@ Fixed in PR \#1018, and listed here because older notes mention them: failed job
 4.  In `Scheduler::Plan`, what is `this`, what is `ctx`, and why can a `const` method still change the plan?
 5.  Why does every `Expand<Type>Job` start with `ComputeStateAfterPlannedEvents`, a copy of `ctx->initial_state` with `ctx->event_dag.ApplyEventsTo` applied?
 6.  What makes a `TrayMove` incomplete, and which stage completes each missing part?
-7.  What does an edge in `ScheduleEventDag` mean, and which three rules add edges during job expansion?
+7.  What does an edge in `ScheduleEventDag` mean, and which three helpers add edges during job expansion?
 8.  Why is `first_event_by_tray` recorded in tray assignment and read in AGV assignment?
 9.  What does bottleneck matching optimise, and why might it not pick the lowest total cost?
 10. When does `Plan()` return `success == false`, and how do you tell which jobs really failed?

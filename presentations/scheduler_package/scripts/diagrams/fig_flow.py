@@ -47,7 +47,7 @@ def pipeline():
     cw, gap, ch = 210, 38, 178
     stages = [
         ("Job expansion", "Validate the base state, create PlanContext, expand each pending job into events.",
-         ["Expand<Type>Job()", "+ rule A/B/C edges"], ACT),
+         ["Expand<Type>Job()", "+ edges from the three", "edge helpers"], ACT),
         ("Tray assignment", "Fill missing tray ids and destinations; insert moves for blocking trays.",
          ["AssignTrays(ctx)", "+ occupancy edges"], TRAY),
         ("AGV assignment", "Match AGVs to tray moves; add approach, lift and lower events; prune edges + check.",

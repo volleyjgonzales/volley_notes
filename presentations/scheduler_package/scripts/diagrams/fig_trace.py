@@ -203,7 +203,7 @@ def _part1():
              call=C("ExpandRetrieveJob", r"\bFindBayForRetrieve\(")),
         dict(depth=5, kind="ctx", sig="void PlanContext::AddChainedEvent(const ScheduleEventSPtr& event)",
              loc=F(PCH, r"void AddChainedEvent\("), call=C("ExpandRetrieveJob", r"AddChainedEvent\(", nth=0),
-             note="add + rule A for TRANSITION_TO_RETRIEVE (only when the bay is not ready to retrieve)"),
+             note="AddEvent + ChainAfterLastEntityEvent for TRANSITION_TO_RETRIEVE (only when the bay is not ready to retrieve)"),
         dict(depth=5, kind="sched", sig="stdx::Expected<void, JobFailure> Scheduler::ExpandReparkTrayJob("
              "PlanContextSPtr ctx, std::optional<uint16_t> tray_id, size_t job_index, bool "
              "is_reciprocal_heading_allowed, std::optional<interfaces::msg::GaragePose> dest) const   x2",
@@ -225,10 +225,10 @@ def _part1():
              "ctx->OrderAfterJobLeafEvents(tray_move)", loc=F(PCH, r"void AddChainedEvent\(") + ", "
              + L("OrderAfterBayAndChargerEvents"),
              call=C("ExpandReparkTrayJob", r"AddChainedEvent\(|\bOrderAfterBayAndChargerEvents\(|"
-                    r"OrderAfterJobLeafEvents\("), note="rules A, C, B"),
+                    r"OrderAfterJobLeafEvents\("), note="called in this order"),
         dict(depth=5, kind="ctx", sig="void PlanContext::OrderAfterJobLeafEvents(const ScheduleEventSPtr& event)",
              loc=F(PCH, r"void OrderAfterJobLeafEvents\("),
-             call=C("ExpandRetrieveJob", r"OrderAfterJobLeafEvents\("), note="rule B for PROCESS_RETRIEVE"),
+             call=C("ExpandRetrieveJob", r"OrderAfterJobLeafEvents\("), note="edges from job 0's leaves to PROCESS_RETRIEVE"),
         dict(depth=3, kind="ctx", sig="void PlanContext::AddScheduledJob(const interfaces::msg::SchedulerJob& job)",
              loc=F(PCH, r"void AddScheduledJob\("), call=C("Scheduler::Plan", r"AddScheduledJob\("),
              note="success: the job takes its job_index. On failure *ctx is restored (no events left) and "

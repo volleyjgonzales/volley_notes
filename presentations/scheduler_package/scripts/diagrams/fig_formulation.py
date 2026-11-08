@@ -35,7 +35,7 @@ def edge_kinds():
     S3 = d.step("Resource-order edge (amber): AGV-2 does the blocker move and job B's first move, so one must come "
                 "first, but either order is valid. The direction was fixed by request order and assignment: in "
                 "scheduling terms, a disjunctive constraint whose choice was made greedily.")
-    S4 = d.step("Conservative edge (red): rule B makes each new event of a job wait for all of the job's current "
+    S4 = d.step("Conservative edge (red): OrderAfterJobLeafEvents makes each new event of a job wait for all of the job's current "
                 "leaves, so job B's two moves are chained although they use different AGVs, trays and places.")
     S5 = d.step("What the motion planner receives today: all seven edges as hard precedence. A solver that knew "
                 "the kinds could keep green, choose amber, let paths decide blue and drop red, and so find plans "
@@ -64,7 +64,7 @@ def edge_kinds():
         ("e2", "e3", CAUSAL, S1, "car in bay"),
         ("e4", "e2", PATH, S2, "route through P15"),
         ("e4", "e5", RES, S3, "AGV-2 order"),
-        ("e5", "e6", CONS, S4, "rule B only"),
+        ("e5", "e6", CONS, S4, "same job only"),
     ]
     for a, b, col, k, lbl in edges:
         A, Bb = B[a], B[b]

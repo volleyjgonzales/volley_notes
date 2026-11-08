@@ -5,8 +5,9 @@ Every per-job figure has the same four parts so they can be compared side by sid
            hypothetical occupancy). Arrows are *intent* only: job expansion plans no paths.
   request  the SchedulerJob fields the method reads and the job_index it receives.
   events   the ScheduleEvents added to ctx->event_dag, in creation order, with every edge the
-           method adds and the rule that added it (A = same asset, B = earlier leaf of the same
-           job, C = tray into a bay/VECS waits for that resource's last event).
+           method adds and the helper that added it (ChainAfterLastEntityEvent = same asset,
+           OrderAfterJobLeafEvents = earlier leaf of the same job, OrderAfterBayAndChargerEvents = tray
+           into a bay/VECS waits for that resource's last event).
   steps    the method body as numbered steps, each with what happens in this example.
 """
 from __future__ import annotations
@@ -23,7 +24,7 @@ from theme import S, T
 
 DOC1 = "01-software-background.html"
 TRAY, AGV, BAYC, VECS = T.amber, T.green, T.violet, T.pink
-RULE_B = T.fg2
+LEAF_COL = T.fg2
 QA_X, QA_Y = (20.4, 46.4), (15.3, 25.2)
 FULL_X, FULL_Y = (20.4, 46.4), (6.9, 25.2)
 W = 1120
@@ -187,7 +188,9 @@ def request_card(d: Doc, x, y, w, rows, *, title="Request"):
     return BBox(x, y, x + w, y + h)
 
 
-RULE_STYLE = {"A": (None, 1.8), "B": ("5 4", 1.5), "C": ("2 4", 1.8)}
+# edge style per helper: chain = ChainAfterLastEntityEvent, leaf = OrderAfterJobLeafEvents,
+# bay = OrderAfterBayAndChargerEvents
+EDGE_STYLE = {"chain": (None, 1.8), "leaf": ("5 4", 1.5), "bay": ("2 4", 1.8)}
 
 
 def event_column(d: Doc, x, y, events, edges, *, bw=290, gap=40, lane_x0=None):
@@ -223,17 +226,16 @@ def event_column(d: Doc, x, y, events, edges, *, bw=290, gap=40, lane_x0=None):
 def _edge(d, boxes, i, j, rule, ent, lab, lanes_used, adj_count, lane_x0):
     if True:
         a, b = boxes[i - 1], boxes[j - 1]
-        col = ENT_COL.get(ent, ent) if rule != "B" else RULE_B
-        if rule == "C":
-            col = ENT_COL.get(ent, ent)
-        dash, sw = RULE_STYLE[rule]
-        text = lab[0] if lab else (f"{rule} · {ent}" if rule == "A" and ent in ENT_COL else rule)
+        col = ENT_COL.get(ent, ent) if rule != "leaf" else LEAF_COL
+        dash, sw = EDGE_STYLE[rule]
+        text = lab[0] if lab else None   # leaf edges carry no pill unless one is given
         if j == i + 1:
             k = adj_count.get(i, 0)
             adj_count[i] = k + 1
             xx = a.x0 + 46 + k * 92
             connect(d, [(xx, a.y1), (xx, b.y0)], kind="flow", color=col, size=8, sw=sw, dash=dash)
-            label_pill(d, xx + 8, (a.y1 + b.y0) / 2, text, color=col, size=10, anchor="start", bg=T.bg)
+            if text:
+                label_pill(d, xx + 8, (a.y1 + b.y0) / 2, text, color=col, size=10, anchor="start", bg=T.bg)
         else:
             lane = 0
             while any(l == lane and not (j <= s0 or i >= s1) for (l, s0, s1) in lanes_used):
@@ -243,7 +245,8 @@ def _edge(d, boxes, i, j, rule, ent, lab, lanes_used, adj_count, lane_x0):
             ya, yb = a.cy - 6, b.cy + 6
             connect(d, [(a.x1, ya), (lx, ya), (lx, yb), (b.x1, yb)], kind="flow", color=col, size=8, sw=sw,
                     dash=dash, radius=7)
-            label_pill(d, lx, (ya + yb) / 2, text, color=col, size=10, bg=T.bg)
+            if text:
+                label_pill(d, lx, (ya + yb) / 2, text, color=col, size=10, bg=T.bg)
 
 
 # --------------------------------------------------------------------------------------
@@ -263,10 +266,10 @@ GENERAL = {
     "with a car takes the node's retrieval heading, and the AGV's destination follows the tray.",
     "Check that the AGV's destination exists in the graph and is not kept out for its footprint (empty or "
     "carrying a tray).",
-    "An AGV without a tray gets one AgvMove, chained after the AGV's previous event (rule A).",
+    "An AGV without a tray gets one AgvMove, chained after the AGV's previous event (AddChainedEvent).",
     "An AGV carrying a tray gets a TrayMove with this AGV already assigned, chained after the tray's previous "
-    "event (rule A).",
-    "Make the new event wait for any earlier events of the same job (rule B).",
+    "event (AddChainedEvent).",
+    "Make the new event wait for any earlier events of the same job (OrderAfterJobLeafEvents).",
 ],
 "41_job_repark_tray": [
     "A repark needs at least a tray or a destination; with neither there is nothing to plan.",
@@ -281,9 +284,9 @@ GENERAL = {
     "A loaded tray takes the destination node's retrieval heading, if the node has one, whatever the node type.",
     "Reject destinations that are a VECS not ready to charge, not in the graph, kept out for this tray, or a "
     "disabled bay.",
-    "Create the TrayMove, add it to the DAG and chain it after this tray's previous event (rule A).",
-    "If the destination is a bay or VECS, also wait for that resource's last event (rule C).",
-    "Make the move wait for earlier events of the same job (rule B).",
+    "Create the TrayMove, add it to the DAG and chain it after this tray's previous event (AddChainedEvent).",
+    "If the destination is a bay or VECS, also wait for that resource's last event (OrderAfterBayAndChargerEvents).",
+    "Make the move wait for earlier events of the same job (OrderAfterJobLeafEvents).",
 ],
 "42_job_retrieve": [
     REPLAY,
@@ -295,7 +298,7 @@ GENERAL = {
     "retrieve mode, else remember the first one in insert mode or with a car inserted.",
     "No usable bay: fail and ask Dispatch to keep the job for later (is_retryable).",
     "If the chosen bay is not in retrieve mode yet, add the transition that switches it, on the layout's "
-    "retrieve floor (chained to the bay, rule A).",
+    "retrieve floor, chained after the bay's previous event (AddChainedEvent).",
     "If a tray already occupies the bay, plan it out of the bay; its destination is left for tray assignment.",
     "Plan the car's tray into the bay, turned so the car faces the right way.",
     "Add the hand-over: the bay processes the retrieve once the tray is in.",
@@ -375,8 +378,8 @@ GENERAL = {
     "Insert mode can only be entered from retrieve mode.",
     "Retrieve mode needs a floor (the bay's first system floor) and starts from insert mode or a car inserted.",
     "Any other command is rejected.",
-    "Add the bay transition, chained after the bay's previous event (rule A) and earlier events of the job "
-    "(rule B).",
+    "Add the bay transition, chained after the bay's previous event (AddChainedEvent) and ordered after earlier "
+    "events of the job (OrderAfterJobLeafEvents).",
 ],
 "50_job_charge_payload": [
     REPLAY,
@@ -691,9 +694,10 @@ def job_figure(name, *, heading, subtitle, req, region, draw_map, map_caption, e
     if notes:
         y = notes_row(d, tx, y + 22, TABLE_W, notes)
     legend = [("box", TRAY, "TrayMove"), ("box", AGV, "AgvMove"), ("box", BAYC, "BayTransition"),
-              ("box", VECS, "VecsTransition"), ("arrow", T.fg2, "rule A: previous event on the same asset (colour = asset)"),
-              ("dasharrow", RULE_B, "rule B: earlier leaf of the same job"),
-              ("dasharrow", BAYC, "rule C: into a bay / VECS"), ("ring", T.fg2, "? = left for AssignTrays")]
+              ("box", VECS, "VecsTransition"), ("arrow", T.fg2,
+               "ChainAfterLastEntityEvent: previous event on the same asset (colour = asset)"),
+              ("dasharrow", LEAF_COL, "OrderAfterJobLeafEvents: earlier leaf of the same job"),
+              ("dasharrow", BAYC, "OrderAfterBayAndChargerEvents: into a bay / VECS"), ("ring", T.fg2, "? = left for AssignTrays")]
     if legend_override is not None:
         legend = legend_override
     frame(d, title=heading, subtitle=subtitle, badge_key=badge, legend=list(legend) + list(legend_extra))
@@ -933,15 +937,18 @@ SHORT = {"ExpandReparkTrayJob": "Repark", "ExpandAgvMoveJob": "AgvMove", "Expand
          "ExpandReadyForRetrieveJob": "RdyRet", "ReparkWaypointStashedTrays": "Stash",
          "AssignTraysToBayFillMoves": "Fill", "ResolveBlockingTrays": "Resolve",
          "FindPreferredTrayHeadingForRetrieval": "RetHdg", "AddChargingStopBeforeTrayMove": "StopChg",
-         "FindAgvUnderTrayAssignment": "Hide", "ComputeBayRebalancingActions": "Rebal"}
+         "FindAgvUnderTrayAssignment": "Hide", "ComputeBayRebalancingActions": "Rebal",
+         "ChainAfterLastEntityEvent": "Chain", "OrderAfterJobLeafEvents": "Leaf",
+         "OrderAfterBayAndChargerEvents": "BayChg"}
 # event type -> how a method creates one itself (constructor or the move_events.hpp builder)
 MAKE_COLS = [("TrayMove", r"make_shared<TrayMove>|\bMakeTrayMove\("),
              ("AgvMove", r"make_shared<AgvMove>|\bMakeAgvPoseMove\("),
              ("BayTransition", r"make_shared<BayTransition>"), ("VecsTransition", r"make_shared<VecsTransition>")]
 MAKE_RE = dict(MAKE_COLS)
-# edge rules: PlanContext / job_expansion.cpp helpers that add each kind of edge
-RULE_RE = {"A": r"\b(AddChainedEvent|ChainAfterLastEntityEvent)\(", "B": r"\bOrderAfterJobLeafEvents\(",
-           "C": r"\bOrderAfterBayAndChargerEvents\("}
+# edge helpers: PlanContext / job_expansion.cpp functions that add each kind of edge
+RULE_RE = {"ChainAfterLastEntityEvent": r"\b(AddChainedEvent|ChainAfterLastEntityEvent)\(",
+           "OrderAfterJobLeafEvents": r"\bOrderAfterJobLeafEvents\(",
+           "OrderAfterBayAndChargerEvents": r"\bOrderAfterBayAndChargerEvents\("}
 
 
 def job_method_bodies():
@@ -954,7 +961,7 @@ def job_method_bodies():
 def building_blocks():
     d = Doc("37_job_building_blocks", "Job methods are built from a few shared pieces",
             "Matrix computed from src/job_expansion.cpp: which job methods and helpers each Expand<Type>Job calls, "
-            "which events it creates itself, and which edge rules it applies itself.")
+            "which events it creates itself, and which edge helpers it calls itself.")
     bodies = job_method_bodies()
     name_w, cw, rh = 300, 50, 30
     cols = [(c, "call") for c in CALL_COLS] + [(k, "make") for k, _ in MAKE_COLS] + \
@@ -978,15 +985,14 @@ def building_blocks():
     S_MAKE = d.step("Creates directly: which event types a method constructs itself, with make_shared<...> or the "
                     "MakeTrayMove / MakeAgvPoseMove builders. Many methods create no TrayMove themselves; they get "
                     "one from a callee.")
-    S_RULE = d.step("Edge rules: whether a method applies rule A (AddChainedEvent / ChainAfterLastEntityEvent), "
-                    "rule B (OrderAfterJobLeafEvents) or rule C (OrderAfterBayAndChargerEvents) itself rather than "
-                    "through a callee.")
+    S_RULE = d.step("Edge helpers: whether a method calls AddChainedEvent / ChainAfterLastEntityEvent, "
+                    "OrderAfterJobLeafEvents or OrderAfterBayAndChargerEvents itself rather than through a callee.")
     S_WORK = d.step(f"ExpandReparkTrayJob is the workhorse: {n_repark} other methods create their TrayMoves through "
-                    "it, so rule C, the heading policy and the VECS checks live in one place.")
+                    "it, so OrderAfterBayAndChargerEvents, the heading policy and the VECS checks live in one place.")
     group_step = {"call": S_CALL, "make": S_MAKE, "rule": S_RULE}
     # group header
     groups = [("calls", len(CALL_COLS), T.teal, S_CALL), ("creates directly", len(MAKE_COLS), T.amber, S_MAKE),
-              ("edge rules", len(RULE_RE), T.fg2, S_RULE)]
+              ("edge helpers", len(RULE_RE), T.fg2, S_RULE)]
     x = name_w
     for g, n, col, sk in groups:
         d.rect(x + 2, 0, n * cw - 4, 22, rx=6, fill=T.tint(col, 0.16, T.bg), stroke=T.tint(col, 0.6, T.bg), sw=1)
@@ -1035,16 +1041,17 @@ def building_blocks():
                       "ResolveBlockingTrays, RetHdg = FindPreferredTrayHeadingForRetrieval, StopChg = "
                       "AddChargingStopBeforeTrayMove,", size=10.5, fill=T.muted)
     d.text(0, y + 46, "Hide = FindAgvUnderTrayAssignment (motion_planner), Rebal = ComputeBayRebalancingActions. "
-                      "Rules: A = AddChainedEvent / ChainAfterLastEntityEvent, B = OrderAfterJobLeafEvents, "
-                      "C = OrderAfterBayAndChargerEvents.", size=10.5, fill=T.muted)
+                      "Chain = AddChainedEvent / ChainAfterLastEntityEvent, Leaf = OrderAfterJobLeafEvents, "
+                      "BayChg = OrderAfterBayAndChargerEvents.", size=10.5, fill=T.muted)
     frame(d, title="Job methods are built from a few shared pieces",
           subtitle=f"Read a row to see what one job method does itself and what it delegates. ExpandReparkTrayJob is "
-                   f"the workhorse: {n_repark} other methods create their TrayMoves through it, so rule C and the "
+                   f"the workhorse: {n_repark} other methods create their TrayMoves through it, so "
+                   f"OrderAfterBayAndChargerEvents and the "
                    f"heading policy live in one place.",
           badge_key="as-built",
           legend=[("dot", T.teal, "calls"), ("dot", TRAY, "creates a TrayMove"), ("dot", AGV, "AgvMove"),
                   ("dot", BAYC, "BayTransition"), ("dot", VECS, "VecsTransition"),
-                  ("dot", T.fg2, "applies rule A / B / C itself")],
+                  ("dot", T.fg2, "calls an edge helper itself")],
           footnote="Generated by scripts/diagrams/fig_jobs.py from sources/repomix-scheduler.xml (src/*.cpp, comments "
                    "stripped, text match on each method body). Calls made by a callee are not repeated on the "
                    "caller's row.")
@@ -1093,16 +1100,16 @@ def job_retrieve():
                 ("TrayMove", "T21: B21 -> ?", 0, "solid", "via ExpandReparkTrayJob, no destination"),
                 ("TrayMove", "T17: P17 -> B21", 0, "solid", "via ExpandReparkTrayJob, heading set"),
                 ("BayTransition", "B21: PROCESS_RETRIEVE", 0, "solid")],
-        edges=[(1, 2, "B", "bay"), (2, 3, "B", "bay"), (3, 4, "B", "bay"), (1, 3, "C", "bay", "C · B21"),
-               (1, 4, "A", "bay", "A · B21")],
+        edges=[(1, 2, "leaf", "bay"), (2, 3, "leaf", "bay"), (3, 4, "leaf", "bay"), (1, 3, "bay", "bay", "into B21"),
+               (1, 4, "chain", "bay", "B21")],
         steps=[
             (RE_CODE, "First job, so the DAG is empty and working_state equals the request.", "replay", "ok"),
             ("payload_opt = working_state.GetPayload(payload_id)\nmissing -> Fail(...)",
              "The car is on tray T17 at P17.", "found", "ok"),
             ("ctx->FindKeepOutFilter(payload footprint)\n  .IsEnabled(tray vertex), else Fail(...)",
              "P17 is not kept out.", "passes", "ok"),
-            ("VECS at the tray's node ->\n  AddChargingStopBeforeTrayMove(...):\n  CHARGING -> stop, rule A; "
-             "other non-ready\n  state -> JobFailure, is_retryable",
+            ("VECS at the tray's node ->\n  AddChargingStopBeforeTrayMove(...):\n  CHARGING -> stop, AddChainedEvent;\n"
+             "  other non-ready state -> JobFailure,\n  is_retryable",
              "P17 has no VECS.", "skipped", "skip"),
             ("bay_opt = FindBayForRetrieve(working_state, payload)\n  reverse(bay_prioritization); skip missing,\n"
              "  disabled or too small; READY_TO_RETRIEVE ->\n  take it; else first READY_TO_INSERT\n"
@@ -1113,17 +1120,18 @@ def job_retrieve():
             ("no bay -> JobFailure{\"No Bay available for\n  retrieve!\", is_retryable = true}",
              "A bay was found.", "skipped", "skip"),
             ("bay READY_TO_INSERT or VEHICLE_INSERTED ->\n  BayTransition(TRANSITION_TO_RETRIEVE,\n"
-             "  retrieve floor); AddChainedEvent  // A",
+             "  retrieve floor); AddChainedEvent",
              "B21 must switch to retrieve mode before trays can go in or out on the garage side.", "adds 1", "event"),
             ("GetTrayOnNode(bay) -> ExpandReparkTrayJob(ctx,\n  tray, job_index, true)   // no dest",
              "Empty tray T21 occupies B21. It must leave first; where it goes is decided later.",
-             "adds 2 · rule B", "event"),
+             "adds 2 · 1 -> 2", "event"),
             ("dest = MakeBayInboundPose(bay), reversed\n  unless payload.reciprocal_to_tray;\n"
              "ExpandReparkTrayJob(ctx, payload tray,\n  job_index, false, dest)",
-             "T17 goes into B21, turned so the car faces the right way for the customer. Inside the call: rule B "
-             "(after 2) and rule C (after B21's last event, 1).", "adds 3 · B, C", "event"),
-            ("BayTransition(PROCESS_RETRIEVE);\nAddChainedEvent (A);\nOrderAfterJobLeafEvents (B)",
-             "The bay hands the car over once T17 is inside.", "adds 4 · A, B", "event"),
+             "T17 goes into B21, turned so the car faces the right way for the customer. Inside the call: "
+             "OrderAfterJobLeafEvents (after 2) and OrderAfterBayAndChargerEvents (after B21's last event, 1).",
+             "adds 3 · 2 edges", "event"),
+            ("BayTransition(PROCESS_RETRIEVE);\nAddChainedEvent;\nOrderAfterJobLeafEvents",
+             "The bay hands the car over once T17 is inside.", "adds 4 · 2 edges", "event"),
             ("return {}", "Plan() appends the job to ctx->scheduled_jobs.", "success", "ok"),
         ],
         notes=[("Why two tray moves?", "A bay holds one tray. The empty tray T21 has to leave before T17 can enter, "
@@ -1189,11 +1197,11 @@ def job_move_agv():
             ("motion_graph_.GetVertexFromPose(agv_dest) must\nexist; ctx->FindKeepOutFilter(\n"
              "  CollisionEntityIdFromAgvState(agv))\n  must enable it",
              "The footprint depends on whether the AGV carries a tray. W13 and P24 are enabled.", "passes", "ok"),
-            ("empty -> MakeAgvPoseMove(job_index, agv_id,\n  agv.pose, agv_dest);\nctx->AddChainedEvent(new_event)  // A",
-             "Job 0: AGV-1 is empty. AGV-1 has no earlier event, so rule A adds no edge.", "adds 1", "event"),
-            ("carrying -> MakeTrayMove(job_index, agv.tray_id,\n  tray_dest, agv_id);\nAddChainedEvent  // A (tray)",
+            ("empty -> MakeAgvPoseMove(job_index, agv_id,\n  agv.pose, agv_dest);\nctx->AddChainedEvent(new_event)",
+             "Job 0: AGV-1 is empty. AGV-1 has no earlier event, so AddChainedEvent adds no edge.", "adds 1", "event"),
+            ("carrying -> MakeTrayMove(job_index, agv.tray_id,\n  tray_dest, agv_id);\nAddChainedEvent  // keyed by the tray",
              "Job 1: AGV-2 carries T9, so the event is a TrayMove with its AGV already set.", "adds 2", "event"),
-            ("ctx->OrderAfterJobLeafEvents(new_event)\n// rule B", "Each job has only one event: no rule B edge.",
+            ("ctx->OrderAfterJobLeafEvents(new_event)", "Each job has only one event, so there is no leaf to order after.",
              "no edge", "skip"),
         ],
         notes=[("No edges here", "The two events belong to different jobs and touch different entities, so "
@@ -1225,7 +1233,7 @@ def job_repark():
 
     return job_figure(
         "41_job_repark_tray", heading="TYPE_REPARK_TRAY / TYPE_MOVE_TRAY  ->  ExpandReparkTrayJob()",
-        subtitle="Move one tray to a parking node. Two jobs move the same tray, so rule A chains them. Six other "
+        subtitle="Move one tray to a parking node. Two jobs move the same tray, so AddChainedEvent chains them. Six other "
                  "job methods create their tray moves through this method.",
         req=[("job 0", "TYPE_REPARK_TRAY, tray_id = 19, destination = P24,\n  allow_reciprocal = true"),
              ("job 1", "TYPE_MOVE_TRAY, tray_id = 19, destination = P23"),
@@ -1235,7 +1243,7 @@ def job_repark():
         events=[("TrayMove", "T19: P19 -> P24@retrieval", 0, "solid",
                  "heading = motion_graph_.GetRetrievalHeading(P24)"),
                 ("TrayMove", "T19: P24 -> P23", 1, "solid")],
-        edges=[(1, 2, "A", "tray", "A · T19")],
+        edges=[(1, 2, "chain", "tray", "T19")],
         steps=[
             ("if(!tray_id && !dest) return Fail(...)", "Both are given.", "passes", "ok"),
             (RE_CODE, "Job 1 replays event 1, so working_state has T19 at P24.", "replay", "ok"),
@@ -1244,7 +1252,7 @@ def job_repark():
              "Job 0 reads T19 at P19; job 1 reads it at P24, where job 0 leaves it. The initial_state fallback is "
              "only for a tray that an earlier move without a destination took out of the planned state.",
              "passes", "ok"),
-            ("VECS at the tray's node ->\n  AddChargingStopBeforeTrayMove(...):\n  CHARGING -> stop, rule A;\n"
+            ("VECS at the tray's node ->\n  AddChargingStopBeforeTrayMove(...):\n  CHARGING -> stop, AddChainedEvent;\n"
              "  READY_TO_CHARGE -> nothing; other -> Fail",
              "P19 has no VECS.", "skipped", "skip"),
             ("retrieval = FindPreferredTrayHeadingForRetrieval(\n  dest node, payload);\n"
@@ -1260,12 +1268,13 @@ def job_repark():
             ("CheckReparkDestination(*ctx, working_state,\n  tray_opt, *dest): VECS not READY_TO_CHARGE,\n"
              "  no vertex, kept out for the tray's\n  footprint, or a disabled bay -> Fail",
              "P24 and P23 are plain, enabled parking.", "passes", "ok"),
-            ("tray_move = MakeTrayMove(job_index, tray_id, dest);\nctx->AddChainedEvent(tray_move)  // rule A",
-             "Job 0: T19 has no earlier event. Job 1: T19's last event is 1, so edge 1 -> 2.", "adds 1, 2 · A",
+            ("tray_move = MakeTrayMove(job_index, tray_id, dest);\nctx->AddChainedEvent(tray_move)",
+             "Job 0: T19 has no earlier event. Job 1: T19's last event is 1, so edge 1 -> 2.", "adds 1, 2",
              "event"),
-            ("dest -> OrderAfterBayAndChargerEvents(*ctx,\n  working_state, *dest, tray_move)  // rule C",
-             "Neither destination is a bay or VECS.", "rule C skipped", "skip"),
-            ("ctx->OrderAfterJobLeafEvents(tray_move)\n// rule B", "Each job has one event: no rule B edge.", "no edge",
+            ("dest -> OrderAfterBayAndChargerEvents(*ctx,\n  working_state, *dest, tray_move)",
+             "Neither destination is a bay or VECS.", "skipped", "skip"),
+            ("ctx->OrderAfterJobLeafEvents(tray_move)", "Each job has one event, so there is no leaf to order after.",
+             "no edge",
              "skip"),
         ],
         notes=[("When is the destination '?'", "Never from Plan(): job.destination is always passed. Internal callers "
@@ -1302,7 +1311,7 @@ def job_insert():
         events=[("BayTransition", "B21: TRANSITION_TO_RETRIEVE", 0, "solid",
                  "via AddBayTransitionToRetrieve, first system floor"),
                 ("TrayMove", "T21: B21 -> ?", 0, "solid", "via ExpandReparkTrayJob, no destination")],
-        edges=[(1, 2, "B", "bay")],
+        edges=[(1, 2, "leaf", "bay")],
         outside=[("Not an event: a callback", "reset_bay_state_request_fn_(21, READY_TO_INSERT) asks Dispatch "
                   "(through SchedulerRos) for a separate job that refills B21 with an empty tray.")],
         steps=[
@@ -1313,10 +1322,10 @@ def job_insert():
              "T21 is in the bay and carries the customer's car.", "passes", "ok"),
             ("state must be VEHICLE_INSERTED or READY_TO_RETRIEVE", "B21 is VEHICLE_INSERTED.", "passes", "ok"),
             ("AddBayTransitionToRetrieve(ctx, bay, job_index):\n  floor = GetFirstSystemFloor(bay) (none -> fail);\n"
-             "  BayTransition(TRANSITION_TO_RETRIEVE);\n  AddChainedEvent (A); OrderAfterJobLeafEvents (B)",
+             "  BayTransition(TRANSITION_TO_RETRIEVE);\n  AddChainedEvent; OrderAfterJobLeafEvents",
              "Added even when the bay is already READY_TO_RETRIEVE.", "adds 1", "event"),
             ("ExpandReparkTrayJob(ctx, tray.id, job_index, true)\n// no destination",
-             "T21 leaves the bay. Rule B orders it after 1.", "adds 2 · B", "event"),
+             "T21 leaves the bay. OrderAfterJobLeafEvents orders it after 1.", "adds 2 · 1 -> 2", "event"),
             ("if(reset_bay_state_request_fn_)\n  reset_bay_state_request_fn_(bay_id, READY_TO_INSERT)",
              "Ask for a follow-up job instead of planning the refill here.", "callback", "call"),
             ("return {}", "", "success", "ok"),
@@ -1359,7 +1368,7 @@ def job_ready_for_insert():
         region="qa", draw_map=draw, map_caption="working_state at the start of the job",
         events=[("TrayMove", "T23: P23 -> B21", 0, "solid", "created as '? -> B21', tray filled in step 7"),
                 ("BayTransition", "B21: TRANSITION_TO_INSERT", 0, "solid")],
-        edges=[(1, 2, "B", "bay")],
+        edges=[(1, 2, "leaf", "bay")],
         steps=[
             (RE_CODE, "Empty DAG.", "replay", "ok"),
             ("bay must exist and be READY_TO_RETRIEVE,\nelse Fail(...)", "B21 is READY_TO_RETRIEVE.", "passes", "ok"),
@@ -1374,10 +1383,10 @@ def job_ready_for_insert():
             ("empty tray already in bay -> nothing to move", "Not this case.", "skipped", "skip"),
             ("AssignTraysToBayFillMoves(ctx, job_index):\n  replay again; for this job's TrayMoves with\n"
              "  a dest but no tray, in topological order:\n  AssignEmptyTrayToMove(*move, fill_state)",
-             "Nearest empty tray by graph search: T23 (illustrative). Rule A is applied now for T23. If no tray "
+             "Nearest empty tray by graph search: T23 (illustrative). The move is chained after T23's last event now (ChainAfterLastEntityEvent). If no tray "
              "is found, the move stays '? -> B21' for AssignTrays().", "tray = T23", "ok"),
-            ("BayTransition(TRANSITION_TO_INSERT);\nAddChainedEvent (A); OrderAfterJobLeafEvents (B)",
-             "After the tray is in.", "adds 2 · B", "event"),
+            ("BayTransition(TRANSITION_TO_INSERT);\nAddChainedEvent; OrderAfterJobLeafEvents",
+             "After the tray is in.", "adds 2 · 1 -> 2", "event"),
             ("return {}", "", "success", "ok"),
         ],
         notes=[("Two ways to get a tray", "Early, here, with AssignEmptyTrayToMove; or late, in AssignTrays(), "
@@ -1413,7 +1422,7 @@ def job_ready_for_retrieve():
         region="qa", draw_map=draw, map_caption="working_state at the start of the job",
         events=[("BayTransition", "B21: TRANSITION_TO_RETRIEVE", 0, "solid", "via AddBayTransitionToRetrieve"),
                 ("TrayMove", "T21: B21 -> ?", 0, "solid", "via ExpandReparkTrayJob, no destination")],
-        edges=[(1, 2, "B", "bay")],
+        edges=[(1, 2, "leaf", "bay")],
         steps=[
             (RE_CODE, "Empty DAG.", "replay", "ok"),
             ("bay must exist; state READY_TO_INSERT or\nREADY_TO_RETRIEVE, else Fail(...)", "B21 is READY_TO_INSERT.",
@@ -1424,7 +1433,7 @@ def job_ready_for_retrieve():
             ("IsEvChargeRequested(working_state, payload) ->\n  ExpandChargePayloadJob(ctx, payload, job_index)",
              "T21 has no payload.", "skipped", "skip"),
             ("else -> ExpandReparkTrayJob(ctx, tray, job_index,\n  true)   // no destination",
-             "T21 leaves the bay; rule B orders it after 1.", "adds 2 · B", "event"),
+             "T21 leaves the bay; OrderAfterJobLeafEvents orders it after 1.", "adds 2 · 1 -> 2", "event"),
             ("return {}", "The bay stays READY_TO_RETRIEVE.", "success", "ok"),
         ],
         notes=[("Same first half as INSERT", "Both call AddBayTransitionToRetrieve() and then move the tray out "
@@ -1465,7 +1474,7 @@ def job_clean_garage():
         events=[("AgvMove", "AGV-1: W27 -> P24 (under T24)", 0, "solid"),
                 ("AgvMove", "AGV-2: W13 -> P15 (under T15)", 0, "solid"),
                 ("TrayMove", "T9: W25 -> ?", 0, "solid", "via ReparkWaypointStashedTrays")],
-        edges=[(2, 3, "B", "bay"), (1, 3, "B", "bay")],
+        edges=[(2, 3, "leaf", "bay"), (1, 3, "leaf", "bay")],
         steps=[
             (RE_CODE, "Empty DAG.", "replay", "ok"),
             ("if(job_index == 0):\n  pose_under_tray_by_agv_opt =\n  FindAgvUnderTrayAssignment(working_state,\n"
@@ -1474,19 +1483,20 @@ def job_clean_garage():
              "assignment it finds, one pose under a tray per AGV (AGV-1 -> P24, AGV-2 -> P15 here, illustrative).",
              "hiding spots", "ok"),
             ("nullopt -> Fail(\"Failed to assign AGVs to\n  tray hiding spots\")", "It succeeded.", "skipped", "skip"),
-            ("for each (agv, dest) with agv.pose != dest:\n  MakeAgvPoseMove; AddChainedEvent (A, AGV);\n"
-             "  dest is a bay -> rule A for that bay too;\n  agv_move->ApplyTo(working_state), else Fail",
-             "No rule B: the hide moves do not wait for each other.", "adds 1, 2", "event"),
+            ("for each (agv, dest) with agv.pose != dest:\n  MakeAgvPoseMove; AddChainedEvent (AGV);\n"
+             "  dest is a bay -> ChainAfterLastEntityEvent(\n    BayId(dest.node_id), agv_move);\n  agv_move->ApplyTo(working_state), else Fail",
+             "No OrderAfterJobLeafEvents: the hide moves do not wait for each other.", "adds 1, 2", "event"),
             ("ReparkWaypointStashedTrays(ctx, job_index):\n  replay; enabled trays on TYPE_WAYPOINT nodes",
              "T9 was left on waypoint W25 by an earlier tier-2 stash.", "T9 found", "ok"),
             ("  for each: ExpandReparkTrayJob(ctx, tray_id,\n  job_index, true)   // no dest; failures logged",
-             "Rule B: both hide moves are leaves of this job, so 3 waits for 1 and 2.", "adds 3 · B", "event"),
+             "OrderAfterJobLeafEvents: both hide moves are leaves of this job, so 3 waits for 1 and 2.",
+             "adds 3 · 2 edges", "event"),
             ("return {}   // stash failures are only logged", "", "success", "ok"),
         ],
         notes=[("job_index == 0", "Means the first job that succeeded in this request, not the first in the list. "
                 "If an earlier job failed, CLEAN_GARAGE can still get index 0.", T.amber),
                ("Why under trays?", "An AGV parked under a tray takes no extra space and is out of the aisles. "
-                "If the hiding spot is a bay, the bay's next transition waits for the AGV (rule A on the bay).",
+                "If the hiding spot is a bay, the bay's next transition waits for the AGV (ChainAfterLastEntityEvent on the bay).",
                 T.green),
                ("Waypoint stash", "When ResolveBlockingTrays() finds no parking it may leave a blocker on a "
                 "waypoint (tier 2, 'Tray assignment'). CLEAN_GARAGE is what puts it back.", T.border)],
@@ -1525,7 +1535,7 @@ def job_rebalance():
                 ("BayTransition", "B7: TRANSITION_TO_INSERT", 0, "solid"),
                 ("BayTransition", "B21: TRANSITION_TO_RETRIEVE", 0, "solid", "READY_FOR_RETRIEVE recipe for B21"),
                 ("TrayMove", "T21: B21 -> ?", 0, "solid")],
-        edges=[(1, 2, "B", "bay"), (2, 3, "B", "bay", "B · across bays"), (3, 4, "B", "bay")],
+        edges=[(1, 2, "leaf", "bay"), (2, 3, "leaf", "bay", "across bays"), (3, 4, "leaf", "bay")],
         steps=[
             (RE_CODE, "Empty DAG.", "replay", "ok"),
             ("auto [transition_to_insert_bays,\n  transition_to_retrieve_bays] =\n"
@@ -1538,12 +1548,12 @@ def job_rebalance():
              "Empty tray T5 (nearest, illustrative) into B7, then B7 to insert mode.", "adds 1, 2", "event"),
             ("for bay in transition_to_retrieve_bays:\n  ExpandReadyForRetrieveJob(ctx, bay, job_index)\n"
              "  failure -> log and continue",
-             "B21 to retrieve mode, then T21 out. Rule B links 3 to 2 because both recipes share job_index 0.",
-             "adds 3, 4 · B", "event"),
+             "B21 to retrieve mode, then T21 out. OrderAfterJobLeafEvents links 3 to 2 because both recipes share "
+             "job_index 0.", "adds 3, 4", "event"),
             ("return {}   // per-bay failures never fail the job", "", "success", "ok"),
         ],
-        notes=[("Rule B serialises the bays", "Every sub-recipe uses the same job_index, so the first event of "
-                "B21's recipe waits for the leaves of B7's. Bays are rebalanced one after another, not in "
+        notes=[("One job_index serialises the bays", "Every sub-recipe uses the same job_index, so the first event "
+                "of B21's recipe waits for the leaves of B7's (OrderAfterJobLeafEvents). Bays are rebalanced one after another, not in "
                 "parallel.", T.fg2),
                ("Almost never fails", "Per-bay failures are logged and skipped, and their partial events stay: "
                 "Plan() only rolls back a job that fails as a whole. The job fails only if the replay fails; it may "
@@ -1581,14 +1591,14 @@ def job_charge_agv():
         events=[("BayTransition", "B21: TRANSITION_TO_RETRIEVE", 0, "solid"),
                 ("AgvMove", "AGV-1: B21 -> C14@inbound", 0, "solid", "via ExpandAgvMoveJob"),
                 ("BayTransition", "B21: TRANSITION_TO_INSERT", 0, "solid", "via ExpandBayTransitionJob")],
-        edges=[(1, 2, "B", "bay"), (2, 3, "B", "bay"), (1, 3, "A", "bay", "A · B21")],
+        edges=[(1, 2, "leaf", "bay"), (2, 3, "leaf", "bay"), (1, 3, "chain", "bay", "B21")],
         steps=[
             (RE_CODE, "Empty DAG.", "replay", "ok"),
             ("AGV must exist and not be disabled, else Fail", "AGV-1 is enabled.", "passes", "ok"),
             ("on a TYPE_AGV_CHARGE node and\nagv.pose == MakeInboundPose(node) -> return {}", "AGV-1 is in a bay.",
              "no early exit", "skip"),
             ("on a bay node:\n  READY_TO_INSERT -> BayTransition(TO_RETRIEVE),\n"
-             "    AddChainedEvent (A), ApplyTo(working_state);\n  READY_TO_RETRIEVE -> fine; other -> Fail",
+             "    AddChainedEvent, ApplyTo(working_state);\n  READY_TO_RETRIEVE -> fine; other -> Fail",
              "B21 is READY_TO_INSERT, so AGV-1 is trapped until the bay switches.", "adds 1", "event"),
             ("FindUnoccupiedChargerWithShortestTravelTime(\n  *ctx, working_state, agv): each TYPE_AGV_CHARGE\n"
              "  node with no AGV; pose = MakeInboundPose(node),\n  not kept out; ComputeTravelDuration(...,\n"
@@ -1597,10 +1607,12 @@ def job_charge_agv():
              "node, not that its surroundings are clear.", "best = C14", "ok"),
             ("no charger -> Fail(\"Caution: No available ...\")", "C14 was found.", "skipped", "skip"),
             ("ExpandAgvMoveJob(ctx, agv_id, best, job_index)",
-             "Replays event 1 (bay now READY_TO_RETRIEVE), adds the move, rule A (AGV-1) and rule B (after 1).",
-             "adds 2 · B", "event"),
+             "Replays event 1 (bay now READY_TO_RETRIEVE), adds the move, AddChainedEvent (AGV-1) and "
+             "OrderAfterJobLeafEvents (after 1).",
+             "adds 2 · 1 -> 2", "event"),
             ("trapped -> ExpandBayTransitionJob(ctx, bay,\n  TRANSITION_TO_INSERT, job_index)",
-             "Puts B21 back into insert mode: rule A after 1 and rule B after 2.", "adds 3 · A, B", "event"),
+             "Puts B21 back into insert mode: chained after 1 (AddChainedEvent) and ordered after 2 "
+             "(OrderAfterJobLeafEvents).", "adds 3 · 2 edges", "event"),
         ],
         notes=[("Composite job", "Two of the three events come from other job methods. That is why the matrix "
                 "of building blocks shows AgvMove and BayTrans calls on this row.", T.teal),
@@ -1652,7 +1664,7 @@ def job_bay_transition():
             ("TO_RETRIEVE: floor = GetFirstSystemFloor(bay)\n  (none -> Fail); bay must be READY_TO_INSERT\n"
              "  or VEHICLE_INSERTED", "Job 0: B21 is READY_TO_INSERT.", "passes", "ok"),
             ("other command type -> Fail", "", "skipped", "skip"),
-            ("BayTransition(MakeBayCommand(cmd, ..., floor));\nAddChainedEvent (A); OrderAfterJobLeafEvents (B)",
+            ("BayTransition(MakeBayCommand(cmd, ..., floor));\nAddChainedEvent; OrderAfterJobLeafEvents",
              "Job 0 only.", "adds 1", "event"),
         ],
         notes=[("Also used inside other jobs", "ExpandAgvChargeJob() calls it to put a bay back into insert mode. "
@@ -1694,7 +1706,7 @@ def job_charge_payload():
         map_caption="working_state at the start (Pecos has no VECS; V23 is invented)",
         events=[("TrayMove", "T20: P20 -> V23", 0, "solid", "via ExpandReparkTrayJob; heading from the search"),
                 ("VecsTransition", "V23: READY_TO_CHARGE -> CHARGING", 0, "solid")],
-        edges=[(1, 2, "B", "bay")],
+        edges=[(1, 2, "leaf", "bay")],
         steps=[
             (RE_CODE, "Empty DAG.", "replay", "ok"),
             ("payload must exist (else Fail);\ntray = GetTray(payload.tray_id)", "The car is on T20 at P20.", "found",
@@ -1707,10 +1719,11 @@ def job_charge_payload():
              "(OpenSpaceSearchEnvironment): V23 here.", "dest = V23", "ok"),
             ("no dest -> Fail; dest has no VECS -> Fail", "V23 is a VECS.", "passes", "ok"),
             ("ExpandReparkTrayJob(ctx, tray.id, job_index,\n  false, dest)",
-             "Adds the TrayMove with rule A (T20); rule C would wait for V23's last event (none yet).",
+             "Adds the TrayMove with AddChainedEvent (T20); OrderAfterBayAndChargerEvents would wait for V23's last "
+             "event (none yet).",
              "adds 1", "event"),
-            ("VecsTransition(READY_TO_CHARGE -> CHARGING);\nAddChainedEvent (A); OrderAfterJobLeafEvents (B)",
-             "Starts after the tray arrives.", "adds 2 · B", "event"),
+            ("VecsTransition(READY_TO_CHARGE -> CHARGING);\nAddChainedEvent; OrderAfterJobLeafEvents",
+             "Starts after the tray arrives.", "adds 2 · 1 -> 2", "event"),
         ],
         notes=[("Also called by bay jobs", "READY_FOR_INSERT and READY_FOR_RETRIEVE call it when the car in the "
                 "bay asked for EV charging, so the car goes to a VECS instead of ordinary parking.", T.pink),
@@ -1719,7 +1732,7 @@ def job_charge_payload():
                 "again later.", T.amber),
                ("Stop-charging events", "RETRIEVE and REPARK add the opposite transition (CHARGING -> "
                 "READY_TO_CHARGE) through AddChargingStopBeforeTrayMove(). Since PR #1018 it is chained after the "
-                "VECS's previous event (rule A), so it is ordered after this one.", T.border)],
+                "VECS's previous event (AddChainedEvent), so it is ordered after this one.", T.border)],
         bw=300, play=dict(notes={2: "The car on T20 is charging."}))
 
 
@@ -1843,7 +1856,7 @@ def job_method_dataflow():
              ["+4 events, all job_index 0:", "  e1 B21 TO_RETRIEVE   e2 T21 -> ?", "  e3 T17 -> B21        e4 B21 PROCESS_RETRIEVE",
               "+5 edges: e1->e2, e2->e3, e1->e3, e3->e4, e1->e4"]),
             ("ctx->last_event_by_entity", "{ }",
-             ["{ B21 -> e4,  T21 -> e2,  T17 -> e3 }", "(used by rule A in later jobs)"]),
+             ["{ B21 -> e4,  T21 -> e2,  T17 -> e3 }", "(read by ChainAfterLastEntityEvent in later jobs)"]),
             ("ctx->keep_out_filter_by_footprint", "one entry per footprint",
              ["unchanged: FindKeepOutFilter() is const"])]
     yy = my + 68
@@ -1871,7 +1884,7 @@ def job_method_dataflow():
         code_panel(d, 450, ey, W - 450, [
             "// sketch: same work, everything visible in the signature",
             "struct JobPlan { std::vector<ScheduleEventSPtr> events;",
-            "                 std::vector<Edge> edges;          // rules A, B, C",
+            "                 std::vector<Edge> edges;          // from all three helpers",
             "                 std::vector<FollowUp> requests; }; // instead of callbacks",
             "std::expected<JobPlan, JobFailure>",
             "ExpandRetrieveJob(const PlanView& view, // working_state, DAG, last events: const&",
