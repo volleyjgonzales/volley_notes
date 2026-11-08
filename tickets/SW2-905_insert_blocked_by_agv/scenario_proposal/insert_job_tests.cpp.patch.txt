@@ -11,3 +11,23 @@ TEST(InsertJob, StallBlockedByAgvOnCharger) {
     }
   }
 }
+
+// Control for SW2-905, proposed 2026-11-05: with C14 enabled and no AGV on it, P15 is the only free
+// stall and the car parks there. Also replace the comment above InsertExpectation (lines 15-17), which
+// attributes the W31 stash to the retrieval-heading rule; the rule caches no heading on this layout and
+// accepts every candidate, the stash comes from the disabled charger C14 blocking P15:
+//
+//   // The AGV nearest the bay lifts the tray in it and lowers it outside; where is recorded in the
+//   // scenario. In the busy-garage states the disabled charger C14 blocks the only free stall P15, so
+//   // the car is stashed on the waypoint in front of the bay.
+TEST(InsertJob, FromBay7StallFree) {
+  const auto run = scenarios::Plan();
+  ExpectInsert(run, {.bay = 7, .agv = 7, .lift_heading = 90});
+  bool is_lowered_on_p15 = false;
+  for(const auto& node : run.response.schedule.nodes) {
+    if(node.type == interfaces::msg::ActionNode::TYPE_AGV_COMMAND && IsAgvLiftLowered(node.agv_command)) {
+      is_lowered_on_p15 = is_lowered_on_p15 || node.agv_command.dst.pose.node_id == 15u;
+    }
+  }
+  EXPECT_TRUE(is_lowered_on_p15) << "the car was not parked on P15, the only free stall";
+}

@@ -16,7 +16,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TICKET = HERE.parent
-DIAGRAMS = TICKET.parent / "SW2-482_scheduler_core_refactor" / "scheduler_package" / "scripts" / "diagrams"
+DIAGRAMS = TICKET.parents[1] / "presentations" / "scheduler_package" / "scripts" / "diagrams"
 sys.path.insert(0, str(DIAGRAMS))
 
 from components import card, chip, connect, flow, frame, label_pill, note, num_badge  # noqa: E402
@@ -514,8 +514,80 @@ def fig_options():
     return d
 
 
+# --------------------------------------------------------------------------------------
+def scene_pr(m: Map, *, labels=True):
+    """The committed scenario (two AGVs): AGV-1 idle on C14, AGV-2 under the empty tray at P5."""
+    for tid, nid in EMPTY_TRAYS.items():
+        m.tray(nid, f"T{tid}" if labels else "", chip_pos="bl")
+    for tid, nid in LOADED_TRAYS.items():
+        m.tray(nid, f"T{tid}" if labels else "", payload=True, chip_pos="bl")
+    m.tray(7, "T27" if labels else "", payload=True, emphasis=True, chip_pos="bl")
+    for nid in DISABLED:
+        disabled_mark(m.d, m, nid, label=labels)
+    m.agv(5, "AGV-2" if labels else "", heading=90, label_side="below")
+    m.agv(14, "AGV-1" if labels else "", heading=-90, label_side="left")
+
+
+def fig_pr():
+    d = Doc("06_pr_scenario_and_plan", "The blocked insert on main and with this PR",
+            "Left: on main the stall search picks P15, the only stall without a tray, although AGV-1 on charger "
+            "C14 overlaps it; validation rejects the plan and the insert is dropped. Right: with this PR AGV-1 "
+            "drives to charger C16 while AGV-2 fetches the car, and the car is parked on P15.")
+    scale, gap = 20, 44
+    pw = (FULL_X[1] - FULL_X[0]) * scale
+    specs = [
+        ("main", "On main: the insert fails", T.red,
+         ["The stall search ignores AGVs and picks P15, the only stall without a",
+          "tray, 0.6 m from AGV-1 on C14. Validation rejects the destination as",
+          "occupied, every job of the request fails, and the insert is dropped",
+          "with the car shut in the bay."]),
+        ("pr", "With this PR: the AGV moves and the car is parked", T.green,
+         ["AGV-1 is sent to the nearest free charger that keeps the tray's route",
+          "open, C16, while AGV-2 drives to the bay and lifts the tray; only the",
+          "loaded leg to P15 waits for AGV-1 to arrive",
+          "(recorded as InsertJob.StallBlockedByAgvOnCharger)."]),
+    ]
+    for i, (key, title, col, lines) in enumerate(specs):
+        ox = i * (pw + gap)
+        m = Map(d, ox, 0, scale, FULL_X, FULL_Y)
+        m.base(labels=True, zones=False, axes=False, highlight=(15,))
+        scene_pr(m, labels=False)
+        chip(d, m.P(7)[0] - 10, m.P(7)[1] - 0.4 * scale, "T27", T.amber, size=10, anchor="middle")
+        chip(d, m.P(14)[0] - 3.1 * scale, m.P(14)[1], "AGV-1", T.green, size=10, anchor="end")
+        chip(d, m.P(5)[0], m.P(5)[1] + 1.1 * scale, "AGV-2", T.green, size=10, anchor="middle")
+        if key == "main":
+            m.route([5, 9, 8, 31, 7], T.green, sw=3, dash="6 5", num=1, num_at=0, offset=(0, -8))
+            m.route([7, 31, 8, 13, 15], T.amber, sw=4, num=2, num_at=1, offset=(0, 12))
+            x, y = m.P(15)
+            d.line(x - 14, y - 14, x + 14, y + 14, stroke=T.red, sw=3.5, layer="top")
+            d.line(x - 14, y + 14, x + 14, y - 14, stroke=T.red, sw=3.5, layer="top")
+            sx, sy, sw_, sh = stall_rect(m, 15)
+            label_pill(d, sx + sw_ / 2, sy + sh + 22, "rejected: P15 is 0.61 m from AGV-1", color=T.red,
+                       size=10, bg=T.bg_deep, border=T.red)
+        else:
+            m.route([14, 15, 17, 16], T.green, sw=3, num=1, num_at=2, offset=(0, -8))
+            x, y = m.P(16)
+            label_pill(d, x + 0.36 * scale + 4, y + 24, "AGV-1 to C16", color=T.green, size=10,
+                       bg=T.bg_deep, border=T.green, anchor="start")
+            m.route([5, 9, 8, 31, 7], T.green, sw=3, dash="6 5", num=2, num_at=0, offset=(0, -8))
+            m.route([7, 31, 8, 13, 15], T.amber, sw=4, num=3, num_at=1, offset=(0, 12))
+            x, y, w, h = stall_rect(m, 15)
+            label_pill(d, x + w / 2, y + h + 22, "T27 parked on P15", color=T.amber, size=10, bg=T.bg_deep,
+                       border=T.amber)
+        b = m.box
+        d.text(b.x0, b.y0 - 14, title, size=S.h, weight=600, fill=col, layer="labels")
+        d.text_lines(b.x0, b.y1 + 18, lines, size=S.small, fill=T.fg2, lh=1.45)
+    frame(d, title="SW2-905: the only free stall is beside a charging AGV",
+          subtitle="Pecos combined layout (5675_pecos_combined) with the scenario's occupancy: a car on tray 27 in "
+                   "bay B7, every stall but P15 holding a tray, AGV-1 idle on C14, AGV-2 under the empty tray at "
+                   "P5. The routes on the right are the recorded plan; moves 1 and 2 run at the same time.",
+          legend=[("route", T.green, "AGV move (dashed: approach to the tray)"), ("route", T.amber, "tray move"),
+                  ("dashbox", C_PARK, "candidate stall")])
+    return d
+
+
 FIGURES = [fig_scenario, fig_context, fig_overlap, fig_substitutions, fig_filter_keep_out,
-           fig_filter_stall_search, fig_filter_validation, fig_pipeline, fig_options]
+           fig_filter_stall_search, fig_filter_validation, fig_pipeline, fig_options, fig_pr]
 
 
 def main():

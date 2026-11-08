@@ -1,0 +1,16 @@
+test: InsertJob.FromBay7StallFree
+description: >-
+  Scenario: As in InsertJob.FromBay7TrayHeading90, but charger C14 is enabled and no AGV stands on
+  it, so stall P15 is clear: a car on tray 27 at heading 90 in bay B7, whose state is vehicle
+  inserted, bay B21 ready to retrieve, AGV 7 under an empty tray at P5 and AGV 10 under one at P19,
+  every other stall occupied and P24 disabled. Test: The test plans one INSERT job for bay 7 through
+  Plan(). Expected: AGV 7 enters the bay at heading 90, lifts the tray and parks it on P15, the only
+  free stall (control for SW2-905: the stash on W31 in FromBay7TrayHeading90 comes from the disabled
+  charger, not from the retrieval-heading rule); the job is returned as executing.
+initial_state: 5675_pecos_combined/busy_garage_car_in_bay_7_charger_14_enabled
+scheduler:
+  target_insert_ready_bay_fraction: 0.5
+request:
+  jobs:
+  - type: INSERT
+    bay_id: 7
