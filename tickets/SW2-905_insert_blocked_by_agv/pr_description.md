@@ -1,9 +1,11 @@
 # PR text (paste into GitHub)
 
 Same form as the other PRs (`# What`, `# Why`, `# Testing`, a `Refs:` line; one line per paragraph and per
-bullet). Rewritten 2026-11-06 at about a third of the previous length, after a look at the body lengths of
-the last twelve PRs (100 to 600 words); the earlier, denser text is kept in `pr_description_dense_2026-11-06.md`.
-Draft PR #1036 (https://github.com/VolleyAutomation/volley/pull/1036). The figure is added once approved.
+bullet). Rewritten 2026-11-06 at about a third of the previous length; the earlier, denser text is kept in
+`pr_description_dense_2026-11-06.md`. PR #1036 (https://github.com/VolleyAutomation/volley/pull/1036).
+
+Synced 2026-11-08 from the live PR body (Jon's edits after the viewer moved to #1043). The overlap wording and Testing
+parentheses were applied to the live body the same day.
 
 
 Title: `[SW2-905] Keep tray destinations clear of parked AGVs`
@@ -16,15 +18,21 @@ The stall search of tray assignment ignored every AGV, so an insert could be sen
 
 <img width="2382" height="1540" alt="06_pr_scenario_and_plan_light" src="https://github.com/user-attachments/assets/35188eab-ebbf-4ebf-8bbc-281aeace7df9" />
 
-Three commits:
+Two commits:
 
-1. **Test viewer.** Steps of a solution are selected by clicking a row or a graph node, with a scrubber and the arrow keys; the details are split into tabs, with a timeline that lays the schedule out in time, one row per agent. Tooling only; it helped review the recordings.
-2. **Scenarios.** Seven insert scenarios on the busy Pecos garage with its two AGVs (AGV 1 in the way, AGV 2 the carrier), recorded with the behaviour the next commit implements, plus a control and a simulation scenario for `sim.launch.py`.
-3. **Fix.** `ResolveBlockingTrays` treats every parked AGV's pose as a place a tray may drive through but must not be lowered on. When that leaves only a waypoint stash, the scheduler moves the AGV instead: it finds the stall the AGV blocks, sends the AGV to the nearest free charger whose placement keeps the tray's route open, and parks the tray on the stall. The AGV move is a root of the event DAG, so the carrier's approach to the bay runs in parallel and only the loaded leg waits. A disabled AGV, or one carrying a tray, is never moved; with no usable charger the stash stays.
+1. **Scenarios.** Nine insert scenarios on the busy Pecos garage with its two AGVs (AGV 1 in the way, AGV 2 the carrier), recorded with the behaviour the next commit implements, plus a control and a simulation scenario for `sim.launch.py`.
+2. **Fix.** `ResolveBlockingTrays` lets a tray drive past a parked AGV but never lowers it where it would overlap one. When that leaves only a waypoint stash, the scheduler moves the AGV instead: it finds the stall the AGV blocks, sends the AGV to the nearest free charger whose placement keeps the tray's route open, and parks the tray on the stall. The AGV move waits only for that AGV's earlier planned events and precedes the dependent tray moves, so the carrier's approach to the bay may overlap it and only the loaded leg waits. When the eviction is not possible the stash stays and one INFO line in central's log says why. A disabled AGV, or one carrying a tray, is never moved; with no usable charger the stash stays.
+
+The test viewer changes that helped review the recordings are now in #1043 (SW2-1191).
 
 Behaviour changes outside the bug: `TrayAssignment.FillsBlankDestination` (sunrise) now parks tray 1 on P2062 instead of P2066, where the garage's only AGV stands idle, since the carrier is not known at that stage. Every other recording is unchanged.
 
-Not in this PR: the unassignable-AGV list of #1031. Once that PR lands, AGVs on the list must be excluded from eviction as they are from carrier choice and hiding, while staying obstacles for occupancy and collision checks; that is one condition in the eviction's candidate loop, carried by whichever PR merges second, so low-battery AGVs recovering on a charger will then stay put and the insert will stash. Also deferred: moving a loaded AGV as a tray move, a hiding pose as a second choice when no charger is free, and scenarios for two AGVs blocking one stall or an eviction combined with a blocking-tray repark (no layout in the set produces those states).
+Not in this PR: the unassignable-AGV list of #1031 (AGVs with very low battery that dispatch has sent to charge). With #1031, the scheduler never picks those AGVs to carry a tray and never parks them under trays during Clean. Once both PRs are on main, it must also never move them off a stall to make room, while still treating them as obstacles in occupancy and collision checks. That takes one extra condition in the loop that picks which parked AGVs to move (`ResolveByEvictingAgvs`), added by whichever PR merges second. A low-battery AGV charging next to the free stall will then stay put, and the insert will park its tray on a waypoint instead, as it did before this PR.
+
+Also deferred:
+- Moving an AGV that is carrying a tray off the stall. It would have to be planned as a tray move, not an AGV move, so for now such an AGV is never moved.
+- When no charger is free, parking the blocking AGV under a tray (a hiding spot) before falling back to the waypoint.
+- Scenarios with two AGVs blocking one stall, or with an AGV moved off a stall while a tray in the way is also reparked. No layout in the scenario set produces those states.
 
 # Why
 
@@ -33,8 +41,17 @@ An AGV charging beside the only free stall took the garage down: the insert coul
 # Testing
 
 - [x] `scheduler` and `scheduler_advanced_tests` build with 0 warnings; `prek` passes; `clang-tidy` on the changed lines: 0 findings
-- [x] `scheduler` 202 tests (194 on main), `planner_core` 24, `scheduler_advanced_tests` 15; `SCHEDULER_CHECK_RECORDINGS=1` shows only the recordings named above
+- [x] `scheduler` 204 tests (194 on main), `planner_core` 24, `scheduler_advanced_tests` 15; `SCHEDULER_CHECK_RECORDINGS=1` shows only the recordings named above
 - [x] Three independent Codex reviews and Greptile's loaded-AGV finding; all fixed in these commits
 - [x] The simulation scenario (`5675_pecos_sandbox_combined_insert_blocked_by_agv_on_charger`) watched in Foxglove
+- [x] Tested in garage. (Need to discuss optimal policy, the evicted agv goes to a charger, but then may be immediately assigned a job to move a tray into the bay)
 
 Refs: SW2-905
+
+[SW2-905]: https://volleyautomation.atlassian.net/browse/SW2-905?atlOrigin=eyJpIjoiNWRkNTljNzYxNjVmNDY3MDlhMDU5Y2ZhYzA5YTRkZjUiLCJwIjoiZ2l0aHViLWNvbS1KU1cifQ
+
+
+
+
+
+

@@ -2,7 +2,7 @@
 
 PR [1036](https://github.com/VolleyAutomation/volley/pull/1036) fixes an insert that could leave a customer's car inside a closed bay because an idle robot blocked the only available parking stall. The scheduler now avoids parking over robots and, when necessary, plans a robot relocation before moving the car into the freed stall. If it cannot find a feasible relocation, it retains the existing waypoint-stash fallback.
 
-This explanation follows the final three-commit branch at `e9f799bb`, based on main `54d59be4`, on 6 November 2026. The intended reader is a C++ reviewer who knows dependency graphs but has not worked on this scheduler.
+This explanation follows the two-commit branch at `55a5877a`, based on main `2252c8a9`, as pushed on 8 November 2026 after the review fixes. The intended reader is a C++ reviewer who knows dependency graphs but has not worked on this scheduler.
 
 ## The garage objects and the failure
 
@@ -51,7 +51,7 @@ The old search's optimistic treatment of AGVs was not matched by a destination e
 
 The helper excludes the AGV already carrying the root tray. That AGV travels with the tray and is not a separate parked obstacle. Disabled AGVs are handled through the existing disabled-entity restrictions rather than offered for relocation.
 
-`ResolveRequest::is_parking_over_agvs_allowed` defaults to false. The eviction candidate search sets it to true to ask a counterfactual question: where could this tray park if an enabled AGV were moved away? It is not permission to execute an overlapping placement.
+`ResolveRequest::is_parked_agv_overlap_allowed` defaults to false. The eviction candidate search sets it to true to ask a counterfactual question: which stall could this tray take if destinations overlapping a parked AGV were allowed? Overlap is a collision-table query against the AGV's footprint, so an AGV on C14 blocks P15 without standing on it. The flag is not permission to execute an overlapping placement.
 
 Tray assignment also now applies AGV events to its working state. Otherwise, a search after a planned AGV move would still see that robot at its old pose. Bay and VECS transitions retain their occupancy registration and state application; VRC transitions remain explicitly skipped in this stage. `RecordTransitionOccupancy` describes the registration operation, while `ApplyToWorkingState` centralizes application and its error message.
 
@@ -63,13 +63,15 @@ This alone prevents selecting P15 in the reproduction, but would leave the car s
 
 The relocation procedure is:
 
-1. Rerun destination resolution with waypoint stashing disabled and parking over AGVs allowed. This identifies a candidate destination such as P15.
-2. Query the collision table for enabled AGVs whose current poses overlap that candidate, excluding the root tray's existing carrier.
+1. Rerun destination resolution with waypoint stashing disabled and destinations overlapping parked AGVs allowed. This identifies a candidate destination such as P15.
+2. Query the collision table for AGVs whose current poses overlap that candidate. Disabled AGVs, AGVs carrying a tray, the root tray's existing carrier and AGVs with planned moves later in the request (`ResolveRequest::unevictable_agvs`) are never relocated: the last would start those moves from the stall they left.
 3. Exclude chargers whose inbound AGV pose would also overlap the candidate destination. Checking the inbound pose matters because the robot's arrival heading affects its footprint.
 4. Use `FindUnoccupiedChargersByTravelTime` to enumerate reachable, unoccupied charger poses in travel-time order. The normal charge-job helper remains a wrapper that takes the first result; stable sorting preserves encounter order for equal costs.
-5. `FindAgvEvictionPlan` explores placements recursively. Each attempted AGV move is applied to a separate state copy before placing the next AGV. Consequently, later searches see already occupied candidate chargers. A failed branch does not modify its caller's state.
+5. `PlanAgvEvictionsToChargers` explores placements recursively. Each attempted AGV move is applied to a separate state copy before placing the next AGV. Consequently, later searches see already occupied candidate chargers. A failed branch does not modify its caller's state.
 6. Once all candidate AGVs are placed, rerun ordinary tray resolution with AGV parking exclusions restored. Reject a missing destination or another waypoint stash.
-7. Call `IsTrayPlanFeasible`: check each required blocking-tray move's route, apply it, and then check the root tray's route. Return the first feasible complete placement, or retain the original stash if none works.
+7. Call `AreTrayMovesReachable`: check each required blocking-tray move's route, apply it, and then check the root tray's route. Return the first feasible complete placement, or retain the original stash if none works.
+
+`ResolveByEvictingAgvs` returns `stdx::Expected<AgvEvictionPlan>`. When it fails, the error names the reason (no stall even one that overlaps a parked AGV, no eligible AGV to relocate, no reachable free charger, no charger relocation that permits the tray plan), and tray assignment logs one INFO line per tray: "tray {} remains stashed on {}: {reason}".
 
 The feasibility check uses the static obstacle filtering used for validation. Because AGV assignment has not yet run, it treats an AGV standing beneath the tray as its prospective carrier. That assumption is documented in `IsTrayDestinationReachable`; later assignment, validation and motion planning still run.
 
@@ -85,9 +87,11 @@ Review also exposed why feasibility must be checked on the complete plan. Checki
 
 ## How relocation and insertion are ordered
 
-For an accepted plan, tray assignment adds each relocation event to the DAG and makes it a predecessor of every generated tray move, including blocking-tray reparks and the root move. It also applies the relocation to its working state before applying the tray moves.
+For an accepted plan, tray assignment adds each relocation event to the DAG chained after that AGV's earlier planned events (`AddChainedEvent`), and makes it a predecessor of every generated tray move, including blocking-tray reparks and the root move. It also applies the relocation to its working state before applying the tray moves. Tray assignment counts each AGV's planned moves from job expansion and applies them in order, so an AGV brought to a charger by earlier jobs in the same request is relocated from where those jobs leave it.
 
-AGV assignment processes non-tray roots, records the moving AGV's busy time, and chains subsequent work for that AGV. The relocation carries the insert's job index from its creation; action graph construction maps that index to the job GUID. A DAG root does not mean an action without a job.
+AGV assignment records the moving AGV's busy time and chains subsequent work for that AGV. The relocation carries the insert's job index from its creation; action graph construction maps that index to the job GUID.
+
+`GetTopologicalOrdering` now breaks ties among ready events by job index, then by creation order. Before, events of one job that were ready together came out in heap order, so validation could replay the carrier's approach before the insert's bay transition, whose inbound pose stays blocked until the transition; the earlier-moves scenario exposed it. No existing recording changes.
 
 The reproduction has two chains that may overlap:
 
@@ -105,7 +109,7 @@ CHUGG must still resolve collisions between otherwise independent trajectories. 
 
 ## What the tests and viewer show
 
-The six new insert recordings now use the site's two AGVs, with AGV 1 blocking and AGV 2 carrying where both are present.
+The nine new insert recordings use the site's two AGVs, with AGV 1 blocking and AGV 2 carrying where both are present.
 
 | Scenario | Property exercised |
 |---|---|
@@ -115,12 +119,15 @@ The six new insert recordings now use the site's two AGVs, with AGV 1 blocking a
 | `StallBlockedByAgvNoFreeCharger` | Other chargers are disabled; retain the W31 stash. This is no longer the earlier fixture with AGVs on every charger. |
 | `StallBlockedByAgvChargersUnreachable` | Chargers exist but access is blocked; retain the stash. |
 | `StallBlockedByDisabledAgvOnCharger` | Do not relocate a disabled AGV; retain the stash. |
+| `StallBlockedByLoadedAgvOnCharger` | Do not relocate an AGV carrying a tray; retain the stash. |
+| `StallBlockedByAgvParkedThereByEarlierMoves` | Two MOVE_AGV jobs in the same request bring AGV 1 to C14; relocate it after the second, then park on P15. |
+| `StallBlockedByAgvWithLaterMove` | AGV 1 has a move later in the request; do not relocate it, stash on W31, and keep the move's destination. |
 
 The new unrecorded stage test, `KeepsDestinationsOffParkedAgvs`, checks the resolver's default exclusion policy and its explicit candidate-search exception. The pre-existing `FillsBlankDestination` recording changes from P2066 to P2062: the only AGV occupies P2066, and tray assignment does not yet know it will become the carrier. That is an intentional conservative destination change.
 
 Recording comparison is opt-in through `SCHEDULER_CHECK_RECORDINGS=1`; it compares normalized recorded input/output. Ordinary CI assertions, particularly dependency and job-state assertions, remain essential. Passing recordings do not establish arbitrary multi-AGV or recursive eviction correctness.
 
-The engineering viewer adds persistent step selection, a scrubber, tabs, URL links, failure messages, consistent AGV colors and a timeline. The timeline computes earliest starts from parent dependencies and planned durations, with whole-second display cells. It is a dependency-based illustration, not a measured execution trace or a guarantee of exact simultaneous motion.
+The engineering viewer that helped review these recordings moved to PR #1043 (SW2-1191).
 
 A separate simulation scenario exercises the full stack: `src/scenario/scenarios/5675_pecos_sandbox_combined_insert_blocked_by_agv_on_charger.yaml`. It sets MANUAL dispatch, requests B7's transition at 40 seconds and queues a patron at 45 seconds. Those delays allow bay startup and door validation. The sandbox layout and simulation parameters can produce routes different from the unit-test recording; see [simulation instructions](/home/jon-gonzales/repos/volley_notes/tickets/SW2-905_insert_blocked_by_agv/simulation.md).
 
@@ -128,8 +135,8 @@ A separate simulation scenario exercises the full stack: `src/scenario/scenarios
 
 The PR changes stall choice and can insert AGV relocation events; it does not redesign carrier assignment, CHUGG or dispatcher recovery. A single enabled AGV can still be sent to a charger and subsequently selected as the carrier, producing an unnecessary trip. Relocation destinations are limited to chargers; hiding beneath an empty tray is deferred.
 
-The current tests do not combine eviction with a blocking-tray repark or demonstrate two independent AGVs blocking one stall. The recursive placement code and sequential feasibility checks address those structures, but the six recordings do not exercise them. The search also fixes the blocking-AGV iteration order and returns the first feasible charger combination; it is not a global optimization over all move orders and destinations.
+The current tests do not combine eviction with a blocking-tray repark or demonstrate two independent AGVs blocking one stall. The recursive placement code and sequential feasibility checks address those structures, but the recordings do not exercise them. The search also fixes the blocking-AGV iteration order and returns the first feasible charger combination; it is not a global optimization over all move orders and destinations.
 
-When the unassignable-AGV policy from PR 1031 is integrated, those AGVs must remain obstacles but must not become eviction candidates. The proposed C1 tray-module extraction also needs to represent AGV relocation outputs and incoming AGV state changes; a tray-only result type cannot preserve this behavior.
+When the unassignable-AGV policy from PR 1031 is integrated, those AGVs must remain obstacles but must not become eviction candidates. Relocating AGVs off the explicit destination of a move tray job is SW2-1190, on its own branch for a follow-up PR. The proposed C1 tray-module extraction also needs to represent AGV relocation outputs and incoming AGV state changes; a tray-only result type cannot preserve this behavior.
 
-The final history is organized as `aa18d58a` for the viewer, `6467ea96` for scenarios, and `e9f799bb` for the scheduler solution. The scenario commit intentionally contains expectations that require the following solution commit. The review-driven corrections are folded into the relevant commits rather than left as separate fixes.
+The history is `a90f42da` for scenarios and `55a5877a` for the scheduler solution. The scenario commit intentionally contains expectations that require the following solution commit. The review-driven corrections, including the 8 November renames, are folded into the relevant commits rather than left as separate fixes.

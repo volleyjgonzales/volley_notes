@@ -1019,6 +1019,46 @@ message is the one predicted, and the control parks the car on P15.
   in `CollectIllegalPosesOfParkedAgvs`). `scheduler` 202, `planner_core` 24, `scheduler_advanced_tests` 15
   with recording checks; tidy clean. Drafts of the Greptile reply and the note to Jesse are at the end of
   `codex_reviews/codex_review_4.md`. Unpushed.
+- **2026-11-08, naming review** (`codex_reviews/naming_proposal_2026-11-08.md`, for Codex): Jon's points
+  on tip `a38e7eb8`. (1) New messages say `tray {}` / `AGV {}`, not `t{}` / `a{}`; "even over the AGVs"
+  becomes "even with the parked AGVs moved away" (a stall is a parking spot, so "stalls under parked AGVs"
+  makes no sense). The four older `t{}` messages stay. (2) `later_first(left, right)` becomes
+  `is_later_event(lhs, rhs)`, with no new comments (Jon: too verbose). (3) `is_parking_over_agvs_allowed`
+  becomes `is_parked_agv_pose_allowed`. Undecided: `IsTrayPlanFeasible` → `AreTrayMovesReachable`,
+  `FindAgvEvictionPlan` → `PlanAgvEvictionsToChargers`. Not applied yet; `reviewer_walkthrough.md` and
+  `pr_description.md` mention the old flag name and need the rename when it lands.
+  Codex replied the same day; decisions table at the end of the proposal. Flag becomes
+  `is_parked_agv_overlap_allowed` (illegal poses block by footprint overlap, `blocking_tray_search.cpp:138`,
+  so C14 blocks P15 without sharing its pose). Message 664: "no stall for tray {}, even one that overlaps a
+  parked AGV". Codex's other message texts, its shorter comparator comment and both undecided renames
+  accepted; `unevictable_agvs` kept against Codex. Jon then took `left`/`right` back (conventional, and clear
+  once the lambda is `is_later_event`). Applied unstaged on `a38e7eb8` (4 files, plus a one-line doc on
+  `AreTrayMovesReachable` per Codex); `reviewer_walkthrough.md` updated. `planner_core` 24, `scheduler` 204,
+  `scheduler_advanced_tests` 15 with `SCHEDULER_CHECK_RECORDINGS=1`, recordings unchanged. Tidy waits for the
+  commit (it lints committed lines).
+  On Jon's "commit amend, we only want two commits": fix commit amended in the container, `a38e7eb8` →
+  `55a5877a` (tests `a90f42da` unchanged); tidy 0 findings. `jmg/SW2-1190/move-tray-explicit-destination`
+  (`b79028e5`, the fork of `a38e7eb8`) rebased onto `55a5877a`: conflicts in `scheduler.hpp` and
+  `tray_assignment.cpp` resolved (renames plus its `fixed_destination_opt`), its LOG_INFO now says "no AGV
+  relocated from tray {}'s destination". Resolved state builds and passes (`planner_core` 24, `scheduler` 208,
+  `scheduler_advanced_tests` 15, recordings unchanged), but `volley-in-container` refuses `rebase --continue`,
+  so the rebase is paused for Jon. The pushed `jmg/SW2-1190/evict-agvs-from-explicit-tray-destination`
+  (`282431de`) still sits on the pre-review commits.
+  Jon finished the rebase: `move-tray-explicit-destination` is `68089a31` on `55a5877a`; tidy 0 findings.
+  Jon force-pushed both: origin SW2-905 is `55a5877a` (#1036 shows two commits), origin
+  `jmg/SW2-1190/evict-agvs-from-explicit-tray-destination` is `68089a31`. No SW2-1190 PR yet.
+  CI on `55a5877a` lost its build runner (shutdown signal mid `colcon build`); failed jobs rerun. Jon opens
+  the SW2-1190 PR after #1036 merges. Docs synced to the pushed code: `review_replies_2026-11-08.md`
+  (scenario names filled in, reasons in the new wording, an optional top-level comment, PR-body status),
+  `pr_description.md` (now the live body, plus one proposed overlap-wording edit), `reviewer_walkthrough.md`
+  (two commits, unevictable AGVs, chaining after earlier moves, INFO reason, tie-break, nine scenarios,
+  viewer moved to #1043). Codex reviews and `garage_test.md` are dated records and stay as written.
+  At Jon's explicit request the assistant posted the four thread replies (VECS one rewritten: it is about VECS
+  stalls for charge jobs, not AGV chargers), a top-level comment on the force push, and edited the PR body
+  (overlap wording, Testing parentheses). Links in `review_replies_2026-11-08.md`.
+  VECS follow-up created as SW2-1192 ("Move a parked AGV off the only free VECS for a charge payload job",
+  Task, epic SW2-1067, assigned to Jon, Relates SW2-905; description links Jesse's thread). Test bed:
+  `38_gramercy` (has VECS 21 and the existing `charge_payload_job` scenarios). Thread reply posted at Jon's request (#discussion_r4508969671).
 
 ## 13. The decision path, before and after (walkthrough for the PR)
 
@@ -1103,3 +1143,123 @@ $$
     (section 4); do not move a tray onto P15 by hand. Stay in MANUAL: AUTO start-up queues CleanGarage +
     Rebalance, which would hide a16 under a tray before the insert.
   - Not posted on the PR; relayed to the garage-test session.
+- **2026-11-08, state found on return** (done in other sessions, not recorded here before): the viewer commit
+  was split out as PR #1043 (`jmg/SW2-1191/plan-viewer-step-review`, SW2-1191, base `main`) at Jesse's
+  request, and #1036 now holds two commits on `main` `2252c8a9`: tests `c8572a7a`, fix `f6580404`; the PR
+  body links #1043. #1036 is no longer a draft. Its Testing box says "Tested in garage" with an open policy
+  question: the evicted AGV reaches its charger and may at once be assigned the next tray job (AGV
+  assignment ranks by busy time, the eviction counts, but the AGV stays eligible). Local, unpushed, on top:
+  `282431de` "fix(scheduler): move parked AGVs off a move tray job's explicit destination" (Refs SW2-1190):
+  eviction for a MOVE_TRAY job's fixed destination, `ResolveRequest::unevictable_agvs` fed by
+  `CollectAgvsWithPendingMoves` (`TrayAssignmentState::pending_move_count_by_agv`), and the insert path's
+  eviction moves now `AddChainedEvent` instead of `event_dag.AddEvent`; four `ReparkTrayJob` tests built
+  inline (no scenario recordings) on `tray_at_p23_agvs_at_c14_and_w8`. CI on both PRs: the failures are
+  ARC runner shutdowns ("The runner has received a shutdown signal"; #1036 scheduler job cancelled at
+  "Upload collision table cache", #1043 task_planner and vecs jobs); re-run, not code.
+- **2026-11-08, review comments assessed** (Greptile second P1, Jesse's three inline comments; drafts of the
+  replies in `review_replies_2026-11-08.md`):
+  1. *Greptile, eviction runs before the AGV's earlier moves* (`f6580404` `tray_assignment.cpp:464`):
+     **valid on the pushed tip.** `ExpandAgvMoveJob` chains the AGV's own moves (`AddChainedEvent`), but
+     the insert's eviction moves were added with `event_dag.AddEvent`, so with MOVE_AGV jobs for AGV 1
+     ending on C14 in the same request as the insert, the eviction is a DAG root; `ApplyNonTrayRootEvents`
+     (`agv_assignment.cpp:189`) applies it before AGV 1's second move, the start pose does not match, and
+     the whole request fails (no stash fallback at that stage). Realistic: manual MOVE_AGV to a charger plus
+     an insert in one planning request. `282431de` already fixes both directions (`AddChainedEvent` for the
+     insert path; `unevictable_agvs` for an AGV whose moves come later in the order). Recommendation: move
+     those two pieces into #1036's fix commit (amend `f6580404`), with a Pecos scenario where a MOVE_AGV
+     job parks AGV 1 on C14 in the same request as the insert (expect eviction after that move) and one
+     where AGV 1 has a later move (expect stash); SW2-1190 keeps only the explicit-destination part.
+  2. *Jesse, log why the eviction failed* (`:636`): **agree.** Three reasons today: no stall even when
+     parking over AGVs is allowed (garage full, the stash is right), every blocker unevictable (disabled,
+     loaded, the carrier, pending moves), no charger plan (none free and reachable, or the tray route
+     infeasible). Cheapest consistent shape: `ResolveByEvictingAgvs`/`FindAgvEvictionPlan` return
+     `stdx::Expected<AgvEvictionPlan>` with the reason, one `LOG_INFO` at the fallback in
+     `AssignDestinationAndUnblockingMoves` ("t{} stashed on {}: {}"). INFO, not ERROR: the stash is a legal
+     outcome. Goes into the fix commit.
+  3. *Jesse, VECS charge path and blocking-tray reparks skip AGV spots but get no eviction* (`:572`):
+     **intentional, and an improvement, not a regression.** `ExpandChargePayloadJob`
+     (`job_expansion.cpp:756`) calls the resolver with default flags, so a VECS overlapping a parked AGV is
+     skipped for another VECS, or the job fails at expansion ("Unable to ResolveBlockingTrays to a VECS
+     location"); on `main` it would pick that VECS and fail in validation like the insert did. Blocking
+     trays likewise must not be lowered over an AGV. Eviction there: the VECS repark is an explicit
+     destination (`ExpandReparkTrayJob(..., dest)` at `:768`) and lands in the fixed-destination branch of
+     `AssignTrays`, exactly where `282431de` adds eviction for `TYPE_MOVE_TRAY`; widening that condition to
+     `TYPE_CHARGE_PAYLOAD` plus a scenario is a small follow-up in SW2-1190. It only matters when every
+     ready VECS is AGV-blocked. Pecos combined has no VECS node (3 AgvCharge, 2 Bay, 10 Parking, 13
+     Waypoint), so the test needs one of the `charge_payload_job` layouts.
+  4. *Jesse, Pecos-specific constants in the test helpers* (`insert_job_tests.cpp:143`): **agree,
+     small.** `EvictionExpectation` gains `std::set<uint32_t> chargers`; `ExpectStashWithoutEviction` takes
+     a `StashExpectation {carrier_agv, bay, stash_node}`. Amend the tests commit `c8572a7a` (the user's
+     two-commit shape) or add a fixup; the user's call.
+  5. *Jesse, split the viewer*: done (#1043), body updated.
+  Also for the SW2-1190 review, not Jesse's: its four tests build requests inline instead of scenario
+  recordings, unlike the rest of the suite since PR #1007.
+- **2026-11-08, Codex on the assessment above** (`codex_reviews/codex_review_5.md` is the user's paste; two
+  corrections, both checked and right):
+  1. *The ordering regression needs two earlier MOVE_AGV jobs, not one.* `ScheduleEventDag::GetRootEvents`
+     (`planner_core/src/event_dag.cpp:39`) sorts the roots by job index, so with one earlier move (job 0)
+     and the insert (job 1) `ApplyNonTrayRootEvents` always applies the move before the eviction and the
+     defect never shows. With two moves (job 0 → C14 via P15, job 1 → C14 is chained after job 0), round
+     one applies move 1 then the eviction (AGV to C16), round two applies move 2, whose start pose is
+     checked by `DiscreteGarageState::OnEvent(AgvPoseChanged)` (`discrete_garage_state.cpp:1126`, "should
+     be at X but is at Y") → every job fails, deterministically. Scenario: Greptile's two moves then the
+     insert; assert ancestry (the eviction depends on move 2's node) and execution, plus the recordings.
+     Second scenario: insert first, a MOVE_AGV of AGV 1 later in the request; assert stash on W31 and that
+     AGV 1's move keeps its destination.
+  2. *VECS eviction needs expansion-level work; widening the SW2-1190 job-type condition is not enough.*
+     `OpenSpaceSearchEnvironment::OnExpansion` (`blocking_tray_search.cpp:166`) accepts only
+     `TYPE_EV_CHARGE` goals (or a stashable waypoint) for an `ev_charge_requested` payload, and the AGV
+     illegal poses now exclude an AGV-blocked VECS, so when that was the only ready VECS the resolver
+     returns the waypoint and `ExpandChargePayloadJob` fails at `job_expansion.cpp:764` ("supposed to find
+     a VECS node here, but returned a non-VECS one") before tray assignment runs. A VECS eviction would
+     have to let expansion consider the blocked VECS (candidate search with `is_parking_over_agvs_allowed`,
+     relocation carried into the plan), keep the READY_TO_CHARGE check and order the VECS transition after
+     the delivery; tested through a charge-payload request on a `38_gramercy` state (the
+     `charge_payload_job` scenarios' layout). My earlier reply draft said the search "skips an AGV-blocked
+     VECS for another one": true only when another ready VECS exists; corrected below and in the drafts.
+  Also from Codex, agreed: log the final outcome once, distinguishing "no reachable charger" from
+  "placements exist but none leaves a feasible tray plan"; record the new scenarios so the viewer shows
+  them; the PR body's "The AGV move is a root of the event DAG" becomes "waits for the AGV's earlier planned
+  events and precedes the dependent tray moves; the carrier's approach may overlap it". Codex could not
+  confirm the runner-shutdown cause; it is in the job logs: `gh api repos/{owner}/{repo}/actions/jobs/<id>/logs`
+  for 128237425386 (#1036 scheduler), 128237711049 and 128237711191 (#1043) each end with "The runner has
+  received a shutdown signal". The scheduler job still needs a green rerun.
+  **Plan on the user's go**: (a) amend fix `f6580404`: `AddChainedEvent` for the insert path's eviction
+  moves, `unevictable_agvs` from pending AGV moves, eviction search returns a reason and the fallback logs
+  it once at INFO; (b) amend tests `c8572a7a`: helpers take chargers, bay and stash through the
+  expectation structs; two ordering scenarios (`StallBlockedByAgvParkedThereByEarlierMoves`,
+  `StallBlockedByAgvWithLaterMove`) with recordings; (c) rebase `282431de` (SW2-1190) on the amended pair,
+  minus the pieces moved; (d) PR body sentence; (e) tests, recordings check, tidy; the user pushes.
+- **2026-11-08, review fixes applied** (local, unpushed; backup of the previous tip `282431de` at
+  `jmg/SW2-905/backup-2026-11-08`). Branch on `main` `2252c8a9`: tests `a90f42da`, fix `a38e7eb8`, SW2-1190
+  `b79028e5`. Fix commit: insert-path eviction moves `AddChainedEvent`ed after the AGV's earlier planned
+  events; `ResolveRequest::unevictable_agvs` from `TrayAssignmentState::pending_move_count_by_agv`;
+  `ResolveByEvictingAgvs`/`FindAgvEvictionPlan` return `stdx::Expected<AgvEvictionPlan>` with the reason (no
+  stall even over the AGVs; blocked by an AGV that cannot be moved; no free charger reachable for aN; no
+  charger placement keeps a feasible plan, with the last leaf failure), logged once at INFO where the stash is
+  kept ("tN stays stashed on X: reason"). Tests commit: `EvictionExpectation.chargers`,
+  `StashExpectation {carrier_agv, bay, stash_node}`; scenarios `StallBlockedByAgvParkedThereByEarlierMoves`
+  (two MOVE_AGV jobs P19 → P15 → C14, then the insert: eviction node's parent is the second move's node,
+  loaded leg after the eviction, car on P15, three jobs executing) and `StallBlockedByAgvWithLaterMove`
+  (insert, then MOVE_AGV 1 → C16: car stashed on W31, AGV 1 moved only by its own job, destination kept).
+  New state `busy_garage_car_in_bay_7_agv_idle_on_p19` (AGV 1 active under tray 10). SW2-1190 commit
+  rebased by patch (no cherry-pick allowed): kept only the explicit-destination part, adapted to the
+  `Expected` API, plus one INFO line when a move tray job's destination keeps its AGV. `scheduler` 208,
+  `planner_core` 24, `scheduler_advanced_tests` 15, all with `SCHEDULER_CHECK_RECORDINGS=1`; tidy 0. PR body:
+  "waits only for that AGV's earlier planned events…", nine scenarios, 204 tests.
+  - **Found on the way: validation's replay order is a heap tie-break.** The first recording of the
+    earlier-moves scenario failed with "Cannot find path from 5@90 to 7@90" for the carrier's approach.
+    `BuildStaticObstacleFilter` blocks a bay's inbound pose unless the bay is READY_TO_RETRIEVE
+    (`static_graph_filtering.cpp:98`), the insert's bay transition and the carrier's approach have no DAG
+    edge, and `ScheduleEventDag::GetTopologicalOrdering` ordered events of one job by `std::priority_queue`
+    internals: in `StallBlockedByAgvOnCharger` the transition replays first (traced: b7 state 2 at the
+    approach), with the two extra jobs the approach replayed first (b7 state 9) and the bay's inbound pose
+    closed the only way in. AGV assignment never sees this because it applies every non-tray root
+    (transition included) before costing the approach. Fix in the fix commit, `event_dag.cpp`: ties broken
+    by creation order (`std::tie(job, vertex)`), so expansion's events replay before assignment's. Zero
+    recordings moved. Alternatives rejected: a DAG edge transition → approach (delays every insert's
+    approach by the bay command, 14 s in the recording), ignoring the destination bay in validation (weakens
+    the check), a bay already READY_TO_RETRIEVE (ExpandInsertJob accepts it but still adds a transition that
+    fails to apply: "Bay 7 is not in a state that can transition to retrieve", a pre-existing dead branch).
+  - Open for the user: whether the SW2-1190 commit stays in #1036 (the body still says two commits) or
+    moves to its own PR; its four tests build requests inline, unlike the suite's scenario files.
