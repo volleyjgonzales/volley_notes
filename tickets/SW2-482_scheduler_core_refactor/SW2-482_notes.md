@@ -208,6 +208,14 @@
   to `07eb74dd` and force-pushed (origin and PR #1018 head `07eb74dd`;
   `e1d24a7c` dropped). The DDS diagnostics are commit `5f72fcae` on
   `jmg/test/dds-rest-api-diagnostics` (one commit on `07eb74dd`; not pushed).
+- **Ordered-plan proposal (2026-11-08):** idea to replace the event DAG with an
+  ordered plan plus explicit prerequisites; input from the SW2-905 and EV-charge
+  sessions and Codex review 1 (all five points accepted). Folder
+  `ordered_plan_prototype/` with the proposal, assessment and a draft Jira
+  spike. No ticket yet, no code. Same day: `scheduler_problem_formulation.md`,
+  a draft solver-agnostic instance format (MAPD with goal sets and precedence;
+  rearrangement layer; today's pipeline as solver #1). Recommended before the
+  ordered-plan work. For review.
 - **Parity from now on:**
   `SCHEDULER_CHECK_RECORDINGS=1 volley-in-container test scheduler` green and
   `git status` clean under `test/scenarios/`; CI runs the property assertions

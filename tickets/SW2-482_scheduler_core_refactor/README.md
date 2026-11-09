@@ -10,6 +10,8 @@ Working notes for the refactor, outside the volley repo and never committed ther
 | `review_rules.md` | The review rules distilled from the Greptile configuration, the implicit-guidelines report and what was applied; section 7 is what PR #1007 taught; the pre-PR checklist for every sub-ticket. |
 | `SW2-1126_scenario_files/` | Sub-ticket SW2-1126, stage A (merged 2026-10-29, PR #1007): the scenario files and the viewer. Code notes, scenario selection, Jira ticket, PR description, review-guideline plan. |
 | `SW2-1135_scheduler_renames/` | Stage 2, phase B2 (SW2-1135): the renames, then small code-quality clean-ups. Ticket text, PR text, code-notes skeleton. |
+| `scheduler_problem_formulation.md` | Draft for review (2026-11-08): the scheduler as a MAPD-with-precedence problem instance, solver-agnostic, with today's pipeline as solver #1. |
+| `ordered_plan_prototype/` | Proposed sub-ticket (2026-11-08): replace the event DAG with an ordered plan plus explicit prerequisites. Proposal, Codex review 1 and assessment, draft Jira ticket. |
 | `action_dependency_graph/` | Background study: from CBS to the action dependency graph, with figures. |
 | `scheduler_package/` | Reference material on the scheduler package. |
 
