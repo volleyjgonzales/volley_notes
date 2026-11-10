@@ -1,7 +1,7 @@
 """All figure builders. Each returns an SVG object."""
 import math
 from svgkit import SVG, C, STATUS
-from data import R, BY_ID
+from data import R, BY_ID, VERDICT
 
 W = 960
 
@@ -46,6 +46,9 @@ def fig_overview():
         s.rect(x, y, cw, ch, stroke=col, rx=6, sw=1.4)
         s.text(x + 9, y + 20, rid, size=14, weight=600, color=C["ink"], mono=True)
         s.text(x + cw - 9, y + 38, letter, size=12, weight=700, color=col, anchor="end", mono=True)
+        if VERDICT.get(rid) in ("fails", "partial", "disagree"):
+            s.raw(f'<path d="M{x + cw - 16} {y} H{x + cw - 6} Q{x + cw} {y} {x + cw} {y + 6} V{y + 16} Z" '
+                  f'fill="{C["red"]}"/>')
     # counts bar
     counts = {}
     for r in R:
@@ -67,7 +70,7 @@ def fig_overview():
         lx += w + 12
         if lx > 700 and i < len(order) - 1:
             lx, ly = 28, ly + 34
-    s.text(28, 458, "Numbering gaps in the source: 5.2 and 7.2 do not exist.", size=12, color=C["mutedfg"], italic=True)
+    s.text(28, 458, "Numbering gaps in the source: 5.2 and 7.2 do not exist. V1.1 renumbered 6.2 as 6.1.1.", size=12, color=C["mutedfg"], italic=True)
     return s
 
 
@@ -288,7 +291,7 @@ def fig_2_actions():
 
 def fig_governance():
     s = SVG(W, 380, "Interface change control and documentation",
-            "2.7 deviation list   2.8 custom message docs   2.9, 5.6, 5.7, 6.2 joint approval")
+            "2.7 deviation list   2.8 custom message docs   2.9, 5.6, 5.7, 6.1.1 joint approval")
     # flow
     boxes = [(40, "Proposed change", C["mutedfg"]), (250, "Volley review", C["fg"]), (250, "HITO review", C["fg"]),
              (470, "Both approve", C["green"]), (680, "Release", C["primary"])]
@@ -311,7 +314,7 @@ def fig_governance():
     # applies-to
     s.text(40, 250, "Applies to", size=13, weight=600, color=C["fg"])
     items = [("2.9", "any VDA5050 / custom message change"), ("5.6", "errorType strings before release"),
-             ("5.7", "errorType strings frozen unless both agree"), ("6.2", "action type for rotation direction")]
+             ("5.7", "errorType strings frozen unless both agree"), ("6.1.1", "action type for rotation direction")]
     for i, (rid, t) in enumerate(items):
         yy = 266 + i * 26
         s.tag(40, yy, rid)
@@ -610,7 +613,7 @@ def fig_5_pose():
 # ------------------------------------------------------------------ group 6
 def fig_6():
     s = SVG(W, 480, "Rotation direction chosen by a node action",
-            "6.1  an action with blockingType NONE on the node sets clockwise or counter-clockwise   6.2  action type jointly agreed")
+            "6.1  an action with blockingType NONE on the node sets clockwise or counter-clockwise   6.1.1  action type jointly agreed")
     rows = [("clockwise", [0, 90, 180], ["0°", "via −90°", "180°"]),
             ("counter-clockwise", [0, -90, 180], ["0°", "via +90°", "180°"])]
     for i, (lab, hs, ls) in enumerate(rows):
@@ -628,9 +631,9 @@ def fig_6():
     s.lines(638, 126, ["node.actions = [{", "  actionType: \"rotateDir\",", "  blockingType: \"NONE\",",
                        "  actionParameters: [", "    {key: \"direction\",", "     value: \"CW\"}]", "}]"],
             size=12, mono=True, color=C["fg"], lh=22)
-    s.text(638, 290, "names illustrative; to be agreed (6.2)", size=11.5, color=C["mutedfg"], italic=True)
+    s.text(638, 290, "names illustrative; to be agreed (6.1.1)", size=11.5, color=C["mutedfg"], italic=True)
     w = status_chip_for(s, 620, 320, "6.1", "no estimate")
-    status_chip_for(s, 620, 352, "6.2")
+    status_chip_for(s, 620, 352, "6.1.1")
     s.scale_bar(28, 462, 1)
     return s
 

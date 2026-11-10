@@ -226,3 +226,84 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 56px 0 24px; }
   main { margin: 0; padding: 0; }
   a.xref, a.term { text-decoration: none; color: inherit; }
 }
+
+/* links to the source sheet, Volley 9 Nov verdicts */
+a.src { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: none; }
+a.src:hover, a.src:focus-visible { color: var(--primary); }
+.v-fails { --v: #DC2626; } .v-partial { --v: #EA580C; } .v-disagree { --v: #9333EA; }
+.v-accepted { --v: #64748B; } .v-agree { --v: #15803D; }
+a.vbadge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  white-space: nowrap; text-decoration: none; color: var(--v);
+  background: color-mix(in srgb, var(--v) 12%, transparent); border: 1px solid color-mix(in srgb, var(--v) 45%, transparent);
+}
+a.vbadge:hover { background: color-mix(in srgb, var(--v) 22%, transparent); }
+.req-table .c-volley { width: 1%; white-space: nowrap; color: var(--muted); }
+.req-table tr.contested .c-id { box-shadow: inset 3px 0 0 #DC2626; }
+.tile.contested::after {
+  content: ""; position: absolute; top: 0; right: 0; width: 12px; height: 12px;
+  background: #DC2626; clip-path: polygon(0 0, 100% 0, 100% 100%); border-top-right-radius: 6px;
+}
+dl.vremarks { margin: 12px 0 28px; }
+dl.vremarks dt { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+dl.vremarks dt a.self { color: var(--heading); text-decoration: none; font-variant-numeric: tabular-nums; }
+dl.vremarks dt a.src { margin-left: 0; }
+dl.vremarks dd { padding-left: 14px; border-left: 2px solid var(--rule); }
+dl.vremarks dd p { margin: 6px 0; }
+@media print { a.src { display: none; } }
+
+/* status panel beside each figure: media on top, caption | panel below; side by side on very wide screens */
+.fig.has-panel {
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px; column-gap: 28px;
+  grid-template-areas: "media media" "cap panel"; align-items: start;
+}
+.fig.has-panel > .fig-media, .fig.has-panel > .req-grid { grid-area: media; }
+.fig.has-panel > figcaption { grid-area: cap; }
+.fig.has-panel > .fig-panel { grid-area: panel; margin-top: 14px; }
+@media (min-width: 1500px) {
+  /* let the figure row grow past the text column into the free space on the right */
+  .doc .fig.has-panel:not(.fig-wide) {
+    width: min(calc(100% + 328px), calc(100vw - var(--sidebar-w) - 160px));
+    grid-template-areas: "media panel" "cap panel";
+  }
+  .doc .fig.has-panel:not(.fig-wide) > .fig-panel { margin-top: 0; }
+}
+@media (max-width: 960px) {
+  .fig.has-panel { grid-template-columns: minmax(0, 1fr); grid-template-areas: "media" "cap" "panel"; }
+}
+.fig-panel { display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; line-height: 1.45; }
+.fp-head { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.fp-req {
+  --st: var(--muted); background: var(--surface); border: 1px solid var(--rule);
+  border-left: 4px solid var(--st); border-radius: 8px; padding: 9px 12px 10px;
+}
+.fp-req.contested { box-shadow: inset -3px 0 0 #DC2626; }
+.fp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.fp-id { font-weight: 700; font-size: 15px; color: var(--heading); text-decoration: none; font-variant-numeric: tabular-nums; }
+.fp-row a.src { margin-left: auto; }
+.fp-text { margin: 6px 0 4px; color: var(--ink); }
+.fp-facts p { margin: 2px 0; display: flex; gap: 8px; }
+.fp-k { flex: 0 0 68px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.fp-priority span:last-child { font-weight: 600; color: var(--accent); }
+.fp-history { margin-top: 6px; }
+.fp-history summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.fp-history ol { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--rule); }
+.fp-history li { display: flex; gap: 8px; margin: 4px 0; }
+.ev-date { flex: 0 0 74px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.ev-hito strong { color: var(--primary); } .ev-volley strong { color: var(--heading); }
+.ev-pending { color: #DC2626; font-style: italic; }
+.fig-panel.compact { gap: 6px; }
+.fig-panel.compact .fp-req { padding: 5px 10px; }
+.fig-panel .badge { font-size: 12.5px; }
+@media print { .fig.has-panel { display: block; } .fp-history { display: none; } }
+
+/* Docs row in the figure panel: links to hardware / grid reference material */
+.fp-docs span:last-child a { white-space: nowrap; }
+
+/* Chinese original text in the figure panel */
+.fp-cn { margin: 4px 0 6px; font-size: 12.5px; }
+.fp-cn summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.fp-cn p { margin: 3px 0; display: flex; gap: 8px; }
+.fp-cn p[lang] span:last-child { font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+.fp-cn .fp-cn-src { font-size: 11px; color: var(--muted); }
+:lang(zh-CN) { font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", var(--font-sans, sans-serif); }

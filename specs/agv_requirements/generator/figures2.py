@@ -576,7 +576,7 @@ def fig_topics():
         ("state", "AGV → fleet", "full status, errors, loads", "1.3 1.4 2.5 2.6 5.4–5.12 8.3 8.5 8.6"),
         ("visualization", "AGV → fleet", "position + velocity, high rate", "4.1 5.10 5.14"),
         ("connection", "AGV → fleet", "online / offline; Last Will", "2.2 2.3 2.4"),
-        ("factsheet", "AGV → fleet", "capabilities; retained", "2.1 6.2"),
+        ("factsheet", "AGV → fleet", "capabilities; retained", "2.1 6.1.1"),
         ("commonMessage", "AGV → fleet", "HITO custom, not VDA5050", "4.2 5.1 5.3 5.13 5.15"),
     ]
     s = SVG(W, 160 + len(rows) * 40 + 40, "Where VDA5050 data travels",
@@ -663,11 +663,11 @@ def fig_uml_5():
 def fig_uml_6():
     return S("Where the group 6 fields live", "a rotation-direction action attached to a node, declared in the factsheet",
              [("order", [("order.nodes.nodeId", None, None),
-                         ("order.nodes.actions.actionType", "6.1 6.2", "custom name, to be agreed"),
+                         ("order.nodes.actions.actionType", "6.1 6.1.1", "custom name, to be agreed"),
                          ("order.nodes.actions.blockingType", "6.1", "NONE"),
                          ("order.nodes.actions.actionParameters.key", "6.1", "e.g. \"direction\""),
                          ("order.nodes.actions.actionParameters.value", "6.1", "e.g. \"CW\"")]),
-              ("factsheet", [("factsheet.protocolFeatures.agvActions.actionType", "6.2", "AGV lists the custom action"),
+              ("factsheet", [("factsheet.protocolFeatures.agvActions.actionType", "6.1.1", "AGV lists the custom action"),
                              ("factsheet.protocolFeatures.agvActions.actionScopes", None, "NODE")])],
              ["Custom actions are allowed by VDA5050; the AGV advertises them in factsheet.protocolFeatures.agvActions[]."])
 

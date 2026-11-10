@@ -1,5 +1,14 @@
 """Captions shown underneath each diagram: (short title, explanation)."""
 
+from data import R, VERDICT
+
+_N = {}
+for _r in R:
+    _N[_r[1]] = _N.get(_r[1], 0) + 1
+_DEV = sum(r[4] for r in R if r[4])
+_TEST = sum(r[5] or 0 for r in R if r[4])
+_CONTESTED = [k for k, v in VERDICT.items() if v in ("fails", "partial", "disagree")]
+
 CAPTIONS = {
     "robot_key": (
         "How to read the robot",
@@ -10,18 +19,22 @@ CAPTIONS = {
     ),
     "overview": (
         "Status of all 52 requirements",
-        "One tile per requirement, coloured and lettered by how HITO answered it. Read the bar underneath for "
-        "the totals: 12 already work, 17 will be built, 8 are conditional (they depend on testing, discussion "
-        "or a counter-proposal), and 15 are closed without new work for different reasons — 3 as duplicates, "
-        "6 as process items, 3 blocked on hardware or clarification, and 3 rejected as not feasible.",
+        "One tile per requirement, coloured and lettered by how HITO answered it in V1.1. Read the bar underneath "
+        f"for the totals: {_N['works']} already work, {_N['implement']} will be built, {_N['conditional']} are "
+        "conditional (they depend on testing, discussion or a counter-proposal), and "
+        f"{_N['duplicate'] + _N['process'] + _N['blocked'] + _N['rejected']} are closed without new work for "
+        f"different reasons — {_N['duplicate']} as duplicates, {_N['process']} as process items, "
+        f"{_N['blocked']} blocked on hardware or clarification, and {_N['rejected']} rejected as not feasible. "
+        f"A red corner marks the {len(_CONTESTED)} tiles where Volley's 9 Nov remarks contest HITO's answer: "
+        "testing shows the behaviour is missing or partial, or Volley rejects HITO's reason.",
     ),
     "estimates": (
         "How long HITO says the work takes",
-        "Each bar is one requirement that has an estimate. The solid part is development days, the pale part "
-        "is testing days. Three items dominate at 30 + 30 days: speed-based tracking parameters (7.4), early "
+        "Each bar is one requirement that has an estimate in V1.1. The solid part is development days, the pale "
+        "part is testing days. Three items dominate at 30 + 30 days: speed-based tracking parameters (7.4), early "
         "braking for a short final edge (7.7) and remote joystick recovery (8.6). Adding every bar end to end "
-        "gives 244 + 196 days, but the source doesn't say how much can run in parallel, so treat that as an "
-        "upper bound, not a schedule.",
+        f"gives {_DEV} + {_TEST} days, but the source doesn't say how much can run in parallel, so treat that as "
+        "an upper bound, not a schedule.",
     ),
     "1_1_single_node_rotation": (
         "Turning on the spot when the order has only one node",
@@ -120,7 +133,7 @@ CAPTIONS = {
         "fleet manager (5.4). Each error entry should use an agreed name from a fixed list rather than free "
         "text (5.5), always include a readable description (5.8), and may include a hint for the operator "
         "(5.9). The fixed list of names can only change if both companies agree (5.6, 5.7). HITO said it "
-        "didn't understand what errorHint means.",
+        "didn't understand what errorHint means, though V1.1 quotes 10 + 5 days for it.",
     ),
     "5_10_pose": (
         "Reporting where the AGV actually is",
@@ -138,7 +151,7 @@ CAPTIONS = {
         "clockwise it passes through facing down; turning counter-clockwise it passes through facing up. "
         "Volley wants to pick the direction by attaching an action to the node (example on the right) — "
         "useful when one side of the AGV would hit something during the turn. 'blockingType NONE' means the "
-        "action doesn't pause anything else. The action's name and fields still have to be agreed (6.2).",
+        "action doesn't pause anything else. The action's name and fields still have to be agreed (6.1.1).",
     ),
     "7_1_tracking_direction": (
         "Following the tape forwards versus sideways",
@@ -316,7 +329,7 @@ CAPTIONS.update({
         "Message structure for group 6",
         "The rotation-direction request of 6.1 is an action inside the node: order.nodes[i].actions[j], with "
         "blockingType NONE and the direction passed as a key/value pair in actionParameters[]. The action's "
-        "name is custom, so 6.2 asks both sides to agree it. VDA5050 expects the AGV to advertise every custom "
+        "name is custom, so 6.1.1 asks both sides to agree it. VDA5050 expects the AGV to advertise every custom "
         "action it supports in factsheet.protocolFeatures.agvActions[].",
     ),
     "uml_8": (
