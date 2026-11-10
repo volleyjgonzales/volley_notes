@@ -688,3 +688,28 @@ Seen on 2026-11-04 with the **FoxNOC (WIP)** layout on comb:
   container) shows bay 7's topics, central's container itself can see bay 7.
 - **After a deploy,** `central` restarts and so does the bridge. Foxglove reconnects on its own after a short
   wait, or reopen the connection.
+
+## 15. A guidance service that crashed on start (bay21, 2026-11-10)
+
+Seen in `swarmctl watch`: `app-comb_bay21-guidance` failed twice, then ran. Steps and findings:
+
+1. Task history, with full errors (`--no-trunc`):
+   ```bash
+   docker service ps app-comb_bay21-guidance --no-trunc --format "{{.ID}} {{.Node}} {{.CurrentState}} | {{.Error}}"
+   ```
+   Two tasks "Failed … non-zero exit (139)" at 22:43:25 and 22:43:31, the third Running. 139 = 128 + 11, SIGSEGV.
+   The restart policy (`condition any`, 5 s delay, no attempt limit) explains the restarts about 6 s apart.
+2. Each task's own log (pass the task ID, so an old task's lines can't be mistaken for the new one's):
+   ```bash
+   docker service logs --timestamps --raw <task-id> | tail -40
+   ```
+   Both crashed tasks logged `Timed out waiting for OpenGL frame of size 2160x3840 (have 1280x720)` 0.3 s after
+   start; the running one didn't. `Atk-CRITICAL … atk_socket_embed: assertion 'plug_id != NULL' failed` appears
+   in every task and in bay7-guidance, which runs fine: harmless.
+3. Config compared with bay7-guidance (`docker service inspect … --format …`): same image
+   (`volley-bay-guidance:0.1.3`), `DISPLAY=:0`, `GDK_BACKEND=x11`. Both services were created at 22:43:24 (the
+   stack recreated), so this was the app's first start after creation.
+4. Reading (inferred, not checked on the bay): the app wanted a 2160x3840 (4K portrait) OpenGL frame and the X
+   screen gave 1280x720, so the display on bay21-qa hadn't reached its 4K mode when the app started, and the app
+   crashed instead of waiting. The bay nodes are offline on the tailnet from the laptop, so `xrandr` on bay21-qa
+   was not checked. No crash after the third start (`grep -c "Timed out waiting for OpenGL"` over 15 min = 2).
