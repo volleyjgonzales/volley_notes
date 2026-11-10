@@ -1059,6 +1059,31 @@ message is the one predicted, and the control parks the car on P15.
   VECS follow-up created as SW2-1192 ("Move a parked AGV off the only free VECS for a charge payload job",
   Task, epic SW2-1067, assigned to Jon, Relates SW2-905; description links Jesse's thread). Test bed:
   `38_gramercy` (has VECS 21 and the existing `charge_payload_job` scenarios). Thread reply posted at Jon's request (#discussion_r4508969671).
+  2026-11-09: branches rebased onto main (#1036 `e0097d88`, SW2-1190 `333f59da`); Jesse's approval of #1036 was
+  dismissed by a push and needs renewing. "SW2-1191" removed from the PR body at Jesse's warning that Jira
+  automation may close tickets named in a merged PR's description.
+  Greptile's re-review after the rebase: scenario text quoted review history (fixed with the two other ticket
+  mentions, fixup `536ca4fe` on the tests commit); eviction not ordered after tray departures on its route
+  (assessed real and rare: motion planning can plan the eviction before an earlier tray leaves the route and
+  fail the request; proposed fix A, generalise `OrderAfterTraysOnPath` to eviction moves, plus a W9-stash
+  scenario; B, check chargers against the trays' starting poses too). Not fixed yet.
+  2026-11-09 evening: Paul's two nits (else-if; record the apply failure in `last_failure`) plus my sweep (1u,
+  `IsLoadedDeparture`, `.dest` in the stage test, `->` in AssignDestinationAndUnblockingMoves, the 3 added comments
+  removed) folded into the two commits and force-pushed: tests `117c5fd2`, fix `af10f71b`; SW2-1190 `f50a66d9`.
+  204 + 15 tests with recordings, tidy 0. Greptile's eviction-ordering finding still open (option A preferred).
+  2026-11-09 late: eviction-ordering fixed (Codex's conservative version): evictions wait for the last event of
+  every tray moved earlier in the request, rejected (stash kept) if that would cycle; Codex added
+  `PlanContext::agv_evictions` + `AgvMove::SetSourcePose` so AGV assignment rebinds an eviction's start when the
+  evicted AGV carried an earlier tray. Scenarios `StallBlockedByAgvRouteClearedByEarlierTrayMove` (tray 30 on W8@0,
+  C16 disabled; fails without the fix on the dependency, the plan itself succeeded) and
+  `EvictionAfterCarryingEarlierTray`. Rebased on main `afc637ba` (#1043 merged): SW2-905 `a3bbcb65`; SW2-1190
+  given the same ordering, `agv_evictions`, its comments removed, test `ReparkTrayJob.EvictionWaitsForEarlierTrayMove`.
+  planner_core 24, scheduler 211, advanced 15 with recordings. Pushed by Jon: SW2-905 `a3bbcb65`, SW2-1190
+  `8772e821`; tidy 0 on both. main then moved to `1c5b0473` (#1050, only pecos_all/showcase layouts, not combined).
+  Timing check (makespan over recorded plans, 2f87b51a / a38e7eb8 / af10f71b / a3bbcb65): every common scenario
+  identical (StallBlockedByAgvOnCharger 71.75 s throughout); the ordering costs 149.9 → 206.0 s only in
+  RouteClearedByEarlierTrayMove. `reviewer_walkthrough.md` updated to a3bbcb65 (ordering, start-pose rebinding,
+  11 scenarios, the cost, history).
 
 ## 13. The decision path, before and after (walkthrough for the PR)
 
@@ -1263,3 +1288,43 @@ $$
     fails to apply: "Bay 7 is not in a state that can transition to retrieve", a pre-existing dead branch).
   - Open for the user: whether the SW2-1190 commit stays in #1036 (the body still says two commits) or
     moves to its own PR; its four tests build requests inline, unlike the suite's scenario files.
+- **2026-11-08, simulation notes**: `simulation.md` updated with the 2026-11-06 Foxglove run (sections 2, 3,
+  6, 7). Do not launch at `real_time_factor:=0` to get Foxglove ready: the visualizer renders on the sim
+  clock and creates its `/vis/*` publishers lazily, so nothing appears until the clock runs; connect
+  Foxglove first and launch at 1. The sim never ends on its own (only a collision shuts it down), so "done"
+  is car `…27` on P15 with empty job lists. Ctrl+C in the VS Code terminal did not reach the launch;
+  `devc exec pkill -INT -f "ros2 launch launcher sim.launch.py"` does. **Open:** that run (old 20 s / 90 s
+  timing) got stuck with the dispatcher re-sending "Empty Tray Delivered" to B7 every 1.8 s and the bay
+  answering "A tray is not present"; not investigated. Recheck B7's state and tray presence on the next run
+  with the 40 s / 45 s scenario.
+- **2026-11-09, comment and rule pass against `review_rules.md`**: 9 added comment lines cut to 3 (deleted:
+  `event_dag.cpp` tie-break, `unevictable_agvs` doc, `AreTrayMovesReachable` doc, both test comments;
+  shortened: `is_parked_agv_overlap_allowed` to the caller's contract, `pending_move_count_by_agv` to the
+  why; kept: the carrier note in `IsTrayDestinationReachable`). `*opt` / `->` on optionals in new code
+  changed to `.has_value()` / `.value()` (library and tests). `ResolveByEvictingAgvs` moved to private (no
+  caller outside the class). Test helper `IsLoweredOn(nodes, node_id)` replaces four copies of the "lowered
+  on node N" loop; `ExpectStashWithoutEviction` keeps its stricter every-lower check. Not done: shortening
+  the two seven-word test names (renames scenario files and recordings). Build 0 warnings; planner_core
+  24, scheduler 204 (also with `SCHEDULER_CHECK_RECORDINGS=1`), advanced 15; tidy 0. Left as two
+  `fixup!` commits (`0ce400cc` → tests, `16a63c20` → fix) because `volley-in-container` refuses rebase;
+  the user autosquashes, then rebases `jmg/SW2-1190/evict-agvs-from-explicit-tray-destination` (one commit,
+  `68089a31`, on old `55a5877a`) onto the new tip.
+- **2026-11-09, folded**: the user autosquashed: #1036 is two commits again (`b32a6fc1` tests,
+  `f432e2a4` fix; tree identical to `16a63c20`). `jmg/SW2-1190/evict-agvs-from-explicit-tray-destination`
+  rebased onto it (`e012c0d7`); conflicts in `scheduler.hpp` (`ResolveByEvictingAgvs` now private, with
+  SW2-1190's `fixed_destination_opt`) and `tray_assignment.cpp` (`.value()` in the waypoint check);
+  scheduler 208 tests pass. Both branches await the user's force-with-lease push.
+- **2026-11-09, main moved twice**: #1049 (bay 7/21 param YAMLs) and #1048 (SW2-598: layout
+  `5675_pecos_sandbox_combined` deleted, its scenarios renamed to `5675_pecos_combined_*`). All jmg branches
+  rebased onto `1155baba` (patches identical; #1036 now `6db9c2b6` + `b064cd59`, SW2-1190 `28df9d04`), not
+  pushed yet. #1048 silently breaks this PR's simulation scenario (no git conflict): it named the deleted
+  layout. Prepared in the working tree, unstaged: rename to
+  `src/scenario/scenarios/5675_pecos_combined_insert_blocked_by_agv_on_charger.yaml`, `layout:
+  5675_pecos_combined` (a superset of the old layout: adds bay 21 and node 41). Needs folding into the test
+  commit (user's approval), then SW2-1190 restacked; the PR body's Testing line names the old scenario.
+- **2026-11-09, scenario fold**: approved and folded; #1036 is `96524408` (tests, now adds
+  `5675_pecos_combined_insert_blocked_by_agv_on_charger.yaml`) + `0232d002` (fix), on main `1155baba`;
+  SW2-1190 `e04bfb8b` on top. No `pecos_sandbox_combined` reference left. Push pending (user's).
+- **2026-11-09, sim launch with the old path**: the user's launch with
+  `5675_pecos_sandbox_combined_insert_blocked_by_agv_on_charger.yaml` failed with `FileNotFoundError` (plus
+  launch's misleading `InvalidFrontendLaunchFileError`). `simulation.md` now uses the renamed file and layout.

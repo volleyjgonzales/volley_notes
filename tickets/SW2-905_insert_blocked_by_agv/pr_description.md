@@ -23,7 +23,7 @@ Two commits:
 1. **Scenarios.** Nine insert scenarios on the busy Pecos garage with its two AGVs (AGV 1 in the way, AGV 2 the carrier), recorded with the behaviour the next commit implements, plus a control and a simulation scenario for `sim.launch.py`.
 2. **Fix.** `ResolveBlockingTrays` lets a tray drive past a parked AGV but never lowers it where it would overlap one. When that leaves only a waypoint stash, the scheduler moves the AGV instead: it finds the stall the AGV blocks, sends the AGV to the nearest free charger whose placement keeps the tray's route open, and parks the tray on the stall. The AGV move waits only for that AGV's earlier planned events and precedes the dependent tray moves, so the carrier's approach to the bay may overlap it and only the loaded leg waits. When the eviction is not possible the stash stays and one INFO line in central's log says why. A disabled AGV, or one carrying a tray, is never moved; with no usable charger the stash stays.
 
-The test viewer changes that helped review the recordings are now in #1043 (SW2-1191).
+The test viewer changes that helped review the recordings are now in #1043.
 
 Behaviour changes outside the bug: `TrayAssignment.FillsBlankDestination` (sunrise) now parks tray 1 on P2062 instead of P2066, where the garage's only AGV stands idle, since the carrier is not known at that stage. Every other recording is unchanged.
 
